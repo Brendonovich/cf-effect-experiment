@@ -1,0 +1,28 @@
+{
+  "name": "@macrograph/editor",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/core": "workspace:*",
+    "@macrograph/persistence": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@macrograph/persistence-sqlite": "workspace:*",
+    "typescript": "^5.8",
+    "vitest": "^3"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@macrograph/playground",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsgo --build"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "catalog:",
+    "@macrograph/editor": "workspace:*",
+    "effect": "catalog:",
+    "solid-js": "^1.9.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^24",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.8",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.0.0"
+  }
+}

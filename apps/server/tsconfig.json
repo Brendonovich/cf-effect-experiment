@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist/types",
+    "lib": ["ES2024"]
+  },
+  "include": ["src", "test"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/persistence" },
+    { "path": "../../packages/persistence-sqlite" },
+    { "path": "../../packages/editor" }
+  ]
+}

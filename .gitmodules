@@ -1,0 +1,3 @@
+[submodule "lib/effect-smol"]
+	path = lib/effect-smol
+	url = https://github.com/effect-ts/effect-smol.git

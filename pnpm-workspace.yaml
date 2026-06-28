@@ -1,0 +1,17 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true
+  sharp: set this to true or false
+  workerd: true
+
+catalog:
+  effect: 4.0.0-beta.90
+  "@effect/opentelemetry": 4.0.0-beta.90
+  "@effect/platform-browser": 4.0.0-beta.90
+  "@effect/platform-bun": 4.0.0-beta.90
+  "@effect/platform-node": 4.0.0-beta.90
+  "@effect/platform-node-shared": 4.0.0-beta.90
+  "@effect/vitest": 4.0.0-beta.90

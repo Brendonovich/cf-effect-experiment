@@ -1,0 +1,8 @@
+{
+	"file_scan_exclusions": [
+		"lib/*",
+		"node_modules/*",
+		"..."
+	],
+	"formatter": "language_server",
+}

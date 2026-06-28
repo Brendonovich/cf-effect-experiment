@@ -1,0 +1,22 @@
+{
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo -b",
+    "clean": "pnpm -r clean",
+    "format": "vp fmt . --write"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "7.0.0-dev.20260514.1",
+    "typescript": "^5.8",
+    "vite-plus": "^0.1.21"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
