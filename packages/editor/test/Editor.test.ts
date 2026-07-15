@@ -1,21 +1,21 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Graph, Node, Package, PackageId, Position, Project, SchemaId, SchemaRef } from "@macrograph/core";
+import { PackageId, SchemaId } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, PubSub } from "effect";
 
 import { Editor, Packages, ProjectPubSub } from "../src/index";
 
-const schemaRef = new SchemaRef({
+const schemaRef = {
   package: PackageId.make("pkg"),
   schema: SchemaId.make("schema"),
-});
+};
 
-const TestPackage = new Package.Model({
+const TestPackage = {
   id: PackageId.make("pkg"),
   name: "Test",
-  schemas: [new Package.SchemaModel({ id: SchemaId.make("schema"), name: "Schema" })],
-});
+  schemas: [{ id: SchemaId.make("schema"), name: "Schema" }],
+};
 
 const PackagesLayer = Layer.effect(
   Packages.Service,
@@ -28,12 +28,10 @@ const PackagesLayer = Layer.effect(
 
 const SeedLayer = Layer.effectDiscard(
   Effect.flatMap(Persistence.Service, (db) =>
-    db.saveProject(
-      new Project.Model({
-        name: "test",
-        graphs: {},
-      }),
-    ),
+    db.saveProject({
+      name: "test",
+      graphs: {},
+    }),
   ),
 );
 
@@ -53,7 +51,7 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const event = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const event = yield* editor.graph.create({ name: "Test Graph" });
 
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
@@ -65,10 +63,10 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const graphEvent = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
         yield* PubSub.take(events);
 
-        const event = yield* editor.deleteGraph(graphEvent.graphId);
+        const event = yield* editor.graph.delete({ graphID: graphEvent.graph.id });
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
       }),
@@ -79,17 +77,17 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const graphEvent = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
         yield* PubSub.take(events);
 
-        const event = yield* editor.createNode(
-          graphEvent.graphId,
-          new Node.CreateInput({
+        const event = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: {
             name: "Test Node",
-            position: new Position({ x: 100, y: 200 }),
+            position: { x: 100, y: 200 },
             schema: schemaRef,
-          }),
-        );
+          },
+        });
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
       }),
@@ -100,16 +98,19 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const graphEvent = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
         yield* PubSub.take(events);
 
-        const nodeEvent = yield* editor.createNode(
-          graphEvent.graphId,
-          new Node.CreateInput({ name: "Node", schema: schemaRef }),
-        );
+        const nodeEvent = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: { name: "Node", schema: schemaRef },
+        });
         yield* PubSub.take(events);
 
-        const event = yield* editor.deleteNode(graphEvent.graphId, nodeEvent.nodeId);
+        const event = yield* editor.node.delete({
+          graphID: graphEvent.graph.id,
+          nodeID: nodeEvent.node.id,
+        });
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
       }),
@@ -120,18 +121,27 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const graphEvent = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
         yield* PubSub.take(events);
 
-        const nodeEvent = yield* editor.createNode(
-          graphEvent.graphId,
-          new Node.CreateInput({ name: "Old Name", schema: schemaRef }),
-        );
+        const nodeEvent = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: { name: "Old Name", schema: schemaRef },
+        });
         yield* PubSub.take(events);
 
-        const event = yield* editor.setNodeName(graphEvent.graphId, nodeEvent.nodeId, "New Name");
+        yield* editor.node.update({
+          graphID: graphEvent.graph.id,
+          nodeID: nodeEvent.node.id,
+          name: "New Name",
+        });
         const busEvent = yield* PubSub.take(events);
-        expect(busEvent).toEqual(event);
+        expect(busEvent).toEqual({
+          _tag: "NodeNameChanged",
+          graphId: graphEvent.graph.id,
+          nodeId: nodeEvent.node.id,
+          name: "New Name",
+        });
       }),
     );
 
@@ -140,18 +150,65 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        const graphEvent = yield* editor.createGraph(new Graph.CreateInput({ name: "Test Graph" }));
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
         yield* PubSub.take(events);
 
-        const nodeEvent = yield* editor.createNode(
-          graphEvent.graphId,
-          new Node.CreateInput({ name: "Node", schema: schemaRef }),
-        );
+        const nodeEvent = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: { name: "Node", schema: schemaRef },
+        });
         yield* PubSub.take(events);
 
-        const event = yield* editor.setNodePosition(graphEvent.graphId, nodeEvent.nodeId, 300, 400);
+        yield* editor.node.update({
+          graphID: graphEvent.graph.id,
+          nodeID: nodeEvent.node.id,
+          position: { x: 300, y: 400 },
+        });
         const busEvent = yield* PubSub.take(events);
-        expect(busEvent).toEqual(event);
+        expect(busEvent).toEqual({
+          _tag: "NodePositionChanged",
+          graphId: graphEvent.graph.id,
+          nodeId: nodeEvent.node.id,
+          x: 300,
+          y: 400,
+        });
+      }),
+    );
+
+    it.effect("updates a graph", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const graphEvent = yield* editor.graph.create({ name: "Old Name" });
+
+        yield* editor.graph.update({ graphID: graphEvent.graph.id, name: "New Name" });
+
+        const project = yield* editor.project.get();
+        expect(project.graphs[graphEvent.graph.id]?.name).toBe("New Name");
+      }),
+    );
+
+    it.effect("registers plugin schemas", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const packages = yield* Packages.Service;
+
+        yield* editor.plugin({
+          id: "plugin",
+          name: "Plugin",
+          effect: (context) =>
+            context.schema.register({
+              id: "schema",
+              name: "Schema",
+              io: () => ({}),
+              run: () => Effect.void,
+            }),
+        });
+
+        const schema = yield* packages.getSchema({
+          package: PackageId.make("plugin"),
+          schema: SchemaId.make("schema"),
+        });
+        expect(schema.name).toBe("Schema");
       }),
     );
   });

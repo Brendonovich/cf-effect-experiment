@@ -4,7 +4,8 @@
     "moduleResolution": "nodenext",
     "allowImportingTsExtensions": true,
     "declaration": true,
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "noEmit": true
   },
   "include": ["src", "alchemy.run.ts"],
   "references": [

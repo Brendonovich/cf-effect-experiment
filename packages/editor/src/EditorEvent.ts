@@ -1,60 +1,55 @@
 import { Connection, Graph, Node } from "@macrograph/core";
 import { Schema } from "effect";
 
-export class GraphCreated extends Schema.TaggedClass<GraphCreated>()("GraphCreated", {
-  graphId: Schema.String,
+export const GraphCreated = Schema.TaggedStruct("GraphCreated", {
   graph: Graph.Model,
-}) {}
+});
+export type GraphCreated = typeof GraphCreated.Type;
 
-export class GraphDeleted extends Schema.TaggedClass<GraphDeleted>()("GraphDeleted", {
+export const GraphDeleted = Schema.TaggedStruct("GraphDeleted", {
   graphId: Schema.String,
-}) {}
+});
+export type GraphDeleted = typeof GraphDeleted.Type;
 
-export class NodeCreated extends Schema.TaggedClass<NodeCreated>()("NodeCreated", {
+export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
   graphId: Schema.String,
-  nodeId: Schema.String,
   node: Node.Model,
-}) {}
+});
+export type NodeCreated = typeof NodeCreated.Type;
 
-export class NodeDeleted extends Schema.TaggedClass<NodeDeleted>()("NodeDeleted", {
+export const NodeDeleted = Schema.TaggedStruct("NodeDeleted", {
   graphId: Schema.String,
   nodeId: Schema.String,
-}) {}
+});
+export type NodeDeleted = typeof NodeDeleted.Type;
 
-export class NodeNameChanged extends Schema.TaggedClass<NodeNameChanged>()("NodeNameChanged", {
+export const NodeNameChanged = Schema.TaggedStruct("NodeNameChanged", {
   graphId: Schema.String,
   nodeId: Schema.String,
   name: Schema.String,
-  node: Node.Model,
-}) {}
+});
+export type NodeNameChanged = typeof NodeNameChanged.Type;
 
-export class NodePositionChanged extends Schema.TaggedClass<NodePositionChanged>()(
-  "NodePositionChanged",
-  {
-    graphId: Schema.String,
-    nodeId: Schema.String,
-    x: Schema.Number,
-    y: Schema.Number,
-    node: Node.Model,
-  },
-) {}
+export const NodePositionChanged = Schema.TaggedStruct("NodePositionChanged", {
+  graphId: Schema.String,
+  nodeId: Schema.String,
+  x: Schema.Number,
+  y: Schema.Number,
+  clientId: Schema.optional(Schema.String),
+});
+export type NodePositionChanged = typeof NodePositionChanged.Type;
 
-export class ConnectionCreated extends Schema.TaggedClass<ConnectionCreated>()(
-  "ConnectionCreated",
-  {
-    graphId: Schema.String,
-    connectionId: Schema.String,
-    connection: Connection.Model,
-  },
-) {}
+export const ConnectionCreated = Schema.TaggedStruct("ConnectionCreated", {
+  graphId: Schema.String,
+  connection: Connection.Model,
+});
+export type ConnectionCreated = typeof ConnectionCreated.Type;
 
-export class ConnectionDeleted extends Schema.TaggedClass<ConnectionDeleted>()(
-  "ConnectionDeleted",
-  {
-    graphId: Schema.String,
-    connectionId: Schema.String,
-  },
-) {}
+export const ConnectionDeleted = Schema.TaggedStruct("ConnectionDeleted", {
+  graphId: Schema.String,
+  connectionId: Schema.String,
+});
+export type ConnectionDeleted = typeof ConnectionDeleted.Type;
 
 export type EditorEvent =
   | GraphCreated

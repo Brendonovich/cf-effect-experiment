@@ -6,7 +6,8 @@ export type PackageId = typeof PackageId.Type;
 export const SchemaId = Schema.String.pipe(Schema.brand("SchemaId"));
 export type SchemaId = typeof SchemaId.Type;
 
-export class SchemaRef extends Schema.Class<SchemaRef>("SchemaRef")({
+export const SchemaRef = Schema.Struct({
   package: PackageId,
   schema: SchemaId,
-}) {}
+});
+export type SchemaRef = typeof SchemaRef.Type;

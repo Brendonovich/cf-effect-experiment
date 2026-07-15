@@ -174,7 +174,7 @@ export const makeDualServerProtocol = (
         end: (_cid: number): Effect.Effect<void> => Effect.void,
         clientIds: Effect.sync(() => clientIds),
         initialMessage: Effect.succeedNone,
-        supportsAck: true,
+        supportsAck: false,
         supportsTransferables: false,
         supportsSpanPropagation: true,
       });
@@ -276,7 +276,7 @@ export const makeDualClientProtocol: Effect.Effect<
             if (encoded === undefined) return Effect.void;
             return Effect.orDie(writeRaw(frame(TAG_RPC, toBytes(encoded))));
           },
-          supportsAck: true,
+          supportsAck: false,
           supportsTransferables: false,
         };
       }),

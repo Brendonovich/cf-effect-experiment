@@ -17,7 +17,7 @@ export class Service extends Context.Service<
 >()("macrograph/ProjectPubSub") {}
 
 const make = Effect.gen(function* () {
-  const pubsub = yield* PubSub.bounded<EditorEvent.EditorEvent>(100);
+  const pubsub = yield* PubSub.unbounded<EditorEvent.EditorEvent>();
   yield* Effect.log("creating pubsub");
   return Service.of({
     publish: (event) => PubSub.publish(pubsub, event),

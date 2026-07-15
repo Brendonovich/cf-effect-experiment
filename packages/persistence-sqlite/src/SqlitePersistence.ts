@@ -1,7 +1,5 @@
 import {
   Node,
-  Position,
-  SchemaRef,
   Graph,
   Connection,
   Project,
@@ -30,14 +28,14 @@ export const layer = Layer.effect(
     const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
       yield* exec((db) => {
         db.transaction((tx) => {
-			tx.delete(schema.projectMeta).run();
-			tx.insert(schema.projectMeta).values({ name: project.name }).run();
+          tx.delete(schema.projectMeta).run();
+          tx.insert(schema.projectMeta).values({ name: project.name }).run();
 
-			tx.delete(schema.connections).run();
-			tx.delete(schema.nodes).run();
-			tx.delete(schema.graphs).run();
+          tx.delete(schema.connections).run();
+          tx.delete(schema.nodes).run();
+          tx.delete(schema.graphs).run();
 
-			for (const [graphId, graph] of Object.entries(project.graphs)) {
+          for (const [graphId, graph] of Object.entries(project.graphs)) {
             tx.insert(schema.graphs).values({ id: graphId, name: graph.name }).run();
 
             for (const [nodeId, node] of Object.entries(graph.nodes)) {
@@ -87,40 +85,38 @@ export const layer = Layer.effect(
 
       const nodes: Record<string, Node.Model> = {};
       for (const nodeRow of nodeRows) {
-        nodes[nodeRow.id] = new Node.Model({
+        nodes[nodeRow.id] = {
           id: NodeId.make(nodeRow.id),
           name: nodeRow.name,
           properties: nodeRow.properties,
-          schema: new SchemaRef({
+          schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
-          }),
-          position: new Position({
+          },
+          position: {
             x: nodeRow.positionX,
             y: nodeRow.positionY,
-          }),
-        });
+          },
+        };
       }
 
       const connections: Array<Connection.Model> = [];
       for (const connRow of connectionRows) {
-        connections.push(
-          new Connection.Model({
-            id: ConnectionId.make(connRow.id),
-            outNodeId: connRow.outNodeId,
-            outIoId: IoId.make(connRow.outIoId),
-            inNodeId: connRow.inNodeId,
-            inIoId: IoId.make(connRow.inIoId),
-          }),
-        );
+        connections.push({
+          id: ConnectionId.make(connRow.id),
+          outNodeId: connRow.outNodeId,
+          outIoId: IoId.make(connRow.outIoId),
+          inNodeId: connRow.inNodeId,
+          inIoId: IoId.make(connRow.inIoId),
+        });
       }
 
-      return new Graph.Model({
+      return {
         id: GraphId.make(graphRow.id),
         name: graphRow.name,
         nodes,
         connections,
-      });
+      };
     };
 
     const loadProject = Effect.fnUntraced(function* () {
@@ -142,19 +138,15 @@ export const layer = Layer.effect(
         return yield* new Project.NotFoundError({});
       }
 
-      return new Project.Model({
+      return {
         name: result.name,
         graphs: result.graphs,
-      });
+      };
     });
 
     const loadGraph = Effect.fnUntraced(function* (graphId: string) {
       const result = yield* exec((db) => {
-        const graphRow = db
-          .select()
-          .from(schema.graphs)
-          .where(eq(schema.graphs.id, graphId))
-          .get();
+        const graphRow = db.select().from(schema.graphs).where(eq(schema.graphs.id, graphId)).get();
         if (!graphRow) return null;
         return loadGraphModel(db, graphRow);
       });
@@ -165,25 +157,21 @@ export const layer = Layer.effect(
 
     const loadNode = Effect.fnUntraced(function* (graphId: string, nodeId: string) {
       const result = yield* exec((db) => {
-        const nodeRow = db
-          .select()
-          .from(schema.nodes)
-          .where(eq(schema.nodes.id, nodeId))
-          .get();
+        const nodeRow = db.select().from(schema.nodes).where(eq(schema.nodes.id, nodeId)).get();
         if (!nodeRow || nodeRow.graphId !== graphId) return null;
-        return new Node.Model({
+        return {
           id: NodeId.make(nodeRow.id),
           name: nodeRow.name,
           properties: nodeRow.properties,
-          schema: new SchemaRef({
+          schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
-          }),
-          position: new Position({
+          },
+          position: {
             x: nodeRow.positionX,
             y: nodeRow.positionY,
-          }),
-        });
+          },
+        };
       });
 
       if (!result) return yield* new Node.NotFoundError({ id: nodeId });

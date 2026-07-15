@@ -5,16 +5,16 @@ import { Graph } from "./Graph.ts";
 export const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"));
 export type ProjectId = typeof ProjectId.Type;
 
-export class Model extends Schema.Class<Model>("Project")({
+export const Model = Schema.Struct({
   name: Schema.String,
   graphs: Schema.Record(Schema.String, Graph.Model),
-}) {}
+});
+export type Model = typeof Model.Type;
 
-export const empty = () =>
-  new Model({
-    name: "New Project",
-    graphs: {},
-  });
+export const empty = (): Model => ({
+  name: "New Project",
+  graphs: {},
+});
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(
   "ProjectNotFoundError",

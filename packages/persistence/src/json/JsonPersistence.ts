@@ -4,7 +4,6 @@ import { Effect, FileSystem, Layer, Path, Schema, Semaphore } from "effect";
 import { Persistence, PersistenceError } from "../Persistence.ts";
 
 const ProjectMeta = Schema.Struct({
-  id: Schema.String,
   name: Schema.String,
 });
 
@@ -62,11 +61,11 @@ export const layer = (dir: string) =>
           }
         }
 
-        return new Project.Model({
+        return {
           // id: ProjectId.make(meta.id),
           name: meta.name,
           graphs,
-        });
+        };
       }, lock.withPermit);
 
       const loadGraph = Effect.fnUntraced(function* (graphId: string) {
@@ -118,10 +117,10 @@ export const layer = (dir: string) =>
         const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
-        const updatedGraph = new Graph.Model({
+        const updatedGraph = {
           ...graph,
           nodes: { ...graph.nodes, [node.id]: node },
-        });
+        };
         yield* fs
           .writeFileString(graphFile, JSON.stringify(updatedGraph, null, 2))
           .pipe(PersistenceError.refail);
@@ -134,7 +133,7 @@ export const layer = (dir: string) =>
           PersistenceError.refail,
         );
         const { [nodeId]: _, ...nodes } = graph.nodes;
-        const updatedGraph = new Graph.Model({ ...graph, nodes });
+        const updatedGraph = { ...graph, nodes };
         yield* fs
           .writeFileString(graphFile, JSON.stringify(updatedGraph, null, 2))
           .pipe(PersistenceError.refail);
@@ -149,10 +148,10 @@ export const layer = (dir: string) =>
         const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
-        const updatedGraph = new Graph.Model({
+        const updatedGraph = {
           ...graph,
           connections: [...graph.connections, connection],
-        });
+        };
         yield* fs
           .writeFileString(graphFile, JSON.stringify(updatedGraph, null, 2))
           .pipe(PersistenceError.refail);
@@ -165,7 +164,7 @@ export const layer = (dir: string) =>
           PersistenceError.refail,
         );
         const connections = graph.connections.filter((c) => c.id !== connectionId);
-        const updatedGraph = new Graph.Model({ ...graph, connections });
+        const updatedGraph = { ...graph, connections };
         yield* fs
           .writeFileString(graphFile, JSON.stringify(updatedGraph, null, 2))
           .pipe(PersistenceError.refail);

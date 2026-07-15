@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
-export class Position extends Schema.Class<Position>("Position")({
+export const Position = Schema.Struct({
   x: Schema.Number,
   y: Schema.Number,
-}) {}
+});
+export type Position = typeof Position.Type;

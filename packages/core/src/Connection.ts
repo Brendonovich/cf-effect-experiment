@@ -5,19 +5,21 @@ import { IoId } from "./IO.ts";
 export const ConnectionId = Schema.String.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
-export class Model extends Schema.Class<Model>("Connection")({
+export const Model = Schema.Struct({
   id: ConnectionId,
   outNodeId: Schema.String,
   outIoId: IoId,
   inNodeId: Schema.String,
   inIoId: IoId,
-}) {}
+});
+export type Model = typeof Model.Type;
 
-export class CreateInput extends Schema.Class<CreateInput>("ConnectionCreateInput")({
+export const CreateInput = Schema.Struct({
   outNodeId: Schema.String,
   outIoId: IoId,
   inNodeId: Schema.String,
   inIoId: IoId,
-}) {}
+});
+export type CreateInput = typeof CreateInput.Type;
 
 export * as Connection from "./Connection.ts";

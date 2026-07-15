@@ -6,26 +6,27 @@ import { Node } from "./Node.ts";
 export const GraphId = Schema.String.pipe(Schema.brand("GraphId"));
 export type GraphId = typeof GraphId.Type;
 
-export class Model extends Schema.Class<Model>("Graph")({
+export const Model = Schema.Struct({
   id: GraphId,
   name: Schema.String,
   nodes: Schema.Record(Schema.String, Node.Model),
   connections: Schema.Array(Connection.Model),
-}) {}
+});
+export type Model = typeof Model.Type;
 
-export class CreateInput extends Schema.Class<CreateInput>("GraphCreateInput")({
+export const CreateInput = Schema.Struct({
   name: Schema.optional(Schema.String),
   nodes: Schema.optional(Schema.Record(Schema.String, Node.Model)),
   connections: Schema.optional(Schema.Array(Connection.Model)),
-}) {}
+});
+export type CreateInput = typeof CreateInput.Type;
 
-export const empty = (id: string) =>
-  new Model({
-    id: GraphId.make(id),
-    name: id,
-    nodes: {},
-    connections: [],
-  });
+export const empty = (id: string): Model => ({
+  id: GraphId.make(id),
+  name: id,
+  nodes: {},
+  connections: [],
+});
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("GraphNotFoundError", {
   id: Schema.String,

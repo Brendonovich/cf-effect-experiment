@@ -1,25 +1,15 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, describe, expect, it } from "@effect/vitest";
-import {
-  Graph,
-  GraphId,
-  Node,
-  NodeId,
-  PackageId,
-  Position,
-  Project,
-  SchemaId,
-  SchemaRef,
-} from "@macrograph/core";
+import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect, Layer } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
 import { MemoryFileSystem } from "./MemoryFileSystem";
 
-const schema = new SchemaRef({
+const schema = {
   package: PackageId.make("pkg"),
   schema: SchemaId.make("schema"),
-});
+};
 
 const TestLayer = Layer.provideMerge(
   JsonPersistence.layer("/test-project"),
@@ -31,16 +21,16 @@ describe("JsonPersistence", () => {
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;
 
-      const graph = new Graph.Model({
+      const graph = {
         id: GraphId.make("graph-1"),
         name: "My Graph",
         nodes: {},
         connections: [],
-      });
-      const project = new Project.Model({
+      };
+      const project = {
         name: "My Project",
         graphs: { "graph-1": graph },
-      });
+      };
       yield* persistence.saveProject(project);
 
       const loaded = yield* persistence.loadProject();
@@ -62,18 +52,18 @@ describe("JsonPersistence", () => {
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;
 
-      const project = new Project.Model({
+      const project = {
         name: "Empty",
         graphs: {},
-      });
+      };
       yield* persistence.saveProject(project);
 
-      const graph = new Graph.Model({
+      const graph = {
         id: GraphId.make("graph-2"),
         name: "Second Graph",
         nodes: {},
         connections: [],
-      });
+      };
       yield* persistence.saveGraph(graph);
 
       const loaded = yield* persistence.loadProject();
@@ -86,28 +76,28 @@ describe("JsonPersistence", () => {
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;
 
-      const graph = new Graph.Model({
+      const graph = {
         id: GraphId.make("graph-1"),
         name: "G",
         nodes: {},
         connections: [],
-      });
-      const project = new Project.Model({
+      };
+      const project = {
         name: "P",
         graphs: { "graph-1": graph },
-      });
+      };
       yield* persistence.saveProject(project);
 
-      const node = new Node.Model({
+      const node = {
         id: NodeId.make("n1"),
         name: "original",
-        position: new Position({ x: 0, y: 0 }),
+        position: { x: 0, y: 0 },
         properties: {},
         schema,
-      });
+      };
       yield* persistence.saveNode("graph-1", node);
 
-      const updatedNode = new Node.Model({ ...node, name: "updated" });
+      const updatedNode = { ...node, name: "updated" };
       yield* persistence.saveNode("graph-1", updatedNode);
 
       const loaded = yield* persistence.loadProject();
@@ -119,13 +109,13 @@ describe("JsonPersistence", () => {
   //   Effect.gen(function* () {
   //     const persistence = yield* Persistence.Service;
 
-  //     const graph = new Graph.Model({
+  //     const graph = ({
   //       id: GraphId.make("graph-1"),
   //       name: "G",
   //       nodes: {},
   //       connections: [],
   //     });
-  //     const project = new Project.Model({
+  //     const project = ({
   //       id: projectId,
   //       name: "P",
   //       graphs: { "graph-1": graph },
@@ -143,26 +133,26 @@ describe("JsonPersistence", () => {
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;
 
-      const node = new Node.Model({
+      const node = {
         id: NodeId.make("test-node"),
         name: "Test Node",
-        position: new Position({ x: 42, y: 99 }),
+        position: { x: 42, y: 99 },
         properties: { foo: "bar", count: 3 },
-        schema: new SchemaRef({
+        schema: {
           package: PackageId.make("my-pkg"),
           schema: SchemaId.make("my-schema"),
-        }),
-      });
-      const graph = new Graph.Model({
+        },
+      };
+      const graph = {
         id: GraphId.make("graph-1"),
         name: "G",
         nodes: { "test-node": node },
         connections: [],
-      });
-      const project = new Project.Model({
+      };
+      const project = {
         name: "P",
         graphs: { "graph-1": graph },
-      });
+      };
       yield* persistence.saveProject(project);
 
       const loaded = yield* persistence.loadProject();

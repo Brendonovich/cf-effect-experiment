@@ -24,12 +24,8 @@ export const layer = Layer.effect(
 
     return Service.of({
       publish: (event) =>
-        projector.apply(event).pipe(
-          Effect.andThen(pubsub.publish(event)),
-          Effect.as(event),
-        ),
-      publishEphemeral: (event) =>
-        pubsub.publish(event).pipe(Effect.as(event)),
+        projector.apply(event).pipe(Effect.andThen(pubsub.publish(event)), Effect.as(event)),
+      publishEphemeral: (event) => pubsub.publish(event).pipe(Effect.as(event)),
     });
   }),
 );

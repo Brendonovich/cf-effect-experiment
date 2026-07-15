@@ -1,5 +1,5 @@
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Project, defaultPackage } from "@macrograph/core";
+import { defaultPackage } from "@macrograph/core";
 import { Editor, EditorRpc, EditorServer, Packages, ProjectPubSub } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
@@ -32,18 +32,14 @@ const PackagesLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(Packages.defaultLayer));
 
-const EditorLayer = Editor.defaultLayer.pipe(
-  Layer.provideMerge(PackagesLayer),
-);
+const EditorLayer = Editor.defaultLayer.pipe(Layer.provideMerge(PackagesLayer));
 
 const SeedLayer = Layer.effectDiscard(
   Effect.flatMap(Persistence.Service, (persistence) =>
-    persistence.saveProject(
-      new Project.Model({
-        name: "test",
-        graphs: {},
-      }),
-    ),
+    persistence.saveProject({
+      name: "test",
+      graphs: {},
+    }),
   ),
 );
 

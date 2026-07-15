@@ -10,10 +10,7 @@ import { ProjectPubSub } from "./ProjectPubSub.ts";
 
 const ProjectAndPersistenceErrors = Schema.Union([PersistenceError, Project.NotFoundError]);
 
-const PersistenceAndGraphErrors = Schema.Union([
-  PersistenceError,
-  Graph.NotFoundError,
-]);
+const PersistenceAndGraphErrors = Schema.Union([PersistenceError, Graph.NotFoundError]);
 
 const PersistenceGraphAndNodeErrors = Schema.Union([
   PersistenceError,
@@ -42,11 +39,7 @@ class DeleteGraph extends Rpc.make("DeleteGraph", {
 class CreateNode extends Rpc.make("CreateNode", {
   payload: { graphId: Schema.String, node: Node.CreateInput },
   success: EditorEvent.NodeCreated,
-  error: Schema.Union([
-    PersistenceError,
-    Graph.NotFoundError,
-    PkgTypes.SchemaNotFoundError,
-  ]),
+  error: Schema.Union([PersistenceError, Graph.NotFoundError, PkgTypes.SchemaNotFoundError]),
 }) {}
 
 class DeleteNode extends Rpc.make("DeleteNode", {
@@ -72,6 +65,7 @@ class SetNodePosition extends Rpc.make("SetNodePosition", {
     x: Schema.Number,
     y: Schema.Number,
     ephemeral: Schema.optional(Schema.Boolean),
+    clientId: Schema.optional(Schema.String),
   },
   success: EditorEvent.NodePositionChanged,
   error: PersistenceGraphAndNodeErrors,
@@ -92,6 +86,11 @@ class DeleteConnection extends Rpc.make("DeleteConnection", {
 class LoadPackage extends Rpc.make("LoadPackage", {
   payload: { pkg: PkgTypes.Model },
   success: Schema.Void,
+}) {}
+
+class GetPackages extends Rpc.make("GetPackages", {
+  payload: {},
+  success: Schema.Array(PkgTypes.Model),
 }) {}
 
 const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
@@ -119,6 +118,7 @@ export const EditorRpcs = RpcGroup.make(
   CreateConnection,
   DeleteConnection,
   LoadPackage,
+  GetPackages,
   ProjectEventsStream,
 );
 
@@ -128,17 +128,51 @@ export const handlerLayer = EditorRpcs.toLayer(
     const packages = yield* Packages.Service;
     const pubsub = yield* ProjectPubSub.Service;
     return EditorRpcs.of({
-      CreateGraph: (payload) => editor.createGraph(payload.graph),
-      GetProject: () => editor.getProject(),
-      DeleteGraph: (payload) => editor.deleteGraph(payload.graphId),
-      CreateNode: (payload) => editor.createNode(payload.graphId, payload.node),
-      DeleteNode: (payload) => editor.deleteNode(payload.graphId, payload.nodeId),
-      SetNodeName: (payload) => editor.setNodeName(payload.graphId, payload.nodeId, payload.name),
+      CreateGraph: (payload) => editor.graph.create(payload.graph),
+      GetProject: () => editor.project.get(),
+      DeleteGraph: (payload) => editor.graph.delete({ graphID: payload.graphId }),
+      CreateNode: (payload) => editor.node.create({ graphID: payload.graphId, node: payload.node }),
+      DeleteNode: (payload) =>
+        editor.node.delete({ graphID: payload.graphId, nodeID: payload.nodeId }),
+      SetNodeName: (payload) =>
+        editor.node
+          .update({ graphID: payload.graphId, nodeID: payload.nodeId, name: payload.name })
+          .pipe(
+            Effect.as({
+              _tag: "NodeNameChanged" as const,
+              graphId: payload.graphId,
+              nodeId: payload.nodeId,
+              name: payload.name,
+            }),
+          ),
       SetNodePosition: (payload) =>
-        editor.setNodePosition(payload.graphId, payload.nodeId, payload.x, payload.y, { ephemeral: payload.ephemeral ?? false }),
-      CreateConnection: (payload) => editor.createConnection(payload.graphId, payload.connection),
-      DeleteConnection: (payload) => editor.deleteConnection(payload.graphId, payload.connectionId),
+        editor.node
+          .update({
+            graphID: payload.graphId,
+            nodeID: payload.nodeId,
+            position: { x: payload.x, y: payload.y },
+            ephemeral: payload.ephemeral ?? false,
+            ...(payload.clientId !== undefined ? { clientId: payload.clientId } : {}),
+          })
+          .pipe(
+            Effect.as({
+              _tag: "NodePositionChanged" as const,
+              graphId: payload.graphId,
+              nodeId: payload.nodeId,
+              x: payload.x,
+              y: payload.y,
+              ...(payload.clientId !== undefined ? { clientId: payload.clientId } : {}),
+            }),
+          ),
+      CreateConnection: (payload) =>
+        editor.connection.create({ graphID: payload.graphId, connection: payload.connection }),
+      DeleteConnection: (payload) =>
+        editor.connection.delete({
+          graphID: payload.graphId,
+          connectionId: payload.connectionId,
+        }),
       LoadPackage: (payload) => packages.loadPackage(payload.pkg),
+      GetPackages: () => packages.getPackages(),
       ProjectEventsStream: () =>
         pubsub.subscribe.pipe(Effect.map(Stream.fromSubscription), Stream.unwrap),
     });

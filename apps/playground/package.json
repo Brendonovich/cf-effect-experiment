@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@effect/platform-browser": "catalog:",
+    "@kobalte/core": "^0.13.11",
+    "@macrograph/core": "workspace:*",
     "@macrograph/editor": "workspace:*",
+    "@tanstack/solid-query": "^5.101.1",
     "effect": "catalog:",
     "solid-js": "^1.9.0"
   },

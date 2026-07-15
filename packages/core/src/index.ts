@@ -11,3 +11,4 @@ export { IoId } from "./IO.ts";
 export * as Connection from "./Connection.ts";
 export { ConnectionId } from "./Connection.ts";
 export { defaultPackage } from "./defaultPackage.ts";
+export { Plugin } from "./Plugin.ts";

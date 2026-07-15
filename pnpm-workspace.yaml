@@ -15,3 +15,6 @@ catalog:
   "@effect/platform-node": 4.0.0-beta.90
   "@effect/platform-node-shared": 4.0.0-beta.90
   "@effect/vitest": 4.0.0-beta.90
+
+patchedDependencies:
+  alchemy@2.0.0-beta.58: patches/alchemy@2.0.0-beta.58.patch

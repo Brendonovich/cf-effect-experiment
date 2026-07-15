@@ -1,8 +1,6 @@
-import { BrowserHttpClient, BrowserSocket } from "@effect/platform-browser";
+import { Package } from "@macrograph/core";
 import { Effect, Fiber, Schema, SchemaAST, Stream } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { Rpc, RpcClient, RpcSchema } from "effect/unstable/rpc";
-import { RpcSerialization } from "effect/unstable/rpc";
+import { Rpc, RpcSchema } from "effect/unstable/rpc";
 import { onCleanup, createSignal, type Component, Show, For } from "solid-js";
 
 import { SchemaView } from "./SchemaView";
@@ -10,12 +8,13 @@ import { SchemaView } from "./SchemaView";
 interface MethodProps {
   tag: string;
   rpc: Rpc.AnyWithProps;
-  group: { readonly requests: ReadonlyMap<string, Rpc.Any> };
-  url?: string;
-  wsUrl?: string;
+  client: any;
+  packages: Package.Model[];
 }
 
 export const RpcMethod: Component<MethodProps> = (props) => {
+  const packages = () => props.packages;
+
   const [expanded, setExpanded] = createSignal(false);
   const [payloadText, setPayloadText] = createSignal("");
   const [sending, setSending] = createSignal(false);
@@ -28,6 +27,17 @@ export const RpcMethod: Component<MethodProps> = (props) => {
   const [subscribed, setSubscribed] = createSignal(false);
   const [events, setEvents] = createSignal<any[]>([]);
   let fiber: Fiber.Fiber<any, any> | null = null;
+
+  // Autocomplete state
+  const [showAutocomplete, setShowAutocomplete] = createSignal(false);
+  const [autocompleteOptions, setAutocompleteOptions] = createSignal<
+    { label: string; value: string }[]
+  >([]);
+  const [autocompleteTarget, setAutocompleteTarget] = createSignal<{
+    start: number;
+    end: number;
+  } | null>(null);
+  let textareaRef: HTMLTextAreaElement | null = null;
 
   onCleanup(() => {
     if (fiber) {
@@ -51,85 +61,80 @@ export const RpcMethod: Component<MethodProps> = (props) => {
     }
   };
 
-  const callRpc = (decodedPayload: any) =>
-    props.wsUrl
-      ? Effect.scoped(
-          Effect.gen(function* () {
-            const client = yield* (RpcClient.make as any)(props.group);
-            return yield* (client as any)[props.tag](decodedPayload);
-          }),
-        ).pipe(
-          Effect.provide(RpcClient.layerProtocolSocket()),
-          Effect.provide(RpcSerialization.layerJsonRpc()),
-          Effect.provide(BrowserSocket.layerWebSocket(props.wsUrl)),
-          (e) => Effect.runPromise(e as Effect.Effect<unknown, unknown, never>),
-        )
-      : Effect.scoped(
-          Effect.gen(function* () {
-            const client = yield* HttpClient.HttpClient.pipe(
-              Effect.map(HttpClient.mapRequest(HttpClientRequest.prependUrl(requireUrl()))),
-            );
-            const protocol = yield* RpcClient.makeProtocolHttp(client);
-            const rpcClient = yield* (RpcClient.make as any)(props.group).pipe(
-              Effect.provideService(RpcClient.Protocol, protocol),
-            );
-            return yield* (rpcClient as any)[props.tag](decodedPayload);
-          }),
-        ).pipe(
-          Effect.provide(RpcSerialization.layerJsonRpc()),
-          Effect.provide(BrowserHttpClient.layerFetch),
-          (e) => Effect.runPromise(e as Effect.Effect<unknown, unknown, never>),
-        );
+  if (hasPayload()) {
+    generateTemplate();
+  }
 
-  const subscribeToStream = (decodedPayload: any) =>
-    props.wsUrl
-      ? Effect.scoped(
-          Effect.gen(function* () {
-            const protocol = yield* RpcClient.makeProtocolSocket();
-            const client = yield* (RpcClient.make as any)(props.group).pipe(
-              Effect.provideService(RpcClient.Protocol, protocol),
-            );
-            const stream = (client as any)[props.tag](decodedPayload);
-            yield* stream.pipe(
-              Stream.runForEach((event: any) =>
-                Effect.sync(() => {
-                  setEvents((prev) => [...prev, event]);
-                }),
-              ),
-            );
-          }).pipe(Effect.tapError(Effect.log), Effect.tapDefect(Effect.log)),
-        ).pipe(
-          Effect.provide(RpcSerialization.layerJsonRpc()),
-          Effect.provide(BrowserSocket.layerWebSocket(props.wsUrl)),
-        )
-      : Effect.scoped(
-          Effect.gen(function* () {
-            const client = yield* HttpClient.HttpClient.pipe(
-              Effect.map(HttpClient.mapRequest(HttpClientRequest.prependUrl(requireUrl()))),
-            );
-            const protocol = yield* RpcClient.makeProtocolHttp(client);
-            const rpcClient = yield* (RpcClient.make as any)(props.group).pipe(
-              Effect.provideService(RpcClient.Protocol, protocol),
-            );
-            const stream = (rpcClient as any)[props.tag](decodedPayload);
-            yield* stream.pipe(
-              Stream.runForEach((event: any) =>
-                Effect.sync(() => {
-                  setEvents((prev) => [...prev, event]);
-                }),
-              ),
-            );
-          }),
-        ).pipe(
-          Effect.provide(RpcSerialization.layerJsonRpc()),
-          Effect.provide(BrowserHttpClient.layerFetch),
-        );
+  const handleInput = (e: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
+    const text = payloadText();
+    const cursor = e.currentTarget.selectionStart;
+    const beforeCursor = text.slice(0, cursor);
+    const pkgs = packages();
 
-  const requireUrl = () => {
-    if (!props.url) {
-      throw new Error("RpcMethod requires either url or wsUrl");
+    // Check if we're inside a schema.package string value
+    const packageMatch = beforeCursor.match(/("package"\s*:\s*")([^"]*)$/);
+    if (packageMatch && packageMatch.length >= 3 && pkgs.length > 0) {
+      const partial = packageMatch[2]!.toLowerCase();
+      const options = pkgs
+        .filter(
+          (p) => p.id.toLowerCase().includes(partial) || p.name.toLowerCase().includes(partial),
+        )
+        .map((p) => ({ label: `${p.name} (${p.id})`, value: p.id }));
+      if (options.length > 0) {
+        setAutocompleteOptions(options);
+        setAutocompleteTarget({
+          start: packageMatch.index! + packageMatch[1]!.length,
+          end: cursor,
+        });
+        setShowAutocomplete(true);
+        return;
+      }
     }
-    return props.url;
+
+    // Check if we're inside a schema.schema string value
+    const schemaMatch = beforeCursor.match(/("schema"\s*:\s*")([^"]*)$/);
+    if (schemaMatch && schemaMatch.length >= 3 && pkgs.length > 0) {
+      const partial = schemaMatch[2]!.toLowerCase();
+      const options = pkgs.flatMap((p) =>
+        p.schemas
+          .filter(
+            (s) => s.id.toLowerCase().includes(partial) || s.name.toLowerCase().includes(partial),
+          )
+          .map((s) => ({
+            label: `${p.name} › ${s.name} (${s.id})`,
+            value: s.id,
+          })),
+      );
+      if (options.length > 0) {
+        setAutocompleteOptions(options);
+        setAutocompleteTarget({
+          start: schemaMatch.index! + schemaMatch[1]!.length,
+          end: cursor,
+        });
+        setShowAutocomplete(true);
+        return;
+      }
+    }
+
+    setShowAutocomplete(false);
+  };
+
+  const selectOption = (value: string) => {
+    const target = autocompleteTarget();
+    if (!target) return;
+    const text = payloadText();
+    const newText = text.slice(0, target.start) + value + text.slice(target.end);
+    setPayloadText(newText);
+    setShowAutocomplete(false);
+
+    // Restore focus and cursor
+    requestAnimationFrame(() => {
+      if (textareaRef) {
+        textareaRef.focus();
+        const newCursor = target.start + value.length;
+        textareaRef.setSelectionRange(newCursor, newCursor);
+      }
+    });
   };
 
   const send = async () => {
@@ -145,7 +150,9 @@ export const RpcMethod: Component<MethodProps> = (props) => {
         decodedPayload = Schema.decodeUnknownSync(codec as any)(parsed);
       }
 
-      const callResult = await callRpc(decodedPayload).then(
+      const callResult = await Effect.runPromise(
+        (props.client as any)[props.tag](decodedPayload),
+      ).then(
         (value) => ({ type: "success" as const, value }),
         (error: unknown) => ({ type: "error" as const, value: error }),
       );
@@ -188,7 +195,19 @@ export const RpcMethod: Component<MethodProps> = (props) => {
         decodedPayload = Schema.decodeUnknownSync(codec as any)(parsed);
       }
 
-      fiber = Effect.runFork(subscribeToStream(decodedPayload) as any);
+      const stream = (props.client as any)[props.tag](decodedPayload);
+
+      fiber = Effect.runFork(
+        stream.pipe(
+          Stream.runForEach((event: any) =>
+            Effect.sync(() => {
+              setEvents((prev) => [...prev, event]);
+            }),
+          ),
+          Effect.tapError(Effect.log),
+          Effect.tapDefect(Effect.log),
+        ),
+      );
     } catch (err: any) {
       setErrorText(err?.message ?? String(err));
     }
@@ -265,13 +284,33 @@ export const RpcMethod: Component<MethodProps> = (props) => {
             </button>
 
             <Show when={hasPayload()}>
-              <textarea
-                value={payloadText()}
-                onInput={(e) => setPayloadText(e.currentTarget.value)}
-                rows={6}
-                class="mt-2 w-full font-mono text-xs border border-gray-200 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                placeholder='{ "key": "value" }'
-              />
+              <div class="relative">
+                <textarea
+                  ref={(el) => (textareaRef = el)}
+                  value={payloadText()}
+                  onInput={handleInput}
+                  rows={6}
+                  class="mt-2 w-full font-mono text-xs border border-gray-200 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  placeholder='{ "key": "value" }'
+                />
+                <Show when={showAutocomplete()}>
+                  <div class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto">
+                    <For each={autocompleteOptions()}>
+                      {(opt) => (
+                        <button
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectOption(opt.value);
+                          }}
+                          class="block w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 text-gray-700"
+                        >
+                          {opt.label}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
             </Show>
 
             <div class="flex items-center gap-3">
@@ -383,9 +422,6 @@ function generateJsonTemplate(ast: SchemaAST.AST): unknown {
   }
 
   if (SchemaAST.isArrays(ast)) {
-    if (ast.rest.length > 0) {
-      return [generateJsonTemplate(ast.rest[0]!)];
-    }
     if (ast.elements.length > 0) {
       return ast.elements.map((t) => generateJsonTemplate(t));
     }
