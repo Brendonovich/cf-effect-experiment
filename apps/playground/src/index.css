@@ -14,3 +14,9 @@
     }
   }
 }
+
+.graph-canvas {
+  background-color: rgb(38 38 38);
+  background-image: radial-gradient(rgb(115 115 115 / 0.38) 1px, transparent 1px);
+  background-size: 20px 20px;
+}

@@ -2,6 +2,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Drizzle from "alchemy/Drizzle";
+import * as Output from "alchemy/Output";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
@@ -23,7 +24,7 @@ export default Alchemy.Stack(
 
     const playgroundDev = ctx.dev
       ? yield* Command.Dev("PlaygroundDev", {
-          command: "pnpm dev",
+          command: "pnpm exec vite --host 0.0.0.0",
           cwd: "../playground",
           env: { VITE_WORKER_URL: "http://localhost:1337" },
         })
@@ -42,8 +43,15 @@ export default Alchemy.Stack(
       Effect.provideService(AssetsDir, playgroundBuild?.outdir),
     );
 
-    return {
-      url: playgroundDev?.url ?? worker.url,
-    };
+    const playgroundUrl = playgroundDev
+      ? Output.map(playgroundDev.url, (url) => {
+          if (!url) return undefined;
+          const parsed = new URL(url);
+          parsed.hostname = "0.0.0.0";
+          return parsed.href;
+        })
+      : undefined;
+
+    return { url: playgroundUrl ?? worker.url };
   }),
 );

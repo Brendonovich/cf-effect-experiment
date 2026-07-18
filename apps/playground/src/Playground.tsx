@@ -16,6 +16,7 @@ import {
 import { CreateGraphPopover } from "./CreateGraphPopover";
 import { CreateNodePopover } from "./CreateNodePopover";
 import { EventLog } from "./EventLog";
+import { GraphNode } from "./GraphNode";
 import { RpcMethod } from "./RpcMethod";
 import { createPlaygroundStore } from "./store";
 
@@ -39,7 +40,10 @@ function graphTabClass(active: boolean): string {
 }
 
 export const Playground: Component<PlaygroundProps> = (props) => {
-  const clientId = crypto.randomUUID();
+  const clientId =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const [client, setClient] = createSignal<any>(null);
   const [reconnecting, setReconnecting] = createSignal(false);
   const { store, applyEvent, updateNodePosition, setProject, setPackages } =
@@ -153,6 +157,17 @@ export const Playground: Component<PlaygroundProps> = (props) => {
     Effect.runFork(
       c
         .SetNodePosition({ graphId, nodeId, x, y, ephemeral: true, clientId })
+        .pipe(Effect.tapError(Effect.log), Effect.tapDefect(Effect.log)),
+    );
+  };
+
+  const deleteNode = (nodeId: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId) return;
+    Effect.runFork(
+      c
+        .DeleteNode({ graphId, nodeId })
         .pipe(Effect.tapError(Effect.log), Effect.tapDefect(Effect.log)),
     );
   };
@@ -332,6 +347,10 @@ export const Playground: Component<PlaygroundProps> = (props) => {
                             client={client()}
                             graphId={selectedGraphId()!}
                             packages={store.packages}
+                            position={{
+                              x: 40 + (Object.keys(graph().nodes).length % 5) * 200,
+                              y: 40 + Math.floor(Object.keys(graph().nodes).length / 5) * 100,
+                            }}
                           />
                         </Show>
                       </div>
@@ -339,7 +358,7 @@ export const Playground: Component<PlaygroundProps> = (props) => {
                   </Show>
 
                   {/* Node canvas */}
-                  <div class="flex-1 overflow-auto relative">
+                  <div class="relative flex-1 overflow-auto bg-neutral-900">
                     <Show
                       when={selectedGraph()}
                       fallback={
@@ -350,21 +369,14 @@ export const Playground: Component<PlaygroundProps> = (props) => {
                         </div>
                       }
                     >
-                      <div class="absolute inset-0 bg-neutral-800">
+                      <div class="graph-canvas relative h-[2000px] w-[3000px] min-h-full min-w-full">
                         <For each={nodes()}>
                           {(node) => (
-                            <div
-                              class="absolute bg-white rounded shadow px-3 py-2 cursor-grab active:cursor-grabbing select-none"
-                              style={{
-                                transform: `translate(${node.position.x}px, ${node.position.y}px)`,
-                              }}
-                              onMouseDown={(e) => onNodeMouseDown(e, node)}
-                            >
-                              <div class="font-semibold text-gray-900">{node.name}</div>
-                              <div class="mt-1 text-xs text-gray-500 font-mono">
-                                {node.schema.package} › {node.schema.schema}
-                              </div>
-                            </div>
+                            <GraphNode
+                              node={node}
+                              onDragStart={onNodeMouseDown}
+                              onDelete={deleteNode}
+                            />
                           )}
                         </For>
                       </div>

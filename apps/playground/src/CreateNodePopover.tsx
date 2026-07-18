@@ -7,6 +7,7 @@ interface CreateNodePopoverProps {
   client: any;
   graphId: string;
   packages: Package.Model[];
+  position: { x: number; y: number };
 }
 
 export const CreateNodePopover: Component<CreateNodePopoverProps> = (props) => {
@@ -33,7 +34,7 @@ export const CreateNodePopover: Component<CreateNodePopoverProps> = (props) => {
           node: {
             name: input.name,
             schema: input.schema,
-            position: { x: 0, y: 0 },
+            position: props.position,
           },
         }),
       );

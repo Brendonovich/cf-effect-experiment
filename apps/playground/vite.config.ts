@@ -9,6 +9,7 @@ const workerUrl =
 export default defineConfig({
   plugins: [tailwindcss(), solid()],
   server: {
+    allowedHosts: ["brendan-box"],
     proxy: workerUrl
       ? {
           "/rpc": {
