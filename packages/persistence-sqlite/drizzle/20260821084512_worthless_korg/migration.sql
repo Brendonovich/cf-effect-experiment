@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `engines` text DEFAULT '{}' NOT NULL;

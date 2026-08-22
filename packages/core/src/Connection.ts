@@ -22,4 +22,9 @@ export const CreateInput = Schema.Struct({
 });
 export type CreateInput = typeof CreateInput.Type;
 
+export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()(
+  "InvalidConnectionError",
+  { reason: Schema.String },
+) {}
+
 export * as Connection from "./Connection.ts";

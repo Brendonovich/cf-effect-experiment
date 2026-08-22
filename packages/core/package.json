@@ -12,6 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@macrograph/plugin": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

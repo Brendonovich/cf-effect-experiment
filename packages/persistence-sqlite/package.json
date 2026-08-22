@@ -16,12 +16,13 @@
   "dependencies": {
     "@macrograph/core": "workspace:*",
     "@macrograph/persistence": "workspace:*",
-    "drizzle-orm": "1.0.0-rc.1",
+    "@macrograph/plugin": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^24",
-    "drizzle-kit": "1.0.0-rc.1",
+    "drizzle-kit": "1.0.0-rc.4",
     "typescript": "^5.8"
   }
 }

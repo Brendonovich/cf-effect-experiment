@@ -8,12 +8,16 @@ export type ProjectId = typeof ProjectId.Type;
 export const Model = Schema.Struct({
   name: Schema.String,
   graphs: Schema.Record(Schema.String, Graph.Model),
+  engines: Schema.Record(Schema.String, Schema.Unknown).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({})),
+  ),
 });
 export type Model = typeof Model.Type;
 
 export const empty = (): Model => ({
   name: "New Project",
   graphs: {},
+  engines: {},
 });
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()(

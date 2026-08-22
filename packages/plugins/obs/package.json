@@ -1,0 +1,26 @@
+{
+  "name": "@macrograph/plugin-obs",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Plugin.ts",
+  "exports": {
+    ".": "./src/Plugin.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment/WebSocket": "./src/Deployment/WebSocket.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/plugin": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^3"
+  }
+}

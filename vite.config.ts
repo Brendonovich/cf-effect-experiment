@@ -1,6 +1,12 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  lint: {
+    ignorePatterns: ["lib/**"],
+    rules: {
+      "no-unused-vars": "error",
+    },
+  },
   fmt: {
     ignorePatterns: ["lib/**"],
     sortImports: {

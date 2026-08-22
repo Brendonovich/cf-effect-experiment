@@ -1,5 +1,6 @@
 import { Connection, Graph, Node, Package as PkgTypes, Project } from "@macrograph/core";
 import { PersistenceError } from "@macrograph/persistence";
+import { HttpEndpoint } from "@macrograph/plugin";
 import { Effect, Schema, Stream } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -10,12 +11,17 @@ import { ProjectPubSub } from "./ProjectPubSub.ts";
 
 const ProjectAndPersistenceErrors = Schema.Union([PersistenceError, Project.NotFoundError]);
 
-const PersistenceAndGraphErrors = Schema.Union([PersistenceError, Graph.NotFoundError]);
-
 const PersistenceGraphAndNodeErrors = Schema.Union([
   PersistenceError,
   Graph.NotFoundError,
   Node.NotFoundError,
+]);
+const ConnectionErrors = Schema.Union([
+  PersistenceError,
+  Graph.NotFoundError,
+  Node.NotFoundError,
+  PkgTypes.SchemaNotFoundError,
+  Connection.InvalidError,
 ]);
 
 class CreateGraph extends Rpc.make("CreateGraph", {
@@ -74,7 +80,7 @@ class SetNodePosition extends Rpc.make("SetNodePosition", {
 class CreateConnection extends Rpc.make("CreateConnection", {
   payload: { graphId: Schema.String, connection: Connection.CreateInput },
   success: EditorEvent.ConnectionCreated,
-  error: PersistenceAndGraphErrors,
+  error: ConnectionErrors,
 }) {}
 
 class DeleteConnection extends Rpc.make("DeleteConnection", {
@@ -93,6 +99,23 @@ class GetPackages extends Rpc.make("GetPackages", {
   success: Schema.Array(PkgTypes.Model),
 }) {}
 
+class SetEngineState extends Rpc.make("SetEngineState", {
+  payload: { pluginId: Schema.String, state: Schema.Unknown },
+  success: EditorEvent.EngineStateChanged,
+  error: Schema.Union([PersistenceError, Editor.EngineNotRegistered, Editor.InvalidEngineState]),
+}) {}
+
+class GetIngressEndpoints extends Rpc.make("GetIngressEndpoints", {
+  payload: {},
+  success: Schema.Array(HttpEndpoint.Routed),
+}) {}
+
+class GetPluginClientState extends Rpc.make("GetPluginClientState", {
+  payload: { pluginId: Schema.String },
+  success: Schema.Unknown,
+  error: Editor.EngineNotHosted,
+}) {}
+
 const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
   success: Schema.Union([
     EditorEvent.GraphCreated,
@@ -103,6 +126,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.NodePositionChanged,
     EditorEvent.ConnectionCreated,
     EditorEvent.ConnectionDeleted,
+    EditorEvent.EngineStateChanged,
   ]),
   stream: true,
 });
@@ -119,6 +143,9 @@ export const EditorRpcs = RpcGroup.make(
   DeleteConnection,
   LoadPackage,
   GetPackages,
+  SetEngineState,
+  GetIngressEndpoints,
+  GetPluginClientState,
   ProjectEventsStream,
 );
 
@@ -173,6 +200,9 @@ export const handlerLayer = EditorRpcs.toLayer(
         }),
       LoadPackage: (payload) => packages.loadPackage(payload.pkg),
       GetPackages: () => packages.getPackages(),
+      SetEngineState: ({ pluginId, state }) => editor.engine.setState(pluginId, state),
+      GetIngressEndpoints: () => editor.engine.getEndpoints(),
+      GetPluginClientState: ({ pluginId }) => editor.engine.getClientState(pluginId),
       ProjectEventsStream: () =>
         pubsub.subscribe.pipe(Effect.map(Stream.fromSubscription), Stream.unwrap),
     });

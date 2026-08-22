@@ -29,7 +29,9 @@ export const layer = Layer.effect(
       yield* exec((db) => {
         db.transaction((tx) => {
           tx.delete(schema.projectMeta).run();
-          tx.insert(schema.projectMeta).values({ name: project.name }).run();
+          tx.insert(schema.projectMeta)
+            .values({ name: project.name, engines: project.engines })
+            .run();
 
           tx.delete(schema.connections).run();
           tx.delete(schema.nodes).run();
@@ -131,7 +133,7 @@ export const layer = Layer.effect(
           graphs[graphRow.id] = loadGraphModel(db, graphRow);
         }
 
-        return { name: meta.name, graphs };
+        return { name: meta.name, graphs, engines: meta.engines };
       });
 
       if (!result) {
@@ -141,6 +143,7 @@ export const layer = Layer.effect(
       return {
         name: result.name,
         graphs: result.graphs,
+        engines: result.engines,
       };
     });
 

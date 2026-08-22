@@ -5,6 +5,7 @@ import { Persistence, PersistenceError } from "../Persistence.ts";
 
 const ProjectMeta = Schema.Struct({
   name: Schema.String,
+  engines: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 export const layer = (dir: string) =>
@@ -25,7 +26,10 @@ export const layer = (dir: string) =>
         yield* fs.makeDirectory(graphsDir, { recursive: true }).pipe(PersistenceError.refail);
 
         yield* fs
-          .writeFileString(projectFilePath, JSON.stringify({ name: project.name }, null, 2))
+          .writeFileString(
+            projectFilePath,
+            JSON.stringify({ name: project.name, engines: project.engines }, null, 2),
+          )
           .pipe(PersistenceError.refail);
 
         for (const [graphId, graph] of Object.entries(project.graphs)) {
@@ -65,6 +69,7 @@ export const layer = (dir: string) =>
           // id: ProjectId.make(meta.id),
           name: meta.name,
           graphs,
+          engines: meta.engines ?? {},
         };
       }, lock.withPermit);
 

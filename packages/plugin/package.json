@@ -1,0 +1,27 @@
+{
+  "name": "@macrograph/plugin",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Engine": "./src/Engine.ts",
+    "./EngineTest": "./src/EngineTest.ts",
+    "./HttpEndpoint": "./src/HttpEndpoint.ts",
+    "./HttpIngress": "./src/HttpIngress.ts",
+    "./Plugin": "./src/Plugin.ts",
+    "./Registration": "./src/Registration.ts",
+    "./Resource": "./src/Resource.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "^5.8"
+  }
+}

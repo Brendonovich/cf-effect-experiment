@@ -1,8 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { PackageId, SchemaId } from "@macrograph/core";
+import { IoId, PackageId, SchemaId } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { Effect, Layer, PubSub } from "effect";
+import { Engine, Plugin } from "@macrograph/plugin";
+import { Effect, Layer, PubSub, Result, Schema } from "effect";
 
 import { Editor, Packages, ProjectPubSub } from "../src/index";
 
@@ -14,7 +15,15 @@ const schemaRef = {
 const TestPackage = {
   id: PackageId.make("pkg"),
   name: "Test",
-  schemas: [{ id: SchemaId.make("schema"), name: "Schema" }],
+  schemas: [
+    {
+      id: SchemaId.make("schema"),
+      name: "Schema",
+      type: "exec" as const,
+      executionInputs: [{ id: IoId.make("exec") }],
+      executionOutputs: [{ id: IoId.make("exec") }],
+    },
+  ],
 };
 
 const PackagesLayer = Layer.effect(
@@ -31,6 +40,7 @@ const SeedLayer = Layer.effectDiscard(
     db.saveProject({
       name: "test",
       graphs: {},
+      engines: {},
     }),
   ),
 );
@@ -55,6 +65,54 @@ it.layer(TestLayer)((it) => {
 
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
+      }),
+    );
+
+    it.effect("retrieves hosted plugin client state", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        yield* editor.engine.hostClientState("plugin", Effect.succeed({ connected: true }));
+
+        expect(yield* editor.engine.getClientState("plugin")).toEqual({ connected: true });
+        const missing = yield* editor.engine.getClientState("missing").pipe(Effect.result);
+        expect(Result.isFailure(missing)).toBe(true);
+        if (Result.isFailure(missing)) expect(missing.failure._tag).toBe("EngineNotHosted");
+      }),
+    );
+
+    it.effect("setEngineState validates, persists, and publishes state", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const events = yield* makeEventPull;
+        const TestEngine = Engine.make({
+          storage: Schema.Struct({ accounts: Schema.Array(Schema.String) }),
+          initialStorage: { accounts: [] },
+        });
+        const TestPlugin = Plugin.make({
+          id: "engine-test",
+          engine: TestEngine,
+          effect: () => Effect.void,
+        });
+        if (false) {
+          // @ts-expect-error Deployment layers must provide the declared engine service.
+          Engine.deployment(TestPlugin, Layer.empty);
+        }
+        const deployment = Engine.deployment(
+          TestPlugin,
+          TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        );
+        // @ts-expect-error Engine plugins cannot be registered without a deployment.
+        editor.plugin(TestPlugin);
+        yield* editor.plugin(TestPlugin, deployment);
+
+        const event = yield* editor.engine.setState("engine-test", {
+          accounts: ["one", "two"],
+        });
+
+        expect(yield* PubSub.take(events)).toEqual(event);
+        expect((yield* editor.project.get()).engines["engine-test"]).toEqual({
+          accounts: ["one", "two"],
+        });
       }),
     );
 
@@ -113,6 +171,53 @@ it.layer(TestLayer)((it) => {
         });
         const busEvent = yield* PubSub.take(events);
         expect(busEvent).toEqual(event);
+      }),
+    );
+
+    it.effect("createConnection publishes and persists an exec connection", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const events = yield* makeEventPull;
+
+        const graphEvent = yield* editor.graph.create({ name: "Test Graph" });
+        yield* PubSub.take(events);
+        const source = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: { name: "Source", schema: schemaRef },
+        });
+        yield* PubSub.take(events);
+        const target = yield* editor.node.create({
+          graphID: graphEvent.graph.id,
+          node: { name: "Target", schema: schemaRef },
+        });
+        yield* PubSub.take(events);
+
+        const event = yield* editor.connection.create({
+          graphID: graphEvent.graph.id,
+          connection: {
+            outNodeId: source.node.id,
+            outIoId: IoId.make("exec"),
+            inNodeId: target.node.id,
+            inIoId: IoId.make("exec"),
+          },
+        });
+
+        expect(yield* PubSub.take(events)).toEqual(event);
+        const project = yield* editor.project.get();
+        expect(project.graphs[graphEvent.graph.id]?.connections).toEqual([event.connection]);
+
+        const duplicate = yield* Effect.result(
+          editor.connection.create({
+            graphID: graphEvent.graph.id,
+            connection: {
+              outNodeId: source.node.id,
+              outIoId: IoId.make("exec"),
+              inNodeId: target.node.id,
+              inIoId: IoId.make("exec"),
+            },
+          }),
+        );
+        expect(Result.isFailure(duplicate)).toBe(true);
       }),
     );
 
@@ -199,7 +304,7 @@ it.layer(TestLayer)((it) => {
             context.schema.register({
               id: "schema",
               name: "Schema",
-              io: () => ({}),
+              io: (io) => ({ next: io.exec.out("next", { name: "Next" }) }),
               run: () => Effect.void,
             }),
         });
@@ -209,6 +314,9 @@ it.layer(TestLayer)((it) => {
           schema: SchemaId.make("schema"),
         });
         expect(schema.name).toBe("Schema");
+        expect(schema.type).toBe("exec");
+        expect(schema.executionInputs).toEqual([{ id: "exec" }]);
+        expect(schema.executionOutputs).toEqual([{ id: "exec" }, { id: "next", name: "Next" }]);
       }),
     );
   });

@@ -3,46 +3,48 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Output from "alchemy/Output";
+import * as Planetscale from "alchemy/Planetscale";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
-import { DrizzleMigrationBundle } from "./src/DrizzleMigrationBundle.ts";
-import MainWorkerLayer, { MainWorker, AssetsDir } from "./src/MainWorker.ts";
+import { AppDatabaseHyperdrive, RevisionSnapshots } from "./src/AppStorage.ts";
+import { DurableObjectMigrationBundle } from "./src/DurableObjectMigrationBundle.ts";
+import AppWorkerLayer, { AppWorker, WebAssetsDirectory } from "./src/Worker.ts";
 
 export default Alchemy.Stack(
-  "Cloudflare",
+  "Macrograph",
   {
     providers: Layer.mergeAll(
       Cloudflare.providers(),
       Drizzle.providers(),
-      DrizzleMigrationBundle.providers(),
+      Planetscale.providers(),
+      DurableObjectMigrationBundle.providers(),
     ),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const ctx = yield* Alchemy.AlchemyContext;
+    yield* AppDatabaseHyperdrive;
+    yield* RevisionSnapshots;
 
     const playgroundDev = ctx.dev
-      ? yield* Command.Dev("PlaygroundDev", {
-          command: "pnpm exec vite --host 0.0.0.0",
-          cwd: "../playground",
-          env: { VITE_WORKER_URL: "http://localhost:1337" },
+      ? yield* Command.Dev("WebAppDevServer", {
+          command: "bun dev-tunnel.ts",
         })
       : undefined;
 
     const playgroundBuild = !ctx.dev
-      ? yield* Command.Build("PlaygroundBuild", {
+      ? yield* Command.Build("WebAppBuild", {
           command: "pnpm run build",
           cwd: "../playground",
           outdir: "dist",
         })
       : undefined;
 
-    const worker = yield* MainWorker.pipe(
-      Effect.provide(MainWorkerLayer),
-      Effect.provideService(AssetsDir, playgroundBuild?.outdir),
+    const appWorker = yield* AppWorker.pipe(
+      Effect.provide(AppWorkerLayer),
+      Effect.provideService(WebAssetsDirectory, playgroundBuild?.outdir),
     );
-
     const playgroundUrl = playgroundDev
       ? Output.map(playgroundDev.url, (url) => {
           if (!url) return undefined;
@@ -52,6 +54,9 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    return { url: playgroundUrl ?? worker.url };
+    return {
+      url: playgroundUrl ?? appWorker.url,
+      ...(!ctx.dev && { publicWorkerUrl: appWorker.url }),
+    };
   }),
 );

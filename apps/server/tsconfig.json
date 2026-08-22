@@ -11,6 +11,12 @@
     { "path": "../../packages/core" },
     { "path": "../../packages/persistence" },
     { "path": "../../packages/persistence-sqlite" },
-    { "path": "../../packages/editor" }
+    { "path": "../../packages/editor" },
+    { "path": "../../packages/plugin" },
+    { "path": "../../packages/execution" },
+    { "path": "../../packages/project-host" },
+    { "path": "../../packages/plugins/kofi" },
+    { "path": "../../packages/plugins/twitch" },
+    { "path": "../../packages/plugins/obs" }
   ]
 }

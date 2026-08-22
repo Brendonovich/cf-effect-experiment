@@ -20,6 +20,12 @@
   },
   "references": [
     {
+      "path": "packages/plugin"
+    },
+    {
+      "path": "packages/cloud-api"
+    },
+    {
       "path": "packages/core"
     },
     {
@@ -29,13 +35,31 @@
       "path": "packages/persistence-sqlite"
     },
     {
-      "path": "packages/runtime"
+      "path": "packages/execution"
     },
     {
       "path": "packages/editor"
     },
     {
+      "path": "packages/http-ingress"
+    },
+    {
+      "path": "packages/project-host"
+    },
+    {
+      "path": "packages/plugins/twitch"
+    },
+    {
+      "path": "packages/plugins/kofi"
+    },
+    {
+      "path": "packages/plugins/obs"
+    },
+    {
       "path": "apps/server"
+    },
+    {
+      "path": "apps/cloudflare"
     }
   ]
 }

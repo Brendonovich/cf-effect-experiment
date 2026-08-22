@@ -2,17 +2,17 @@ import {
   Connection,
   Graph,
   GraphId,
+  IoId,
   Node,
   NodeId,
   Package,
   PackageId,
   Project,
   SchemaId,
-  Plugin,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
-import { Context, Effect, Layer, Ref, Semaphore } from "effect";
-import { Rpc } from "effect/unstable/rpc";
+import { HttpEndpoint, Registration, type Engine, type Plugin } from "@macrograph/plugin";
+import { Context, Effect, Layer, Ref, Schema, Semaphore } from "effect";
 
 import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
@@ -43,6 +43,21 @@ type NodeDeleteOptions = {
 };
 
 type NodeMutationError = PersistenceError | Graph.NotFoundError | Node.NotFoundError;
+
+export class EngineNotRegistered extends Schema.TaggedErrorClass<EngineNotRegistered>()(
+  "EngineNotRegistered",
+  { pluginId: Schema.String },
+) {}
+
+export class EngineNotHosted extends Schema.TaggedErrorClass<EngineNotHosted>()(
+  "EngineNotHosted",
+  { pluginId: Schema.String },
+) {}
+
+export class InvalidEngineState extends Schema.TaggedErrorClass<InvalidEngineState>()(
+  "InvalidEngineState",
+  { pluginId: Schema.String, cause: Schema.Unknown },
+) {}
 
 export interface Interface {
   readonly project: {
@@ -75,14 +90,39 @@ export interface Interface {
     readonly create: (options: {
       readonly graphID: string;
       readonly connection: Connection.CreateInput;
-    }) => Effect.Effect<EditorEvent.ConnectionCreated, PersistenceError | Graph.NotFoundError>;
+    }) => Effect.Effect<
+      EditorEvent.ConnectionCreated,
+      | PersistenceError
+      | Graph.NotFoundError
+      | Node.NotFoundError
+      | Package.SchemaNotFoundError
+      | Connection.InvalidError
+    >;
     readonly delete: (options: {
       readonly graphID: string;
       readonly connectionId: string;
     }) => Effect.Effect<EditorEvent.ConnectionDeleted, PersistenceError>;
   };
-  readonly plugin: <Engines extends Record<string, Plugin.Engine.Def<Rpc.Any>>>(
-    plugin: Plugin.Plugin<Engines>,
+  readonly engine: {
+    readonly setState: (
+      pluginId: string,
+      state: unknown,
+    ) => Effect.Effect<
+      EditorEvent.EngineStateChanged,
+      PersistenceError | EngineNotRegistered | InvalidEngineState
+    >;
+    readonly getEndpoints: () => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
+    readonly setEndpoints: (endpoints: ReadonlyArray<HttpEndpoint.Routed>) => Effect.Effect<void>;
+    readonly hostClientState: (
+      pluginId: string,
+      state: Effect.Effect<unknown>,
+    ) => Effect.Effect<void>;
+    readonly getClientState: (
+      pluginId: string,
+    ) => Effect.Effect<unknown, EngineNotHosted>;
+  };
+  readonly plugin: <Definition extends Engine.AnyDef = never>(
+    ...args: Plugin.RegisterArgs<Definition>
   ) => Effect.Effect<void>;
 }
 
@@ -95,6 +135,11 @@ export const layer = Layer.effect(
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
     const lock = yield* Semaphore.make(1);
+    const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
+    const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<unknown>>>(
+      new Map(),
+    );
+    const engineEndpoints = yield* Ref.make<ReadonlyArray<HttpEndpoint.Routed>>([]);
 
     const graphCreate = Effect.fn("Editor.graph.create")(function* (input: Graph.CreateInput) {
       const graphId = GraphId.make(Math.random().toString(36).slice(2));
@@ -172,7 +217,27 @@ export const layer = Layer.effect(
       readonly graphID: string;
       readonly connection: Connection.CreateInput;
     }) {
-      yield* persistence.loadGraph(options.graphID);
+      const graph = yield* persistence.loadGraph(options.graphID);
+      const outNode = yield* Graph.getNode(graph, options.connection.outNodeId);
+      const inNode = yield* Graph.getNode(graph, options.connection.inNodeId);
+      const outSchema = yield* packages.getSchema(outNode.schema);
+      const inSchema = yield* packages.getSchema(inNode.schema);
+
+      if (!outSchema.executionOutputs.some((output) => output.id === options.connection.outIoId))
+        return yield* new Connection.InvalidError({ reason: "Execution output does not exist" });
+      if (!inSchema.executionInputs.some((input) => input.id === options.connection.inIoId))
+        return yield* new Connection.InvalidError({ reason: "Execution input does not exist" });
+      if (
+        graph.connections.some(
+          (connection) =>
+            connection.outNodeId === options.connection.outNodeId &&
+            connection.outIoId === options.connection.outIoId,
+        )
+      )
+        return yield* new Connection.InvalidError({
+          reason: "Execution output already has a connection",
+        });
+
       const connection: Connection.Model = {
         ...options.connection,
         id: Connection.ConnectionId.make(Math.random().toString(36).slice(2)),
@@ -199,23 +264,53 @@ export const layer = Layer.effect(
       return yield* persistence.loadProject();
     }, lock.withPermit);
 
-    const plugin: Interface["plugin"] = (definition) =>
+    const engineSetState = Effect.fn("Editor.engine.setState")(function* (
+      pluginId: string,
+      state: unknown,
+    ) {
+      const definition = (yield* Ref.get(engines)).get(pluginId);
+      if (definition === undefined) return yield* new EngineNotRegistered({ pluginId });
+      const decoded = yield* Schema.decodeUnknownEffect(definition.Storage)(state).pipe(
+        Effect.mapError((cause) => new InvalidEngineState({ pluginId, cause })),
+      );
+      return yield* events.publish({ _tag: "EngineStateChanged", pluginId, state: decoded });
+    }, lock.withPermit);
+
+    const plugin: Interface["plugin"] = (...args) =>
       Effect.gen(function* () {
-        const schemas = yield* Ref.make<ReadonlyArray<Package.SchemaModel>>([]);
-        yield* definition.effect({
-          schema: {
-            register: (schema) =>
-              Ref.update(schemas, (registered) => [
-                ...registered.filter((item) => item.id !== schema.id),
-                { id: SchemaId.make(schema.id), name: schema.name ?? schema.id },
-              ]),
-          },
-        });
+        const [definition, deployment] = args;
+        if (
+          definition.engine !== undefined &&
+          (deployment === undefined ||
+            deployment.pluginId !== definition.id ||
+            deployment.definition !== definition.engine)
+        )
+          return yield* Effect.die(`Deployment does not match plugin ${definition.id}`);
+        const schemas = yield* Registration.collect(definition.effect);
         yield* packages.loadPackage({
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
-          schemas: yield* Ref.get(schemas),
+          schemas: schemas.map((schema) => ({
+            id: SchemaId.make(schema.id),
+            name: schema.name,
+            type: schema.type,
+            executionInputs: schema.executionInputs.map((input) => ({
+              id: IoId.make(input.id),
+              ...(input.name === undefined ? {} : { name: input.name }),
+            })),
+            executionOutputs: schema.executionOutputs.map((output) => ({
+              id: IoId.make(output.id),
+              ...(output.name === undefined ? {} : { name: output.name }),
+            })),
+          })),
         });
+        const engine = definition.engine;
+        if (engine !== undefined)
+          yield* Ref.update(engines, (current) => {
+            const next = new Map(current);
+            next.set(definition.id, engine);
+            return next;
+          });
       }).pipe(lock.withPermit);
 
     return Service.of({
@@ -223,6 +318,24 @@ export const layer = Layer.effect(
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
       node: { create: nodeCreate, update: nodeUpdate, delete: nodeDelete },
       connection: { create: connectionCreate, delete: connectionDelete },
+      engine: {
+        setState: engineSetState,
+        getEndpoints: () => Ref.get(engineEndpoints),
+        setEndpoints: (endpoints) => Ref.set(engineEndpoints, endpoints),
+        hostClientState: (pluginId, state) =>
+          Ref.update(engineClientStates, (current) => {
+            const next = new Map(current);
+            next.set(pluginId, state);
+            return next;
+          }),
+        getClientState: (pluginId) =>
+          Ref.get(engineClientStates).pipe(
+            Effect.flatMap((states) => {
+              const state = states.get(pluginId);
+              return state === undefined ? new EngineNotHosted({ pluginId }) : state;
+            }),
+          ),
+      },
       plugin,
     });
   }),

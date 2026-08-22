@@ -1,6 +1,42 @@
+@import "@radix-ui/colors/gray.css";
+@import "@radix-ui/colors/gray-dark.css";
+@import "@radix-ui/colors/red.css";
+@import "@radix-ui/colors/red-dark.css";
 @import "tailwindcss";
+@import "tw-animate-css";
+@source "../../../packages/plugins/kofi/src";
+@source "../../../packages/plugins/twitch/src";
 
 @theme {
+  --color-gray-1: var(--gray-1);
+  --color-gray-2: var(--gray-2);
+  --color-gray-3: var(--gray-3);
+  --color-gray-4: var(--gray-4);
+  --color-gray-5: var(--gray-5);
+  --color-gray-6: var(--gray-6);
+  --color-gray-7: var(--gray-7);
+  --color-gray-8: var(--gray-8);
+  --color-gray-9: var(--gray-9);
+  --color-gray-10: var(--gray-10);
+  --color-gray-11: var(--gray-11);
+  --color-gray-12: var(--gray-12);
+  --color-red-1: var(--red-1);
+  --color-red-2: var(--red-2);
+  --color-red-3: var(--red-3);
+  --color-red-4: var(--red-4);
+  --color-red-5: var(--red-5);
+  --color-red-6: var(--red-6);
+  --color-red-7: var(--red-7);
+  --color-red-8: var(--red-8);
+  --color-red-9: var(--red-9);
+  --color-red-10: var(--red-10);
+  --color-red-11: var(--red-11);
+  --color-red-12: var(--red-12);
+  --color-mg-event: #c20000;
+  --color-mg-exec: #2163eb;
+  --color-mg-pure: #008e62;
+  --color-mg-base: #696969;
+  --color-mg-focus: #eab308;
   --animate-event-in: event-in 0.25s ease-out;
 
   @keyframes event-in {
@@ -15,8 +51,25 @@
   }
 }
 
-.graph-canvas {
-  background-color: rgb(38 38 38);
-  background-image: radial-gradient(rgb(115 115 115 / 0.38) 1px, transparent 1px);
-  background-size: 20px 20px;
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--gray-1);
+  color: var(--gray-12);
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-mg-focus);
 }

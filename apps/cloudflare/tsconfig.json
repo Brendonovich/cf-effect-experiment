@@ -5,12 +5,20 @@
     "allowImportingTsExtensions": true,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "noEmit": true
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
   },
-  "include": ["src", "alchemy.run.ts"],
+  "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
     {
+      "path": "../../packages/cloud-api"
+    },
+    {
       "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/plugin"
     },
     {
       "path": "../../packages/persistence"
@@ -20,6 +28,21 @@
     },
     {
       "path": "../../packages/editor"
+    },
+    {
+      "path": "../../packages/execution"
+    },
+    {
+      "path": "../../packages/http-ingress"
+    },
+    {
+      "path": "../../packages/project-host"
+    },
+    {
+      "path": "../../packages/plugins/twitch"
+    },
+    {
+      "path": "../../packages/plugins/kofi"
     }
   ]
 }

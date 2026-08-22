@@ -1,7 +1,8 @@
-import { sqliteTable, text, real } from "drizzle-orm/sqlite-core";
+import { real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
   name: text("name").notNull(),
+  engines: text("engines", { mode: "json" }).notNull().$type<Record<string, unknown>>().default({}),
 });
 
 export const graphs = sqliteTable("graphs", {

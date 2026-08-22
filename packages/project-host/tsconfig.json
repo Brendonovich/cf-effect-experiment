@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist/types"
+  },
+  "include": ["src", "test"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../editor" },
+    { "path": "../execution" },
+    { "path": "../persistence" },
+    { "path": "../plugin" }
+  ]
+}

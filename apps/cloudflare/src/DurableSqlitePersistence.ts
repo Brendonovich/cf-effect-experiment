@@ -1,4 +1,4 @@
-import { DrizzleDriver, schema } from "@macrograph/persistence-sqlite";
+import { DrizzleDriver } from "@macrograph/persistence-sqlite";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
@@ -9,19 +9,16 @@ export const layer = (migrations: Record<string, string>) =>
     DrizzleDriver.Service,
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-      const client = {
-        sql: state.storage.sql.raw,
-        transactionSync: <T>(callback: () => T) => callback(),
-      };
-
-      const driver = drizzle(client, { schema });
+      const driver = drizzle(state.raw.storage);
       yield* state.blockConcurrencyWhile(() =>
         Effect.sync(() => {
           migrate(driver, { migrations });
         }),
       );
 
-      return DrizzleDriver.Service.of({ driver });
+      return DrizzleDriver.Service.of({
+        driver: driver as unknown as DrizzleDriver.DbDriver,
+      });
     }),
   );
 

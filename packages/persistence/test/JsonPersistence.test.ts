@@ -30,6 +30,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "My Project",
         graphs: { "graph-1": graph },
+        engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
       };
       yield* persistence.saveProject(project);
 
@@ -37,6 +38,7 @@ describe("JsonPersistence", () => {
       assert.strictEqual(loaded.name, "My Project");
       assert.ok(loaded.graphs["graph-1"]);
       assert.strictEqual(loaded.graphs["graph-1"].name, "My Graph");
+      assert.deepStrictEqual(loaded.engines, project.engines);
     }).pipe(Effect.provide(TestLayer)),
   );
 
@@ -55,6 +57,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "Empty",
         graphs: {},
+        engines: {},
       };
       yield* persistence.saveProject(project);
 
@@ -85,6 +88,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "P",
         graphs: { "graph-1": graph },
+        engines: {},
       };
       yield* persistence.saveProject(project);
 
@@ -152,6 +156,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "P",
         graphs: { "graph-1": graph },
+        engines: {},
       };
       yield* persistence.saveProject(project);
 

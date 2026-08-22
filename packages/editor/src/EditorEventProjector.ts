@@ -58,6 +58,15 @@ export const layer = Layer.effect(
 
         case "ConnectionDeleted":
           return persistence.deleteConnection(event.graphId, event.connectionId);
+
+        case "EngineStateChanged":
+          return Effect.gen(function* () {
+            const project = yield* persistence.loadProject();
+            return yield* persistence.saveProject({
+              ...project,
+              engines: { ...project.engines, [event.pluginId]: event.state },
+            });
+          }).pipe(PersistenceError.refail);
       }
     };
 

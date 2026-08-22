@@ -1,5 +1,6 @@
 packages:
   - "packages/*"
+  - "packages/plugins/*"
   - "apps/*"
 allowBuilds:
   esbuild: true
@@ -8,13 +9,10 @@ allowBuilds:
   workerd: true
 
 catalog:
-  effect: 4.0.0-beta.90
-  "@effect/opentelemetry": 4.0.0-beta.90
-  "@effect/platform-browser": 4.0.0-beta.90
-  "@effect/platform-bun": 4.0.0-beta.90
-  "@effect/platform-node": 4.0.0-beta.90
-  "@effect/platform-node-shared": 4.0.0-beta.90
-  "@effect/vitest": 4.0.0-beta.90
-
-patchedDependencies:
-  alchemy@2.0.0-beta.58: patches/alchemy@2.0.0-beta.58.patch
+  effect: 4.0.0-beta.101
+  "@effect/opentelemetry": 4.0.0-beta.101
+  "@effect/platform-browser": 4.0.0-beta.101
+  "@effect/platform-bun": 4.0.0-beta.101
+  "@effect/platform-node": 4.0.0-beta.101
+  "@effect/platform-node-shared": 4.0.0-beta.101
+  "@effect/vitest": 4.0.0-beta.101

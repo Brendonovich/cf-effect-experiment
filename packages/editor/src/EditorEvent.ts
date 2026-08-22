@@ -51,6 +51,12 @@ export const ConnectionDeleted = Schema.TaggedStruct("ConnectionDeleted", {
 });
 export type ConnectionDeleted = typeof ConnectionDeleted.Type;
 
+export const EngineStateChanged = Schema.TaggedStruct("EngineStateChanged", {
+  pluginId: Schema.String,
+  state: Schema.Unknown,
+});
+export type EngineStateChanged = typeof EngineStateChanged.Type;
+
 export type EditorEvent =
   | GraphCreated
   | GraphDeleted
@@ -59,7 +65,8 @@ export type EditorEvent =
   | NodeNameChanged
   | NodePositionChanged
   | ConnectionCreated
-  | ConnectionDeleted;
+  | ConnectionDeleted
+  | EngineStateChanged;
 
 export const is = <Tag extends EditorEvent["_tag"]>(
   event: EditorEvent,

@@ -3,23 +3,39 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "alchemy dev",
-    "deploy": "alchemy deploy"
+    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "dev": "pnpm alchemy dev",
+    "deploy": "pnpm alchemy deploy",
+    "test": "vp test run"
   },
   "dependencies": {
+    "@effect/platform-browser": "catalog:",
+    "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": "4.0.0-beta.90",
-    "alchemy": "2.0.0-beta.58",
-    "drizzle-orm": "1.0.0-rc.1",
+    "@effect/sql-pg": "4.0.0-beta.101",
+    "@macrograph/core": "workspace:*",
+    "@macrograph/cloud-api": "workspace:*",
+    "@macrograph/editor": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/http-ingress": "workspace:*",
+    "@macrograph/persistence": "workspace:*",
+    "@macrograph/persistence-sqlite": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@macrograph/plugin-kofi": "workspace:*",
+    "@macrograph/plugin-twitch": "workspace:*",
+    "@macrograph/project-host": "workspace:*",
+    "alchemy": "2.0.0-beta.64",
+    "drizzle-orm": "1.0.0-rc.4",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@distilled.cloud/cloudflare-rolldown-plugin": "^0.5.4",
-    "@macrograph/core": "workspace:*",
-    "@macrograph/editor": "workspace:*",
-    "@macrograph/persistence": "workspace:*",
-    "@macrograph/persistence-sqlite": "workspace:*",
-    "drizzle-kit": "1.0.0-rc.1",
-    "rolldown": "^1.0.1"
+    "@effect/vitest": "catalog:",
+    "@types/node": "^24",
+    "drizzle-kit": "1.0.0-rc.4",
+    "rolldown": "^1.0.1",
+    "vite": "^8.0.7",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"
   }
 }

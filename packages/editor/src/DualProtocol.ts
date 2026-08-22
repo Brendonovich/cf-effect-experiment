@@ -204,7 +204,7 @@ export const makeDualClientProtocol: Effect.Effect<
   const socket = yield* Socket.Socket;
   const serialization = yield* RpcSerialization.RpcSerialization;
   const customMessages = yield* Queue.make<Uint8Array>();
-  const requestClientMap = new Map<string, number>();
+  const requestClientMap = new Map<string | number, number>();
   const writeRaw = yield* socket.writer;
 
   const protocol = yield* RpcClient.Protocol.make(

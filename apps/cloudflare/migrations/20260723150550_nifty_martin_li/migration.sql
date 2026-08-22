@@ -1,0 +1,1 @@
+-- Baseline snapshot for the project schema created by 0001_projects.sql.

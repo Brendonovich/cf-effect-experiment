@@ -1,14 +1,9 @@
-import type { EmptyRelations } from "drizzle-orm";
-import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
+import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 
 import { PersistenceError } from "@macrograph/persistence";
-import { drizzle as nodeDrizzle } from "drizzle-orm/node-sqlite";
-import { migrate } from "drizzle-orm/node-sqlite/migrator";
 import { Context, Effect, Layer } from "effect";
 
-import * as schema from "./schema.ts";
-
-export type DbDriver = BaseSQLiteDatabase<"sync", unknown, typeof schema, EmptyRelations>;
+export type DbDriver = NodeSQLiteDatabase;
 export class Service extends Context.Service<
   Service,
   {
@@ -20,9 +15,11 @@ export const layerNodeSqlite = (dbPath: string, migrationsFolder: string) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      const nodeDrizzle = yield* Effect.promise(() => import("drizzle-orm/node-sqlite"));
+      const migrator = yield* Effect.promise(() => import("drizzle-orm/node-sqlite/migrator"));
       const driver = yield* Effect.sync(() => {
-        const db = nodeDrizzle(dbPath, { schema });
-        migrate(db, { migrationsFolder });
+        const db = nodeDrizzle.drizzle(dbPath);
+        migrator.migrate(db, { migrationsFolder });
         return db;
       }).pipe(PersistenceError.refail);
 
