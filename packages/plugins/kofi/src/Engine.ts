@@ -10,22 +10,36 @@ export const make = (makeWebhookId: () => string = () => crypto.randomUUID()) =>
       client: {
         state: mg.storage.get.pipe(
           Effect.map((storage) => ({
-            webhooks: Object.keys(storage.webhooks).map((id) => ({
+            webhooks: Object.entries(storage.webhooks).map(([id, webhook]) => ({
               id: WebhookId.make(id),
+              name: webhook.name ?? "Webhook",
             })),
           })),
         ),
         rpcs: ClientRpcs.toLayer({
-          KofiCreateWebhook: Effect.fnUntraced(function* ({ verificationToken }) {
+          KofiCreateWebhook: Effect.fnUntraced(function* ({ name, verificationToken }) {
             const webhookId = WebhookId.make(makeWebhookId());
             yield* mg.storage.update((storage) => ({
               webhooks: {
                 ...storage.webhooks,
-                [webhookId]: { verificationToken },
+                [webhookId]: { name, verificationToken },
               },
             }));
             yield* mg.client.refresh;
             return webhookId;
+          }),
+          KofiRenameWebhook: Effect.fnUntraced(function* ({ webhookId, name }) {
+            yield* mg.storage.update((storage) => {
+              const webhook = storage.webhooks[webhookId];
+              if (webhook === undefined) return storage;
+              return {
+                webhooks: {
+                  ...storage.webhooks,
+                  [webhookId]: { ...webhook, name },
+                },
+              };
+            });
+            yield* mg.client.refresh;
           }),
           KofiRemoveWebhook: Effect.fnUntraced(function* ({ webhookId }) {
             yield* mg.storage.update((storage) => {

@@ -1,8 +1,14 @@
-import { Data, Option, Ref } from "effect";
+import { Context, Data, Option, Redacted, Ref } from "effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as S from "effect/Schema";
-import { Headers, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
+import {
+  Headers,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import {
   HttpApi,
   HttpApiClient,
@@ -19,6 +25,14 @@ export class HelixError extends S.TaggedErrorClass<HelixError>()("HelixError", {
   status: S.optional(S.Number),
   body: S.optional(S.String),
 }) {}
+
+export class AppCredentials extends Context.Service<
+  AppCredentials,
+  {
+    readonly clientId: string;
+    readonly clientSecret: Redacted.Redacted;
+  }
+>()("@macrograph/plugin-twitch/Helix/AppCredentials") {}
 
 export const fromHttpClientError = Effect.fnUntraced(function* (
   error: HttpClientError.HttpClientError,
@@ -169,5 +183,24 @@ export const makeClient = (
       ),
     });
   });
+
+const AppAccessTokenResponse = S.Struct({ access_token: S.String });
+
+export const makeAppClient = Effect.gen(function* () {
+  const { clientId, clientSecret } = yield* AppCredentials;
+  const httpClient = yield* HttpClient.HttpClient;
+  const getToken = HttpClientRequest.post("https://id.twitch.tv/oauth2/token").pipe(
+    HttpClientRequest.bodyUrlParams({
+      client_id: clientId,
+      client_secret: Redacted.value(clientSecret),
+      grant_type: "client_credentials",
+    }),
+    HttpClient.filterStatusOk(httpClient).execute,
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(AppAccessTokenResponse)),
+    Effect.map((response) => response.access_token),
+    Effect.mapError((cause) => new HelixError({ reason: String(cause) })),
+  );
+  return yield* makeClient(yield* getToken, getToken.pipe(Effect.orDie), clientId);
+});
 
 export * as Helix from "./Helix.ts";

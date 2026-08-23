@@ -6,11 +6,7 @@ import type {
 import { createQuery } from "@tanstack/solid-query";
 import { For, Show, createEffect, createMemo, createSignal, type Component } from "solid-js";
 
-import type {
-  ExecutionsApiClient,
-  ProjectsApiClient,
-  RevisionsApiClient,
-} from "../../../../api";
+import type { ExecutionsApiClient, ProjectsApiClient, RevisionsApiClient } from "../../../../api";
 
 import { runApi } from "../../../../api";
 import { LoadingState } from "../../../../LoadingState";
@@ -239,7 +235,7 @@ export const RevisionBrowser: Component<RevisionBrowserProps> = (props) => {
 
   return (
     <div class="flex h-full min-h-0 bg-gray-2">
-      <aside class="w-72 shrink-0 overflow-y-auto border-r border-gray-5 bg-gray-1 p-3 text-gray-12">
+      <aside class="w-72 shrink-0 overflow-y-auto border-r border-gray-5 bg-gray-3 p-3 text-gray-12">
         <div class="mb-3 px-2">
           <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-11">
             Deployed revisions
@@ -321,7 +317,7 @@ export const RevisionBrowser: Component<RevisionBrowserProps> = (props) => {
       </aside>
 
       <section class="min-w-0 flex-1 flex flex-col">
-        <div class="flex h-12 shrink-0 items-center justify-between border-b border-gray-5 bg-gray-1 px-4">
+        <div class="flex h-12 shrink-0 items-center justify-between border-b border-gray-5 bg-gray-3 px-4">
           <Show
             when={selectedRevisionId() === undefined || !snapshotQuery.isPending}
             fallback={
@@ -344,7 +340,7 @@ export const RevisionBrowser: Component<RevisionBrowserProps> = (props) => {
         <Show when={selectedRevisionId() === undefined || !snapshotQuery.isPending} fallback={null}>
           <Show when={snapshot()} keyed>
             {(project) => (
-              <div class="flex shrink-0 overflow-x-auto border-b border-gray-5 bg-gray-2 px-2">
+              <div class="flex shrink-0 overflow-x-auto border-b border-gray-5 bg-gray-3 px-2">
                 <For each={Object.values(project.graphs)}>
                   {(graph) => (
                     <button
@@ -363,7 +359,7 @@ export const RevisionBrowser: Component<RevisionBrowserProps> = (props) => {
             )}
           </Show>
         </Show>
-        <div class="max-h-96 shrink-0 overflow-y-auto border-b border-gray-5 bg-gray-1 px-4 py-2 text-gray-12">
+        <div class="max-h-96 shrink-0 overflow-y-auto border-b border-gray-5 bg-gray-2 px-4 py-2 text-gray-12">
           <div class="mb-2 flex items-center justify-between">
             <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-11">
               Incoming events and executions
@@ -393,9 +389,9 @@ export const RevisionBrowser: Component<RevisionBrowserProps> = (props) => {
             >
               <For each={selectedExecutions()}>
                 {(execution) => (
-                  <div class="mb-1 overflow-hidden rounded bg-gray-2">
+                  <div class="mb-1 overflow-hidden rounded bg-gray-1">
                     <button
-                      class="grid w-full grid-cols-[100px_1fr_auto] items-center gap-3 px-2 py-1.5 text-left text-[10px] hover:bg-gray-3"
+                      class="grid w-full grid-cols-[100px_1fr_auto] items-center gap-3 px-2 py-1.5 text-left text-[10px] hover:bg-gray-2"
                       onClick={() => void toggleExecution(execution)}
                     >
                       <span

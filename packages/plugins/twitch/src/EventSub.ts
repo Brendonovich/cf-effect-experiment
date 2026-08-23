@@ -85,58 +85,7 @@ export namespace EventSubMessage {
   }
 }
 
-export const SUBSCRIPTION_TYPES = [
-  "channel.ban",
-  "channel.unban",
-  "channel.update",
-  "channel.ad_break.begin",
-  "channel.raid",
-  "channel.chat.clear",
-  "channel.chat.clear_user_messages",
-  "channel.chat.message",
-  "channel.chat.message_delete",
-  "channel.chat.notification",
-  "channel.chat_settings.update",
-  "channel.chat.user_message_hold",
-  "channel.chat.user_message_update",
-  "channel.subscribe",
-  "channel.subscription.end",
-  "channel.subscription.gift",
-  "channel.subscription.message",
-  "channel.cheer",
-  "channel.moderator.add",
-  "channel.moderator.remove",
-  "channel.vip.add",
-  "channel.vip.remove",
-  "channel.moderate",
-  "channel.unban_request.create",
-  "channel.unban_request.resolve",
-  "channel.suspicious_user.update",
-  "channel.suspicious_user.message",
-  "channel.warning.acknowledge",
-  "channel.warning.send",
-  "automod.settings.update",
-  "automod.terms.update",
-  "channel.poll.begin",
-  "channel.poll.progress",
-  "channel.poll.end",
-  "channel.prediction.begin",
-  "channel.prediction.progress",
-  "channel.prediction.lock",
-  "channel.prediction.end",
-  "channel.channel_points_automatic_reward_redemption.add",
-  "channel.hype_train.begin",
-  "channel.hype_train.progress",
-  "channel.hype_train.end",
-  "channel.charity_campaign.donate",
-  "channel.charity_campaign.start",
-  "channel.charity_campaign.progress",
-  "channel.charity_campaign.stop",
-  "channel.shared_chat.session.begin",
-  "channel.shared_chat.session.update",
-  "channel.shared_chat.session.end",
-  "channel.bits.use",
-] as const;
+export const SUBSCRIPTION_TYPES = ["channel.ban", "channel.unban"] as const;
 
 const SubscriptionType =
   <Self>() =>
@@ -189,12 +138,22 @@ export namespace SubscriptionEvent {
     },
   }) {}
 
-  // export class ChannelUnban extends SubscriptionType<ChannelUnban>()({
-  // 	type: "channel.unban",
-  // 	version: 1,
-  // 	condition: { broadcaster_user_id: S.String },
-  // 	event: { ...User, ...BroadcasterUser, ...ModeratorUser },
-  // }) {}
+  export class ChannelUnban extends SubscriptionType<ChannelUnban>()({
+    type: "channel.unban",
+    version: 1,
+    condition: { broadcaster_user_id: S.String },
+    event: {
+      user_id: S.String,
+      user_login: S.String,
+      user_name: S.String,
+      broadcaster_user_id: S.String,
+      broadcaster_user_login: S.String,
+      broadcaster_user_name: S.String,
+      moderator_user_id: S.String,
+      moderator_user_login: S.String,
+      moderator_user_name: S.String,
+    },
+  }) {}
 
   // export class ChannelUpdate extends SubscriptionType<ChannelUpdate>()({
   // 	type: "channel.update",
@@ -1383,7 +1342,7 @@ export namespace SubscriptionEvent {
 
   export const Any = S.Union([
     ChannelBan,
-    // ChannelUnban,
+    ChannelUnban,
     // ChannelUpdate,
     // ChannelAdBreakBegin,
     // ChannelRaid,

@@ -547,6 +547,45 @@ export const make = (
           }),
         )
         .handle(
+          "remove",
+          Effect.fnUntraced(function* ({ params }) {
+            const user = yield* CurrentUser;
+            const rows = yield* database
+              .select({ project: projects, role: teamMemberships.role })
+              .from(projects)
+              .innerJoin(
+                teamMemberships,
+                and(
+                  eq(teamMemberships.teamId, projects.teamId),
+                  eq(teamMemberships.userId, user.id),
+                ),
+              )
+              .where(eq(projects.id, params.projectId))
+              .limit(1)
+              .pipe(Effect.orDie);
+            const row = rows[0];
+            if (row === undefined) return yield* new ProjectNotFound();
+            if (!canAdministerTeam(row.role)) return yield* new HttpApiError.Forbidden();
+            const snapshots = yield* database
+              .select({ r2Key: projectRevisions.r2Key })
+              .from(projectRevisions)
+              .where(eq(projectRevisions.projectId, row.project.id))
+              .pipe(Effect.orDie);
+            yield* runtime.undeployProject(row.project.id);
+            yield* database.delete(projects).where(eq(projects.id, row.project.id)).pipe(Effect.orDie);
+            yield* Effect.forEach(
+              snapshots,
+              (snapshot) =>
+                revisions.delete(snapshot.r2Key).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logError("Failed to remove project revision snapshot", cause),
+                  ),
+                ),
+              { discard: true },
+            );
+          }),
+        )
+        .handle(
           "getAccess",
           Effect.fnUntraced(function* ({ params }) {
             const user = yield* CurrentUser;

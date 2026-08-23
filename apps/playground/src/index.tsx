@@ -2,6 +2,7 @@ import { createRouter } from "@solidjs/router";
 import { render } from "@solidjs/web";
 /* @refresh reload */
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
+import { Loading } from "solid-js";
 
 import "./index.css";
 import { App } from "./App";
@@ -60,7 +61,9 @@ if (root) {
   render(
     () => (
       <QueryClientProvider client={queryClient}>
-        <Router>{(props) => <App {...props} />}</Router>
+        <Loading fallback={null}>
+          <Router>{(props) => <App {...props} />}</Router>
+        </Loading>
       </QueryClientProvider>
     ),
     root,

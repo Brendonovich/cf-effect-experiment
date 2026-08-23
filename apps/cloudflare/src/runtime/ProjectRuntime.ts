@@ -10,6 +10,7 @@ import { FetchHttpClient, HttpRouter, HttpServerResponse } from "effect/unstable
 
 import { DurableObjectHttpEndpointHost } from "../DurableObjectHttpEndpointHost.ts";
 import { ObservabilityLayer } from "../Observability.ts";
+import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../Twitch.ts";
 
 export interface IngressRequest {
   readonly projectId: string;
@@ -464,6 +465,10 @@ export default class ProjectRuntime extends Cloudflare.DurableObject<ProjectRunt
         lookupEndpoint,
         upsertEndpointSecret,
       };
-    }).pipe(Effect.provide(endpointHostLayer), Effect.provide(FetchHttpClient.layer));
+    }).pipe(
+      Effect.provide(endpointHostLayer),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(TwitchAppCredentialsLayer),
+    );
   }).pipe(Effect.provide(ObservabilityLayer)),
 ) {}

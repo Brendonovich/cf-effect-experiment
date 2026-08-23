@@ -50,12 +50,19 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
 
       const eventSub = yield* makeEventSub({
         getAccountIds: mg.storage.get.pipe(
-          Effect.map((storage) => Object.keys(storage.accounts).map((id) => AccountId.make(id))),
+          Effect.map((storage) =>
+            Object.entries(storage.accounts).flatMap(([id, account]) =>
+              account.enabled ? [AccountId.make(id)] : [],
+            ),
+          ),
         ),
         getHelix: (accountId) => helixClients.lookup(accountId),
         getSubscriptions: (accountId) =>
           mg.storage.get.pipe(
-            Effect.map((storage) => storage.accounts[accountId]?.subscriptions ?? []),
+            Effect.map((storage) => {
+              const account = storage.accounts[accountId];
+              return account?.enabled ? account.subscriptions : [];
+            }),
           ),
         emit: mg.emit,
         refresh: mg.client.refresh,
@@ -79,7 +86,7 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
               ? mg.storage.get.pipe(
                   Effect.flatMap((storage) => {
                     const accountId = AccountId.make(credential.id);
-                    return storage.accounts[accountId] === undefined
+                    return storage.accounts[accountId]?.enabled !== true
                       ? Effect.void
                       : connect(accountId).pipe(Effect.forkIn(scope), Effect.asVoid);
                   }),
@@ -93,8 +100,9 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
       yield* mg.storage.get.pipe(
         Effect.flatMap((storage) =>
           Effect.forEach(
-            Object.keys(storage.accounts),
-            (accountId) => connect(AccountId.make(accountId)),
+            Object.entries(storage.accounts),
+            ([accountId, account]) =>
+              account.enabled ? connect(AccountId.make(accountId)) : Effect.void,
             { discard: true },
           ),
         ),
@@ -117,8 +125,10 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                 displayName: credential.displayName ?? credential.id,
                 eventSubSocket: {
                   state:
-                    HashMap.get(eventSubState, id).pipe(Option.getOrUndefined)?.state ??
-                    "disconnected",
+                    storage.accounts[id]?.enabled === true
+                      ? (HashMap.get(eventSubState, id).pipe(Option.getOrUndefined)?.state ??
+                        "disconnected")
+                      : "disconnected",
                 },
                 enabledSubscriptions: storage.accounts[id]?.subscriptions ?? [],
               };
@@ -176,6 +186,17 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
             ConnectEventSub: ({ accountId }) =>
               Effect.gen(function* () {
                 yield* Effect.logInfo("EventSub connect RPC received");
+                const storage = yield* mg.storage.get;
+                if (storage.accounts[accountId]?.enabled !== true)
+                  yield* mg.storage.update((current) => ({
+                    accounts: {
+                      ...current.accounts,
+                      [accountId]: {
+                        enabled: true,
+                        subscriptions: current.accounts[accountId]?.subscriptions ?? [],
+                      },
+                    },
+                  }));
                 yield* eventSub.connect(accountId).pipe(
                   Effect.tap(() => Effect.logInfo("EventSub connect RPC completed")),
                   Effect.tapError((error) => Effect.logError("EventSub connect RPC failed", error)),
@@ -185,6 +206,16 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
               Effect.gen(function* () {
                 yield* Effect.logInfo("EventSub disconnect RPC received");
                 yield* eventSub.disconnect(accountId);
+                yield* mg.storage.update((storage) => {
+                  const account = storage.accounts[accountId];
+                  if (account === undefined) return storage;
+                  return {
+                    accounts: {
+                      ...storage.accounts,
+                      [accountId]: { ...account, enabled: false },
+                    },
+                  };
+                });
                 yield* Effect.logInfo("EventSub disconnect RPC completed");
               }).pipe(Effect.annotateLogs({ accountId, eventSubTransport: eventSub.transport })),
             ToggleEventSubSubscription: Effect.fnUntraced(function* ({
@@ -203,16 +234,21 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                 return {
                   accounts: {
                     ...storage.accounts,
-                    [accountId]: { subscriptions },
+                    [accountId]: {
+                      enabled: storage.accounts[accountId]?.enabled ?? true,
+                      subscriptions,
+                    },
                   },
                 };
               });
-              yield* eventSub.connect(accountId).pipe(
-                Effect.catch((error) =>
-                  Effect.log("Failed to reconcile EventSub subscriptions", error),
-                ),
-                Effect.ignore,
-              );
+              const storage = yield* mg.storage.get;
+              if (storage.accounts[accountId]?.enabled === true)
+                yield* eventSub.connect(accountId).pipe(
+                  Effect.catch((error) =>
+                    Effect.log("Failed to reconcile EventSub subscriptions", error),
+                  ),
+                  Effect.ignore,
+                );
             }),
           }),
         },

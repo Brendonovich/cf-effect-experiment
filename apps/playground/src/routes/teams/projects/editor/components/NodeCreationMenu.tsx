@@ -27,7 +27,8 @@ export function NodeCreationMenu(props: {
   };
 
   onSettled(() => {
-    queueMicrotask(() => root?.querySelector("input")?.focus());
+    if (!matchMedia("(pointer: coarse)").matches)
+      queueMicrotask(() => root?.querySelector("input")?.focus());
     const close = (event: PointerEvent) => {
       if (!root?.contains(event.target as globalThis.Node)) props.onClose();
     };
@@ -45,10 +46,10 @@ export function NodeCreationMenu(props: {
   return (
     <div
       ref={root}
-      class="fixed z-50 flex h-[22rem] w-72 flex-col overflow-hidden rounded border border-gray-5 bg-gray-3 text-sm shadow-xl"
+      class="fixed z-50 flex h-[min(22rem,calc(100dvh-1rem))] w-[min(18rem,calc(100vw-1rem))] flex-col overflow-hidden rounded border border-gray-5 bg-gray-3 text-sm shadow-xl"
       style={{
-        left: `${Math.max(8, Math.min(innerWidth - 296, props.screenPosition.x - 16))}px`,
-        top: `${Math.max(8, Math.min(innerHeight - 360, props.screenPosition.y - 16))}px`,
+        left: `${Math.max(8, Math.min(innerWidth - Math.min(288, innerWidth - 16) - 8, props.screenPosition.x - 16))}px`,
+        top: `${Math.max(8, Math.min(innerHeight - Math.min(352, innerHeight - 16) - 8, props.screenPosition.y - 16))}px`,
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -73,7 +74,7 @@ export function NodeCreationMenu(props: {
                   {(schema) => (
                     <button
                       type="button"
-                      class="focus-ring flex w-full flex-row items-center gap-2 rounded bg-transparent px-1 py-0.5 text-left text-gray-12 hover:bg-gray-5"
+                      class="focus-ring flex w-full flex-row items-center gap-2 rounded bg-transparent px-1 py-0.5 text-left text-gray-12 hover:bg-gray-5 [@media(pointer:coarse)]:min-h-10 [@media(pointer:coarse)]:px-2"
                       onClick={() => {
                         props.onCreate({ package: pkg.id, schema: schema.id }, schema.name);
                         props.onClose();

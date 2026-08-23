@@ -15,8 +15,13 @@ export interface SettingsProps {
   readonly endpoints: ReadonlyArray<SettingsEndpoint>;
   readonly rpc: {
     readonly KofiCreateWebhook: (payload: {
+      readonly name: string;
       readonly verificationToken: string;
     }) => Effect.Effect<WebhookId, unknown>;
+    readonly KofiRenameWebhook: (payload: {
+      readonly webhookId: WebhookId;
+      readonly name: string;
+    }) => Effect.Effect<void, unknown>;
     readonly KofiRemoveWebhook: (payload: {
       readonly webhookId: WebhookId;
     }) => Effect.Effect<void, unknown>;
@@ -25,10 +30,12 @@ export interface SettingsProps {
 }
 
 const Settings: Component<SettingsProps> = (props) => {
+  const [name, setName] = createSignal("");
   const [verificationToken, setVerificationToken] = createSignal("");
   const [status, setStatus] = createSignal("");
   const [copied, setCopied] = createSignal<string>();
-  const [collapsedWebhooks, setCollapsedWebhooks] = createSignal<ReadonlyArray<WebhookId>>([]);
+  const [editingWebhook, setEditingWebhook] = createSignal<WebhookId>();
+  const [editedName, setEditedName] = createSignal("");
 
   const endpointFor = (webhookId: WebhookId) =>
     props.endpoints.find(
@@ -36,28 +43,51 @@ const Settings: Component<SettingsProps> = (props) => {
     );
 
   const createWebhook = action(async function* () {
+    const webhookName = name().trim();
     const token = verificationToken().trim();
-    if (token.length === 0) return;
-    setStatus("Creating endpoint...");
+    if (webhookName.length === 0 || token.length === 0) return;
+    setStatus("Creating webhook...");
     yield;
     const result = await Effect.runPromise(
-      props.rpc.KofiCreateWebhook({ verificationToken: token }),
+      props.rpc.KofiCreateWebhook({ name: webhookName, verificationToken: token }),
     ).then(
       () => ({ success: true as const }),
       (error: unknown) => ({ success: false as const, error }),
     );
     yield;
     if (!result.success) {
-      setStatus(`Could not create endpoint: ${String(result.error)}`);
+      setStatus(`Could not create webhook: ${String(result.error)}`);
       return;
     }
+    setName("");
     setVerificationToken("");
     yield props.onChanged();
-    setStatus("Endpoint ready");
+    setStatus("Webhook added");
+  });
+
+  const renameWebhook = action(async function* (webhookId: WebhookId) {
+    const webhookName = editedName().trim();
+    setEditingWebhook(undefined);
+    if (webhookName.length === 0) return;
+    setStatus("Renaming webhook...");
+    yield;
+    const result = await Effect.runPromise(
+      props.rpc.KofiRenameWebhook({ webhookId, name: webhookName }),
+    ).then(
+      () => ({ success: true as const }),
+      (error: unknown) => ({ success: false as const, error }),
+    );
+    yield;
+    if (!result.success) {
+      setStatus(`Could not rename webhook: ${String(result.error)}`);
+      return;
+    }
+    yield props.onChanged();
+    setStatus("");
   });
 
   const removeWebhook = action(async function* (webhookId: WebhookId) {
-    setStatus("Removing endpoint...");
+    setStatus("Removing webhook...");
     yield;
     const result = await Effect.runPromise(props.rpc.KofiRemoveWebhook({ webhookId })).then(
       () => ({ success: true as const }),
@@ -65,14 +95,14 @@ const Settings: Component<SettingsProps> = (props) => {
     );
     yield;
     if (!result.success) {
-      setStatus(`Could not remove endpoint: ${String(result.error)}`);
+      setStatus(`Could not remove webhook: ${String(result.error)}`);
       return;
     }
     yield props.onChanged();
-    setStatus("Endpoint removed");
+    setStatus("Webhook removed");
   });
 
-  const copyEndpoint = action(async function* (endpoint: SettingsEndpoint) {
+  const copyEndpoint = async (endpoint: SettingsEndpoint) => {
     const copyWithSelection = () => {
       const input = document.createElement("textarea");
       input.value = endpoint.url;
@@ -92,7 +122,7 @@ const Settings: Component<SettingsProps> = (props) => {
     try {
       if (window.isSecureContext && navigator.clipboard !== undefined) {
         try {
-          yield navigator.clipboard.writeText(endpoint.url);
+          await navigator.clipboard.writeText(endpoint.url);
         } catch {
           copyWithSelection();
         }
@@ -101,115 +131,109 @@ const Settings: Component<SettingsProps> = (props) => {
       }
       setCopied(endpoint.id);
       setStatus("");
-      yield new Promise((resolve) => setTimeout(resolve, 1800));
-      setCopied(undefined);
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      if (copied() === endpoint.id) setCopied(undefined);
     } catch {
-      yield;
       setStatus("Could not copy the ingest URL");
     }
-  });
+  };
 
   return (
     <section class="text-gray-12">
       <For each={props.state.webhooks}>
         {(webhook) => {
           const endpoint = () => endpointFor(webhook.id);
-          const collapsed = () => collapsedWebhooks().includes(webhook.id);
           return (
-            <section class="grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-gray-6 py-3 first:pt-0">
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-gray-6 py-3 first:pt-0">
+              <div class="-ml-2 h-7 w-64 max-w-full min-w-0">
+                <Show
+                  when={editingWebhook() === webhook.id}
+                  fallback={
+                    <button
+                      type="button"
+                      class="focus-ring h-full w-full truncate rounded bg-transparent px-2 text-left text-sm font-medium text-gray-12 transition-colors hover:bg-gray-3"
+                      title="Rename webhook"
+                      onClick={() => {
+                        setEditedName(webhook.name);
+                        setEditingWebhook(webhook.id);
+                      }}
+                    >
+                      {webhook.name}
+                    </button>
+                  }
+                >
+                  <input
+                    ref={(input) =>
+                      queueMicrotask(() => {
+                        input.focus();
+                        input.select();
+                      })
+                    }
+                    type="text"
+                    aria-label="Webhook name"
+                    class="focus-ring h-full w-full min-w-0 rounded border border-gray-7 bg-gray-1 px-2 text-sm text-gray-12"
+                    value={editedName()}
+                    onInput={(event) => setEditedName(event.currentTarget.value)}
+                    onBlur={() => {
+                      if (editingWebhook() === webhook.id) void renameWebhook(webhook.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void renameWebhook(webhook.id);
+                      if (event.key === "Escape") setEditingWebhook(undefined);
+                    }}
+                  />
+                </Show>
+              </div>
               <button
                 type="button"
-                class="focus-ring col-start-1 row-start-1"
-                aria-label={collapsed() ? "Expand webhook" : "Collapse webhook"}
-                onClick={() =>
-                  setCollapsedWebhooks((webhooks) =>
-                    webhooks.includes(webhook.id)
-                      ? webhooks.filter((id) => id !== webhook.id)
-                      : [...webhooks, webhook.id],
-                  )
-                }
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  class={`size-4 transition-transform ${collapsed() ? "-rotate-90" : ""}`}
-                  aria-hidden="true"
-                >
-                  <path
-                    d="m3 6 5 5 5-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.75"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
-              <h3 class="col-start-2 row-start-1 truncate text-sm font-semibold">Ko-fi Webhook</h3>
-              <button
-                class="focus-ring col-start-3 row-start-1 px-1 text-xs font-medium hover:text-red-11"
+                class="focus-ring col-start-2 row-span-2 row-start-1 h-8 self-center rounded bg-transparent px-2.5 py-1 text-sm font-medium text-red-10 transition-colors enabled:hover:bg-red-3 disabled:bg-red-3 disabled:text-red-9"
                 onClick={() => void removeWebhook(webhook.id)}
               >
                 Remove
               </button>
-              <Show when={!collapsed()}>
-                <span
-                  class={`col-start-1 row-start-2 size-2.5 justify-self-center rounded-full ${endpoint() ? "bg-green-500" : "bg-amber-500"}`}
-                />
-                <span class="col-start-2 row-start-2 text-xs italic text-gray-11">
-                  {endpoint() ? "Endpoint Connected" : "Endpoint Provisioning"}
-                </span>
-                <div class="col-start-2 row-start-3 mt-2 min-w-0">
-                  <div class="text-xs font-medium">Ingest URL</div>
-                  <Show
-                    when={endpoint()}
-                    fallback={<div class="text-xs text-gray-11">Provisioning...</div>}
-                  >
-                    {(resolved) => (
-                      <div class="truncate text-xs text-gray-11">{resolved().url}</div>
-                    )}
-                  </Show>
-                </div>
-                <Show when={endpoint()}>
-                  {(resolved) => (
+              <Show
+                when={endpoint()}
+                fallback={<div class="min-w-0 text-xs italic text-gray-11">Provisioning...</div>}
+              >
+                {(resolved) => (
+                  <div class="group/copy relative min-w-0">
                     <button
                       type="button"
-                      class="focus-ring col-start-3 row-start-3 mt-2 self-end px-1 text-xs font-medium hover:text-gray-11"
+                      class="focus-ring block w-full truncate text-left font-mono text-xs text-gray-11 hover:text-gray-12"
+                      aria-label={`Copy webhook URL for ${webhook.name}`}
                       onClick={() => void copyEndpoint(resolved())}
                     >
-                      {copied() === resolved().id ? "Copied" : "Copy"}
+                      {resolved().url}
                     </button>
-                  )}
-                </Show>
+                    <span class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 translate-y-1 scale-95 rounded border border-gray-6 bg-gray-2 px-2 py-1 text-[11px] font-medium text-gray-12 opacity-0 shadow-xl transition group-hover/copy:translate-y-0 group-hover/copy:scale-100 group-hover/copy:opacity-100 group-focus-within/copy:translate-y-0 group-focus-within/copy:scale-100 group-focus-within/copy:opacity-100">
+                      {copied() === resolved().id ? "Copied" : "Copy URL"}
+                      <span class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 border-b border-r border-gray-6 bg-gray-2" />
+                    </span>
+                  </div>
+                )}
               </Show>
-            </section>
+            </div>
           );
         }}
       </For>
-      <section class="grid grid-cols-[1rem_minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1 py-3">
-        <svg
-          viewBox="0 0 16 16"
-          class="col-start-1 row-start-1 size-4 self-center"
-          aria-hidden="true"
-        >
-          <path
-            d="M8 3v10M3 8h10"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.75"
-            stroke-linecap="round"
+      <section class="py-3">
+        <h3 class="text-sm font-semibold">Add webhook</h3>
+        <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            aria-label="Webhook name"
+            autocomplete="off"
+            class="focus-ring min-w-0 rounded-md border border-gray-6 bg-gray-1 px-3 py-2 text-xs text-gray-12 placeholder:text-gray-9 focus:border-gray-8 sm:w-48"
+            value={name()}
+            onInput={(event) => setName(event.currentTarget.value)}
+            placeholder="Name"
           />
-        </svg>
-        <h3 class="col-start-2 row-start-1 text-sm font-semibold">Add Webhook</h3>
-        <p class="col-span-2 col-start-2 row-start-2 text-xs text-gray-11">
-          Paste the verification token from your Ko-fi webhook settings.
-        </p>
-        <label class="col-start-2 row-start-3 mt-2 min-w-0" for="kofi-token">
-          <span class="block text-xs font-medium text-gray-11">Verification Token</span>
           <input
             id="kofi-token"
-            type="text"
+            type="password"
+            aria-label="Ko-fi verification token"
             autocomplete="off"
-            class="focus-ring w-full border-0 border-b border-gray-7 bg-transparent px-0 py-1 text-xs text-gray-12 placeholder:text-gray-9"
+            class="focus-ring min-w-0 flex-1 rounded-md border border-gray-6 bg-gray-1 px-3 py-2 font-mono text-xs text-gray-12 placeholder:font-sans placeholder:text-gray-9 focus:border-gray-8"
             value={verificationToken()}
             onInput={(event) => setVerificationToken(event.currentTarget.value)}
             onPaste={(event) => {
@@ -226,19 +250,20 @@ const Settings: Component<SettingsProps> = (props) => {
                 input.setSelectionRange(start + pasted.length, start + pasted.length),
               );
             }}
-            placeholder="Verification token from Ko-fi"
+            placeholder="Verification token"
           />
-        </label>
-        <button
-          class="focus-ring col-start-3 row-start-3 px-1 py-1 text-xs font-medium hover:text-gray-11 disabled:opacity-40"
-          disabled={verificationToken().trim().length === 0}
-          onClick={() => void createWebhook()}
-        >
-          Create endpoint
-        </button>
+          <button
+            type="button"
+            class="focus-ring h-8 self-end rounded bg-gray-12 px-2.5 py-1 text-sm font-medium text-gray-1 transition-colors hover:bg-gray-11 disabled:bg-gray-10"
+            disabled={name().trim().length === 0 || verificationToken().trim().length === 0}
+            onClick={() => void createWebhook()}
+          >
+            Add
+          </button>
+        </div>
       </section>
       <Show when={status().length > 0}>
-        <div class="pl-7 text-xs italic text-gray-11">{status()}</div>
+        <div class="text-xs italic text-gray-11">{status()}</div>
       </Show>
     </section>
   );

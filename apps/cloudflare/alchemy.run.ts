@@ -38,6 +38,7 @@ export default Alchemy.Stack(
           command: "pnpm run build",
           cwd: "../playground",
           outdir: "dist",
+          memo: false,
         })
       : undefined;
 

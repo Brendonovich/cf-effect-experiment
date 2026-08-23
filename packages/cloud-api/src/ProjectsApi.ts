@@ -31,6 +31,11 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
     success: Schema.Struct({ project: ProjectRecord }),
     error: ProjectNotFound,
   }).middleware(Authentication),
+  HttpApiEndpoint.delete("remove", "/api/projects/:projectId", {
+    params: { projectId: Schema.String },
+    success: Schema.Void,
+    error: [ProjectNotFound, HttpApiError.Forbidden],
+  }).middleware(Authentication),
   HttpApiEndpoint.get("getAccess", "/api/projects/:projectId/access", {
     params: { projectId: Schema.String },
     success: Schema.Struct({

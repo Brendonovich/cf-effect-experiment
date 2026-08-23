@@ -18,6 +18,10 @@ import * as CloudHttp from "./Http.ts";
 import { ObservabilityLayer } from "./Observability.ts";
 import * as RuntimeHttp from "./runtime/Http.ts";
 import * as Runtime from "./runtime/Runtime.ts";
+import {
+  ClientIdConfig as TwitchClientIdConfig,
+  ClientSecretConfig as TwitchClientSecretConfig,
+} from "./Twitch.ts";
 
 export class WebAssetsDirectory extends Context.Service<
   WebAssetsDirectory,
@@ -42,6 +46,10 @@ export default Layer.unwrap(
     return AppWorker.make(
       {
         main: import.meta.url,
+        env: {
+          TWITCH_CLIENT_ID: TwitchClientIdConfig,
+          TWITCH_CLIENT_SECRET: TwitchClientSecretConfig,
+        },
         assets: assetsDir
           ? Output.map(assetsDir, (directory) => ({
               directory,

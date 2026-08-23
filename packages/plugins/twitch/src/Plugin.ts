@@ -22,6 +22,24 @@ export default Plugin.make({
         }),
     });
     yield* ctx.schema.register({
+      id: "eventsub:channel.unban",
+      name: "User Unbanned",
+      type: "event",
+      event: (event) => Effect.succeed(event._tag === "channel.unban"),
+      io: (io) => ({
+        userId: io.data.out<string>("userId"),
+        userName: io.data.out<string>("userName"),
+        moderatorId: io.data.out<string>("moderatorId"),
+      }),
+      run: ({ event, io }) =>
+        Effect.sync(() => {
+          if (event?._tag !== "channel.unban") return;
+          io.userId(event.user_id);
+          io.userName(event.user_name);
+          io.moderatorId(event.moderator_user_id);
+        }),
+    });
+    yield* ctx.schema.register({
       id: "helix:ban-user",
       name: "Ban User",
       io: (io) => ({

@@ -40,7 +40,7 @@ describe("TwitchEngine", () => {
       const setStorage = vi.fn();
       let storage: typeof TwitchEngine.Storage.Type = {
         accounts: {
-          [accountId]: { subscriptions: ["channel.ban"] },
+          [accountId]: { enabled: true, subscriptions: ["channel.ban"] },
         },
       };
       const refreshCredential = vi.fn((_provider: string, _id: string) => ({
@@ -223,7 +223,7 @@ describe("TwitchEngine", () => {
         expect(setStorage).toHaveBeenCalledOnce();
         expect(setStorage).toHaveBeenCalledWith({
           accounts: {
-            [accountId]: { subscriptions: [] },
+            [accountId]: { enabled: true, subscriptions: [] },
           },
         });
 
@@ -259,6 +259,16 @@ describe("TwitchEngine", () => {
           httpCalls.map((call) => call.headers.authorization),
           ["Bearer test-token", "Bearer test-token", "Bearer test-token", "Bearer refreshed-token"],
         );
+
+        yield* client.DisconnectEventSub({ accountId });
+        expect(setStorage).toHaveBeenLastCalledWith({
+          accounts: {
+            [accountId]: { enabled: false, subscriptions: [] },
+          },
+        });
+        assert.deepStrictEqual((yield* engine.client.state).accounts[0]?.eventSubSocket, {
+          state: "disconnected",
+        });
       }).pipe(Effect.provide(deployment.layer.pipe(Layer.provide(dependencies))));
     }),
   );

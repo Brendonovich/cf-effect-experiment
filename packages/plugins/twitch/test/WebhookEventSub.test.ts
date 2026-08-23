@@ -7,12 +7,12 @@ import { AccountId } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
 import {
   EventSubEndpoint,
+  AppCredentials,
   SignatureVerifier,
   layerWebCrypto,
   make,
   type Request,
 } from "../src/WebhookEventSub.ts";
-import { Helix } from "../src/Helix.ts";
 
 interface HttpCall {
   readonly method: string;
@@ -35,9 +35,14 @@ describe("WebhookEventSub", () => {
     Effect.gen(function* () {
       const requirements = yield* deployment.httpIngress.requirements({
         accounts: {
-          [AccountId.make("account-1")]: { subscriptions: ["channel.ban"] },
+          [AccountId.make("account-1")]: { enabled: true, subscriptions: ["channel.ban"] },
           [AccountId.make("account-2")]: {
-            subscriptions: ["channel.ban", "channel.update"],
+            enabled: true,
+            subscriptions: ["channel.ban", "channel.unban"],
+          },
+          [AccountId.make("account-3")]: {
+            enabled: false,
+            subscriptions: ["channel.ban"],
           },
         },
       });
@@ -54,7 +59,7 @@ describe("WebhookEventSub", () => {
           pluginId: "twitch",
           instanceKey: "account-2",
           metadata: { accountId: "account-2" },
-          configuration: { subscriptions: ["channel.ban", "channel.update"] },
+          configuration: { subscriptions: ["channel.ban", "channel.unban"] },
         },
       ]);
     }),
@@ -93,7 +98,11 @@ describe("WebhookEventSub", () => {
       const accountId = AccountId.make("account-1");
       const calls: Array<HttpCall> = [];
       const verifiedMessages: Array<string> = [];
-      const provisioned: Array<{ readonly handlerId: string; readonly instanceKey: string }> = [];
+      const provisioned: Array<{
+        readonly handlerId: string;
+        readonly instanceKey: string;
+      }> = [];
+      let clientRefreshes = 0;
       const endpoint = {
         id: "endpoint-1",
         url: "https://example.com/webhooks/twitch/account-1",
@@ -116,13 +125,26 @@ describe("WebhookEventSub", () => {
               headers: { ...request.headers },
               body:
                 request.body._tag === "Uint8Array"
-                  ? JSON.parse(new TextDecoder().decode(request.body.body))
+                  ? request.url === "https://id.twitch.tv/oauth2/token"
+                    ? new TextDecoder().decode(request.body.body)
+                    : JSON.parse(new TextDecoder().decode(request.body.body))
                   : undefined,
             });
             const response =
-              request.method === "GET"
-                ? { data: [], total: 0, total_cost: 0, max_total_cost: 10_000 }
-                : { data: [{ id: "subscription-1" }] };
+              request.url === "https://id.twitch.tv/oauth2/token"
+                ? {
+                    access_token: "app-token",
+                    expires_in: 3600,
+                    token_type: "bearer",
+                  }
+                : request.method === "GET"
+                  ? {
+                      data: [],
+                      total: 0,
+                      total_cost: 0,
+                      max_total_cost: 10_000,
+                    }
+                  : { data: [{ id: "subscription-1" }] };
             return HttpClientResponse.fromWeb(
               request,
               new Response(JSON.stringify(response), {
@@ -135,10 +157,18 @@ describe("WebhookEventSub", () => {
       );
 
       const dependencies = Layer.mergeAll(
+        Layer.succeed(AppCredentials)({
+          clientId: "test-client-id",
+          clientSecret: Redacted.make("test-client-secret"),
+        }),
         Layer.succeed(HttpClient.HttpClient)(httpClient),
         Layer.succeed(Engine.Credentials)({
           get: Effect.succeed([
-            { id: accountId, provider: "twitch", token: { access: "cloud-token" } },
+            {
+              id: accountId,
+              provider: "twitch",
+              token: { access: "cloud-token" },
+            },
           ]),
           refresh: () =>
             Effect.succeed({
@@ -151,7 +181,10 @@ describe("WebhookEventSub", () => {
         Layer.succeed(HttpEndpoint.Host)({
           ensure: (handler, options) =>
             Effect.sync(() => {
-              provisioned.push({ handlerId: handler.id, instanceKey: options.instanceKey });
+              provisioned.push({
+                handlerId: handler.id,
+                instanceKey: options.instanceKey,
+              });
               return {
                 id: endpoint.id,
                 url: endpoint.url,
@@ -196,9 +229,11 @@ describe("WebhookEventSub", () => {
         const eventSub = yield* make({
           getAccountIds: Effect.succeed([accountId]),
           getHelix: () => Effect.die("not used by webhook EventSub"),
-          getSubscriptions: () => Effect.succeed(["channel.ban"]),
+          getSubscriptions: () => Effect.succeed(["channel.ban", "channel.unban"]),
           emit: () => Effect.void,
-          refresh: Effect.void,
+          refresh: Effect.sync(() => {
+            clientRefreshes++;
+          }),
         });
         assert.deepStrictEqual(
           HashMap.get(yield* eventSub.state, accountId),
@@ -211,7 +246,7 @@ describe("WebhookEventSub", () => {
             pluginId: "twitch",
             instanceKey: accountId,
             metadata: { accountId },
-            configuration: { subscriptions: ["channel.ban"] },
+            configuration: { subscriptions: ["channel.ban", "channel.unban"] },
           },
           endpointHost,
         );
@@ -221,11 +256,26 @@ describe("WebhookEventSub", () => {
         assert.deepStrictEqual(
           calls.map(({ method, url }) => ({ method, url })),
           [
-            { method: "GET", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
-            { method: "POST", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
+            { method: "POST", url: "https://id.twitch.tv/oauth2/token" },
+            {
+              method: "GET",
+              url: "https://api.twitch.tv/helix/eventsub/subscriptions",
+            },
+            {
+              method: "POST",
+              url: "https://api.twitch.tv/helix/eventsub/subscriptions",
+            },
+            {
+              method: "POST",
+              url: "https://api.twitch.tv/helix/eventsub/subscriptions",
+            },
           ],
         );
-        assert.deepStrictEqual(calls[1]?.body, {
+        assert.strictEqual(
+          calls[0]?.body,
+          "client_id=test-client-id&client_secret=test-client-secret&grant_type=client_credentials",
+        );
+        assert.deepStrictEqual(calls[2]?.body, {
           type: "channel.ban",
           version: "1",
           condition: { broadcaster_user_id: accountId },
@@ -235,8 +285,18 @@ describe("WebhookEventSub", () => {
             secret: "webhook-secret",
           },
         });
-        assert.strictEqual(calls[1]?.headers.authorization, "Bearer cloud-token");
-        assert.strictEqual(calls[1]?.headers["client-id"], Helix.DEFAULT_CLIENT_ID);
+        assert.strictEqual(calls[2]?.headers.authorization, "Bearer app-token");
+        assert.strictEqual(calls[2]?.headers["client-id"], "test-client-id");
+        assert.deepStrictEqual(calls[3]?.body, {
+          type: "channel.unban",
+          version: "1",
+          condition: { broadcaster_user_id: accountId },
+          transport: {
+            method: "webhook",
+            callback: endpoint.url,
+            secret: "webhook-secret",
+          },
+        });
         const challengeBody = JSON.stringify({
           challenge: "challenge-value",
           subscription: {
@@ -292,6 +352,35 @@ describe("WebhookEventSub", () => {
           { _tag: "channel.ban", reason: "spam" },
         );
 
+        const unban = yield* ingressRegistry.handle({
+          endpoint,
+          configuration: { subscriptions: ["channel.ban", "channel.unban"] },
+          method: "POST",
+          headers: headers("notification"),
+          body: body({
+            subscription: {
+              id: "subscription-2",
+              status: "enabled",
+              type: "channel.unban",
+              version: "1",
+              condition: { broadcaster_user_id: accountId },
+            },
+            event: {
+              user_id: "user-1",
+              user_login: "viewer",
+              user_name: "Viewer",
+              broadcaster_user_id: accountId,
+              broadcaster_user_login: "streamer",
+              broadcaster_user_name: "Streamer",
+              moderator_user_id: accountId,
+              moderator_user_login: "streamer",
+              moderator_user_name: "Streamer",
+            },
+          }),
+        });
+        assert.strictEqual(unban.status, 204);
+        assert.strictEqual(unban.events[0]?.eventType, "channel.unban");
+
         assert.deepStrictEqual(
           yield* ingressRegistry.handle({
             endpoint,
@@ -302,8 +391,42 @@ describe("WebhookEventSub", () => {
           }),
           { status: 403, events: [] },
         );
-        assert.strictEqual(verifiedMessages.length, 3);
+        assert.deepStrictEqual(
+          yield* ingressRegistry.handle({
+            endpoint,
+            configuration: { subscriptions: ["channel.ban"] },
+            method: "POST",
+            headers: headers("notification"),
+            body: body({
+              subscription: {
+                id: "subscription-2",
+                status: "enabled",
+                type: "channel.ban",
+                version: "1",
+                condition: {
+                  broadcaster_user_id: accountId,
+                  moderator_user_id: "account-2",
+                },
+              },
+              event: {
+                reason: "spam",
+                ends_at: null,
+                is_permanent: true,
+              },
+            }),
+          }),
+          { status: 400, events: [] },
+        );
+        assert.strictEqual(verifiedMessages.length, 5);
         assert.ok(verifiedMessages[1]?.endsWith(new TextDecoder().decode(notificationBody)));
+
+        const refreshesBeforeDisconnect = clientRefreshes;
+        yield* eventSub.disconnect(accountId);
+        assert.deepStrictEqual(
+          HashMap.get(yield* eventSub.state, accountId),
+          Option.some({ state: "disconnected" }),
+        );
+        assert.isTrue(clientRefreshes > refreshesBeforeDisconnect);
       }).pipe(
         Effect.provide(HttpIngress.layer(deployment.httpIngress.handlers)),
         Effect.provide(dependencies),

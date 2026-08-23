@@ -1,3 +1,4 @@
+import { useNavigate } from "@solidjs/router";
 import { createQuery, useQueryClient } from "@tanstack/solid-query";
 import {
   For,
@@ -5,11 +6,12 @@ import {
   Loading,
   action,
   createOptimisticStore,
+  createSignal,
   refresh,
   resolve,
 } from "solid-js";
 
-import { runApi } from "../../../../api";
+import { runApi, runApiResult } from "../../../../api";
 import { useWorkspace } from "../../../../App";
 import { LoadingState } from "../../../../LoadingState";
 import { useProject } from "../layout";
@@ -17,7 +19,10 @@ import { useProject } from "../layout";
 export const ProjectSettingsRoute = () => {
   const workspace = useWorkspace();
   const route = useProject();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [deleting, setDeleting] = createSignal(false);
+  const [deleteError, setDeleteError] = createSignal(false);
   const canManage = () => {
     const role = workspace.selectedTeam()?.role;
     return role === "owner" || role === "admin";
@@ -63,6 +68,29 @@ export const ProjectSettingsRoute = () => {
     queryClient.setQueryData(projectAccessKey, { access, userIds: [...result.userIds] });
     refresh(workspace.projects);
     yield resolve(workspace.projects);
+  });
+
+  const deleteProject = action(async function* () {
+    const project = route.project();
+    if (
+      project === undefined ||
+      !window.confirm(`Delete "${project.name}"? This action cannot be undone.`)
+    )
+      return;
+    setDeleting(true);
+    setDeleteError(false);
+    const removed = await runApiResult(
+      workspace.api.projects.remove({ params: { projectId: route.projectId } }),
+    );
+    if (!removed) {
+      setDeleting(false);
+      setDeleteError(true);
+      return;
+    }
+    yield;
+    queryClient.removeQueries({ queryKey: projectAccessKey });
+    refresh(workspace.projects);
+    navigate("/", { replace: true });
   });
 
   return (
@@ -157,6 +185,35 @@ export const ProjectSettingsRoute = () => {
             </Show>
           </Loading>
         </section>
+        <Show when={canManage()}>
+          <section class="mt-6 rounded-lg border border-red-6 bg-red-2/40">
+            <div class="border-b border-red-6 px-5 py-4">
+              <h2 class="font-semibold text-red-11">Danger zone</h2>
+              <p class="mt-1 text-xs text-gray-11">
+                Permanently delete this project, its revisions, and execution history.
+              </p>
+            </div>
+            <div class="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div class="text-sm font-medium text-gray-12">Delete project</div>
+                <div class="mt-1 text-xs text-gray-11">This action cannot be undone.</div>
+              </div>
+              <button
+                type="button"
+                disabled={deleting()}
+                class="shrink-0 rounded-md bg-red-9 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-10 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void deleteProject()}
+              >
+                {deleting() ? "Deleting..." : "Delete project"}
+              </button>
+            </div>
+            <Show when={deleteError()}>
+              <p role="alert" class="border-t border-red-6 px-5 py-3 text-xs text-red-11">
+                Project deletion failed. Please try again.
+              </p>
+            </Show>
+          </section>
+        </Show>
       </div>
     </div>
   );

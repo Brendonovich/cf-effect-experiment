@@ -38,7 +38,7 @@ export const IngestEvents: Component<IngestEventsProps> = (props) => {
 
   return (
     <div class="flex h-full min-h-0 bg-gray-2 text-gray-12">
-      <section class="flex w-[400px] shrink-0 flex-col border-r border-gray-5 bg-gray-1">
+      <section class="flex w-[400px] shrink-0 flex-col border-r border-gray-5 bg-gray-3">
         <header class="shrink-0 border-b border-gray-5 px-5 py-4">
           <div class="flex items-start justify-between gap-4">
             <div>

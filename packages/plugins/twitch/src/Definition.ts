@@ -1,5 +1,5 @@
 import { Engine, Resource } from "@macrograph/plugin";
-import { Array, Schema } from "effect";
+import { Array, Effect, Schema } from "effect";
 import * as S from "effect/Schema";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -76,6 +76,7 @@ export const RuntimeStorage = Schema.Struct({
   accounts: Schema.Record(
     AccountId,
     Schema.Struct({
+      enabled: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
       subscriptions: Schema.Array(Schema.String),
     }),
   ),

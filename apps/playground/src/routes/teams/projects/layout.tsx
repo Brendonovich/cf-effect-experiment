@@ -1,7 +1,7 @@
 import type { ProjectRecord } from "@macrograph/cloud-api";
 
 import { useNavigate, type RouteSectionProps } from "@solidjs/router";
-import { createContext, useContext } from "solid-js";
+import { createContext, createMemo, Show, useContext } from "solid-js";
 
 import { useWorkspace } from "../../../App";
 import { NotFoundRoute } from "../../not-found";
@@ -29,20 +29,21 @@ const ProjectContext = createContext<ProjectContextValue>();
 
 export const useProject = () => useContext(ProjectContext);
 
-export const ProjectLayout = (props: RouteSectionProps) => {
+const ProjectLayoutContent = (props: {
+  readonly projectId: string;
+  readonly teamId: string;
+  readonly children: RouteSectionProps["children"];
+}) => {
   const workspace = useWorkspace();
   const navigate = useNavigate();
-  const projectId = props.params.projectId;
-  const teamId = props.params.teamId;
-  if (projectId === undefined || teamId === undefined) return <NotFoundRoute />;
 
   const project = () =>
     workspace
       .projects()
-      .find((candidate) => candidate.id === projectId && candidate.teamId === teamId);
-  const projectPath = `/teams/${encodeURIComponent(teamId)}/projects/${encodeURIComponent(projectId)}`;
+      .find((candidate) => candidate.id === props.projectId && candidate.teamId === props.teamId);
+  const projectPath = `/teams/${encodeURIComponent(props.teamId)}/projects/${encodeURIComponent(props.projectId)}`;
   const context: ProjectContextValue = {
-    projectId,
+    projectId: props.projectId,
     project,
     openEditor: (tab = "graphs", graphId, replace) =>
       navigate(
@@ -65,5 +66,23 @@ export const ProjectLayout = (props: RouteSectionProps) => {
     <ProjectContext value={context}>
       <div class="h-full min-h-0">{props.children}</div>
     </ProjectContext>
+  );
+};
+
+export const ProjectLayout = (props: RouteSectionProps) => {
+  const route = createMemo(() => {
+    const projectId = props.params.projectId;
+    const teamId = props.params.teamId;
+    return projectId === undefined || teamId === undefined ? undefined : { projectId, teamId };
+  });
+
+  return (
+    <Show when={route()} keyed fallback={<NotFoundRoute />}>
+      {(params) => (
+        <ProjectLayoutContent projectId={params.projectId} teamId={params.teamId}>
+          {props.children}
+        </ProjectLayoutContent>
+      )}
+    </Show>
   );
 };

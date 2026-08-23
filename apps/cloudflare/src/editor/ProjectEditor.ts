@@ -32,6 +32,7 @@ import { requestOrigin } from "../HttpOrigin.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import * as ExecutorPlugins from "../runtime/ExecutorPlugins.ts";
 import ProjectRuntime from "../runtime/ProjectRuntime.ts";
+import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../Twitch.ts";
 import CloudAuth from "./CloudAuth.ts";
 
 const sqliteSchemaPath = "../../packages/persistence-sqlite/src/schema.ts";
@@ -179,6 +180,7 @@ export default class ProjectEditor extends Cloudflare.DurableObject<ProjectEdito
       const twitchDependencies = Layer.mergeAll(
         FetchHttpClient.layer,
         endpointHostLayer,
+        TwitchAppCredentialsLayer,
         Layer.succeed(HttpEndpoint.SecretStore, {
           upsert: (endpointId) =>
             projectRuntimes

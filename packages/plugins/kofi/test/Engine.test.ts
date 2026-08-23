@@ -33,18 +33,26 @@ describe("KofiEngine", () => {
         Effect.provide(context),
       );
 
-      const webhookId = yield* client.KofiCreateWebhook({ verificationToken: "secret" });
+      const webhookId = yield* client.KofiCreateWebhook({
+        name: "Main alerts",
+        verificationToken: "secret",
+      });
       assert.isTrue(webhookId.length > 0);
       assert.deepStrictEqual(storage, {
-        webhooks: { [webhookId]: { verificationToken: "secret" } },
+        webhooks: { [webhookId]: { name: "Main alerts", verificationToken: "secret" } },
       });
       assert.deepStrictEqual(yield* engine.client.state, {
-        webhooks: [{ id: webhookId }],
+        webhooks: [{ id: webhookId, name: "Main alerts" }],
+      });
+
+      yield* client.KofiRenameWebhook({ webhookId, name: "Shop alerts" });
+      assert.deepStrictEqual(yield* engine.client.state, {
+        webhooks: [{ id: webhookId, name: "Shop alerts" }],
       });
 
       yield* client.KofiRemoveWebhook({ webhookId });
       assert.deepStrictEqual(storage, { webhooks: {} });
-      assert.strictEqual(refresh.mock.calls.length, 2);
+      assert.strictEqual(refresh.mock.calls.length, 3);
     }),
   );
 });

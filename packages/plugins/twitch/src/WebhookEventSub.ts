@@ -1,4 +1,4 @@
-import { Engine, HttpEndpoint, HttpIngress } from "@macrograph/plugin";
+import { HttpEndpoint, HttpIngress } from "@macrograph/plugin";
 import {
   Context,
   Effect,
@@ -9,13 +9,14 @@ import {
   Ref,
   Result,
   Schema,
+  Semaphore,
   Scope,
   Stream,
   SubscriptionRef,
 } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
-import { AccountId, MissingCredential } from "./Definition.ts";
+import { AccountId } from "./Definition.ts";
 import { buildCondition, EventSubSocket, SubscriptionEvent } from "./EventSub.ts";
 import { definitionsFor, helixError, type Make, type State } from "./EventSubImplementation.ts";
 import { Helix } from "./Helix.ts";
@@ -84,6 +85,18 @@ const signedMessage = (id: string, timestamp: string, body: Uint8Array) => {
   return message;
 };
 
+const belongsToAccount = (condition: Readonly<Record<string, string>>, accountId: AccountId) => {
+  const values = Object.values(condition);
+  return values.length > 0 && values.every((value) => value === accountId);
+};
+
+const conditionsEqual = (
+  current: Readonly<Record<string, string>>,
+  desired: Readonly<Record<string, string>>,
+) =>
+  Object.keys(current).length === Object.keys(desired).length &&
+  Object.entries(desired).every(([key, value]) => current[key] === value);
+
 const decodeHex = (value: string): Uint8Array | undefined => {
   if (value.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(value)) return undefined;
   const bytes = new Uint8Array(value.length / 2);
@@ -125,12 +138,23 @@ export const layerWebCrypto = (crypto: globalThis.Crypto) =>
     },
   });
 
-export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context) =>
+export const make: Make<
+  Helix.AppCredentials | HttpClient.HttpClient | HttpEndpoint.Host | HttpEndpoint.SecretStore
+> = (context) =>
   Effect.gen(function* () {
+    const appCredentials = yield* Helix.AppCredentials;
+    const httpClient = yield* HttpClient.HttpClient;
     const endpoints = yield* HttpEndpoint.Host;
     const secrets = yield* HttpEndpoint.SecretStore;
     const state = yield* SubscriptionRef.make(
       HashMap.empty<AccountId, { readonly state: State }>(),
+    );
+    const operations = yield* Semaphore.make(1);
+    const getHelix = yield* Effect.cached(
+      Helix.makeAppClient.pipe(
+        Effect.provideService(Helix.AppCredentials, appCredentials),
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
     );
 
     yield* Stream.runForEach(SubscriptionRef.changes(state), () => context.refresh).pipe(
@@ -138,12 +162,12 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
     );
 
     const subscriptionsForAccount = Effect.fnUntraced(function* (accountId: AccountId) {
-      const helix = yield* context.getHelix(accountId);
+      const helix = yield* getHelix;
       const response = yield* helixError(helix.eventsub.listSubscriptions({ query: {} }));
       return response.data.filter(
         (subscription) =>
           subscription.transport.method === "webhook" &&
-          Object.values(subscription.condition).includes(accountId),
+          belongsToAccount(subscription.condition, accountId),
       );
     });
 
@@ -168,11 +192,15 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
         return current;
       }),
       connect: Effect.fnUntraced(function* (accountId, options) {
-        yield* Effect.logInfo("EventSub webhook connect requested", { accountId });
+        yield* Effect.logInfo("EventSub webhook connect requested", {
+          accountId,
+        });
         yield* SubscriptionRef.update(state, (current) =>
           HashMap.set(current, accountId, { state: "connecting" }),
         );
-        yield* Effect.logInfo("EventSub webhook state changed to connecting", { accountId });
+        yield* Effect.logInfo("EventSub webhook state changed to connecting", {
+          accountId,
+        });
 
         yield* Effect.gen(function* () {
           const endpoint = yield* (
@@ -190,7 +218,9 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
           const callbackUrl = yield* Effect.try({
             try: () => new URL(endpoint.url),
             catch: () =>
-              new Helix.HelixError({ reason: `Invalid EventSub callback URL: ${endpoint.url}` }),
+              new Helix.HelixError({
+                reason: `Invalid EventSub callback URL: ${endpoint.url}`,
+              }),
           });
           if (
             callbackUrl.protocol !== "https:" ||
@@ -201,7 +231,7 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
             });
           }
           const secret = yield* secrets.upsert(endpoint.id);
-          const helix = yield* context.getHelix(accountId);
+          const helix = yield* getHelix;
           const definitions = definitionsFor(yield* context.getSubscriptions(accountId));
           const existing = yield* subscriptionsForAccount(accountId);
           yield* Effect.logInfo("Reconciling Twitch EventSub webhook subscriptions", {
@@ -218,9 +248,7 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
               !definitions.some(
                 (definition) =>
                   definition.type === subscription.type &&
-                  Object.entries(buildCondition(definition, accountId)).every(
-                    ([key, value]) => subscription.condition[key] === value,
-                  ),
+                  conditionsEqual(subscription.condition, buildCondition(definition, accountId)),
               ),
           );
           yield* Effect.logInfo("Deleting stale Twitch EventSub webhook subscriptions", {
@@ -231,7 +259,9 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
             subscriptionsToDelete,
             (subscription) =>
               helixError(
-                helix.eventsub.deleteSubscription({ query: { id: subscription.id } }),
+                helix.eventsub.deleteSubscription({
+                  query: { id: subscription.id },
+                }),
               ).pipe(
                 Effect.tap(() =>
                   Effect.logInfo("Deleted Twitch EventSub webhook subscription", {
@@ -251,9 +281,7 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
                   subscription.transport.method === "webhook" &&
                   subscription.transport.callback === endpoint.url &&
                   definition.type === subscription.type &&
-                  Object.entries(buildCondition(definition, accountId)).every(
-                    ([key, value]) => subscription.condition[key] === value,
-                  ),
+                  conditionsEqual(subscription.condition, buildCondition(definition, accountId)),
               ),
           );
           yield* Effect.logInfo("Creating Twitch EventSub webhook subscriptions", {
@@ -290,7 +318,9 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
           yield* SubscriptionRef.update(state, (current) =>
             HashMap.set(current, accountId, { state: "connected" }),
           );
-          yield* Effect.logInfo("EventSub webhook state changed to connected", { accountId });
+          yield* Effect.logInfo("EventSub webhook state changed to connected", {
+            accountId,
+          });
         }).pipe(
           Effect.tapError((error) =>
             Effect.gen(function* () {
@@ -299,9 +329,11 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
             }),
           ),
         );
-      }),
+      }, operations.withPermit),
       disconnect: Effect.fnUntraced(function* (accountId) {
-        yield* Effect.logInfo("EventSub webhook disconnect requested", { accountId });
+        yield* Effect.logInfo("EventSub webhook disconnect requested", {
+          accountId,
+        });
         yield* Effect.gen(function* () {
           const endpoint = yield* endpoints.get(EventSubEndpoint, accountId);
           if (Option.isNone(endpoint)) {
@@ -309,7 +341,7 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
             return;
           }
           const subscriptions = yield* subscriptionsForAccount(accountId);
-          const helix = yield* context.getHelix(accountId);
+          const helix = yield* getHelix;
           yield* Effect.logInfo("Deleting Twitch EventSub webhook subscriptions", {
             accountId,
             count: subscriptions.length,
@@ -317,7 +349,11 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
           yield* Effect.forEach(
             subscriptions,
             (subscription) =>
-              helixError(helix.eventsub.deleteSubscription({ query: { id: subscription.id } })),
+              helixError(
+                helix.eventsub.deleteSubscription({
+                  query: { id: subscription.id },
+                }),
+              ),
             { discard: true },
           );
         }).pipe(
@@ -326,14 +362,15 @@ export const make: Make<HttpEndpoint.Host | HttpEndpoint.SecretStore> = (context
         yield* SubscriptionRef.update(state, (current) =>
           HashMap.set(current, accountId, { state: "disconnected" }),
         );
+        yield* context.refresh;
         yield* Effect.logInfo("EventSub webhook disconnected", { accountId });
-      }),
+      }, operations.withPermit),
     };
   });
 
 export const handler = EventSubIngress.implement(
   Effect.gen(function* () {
-    const credentials = yield* Engine.Credentials;
+    const appCredentials = yield* Helix.AppCredentials;
     const httpClient = yield* HttpClient.HttpClient;
     const secrets = yield* HttpEndpoint.SecretStore;
     const verifier = yield* SignatureVerifier;
@@ -345,24 +382,17 @@ export const handler = EventSubIngress.implement(
       >();
       const lifecycle = yield* make({
         getAccountIds: Ref.get(subscriptions).pipe(Effect.map((current) => [...current.keys()])),
-        getHelix: (accountId) =>
-          Effect.gen(function* () {
-            const credential = (yield* credentials.get).find(
-              (candidate) => candidate.provider === "twitch" && candidate.id === accountId,
-            );
-            if (credential === undefined) return yield* new MissingCredential();
-            return yield* Helix.makeClient(
-              credential.token.access,
-              credentials
-                .refresh("twitch", accountId)
-                .pipe(Effect.map((refreshed) => refreshed.token.access)),
-            ).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
-          }),
+        getHelix: () => Effect.die("Webhook EventSub uses Twitch app credentials"),
         getSubscriptions: (accountId) =>
           Ref.get(subscriptions).pipe(Effect.map((current) => current.get(accountId) ?? [])),
         emit: () => Effect.void,
         refresh: Effect.void,
-      }).pipe(Effect.provideContext(lifecycleContext), Effect.cached);
+      }).pipe(
+        Effect.provideContext(lifecycleContext),
+        Effect.provideService(Helix.AppCredentials, appCredentials),
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.cached,
+      );
 
       return {
         mount: Effect.fnUntraced(function* ({ endpoint, configuration }) {
@@ -385,7 +415,9 @@ export const handler = EventSubIngress.implement(
         }),
         handle: Effect.fnUntraced(function* (request): Effect.fn.Return<Response> {
           const accountId = request.endpoint.metadata.accountId;
-          yield* Effect.logInfo("Received Twitch EventSub webhook request", { accountId });
+          yield* Effect.logInfo("Received Twitch EventSub webhook request", {
+            accountId,
+          });
           const secret = yield* secrets.upsert(request.endpoint.id);
           const messageId = getHeader(request.headers, "Twitch-Eventsub-Message-Id");
           const timestamp = getHeader(request.headers, "Twitch-Eventsub-Message-Timestamp");
@@ -436,7 +468,8 @@ export const handler = EventSubIngress.implement(
             return { status: 400 };
           }
           if (
-            !Object.values(delivery.value.subscription.condition).includes(
+            !belongsToAccount(
+              delivery.value.subscription.condition,
               request.endpoint.metadata.accountId,
             )
           )
@@ -469,7 +502,10 @@ export const handler = EventSubIngress.implement(
               eventType: decoded.success._tag,
               messageId,
             });
-            return { status: 204, events: [{ event: decoded.success, eventId: messageId }] };
+            return {
+              status: 204,
+              events: [{ event: decoded.success, eventId: messageId }],
+            };
           }
 
           if (messageType === "revocation") {
@@ -486,3 +522,5 @@ export const handler = EventSubIngress.implement(
     });
   }),
 );
+
+export { AppCredentials } from "./Helix.ts";

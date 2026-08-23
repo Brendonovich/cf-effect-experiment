@@ -23,7 +23,7 @@ import {
 } from "solid-js";
 
 import { LoadingState } from "../../../../LoadingState";
-import { EmptyContext, Header, Sidebar, TabLayout, headerButtonClass } from "./components/Layout";
+import { EmptyContext, Sidebar, TabLayout } from "./components/Layout";
 import { NodeCreationMenu } from "./components/NodeCreationMenu";
 import {
   GRAPH_NODE_FIRST_IO_Y,
@@ -57,11 +57,13 @@ interface RuntimeEndpoint {
 }
 
 export function Playground(props: PlaygroundProps) {
+  const isMobile = matchMedia("(max-width: 767px)").matches;
   const clientId =
     typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const [client, setClient] = createSignal<WorkspaceClient | null>(null);
+
   const [reconnecting, setReconnecting] = createSignal(false);
   const { store, applyEvent, updateNodePosition, setProject, setPackages } =
     createPlaygroundStore();
@@ -101,7 +103,9 @@ export function Playground(props: PlaygroundProps) {
   const [selectedGraphId, setSelectedGraphIdRaw] = createSignal<string | null>(
     untrack(() => props.selectedGraphId ?? null),
   );
-  const [navSection, setNavSection] = createSignal<"graphs" | "packages" | null>("graphs");
+  const [navSection, setNavSection] = createSignal<"graphs" | "packages" | null>(
+    isMobile ? null : "graphs",
+  );
   const [navSearch, setNavSearch] = createSignal("");
   const [selectedNodeId, setSelectedNodeId] = createSignal<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = createSignal<string[]>([]);
@@ -111,6 +115,7 @@ export function Playground(props: PlaygroundProps) {
   const [openPackageIds, setOpenPackageIds] = createSignal<string[]>([]);
   const [selectedPackageId, setSelectedPackageId] = createSignal<string | null>(null);
   const [paneZoomed, setPaneZoomed] = createSignal(false);
+  const [inspectorOpen, setInspectorOpen] = createSignal(!isMobile);
   const [nodeMenu, setNodeMenu] = createSignal<{
     screen: { x: number; y: number };
     graph: { x: number; y: number };
@@ -125,7 +130,17 @@ export function Playground(props: PlaygroundProps) {
     start: { x: number; y: number };
     current: { x: number; y: number };
   }>();
+  const [paneDomain, setPaneDomain] = createSignal<"rpcs" | "graphs" | "plugin">(
+    untrack(() => props.activeTab),
+  );
+  createEffect(
+    () => props.activeTab,
+    (tab) => {
+      setPaneDomain(tab);
+    },
+  );
   const setSelectedGraphId = (id: string | null) => {
+    setPaneDomain("graphs");
     setSelectedGraphIdRaw(id);
     if (id !== null) setOpenGraphIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
     props.onSelectionChange("graphs", id ?? undefined);
@@ -360,6 +375,7 @@ export function Playground(props: PlaygroundProps) {
 
   const startExecConnection = (event: PointerEvent, nodeId: string, ioId: string) => {
     const handle = event.currentTarget as HTMLElement;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
     const bounds = handle.getBoundingClientRect();
     const from = canvasPosition(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
     setExecConnectionDrag({
@@ -587,7 +603,166 @@ export function Playground(props: PlaygroundProps) {
     });
   };
 
+  const selectNodesInArea = (
+    startGraph: { x: number; y: number },
+    current: { x: number; y: number },
+    additive: boolean,
+  ) => {
+    const left = Math.min(startGraph.x, current.x);
+    const right = Math.max(startGraph.x, current.x);
+    const top = Math.min(startGraph.y, current.y);
+    const bottom = Math.max(startGraph.y, current.y);
+    const selected = nodes()
+      .filter((node) => {
+        const schema = schemaForNode(node);
+        const width = graphNodeWidth(schema, node.name);
+        const height =
+          38 +
+          Math.max(schema?.executionInputs.length ?? 0, schema?.executionOutputs.length ?? 0) *
+            GRAPH_NODE_IO_SPACING;
+        return (
+          node.position.x >= left &&
+          node.position.y >= top &&
+          node.position.x + width <= right &&
+          node.position.y + height <= bottom
+        );
+      })
+      .map((node) => node.id);
+    const next = additive ? Array.from(new Set([...selectedNodeIds(), ...selected])) : selected;
+    setSelectedNodeIds(next);
+    setSelectedNodeId(next.at(-1) ?? null);
+  };
+
+  type TouchPoint = { x: number; y: number };
+  let touchPointers = new Map<number, TouchPoint>();
+  let touchStart:
+    | {
+        pointer: TouchPoint;
+        graph: TouchPoint;
+        origin: TouchPoint;
+        moved: boolean;
+        longPressed: boolean;
+        timer: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
+  let twoTouchStart:
+    | {
+        points: [TouchPoint, TouchPoint];
+        origin: TouchPoint;
+        scale: number;
+      }
+    | undefined;
+
+  const stopTouchGesture = () => {
+    if (touchStart) clearTimeout(touchStart.timer);
+    touchStart = undefined;
+    twoTouchStart = undefined;
+    touchPointers = new Map();
+    setSelectionRect(undefined);
+    window.removeEventListener("pointermove", onTouchMove);
+    window.removeEventListener("pointerup", onTouchEnd);
+    window.removeEventListener("pointercancel", onTouchEnd);
+  };
+
+  const onTouchMove = (event: PointerEvent) => {
+    if (!touchPointers.has(event.pointerId)) return;
+    touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (touchPointers.size === 2 && twoTouchStart) {
+      const current = Array.from(touchPointers.values()) as [TouchPoint, TouchPoint];
+      const [startA, startB] = twoTouchStart.points;
+      const [currentA, currentB] = current;
+      const startDistance = Math.hypot(startB.x - startA.x, startB.y - startA.y);
+      const currentDistance = Math.hypot(currentB.x - currentA.x, currentB.y - currentA.y);
+      const nextScale = Math.min(
+        2,
+        Math.max(0.25, twoTouchStart.scale * (currentDistance / Math.max(1, startDistance))),
+      );
+      const bounds = graphCanvas?.getBoundingClientRect();
+      if (!bounds) return;
+      const startMidpoint = {
+        x: (startA.x + startB.x) / 2 - bounds.left,
+        y: (startA.y + startB.y) / 2 - bounds.top,
+      };
+      const currentMidpoint = {
+        x: (currentA.x + currentB.x) / 2 - bounds.left,
+        y: (currentA.y + currentB.y) / 2 - bounds.top,
+      };
+      const anchor = {
+        x: twoTouchStart.origin.x + startMidpoint.x / twoTouchStart.scale,
+        y: twoTouchStart.origin.y + startMidpoint.y / twoTouchStart.scale,
+      };
+      setCanvasScale(nextScale);
+      setCanvasOrigin({
+        x: anchor.x - currentMidpoint.x / nextScale,
+        y: anchor.y - currentMidpoint.y / nextScale,
+      });
+      return;
+    }
+
+    if (!touchStart || touchStart.longPressed) return;
+    const distance = Math.hypot(
+      event.clientX - touchStart.pointer.x,
+      event.clientY - touchStart.pointer.y,
+    );
+    if (!touchStart.moved && distance <= 3) return;
+    touchStart.moved = true;
+    clearTimeout(touchStart.timer);
+    setSelectionRect({
+      start: touchStart.pointer,
+      current: { x: event.clientX, y: event.clientY },
+    });
+    selectNodesInArea(touchStart.graph, canvasPosition(event.clientX, event.clientY), false);
+  };
+
+  const onTouchEnd = (event: PointerEvent) => {
+    if (!touchPointers.has(event.pointerId)) return;
+    stopTouchGesture();
+  };
+
+  const onCanvasTouchDown = (event: PointerEvent) => {
+    event.preventDefault();
+    if (touchPointers.size >= 2) return;
+    setNodeMenu(undefined);
+    setNodeContextMenu(undefined);
+    touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (touchPointers.size === 2) {
+      if (touchStart) clearTimeout(touchStart.timer);
+      setSelectionRect(undefined);
+      twoTouchStart = {
+        points: Array.from(touchPointers.values()) as [TouchPoint, TouchPoint],
+        origin: canvasOrigin(),
+        scale: canvasScale(),
+      };
+      return;
+    }
+
+    setSelectedNodeIds([]);
+    setSelectedNodeId(null);
+    const pointer = { x: event.clientX, y: event.clientY };
+    touchStart = {
+      pointer,
+      graph: canvasPosition(event.clientX, event.clientY),
+      origin: canvasOrigin(),
+      moved: false,
+      longPressed: false,
+      timer: setTimeout(() => {
+        if (!touchStart || touchStart.moved || touchPointers.size !== 1) return;
+        touchStart.longPressed = true;
+        setNodeMenu({ screen: pointer, graph: touchStart.graph });
+      }, 300),
+    };
+    window.addEventListener("pointermove", onTouchMove);
+    window.addEventListener("pointerup", onTouchEnd);
+    window.addEventListener("pointercancel", onTouchEnd);
+  };
+
   const onCanvasPointerDown = (event: PointerEvent) => {
+    if (event.pointerType === "touch") {
+      onCanvasTouchDown(event);
+      return;
+    }
     if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     event.preventDefault();
     setNodeMenu(undefined);
@@ -622,35 +797,17 @@ export function Playground(props: PlaygroundProps) {
         start: startScreen,
         current: { x: moveEvent.clientX, y: moveEvent.clientY },
       });
-      const current = canvasPosition(moveEvent.clientX, moveEvent.clientY);
-      const left = Math.min(startGraph.x, current.x);
-      const right = Math.max(startGraph.x, current.x);
-      const top = Math.min(startGraph.y, current.y);
-      const bottom = Math.max(startGraph.y, current.y);
-      const selected = nodes()
-        .filter((node) => {
-          const schema = schemaForNode(node);
-          const width = graphNodeWidth(schema, node.name);
-          const height =
-            38 +
-            Math.max(schema?.executionInputs.length ?? 0, schema?.executionOutputs.length ?? 0) *
-              GRAPH_NODE_IO_SPACING;
-          return (
-            node.position.x >= left &&
-            node.position.y >= top &&
-            node.position.x + width <= right &&
-            node.position.y + height <= bottom
-          );
-        })
-        .map((node) => node.id);
-      const next = additive ? Array.from(new Set([...selectedNodeIds(), ...selected])) : selected;
-      setSelectedNodeIds(next);
-      setSelectedNodeId(next.at(-1) ?? null);
+      selectNodesInArea(
+        startGraph,
+        canvasPosition(moveEvent.clientX, moveEvent.clientY),
+        additive,
+      );
     };
 
     const up = (upEvent: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
       setSelectionRect(undefined);
       if (event.button === 2 && !moved) {
         setNodeMenu({
@@ -662,6 +819,7 @@ export function Playground(props: PlaygroundProps) {
 
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
 
   onSettled(() => {
@@ -683,6 +841,7 @@ export function Playground(props: PlaygroundProps) {
       window.removeEventListener("pointermove", onExecConnectionMove);
       window.removeEventListener("pointerup", endExecConnection);
       window.removeEventListener("pointercancel", endExecConnection);
+      stopTouchGesture();
     };
   });
 
@@ -700,9 +859,9 @@ export function Playground(props: PlaygroundProps) {
   };
 
   const selectedPaneId = () => {
-    if (props.activeTab === "graphs")
+    if (paneDomain() === "graphs")
       return selectedGraphId() ? `graph:${selectedGraphId()}` : undefined;
-    if (props.activeTab === "rpcs") return "developer";
+    if (paneDomain() === "rpcs") return "developer";
     return selectedPackageId() ? `package:${selectedPackageId()}` : undefined;
   };
 
@@ -712,11 +871,15 @@ export function Playground(props: PlaygroundProps) {
       return;
     }
     if (id.startsWith("package:")) {
+      setPaneDomain("plugin");
       setSelectedPackageId(id.slice("package:".length));
       props.onSelectionChange("plugin");
       return;
     }
-    if (id === "developer") props.onSelectionChange("rpcs");
+    if (id === "developer") {
+      setPaneDomain("rpcs");
+      props.onSelectionChange("rpcs");
+    }
   };
 
   const closePane = (id: string) => {
@@ -745,7 +908,7 @@ export function Playground(props: PlaygroundProps) {
         class={`absolute inset-0 z-50 grid place-items-center bg-gray-2 transition-opacity duration-100 ${
           editorReady() ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
-        aria-hidden={editorReady()}
+        aria-hidden={editorReady() ? "true" : "false"}
       >
         <span class="text-xs text-gray-11">
           {client() === null ? "Connecting to editor" : "Loading project"}
@@ -756,37 +919,6 @@ export function Playground(props: PlaygroundProps) {
           editorReady() ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
-        <Header>
-          <button
-            type="button"
-            class={[
-              headerButtonClass,
-              {
-                "bg-gray-3": navSection() === "packages",
-                "bg-transparent": navSection() !== "packages",
-              },
-            ]}
-            aria-pressed={navSection() === "packages"}
-            onClick={() => setNavSection((value) => (value === "packages" ? null : "packages"))}
-          >
-            Plugins
-          </button>
-          <button
-            type="button"
-            class={[
-              headerButtonClass,
-              {
-                "bg-gray-3": navSection() === "graphs",
-                "bg-transparent": navSection() !== "graphs",
-              },
-            ]}
-            aria-pressed={navSection() === "graphs"}
-            onClick={() => setNavSection((value) => (value === "graphs" ? null : "graphs"))}
-          >
-            Graphs
-          </button>
-          <div class="flex-1" />
-        </Header>
         <Show when={reconnecting()}>
           <div class="bg-amber-9 px-3 py-1.5 text-center text-xs font-medium text-black">
             Reconnecting...
@@ -803,30 +935,55 @@ export function Playground(props: PlaygroundProps) {
               open={navSection() !== null && !paneZoomed()}
               onClose={() => setNavSection(null)}
             >
-              <div class="flex h-8 shrink-0 flex-row">
-                <input
-                  class="focus-ring h-full min-w-0 flex-1 bg-gray-2 px-2 text-sm"
-                  placeholder={navSection() === "graphs" ? "Search Graphs" : "Search Plugins"}
-                  value={navSearch()}
-                  onInput={(event) => setNavSearch(event.currentTarget.value)}
-                />
-                <Show when={navSection() === "graphs"}>
-                  <button
-                    type="button"
-                    class="focus-ring h-full shrink-0 bg-transparent px-2 hover:bg-gray-3"
-                    onClick={createGraph}
-                  >
-                    New
-                  </button>
-                </Show>
+              <div class="shrink-0">
+                <div class="flex h-8 flex-row items-stretch divide-x divide-gray-5">
+                  <For each={["graphs", "packages"] as const}>
+                    {(section) => (
+                      <button
+                        type="button"
+                        class={`focus-ring flex-1 border-b text-xs font-medium transition-colors ${
+                          navSection() === section
+                            ? "border-b-transparent bg-gray-2 text-gray-12"
+                            : "border-b-gray-5 bg-transparent text-gray-10 hover:text-gray-12"
+                        }`}
+                        aria-pressed={navSection() === section ? "true" : "false"}
+                        onClick={() => setNavSection(section)}
+                      >
+                        {section === "graphs" ? "Graphs" : "Plugins"}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <div class="flex h-8 flex-row items-stretch bg-gray-2">
+                  <div class="group/search flex min-w-0 flex-1 flex-row items-stretch">
+                    <IconTablerSearch class="my-auto ml-2 size-3.5 shrink-0 text-gray-9 transition-colors group-focus-within/search:text-mg-focus" />
+                    <input
+                      class="h-full min-w-0 flex-1 bg-transparent px-1.5 text-xs outline-none placeholder:text-gray-9"
+                      placeholder={navSection() === "graphs" ? "Search Graphs" : "Search Plugins"}
+                      value={navSearch()}
+                      onInput={(event) => setNavSearch(event.currentTarget.value)}
+                    />
+                  </div>
+                  <Show when={navSection() === "graphs"}>
+                    <button
+                      type="button"
+                      class="focus-ring h-full shrink-0 bg-transparent px-2 text-xs font-medium text-gray-11 hover:text-gray-12"
+                      onClick={createGraph}
+                    >
+                      New
+                    </button>
+                  </Show>
+                </div>
               </div>
               <div class="min-h-0 flex-1 overflow-y-auto">
                 <Show when={navSection() === "graphs"}>
                   <For each={filteredGraphs()}>
                     {([id, graph]) => (
                       <button
-                        class={`focus-ring block w-full bg-transparent p-1 px-2 text-left ${
-                          selectedGraphId() === id ? "bg-gray-2" : "hover:bg-gray-2"
+                        class={`focus-ring block w-full p-1 px-2 text-left text-xs ${
+                          selectedPaneId() === `graph:${id}`
+                            ? "bg-gray-2"
+                            : "bg-transparent hover:bg-gray-2"
                         }`}
                         onClick={() => {
                           setSelectedGraphId(id);
@@ -843,8 +1000,13 @@ export function Playground(props: PlaygroundProps) {
                     {(pkg) => (
                       <button
                         type="button"
-                        class="focus-ring block w-full bg-transparent p-1 px-2 text-left hover:bg-gray-2"
+                        class={`focus-ring block w-full p-1 px-2 text-left text-xs ${
+                          selectedPaneId() === `package:${pkg.id}`
+                            ? "bg-gray-2"
+                            : "bg-transparent hover:bg-gray-2"
+                        }`}
                         onClick={() => {
+                          setPaneDomain("plugin");
                           setSelectedPackageId(pkg.id);
                           setOpenPackageIds((ids) =>
                             ids.includes(pkg.id) ? ids : [...ids, pkg.id],
@@ -859,6 +1021,19 @@ export function Playground(props: PlaygroundProps) {
                 </Show>
               </div>
             </Sidebar>
+
+            <Show when={navSection() === null && !paneZoomed()}>
+              <button
+                type="button"
+                class="focus-ring absolute left-2 top-2 z-20 rounded-full border border-gray-6 bg-gray-3 px-2.5 py-1 text-[11px] font-medium text-gray-12 shadow-md md:hidden"
+                onClick={() => {
+                  setInspectorOpen(false);
+                  setNavSection("graphs");
+                }}
+              >
+                Browse
+              </button>
+            </Show>
 
             <main
               class={`flex min-w-0 flex-1 bg-gray-2 ${
@@ -877,7 +1052,7 @@ export function Playground(props: PlaygroundProps) {
                   <div class="flex h-full min-h-0 flex-col">
                     <div
                       ref={graphCanvas}
-                      class="relative flex min-h-0 flex-1 flex-col items-start overflow-hidden bg-gray-2"
+                      class="relative flex min-h-0 flex-1 touch-none flex-col items-start overflow-hidden bg-gray-2"
                       onWheel={(event) => {
                         event.preventDefault();
                         if (event.ctrlKey || event.metaKey) {
@@ -1112,22 +1287,48 @@ export function Playground(props: PlaygroundProps) {
               </TabLayout>
             </main>
 
+            <Show
+              when={
+                props.activeTab === "graphs" &&
+                selectedGraph() &&
+                !inspectorOpen() &&
+                !paneZoomed()
+              }
+            >
+              <button
+                type="button"
+                class="focus-ring absolute right-2 top-2 z-20 rounded-full border border-gray-6 bg-gray-3 px-2.5 py-1 text-[11px] font-medium text-gray-12 shadow-md md:hidden"
+                onClick={() => {
+                  setNavSection(null);
+                  setInspectorOpen(true);
+                }}
+              >
+                Inspect
+              </button>
+            </Show>
+
             <Show when={props.activeTab === "graphs" && selectedGraph()}>
-              <Sidebar side="right" open={!paneZoomed()}>
+              <Sidebar
+                side="right"
+                open={inspectorOpen() && !paneZoomed()}
+                onClose={() => setInspectorOpen(false)}
+              >
                 <Show
                   when={selectedNode()}
                   fallback={
                     <Show when={selectedGraph()} fallback={<EmptyContext />}>
                       {(graph) => (
-                        <div class="flex flex-col items-stretch gap-1 p-2">
-                          <span class="font-medium text-gray-12">Graph Info</span>
-                          <div class="flex flex-col">
-                            <span class="text-xs font-medium text-gray-11">Name</span>
-                            <span class="text-gray-12">{graph().name}</span>
+                        <div class="flex flex-col items-stretch gap-1.5 p-2">
+                          <span class="text-xs font-semibold text-gray-12">Graph Info</span>
+                          <div class="flex flex-col gap-0.5">
+                            <span class="text-[11px] font-medium text-gray-11">Name</span>
+                            <span class="text-xs text-gray-12">{graph().name}</span>
                           </div>
-                          <div class="flex flex-col">
-                            <span class="text-xs font-medium text-gray-11">Total Nodes</span>
-                            <span class="text-gray-12">{Object.keys(graph().nodes).length}</span>
+                          <div class="flex flex-col gap-0.5">
+                            <span class="text-[11px] font-medium text-gray-11">Total Nodes</span>
+                            <span class="text-xs text-gray-12">
+                              {Object.keys(graph().nodes).length}
+                            </span>
                           </div>
                         </div>
                       )}
@@ -1139,12 +1340,12 @@ export function Playground(props: PlaygroundProps) {
                     const pkg = () =>
                       store.packages.find((candidate) => candidate.id === node().schema.package);
                     return (
-                      <div class="flex flex-col items-stretch gap-1 p-2">
-                        <span class="font-medium text-gray-12">Node Info</span>
-                        <div class="flex flex-col">
-                          <span class="text-xs font-medium text-gray-11">Name</span>
+                      <div class="flex flex-col items-stretch gap-1.5 p-2">
+                        <span class="text-xs font-semibold text-gray-12">Node Info</span>
+                        <div class="flex flex-col gap-0.5">
+                          <span class="text-[11px] font-medium text-gray-11">Name</span>
                           <input
-                            class="focus-ring h-6 rounded-sm bg-gray-2 px-1 text-sm ring-1 ring-gray-6"
+                            class="focus-ring h-6 rounded-sm bg-gray-2 px-1 text-xs ring-1 ring-gray-6"
                             value={node().name}
                             onChange={(event) => renameNode(event.currentTarget.value)}
                           />
@@ -1152,7 +1353,9 @@ export function Playground(props: PlaygroundProps) {
                         <Show when={schema()}>
                           {(schema) => (
                             <div class="mt-1 flex flex-col">
-                              <span class="mb-1 text-xs font-medium text-gray-11">Schema</span>
+                              <span class="mb-1 block text-[11px] font-medium text-gray-11">
+                                Schema
+                              </span>
                               <div class="flex h-9 items-center overflow-hidden rounded-sm border border-gray-6">
                                 <div
                                   class={`h-full w-1.5 ${

@@ -53,21 +53,23 @@ const ExecPin: Component<{
   onPointerDown?: (event: PointerEvent) => void;
   onDoubleClick?: () => void;
 }> = (props) => (
-  <div class="size-3.5 shrink-0">
+  <div
+    class="relative size-3.5 shrink-0 after:absolute after:-inset-2 after:content-[''] [@media(pointer:fine)]:after:hidden"
+    data-exec-input={props.direction === "input" ? "true" : undefined}
+    data-node-id={props.nodeId}
+    data-io-id={props.ioId}
+    onPointerDown={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      props.onPointerDown?.(event);
+    }}
+    onDblClick={() => props.onDoubleClick?.()}
+  >
     <svg
       viewBox="0 0 14 17.5"
-      class={`h-full w-full text-white hover:fill-current ${
+      class={`pointer-events-none h-full w-full text-white hover:fill-current ${
         props.connected || props.highlighted ? "fill-current" : "fill-transparent"
       } ${props.highlighted ? "drop-shadow-[0_0_3px_rgba(255,255,255,0.6)]" : ""}`}
-      data-exec-input={props.direction === "input" ? "true" : undefined}
-      data-node-id={props.nodeId}
-      data-io-id={props.ioId}
-      onPointerDown={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        props.onPointerDown?.(event);
-      }}
-      onDblClick={() => props.onDoubleClick?.()}
       aria-hidden="true"
     >
       <path

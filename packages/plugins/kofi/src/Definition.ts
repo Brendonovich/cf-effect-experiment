@@ -54,19 +54,23 @@ export const RuntimeStorage = Schema.Struct({
   webhooks: Schema.Record(
     WebhookId,
     Schema.Struct({
+      name: Schema.optionalKey(Schema.String),
       verificationToken: Schema.String,
     }),
   ),
 });
 
 export const ClientState = Schema.Struct({
-  webhooks: Schema.Array(Schema.Struct({ id: WebhookId })),
+  webhooks: Schema.Array(Schema.Struct({ id: WebhookId, name: Schema.String })),
 });
 
 export class ClientRpcs extends RpcGroup.make(
   Rpc.make("KofiCreateWebhook", {
-    payload: Schema.Struct({ verificationToken: Schema.String }),
+    payload: Schema.Struct({ name: Schema.String, verificationToken: Schema.String }),
     success: WebhookId,
+  }),
+  Rpc.make("KofiRenameWebhook", {
+    payload: Schema.Struct({ webhookId: WebhookId, name: Schema.String }),
   }),
   Rpc.make("KofiRemoveWebhook", {
     payload: Schema.Struct({ webhookId: WebhookId }),
