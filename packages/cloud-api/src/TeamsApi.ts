@@ -7,7 +7,7 @@ import {
 } from "effect/unstable/httpapi";
 
 import { Authentication } from "./Authentication.ts";
-import { TeamNotFound } from "./Errors.ts";
+import { TeamNotFound, UserNotFound } from "./Errors.ts";
 import { TeamMember, TeamRecord } from "./Models.ts";
 
 export class TeamsApiGroup extends HttpApiGroup.make("teams").add(
@@ -29,7 +29,7 @@ export class TeamsApiGroup extends HttpApiGroup.make("teams").add(
     params: { teamId: Schema.String, userId: Schema.String },
     payload: Schema.Struct({ role: Schema.Literals(["admin", "member"]) }),
     success: Schema.Struct({ member: TeamMember }),
-    error: [TeamNotFound, HttpApiError.Forbidden],
+    error: [TeamNotFound, UserNotFound, HttpApiError.Forbidden],
   }).middleware(Authentication),
   HttpApiEndpoint.delete("removeMember", "/api/teams/:teamId/members/:userId", {
     params: { teamId: Schema.String, userId: Schema.String },

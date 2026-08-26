@@ -4,8 +4,11 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "dist/types",
-    "lib": ["ES2024", "DOM"]
+    "lib": ["ES2024", "DOM"],
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web"
   },
   "include": ["src", "test"],
-  "references": [{ "path": "../../plugin" }]
+  "exclude": ["src/**/*.stories.ts", "src/**/*.stories.tsx"],
+  "references": [{ "path": "../../editor-ui" }, { "path": "../../plugin" }]
 }

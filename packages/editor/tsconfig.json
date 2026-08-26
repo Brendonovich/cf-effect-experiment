@@ -11,6 +11,7 @@
     { "path": "../core" },
     { "path": "../plugin" },
     { "path": "../persistence" },
-    { "path": "../persistence-sqlite" }
+    { "path": "../persistence-sqlite" },
+    { "path": "../plugins/utilities" }
   ]
 }

@@ -3,7 +3,17 @@
   "references": {
     "macrograph": {
       "repository": "brendonovich/macrograph",
-      "description": "Use for Macrograph implementation details"
+      "description": "Use for MacroGraph implementation details"
+    }
+  },
+  "mcp": {
+    "executor": {
+      "type": "remote",
+      "url": "http://localhost:4789/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer AOp0CSJtHfLoQ3hfpvOEJKwQtPXlHVdofLUQlrYA0d4"
+      }
     }
   }
 }

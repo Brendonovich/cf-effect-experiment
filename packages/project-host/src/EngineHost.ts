@@ -1,13 +1,11 @@
 import type * as S from "effect/Schema";
-import type { Rpc } from "effect/unstable/rpc";
+import { type Rpc, RpcTest } from "effect/unstable/rpc";
 
 import { Persistence } from "@macrograph/persistence";
-import {
-  Engine,
-  type HttpEndpoint,
-  type Plugin,
-  type Resource,
-} from "@macrograph/plugin";
+import * as Engine from "@macrograph/plugin/Engine";
+import type * as HttpEndpoint from "@macrograph/plugin/HttpEndpoint";
+import type * as Plugin from "@macrograph/plugin/Plugin";
+import type * as Resource from "@macrograph/plugin/Resource";
 import { Context, Effect, Layer, Schema, Semaphore } from "effect";
 
 import { Editor } from "@macrograph/editor";
@@ -60,17 +58,6 @@ export const contextLayer = <
     }),
   );
 
-// Implementations own the complete HTTP ingress lifecycle; engines invoke reconciliation directly.
-export class HttpIngressHost extends Context.Service<
-  HttpIngressHost,
-  {
-    readonly reconcile: (
-      pluginId: string,
-      state: unknown,
-    ) => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
-  }
->()("@macrograph/project-host/EngineHost/HttpIngressHost") {}
-
 type DeploymentRef<Definition extends Engine.AnyDef> = {
   readonly pluginId: string;
   readonly definition: Definition;
@@ -84,6 +71,9 @@ type EditorContextOptions<
   readonly emit: Engine.ToLayerCtx<ResourceType, Event, Storage>["emit"];
   readonly resource?: Engine.ToLayerCtx<ResourceType, Event, Storage>["resource"];
   readonly client?: Engine.ToLayerCtx<ResourceType, Event, Storage>["client"];
+  readonly reconcile?: (
+    state: Storage["Type"],
+  ) => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
 };
 
 const editorLayer = <
@@ -97,11 +87,7 @@ const editorLayer = <
   deployment: DeploymentRef<
     Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>
   >,
-  options: EditorContextOptions<ResourceType, Event, Storage> & {
-    readonly reconcile?: (
-      state: Storage["Type"],
-    ) => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
-  },
+  options: EditorContextOptions<ResourceType, Event, Storage>,
 ) =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -126,9 +112,16 @@ const editorLayer = <
         reconcile: options.reconcile ?? (() => Effect.succeed([])),
         setEndpoints:
           options.reconcile === undefined ? () => Effect.void : editor.engine.setEndpoints,
-        resource: options.resource ?? { refresh: () => Effect.void },
+        resource:
+          options.resource ??
+          {
+            refresh: (resource) =>
+              editor.engine
+                .reloadResource(deployment.pluginId, resource.key)
+                .pipe(Effect.catchTag("InvalidResourceError", () => Effect.void)),
+          },
         credentials,
-        client: options.client ?? { refresh: Effect.void },
+        client: options.client ?? { refresh: editor.engine.dirtyClientState(deployment.pluginId) },
         emit: options.emit,
       });
     }),
@@ -147,28 +140,6 @@ export const editorContextLayer = <
   >,
   options: EditorContextOptions<ResourceType, Event, Storage>,
 ) => editorLayer(deployment, options);
-
-export const editorHttpIngressContextLayer = <
-  ResourceType extends Resource.ResourceClass<any, any, any>,
-  Event extends { _tag: string },
-  Storage extends S.Codec<unknown, unknown, never, never>,
-  Rpcs extends Rpc.Any,
-  ClientState extends S.Top,
-  ClientRpcs extends Rpc.Any,
->(
-  deployment: DeploymentRef<
-    Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>
-  >,
-  options: EditorContextOptions<ResourceType, Event, Storage>,
-) =>
-  Layer.unwrap(
-    Effect.map(HttpIngressHost, (host) =>
-      editorLayer(deployment, {
-        ...options,
-        reconcile: (state) => host.reconcile(deployment.pluginId, state),
-      }),
-    ),
-  );
 
 export const layer = <
   ResourceType extends Resource.ResourceClass<any, any, any>,
@@ -198,7 +169,34 @@ export const layer = <
 ) => {
   const definition = deployment.definition;
   const engineLayer = deployment.layer.pipe(Layer.provide(engineContext));
-  return Layer.unwrap(Effect.map(definition, (engine) => engine.client.rpcs)).pipe(
+  return Layer.unwrap(
+    Effect.map(definition, (engine) =>
+      Layer.merge(
+        engine.client.rpcs,
+        Layer.effectDiscard(
+          Effect.gen(function* () {
+            const editor = yield* Editor.Service;
+            const runtime = yield* RpcTest.makeClient(definition.Rpcs).pipe(
+              Effect.provide(engine.rpcs),
+            );
+            yield* editor.engine.hostRuntimeClient(deployment.pluginId, runtime);
+            const resourceContext = yield* Layer.build(engine.resources);
+            const resourceHandlers = resourceContext as unknown as Context.Context<
+              Resource.Handler<string, Schema.Json>
+            >;
+            for (const resource of definition.Resource) {
+              const handler = Context.get(resourceHandlers, resource.Handler);
+              yield* editor.engine.hostResource(deployment.pluginId, resource.key, {
+                values: handler.values,
+                reload: handler.reload,
+                changes: handler.changes,
+              });
+            }
+          }),
+        ),
+      ),
+    ),
+  ).pipe(
     Layer.provideMerge(engineLayer),
   );
 };
@@ -211,7 +209,13 @@ export const mount = <Definition extends Engine.AnyDef>(
   Effect.gen(function* () {
     const editor = yield* Editor.Service;
     yield* editor.plugin(plugin, deployment);
-    yield* editor.engine.hostClientState(plugin.id, clientState);
+    yield* editor.engine.hostClientState(
+      plugin.id,
+      clientState.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+        Effect.orDie,
+      ),
+    );
   });
 
 export * as EngineHost from "./EngineHost.ts";

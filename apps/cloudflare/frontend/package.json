@@ -1,0 +1,38 @@
+{
+  "name": "@macrograph/cloud-frontend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run --environment node",
+    "preview": "vite preview",
+    "typecheck": "tsgo --build"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "catalog:",
+    "@macrograph/cloud-api": "workspace:*",
+    "@macrograph/editor": "workspace:*",
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@macrograph/plugin-kofi": "workspace:*",
+    "@macrograph/plugin-twitch": "workspace:*",
+    "@solidjs/router": "2.0.0-next.17",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "@tanstack/solid-query": "6.0.0-rc.0",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@iconify/json": "2.2.196",
+    "@macrograph/icons": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@stylexjs/unplugin": "catalog:",
+    "@types/node": "^24",
+    "typescript": "^5.8",
+    "vite": "^8.0.7",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"
+  }
+}

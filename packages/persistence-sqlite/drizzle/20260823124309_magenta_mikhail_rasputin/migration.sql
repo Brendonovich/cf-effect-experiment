@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `input_defaults` text DEFAULT '{}' NOT NULL;

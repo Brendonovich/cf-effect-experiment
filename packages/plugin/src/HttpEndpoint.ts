@@ -1,45 +1,59 @@
 import { Context, Effect, Option, Redacted, Schema } from "effect";
 
+export const Id = Schema.String.pipe(Schema.brand("HttpEndpointId"));
+export type Id = typeof Id.Type;
+
+export const HandlerId = Schema.String.pipe(Schema.brand("HttpEndpointHandlerId"));
+export type HandlerId = typeof HandlerId.Type;
+
+export const InstanceKey = Schema.String.pipe(Schema.brand("HttpEndpointInstanceKey"));
+export type InstanceKey = typeof InstanceKey.Type;
+
+export const EndpointSchema = Schema.Struct({
+  id: HandlerId,
+  displayName: Schema.String,
+});
+export type EndpointSchema = typeof EndpointSchema.Type;
+
 export interface Handler<Metadata> {
-  readonly id: string;
+  readonly id: HandlerId;
   readonly metadata: Schema.Codec<Metadata, unknown, never, never>;
 }
 
 export const handler = <Metadata>(
   id: string,
   metadata: Schema.Codec<Metadata, unknown, never, never>,
-): Handler<Metadata> => ({ id, metadata });
+): Handler<Metadata> => ({ id: HandlerId.make(id), metadata });
 
 export interface Resolved<Metadata> {
-  readonly id: string;
+  readonly id: Id;
   readonly url: string;
-  readonly handlerId: string;
-  readonly instanceKey: string;
+  readonly schema: EndpointSchema;
+  readonly instanceKey: InstanceKey;
+  readonly displayName?: string;
   readonly metadata: Metadata;
 }
 
 export const Routed = Schema.Struct({
-  id: Schema.String,
+  id: Id,
   url: Schema.String,
-  handlerId: Schema.String,
-  instanceKey: Schema.String,
+  schema: EndpointSchema,
+  instanceKey: InstanceKey,
+  displayName: Schema.optionalKey(Schema.String),
   metadata: Schema.Unknown,
 });
 export type Routed = typeof Routed.Type;
 
-export class Current extends Context.Service<Current, Routed>()(
-  "@macrograph/plugin/HttpEndpoint/Current",
-) {}
-
-export class ProvisionError extends Schema.TaggedErrorClass<ProvisionError>()("ProvisionError", {
+export class ProvisionError extends Schema.TaggedError<ProvisionError>()("ProvisionError", {
   cause: Schema.Unknown,
 }) {}
 
 export interface Service {
   readonly ensure: <Metadata>(
-    handler: Handler<Metadata>,
+    handler: Handler<Metadata> & { readonly displayName: string },
     options: {
       readonly instanceKey: string;
+      readonly displayName?: string;
       readonly metadata: Metadata;
     },
   ) => Effect.Effect<Resolved<Metadata>, ProvisionError>;
@@ -54,17 +68,12 @@ export interface Service {
     instanceKey: string,
   ) => Effect.Effect<void, ProvisionError>;
 
-  readonly lookup: (id: string) => Effect.Effect<Option.Option<Routed>, ProvisionError>;
+  readonly lookup: (id: Id) => Effect.Effect<Option.Option<Routed>, ProvisionError>;
+
+  readonly secret: (endpointId: Id) => Effect.Effect<Redacted.Redacted<string>>;
 }
 
+/** Provisions, resolves, removes, and manages secrets for plugin HTTP endpoints. */
 export class Host extends Context.Service<Host, Service>()(
   "@macrograph/plugin/HttpEndpoint/Host",
-) {}
-
-export interface SecretStoreService {
-  readonly upsert: (endpointId: string) => Effect.Effect<Redacted.Redacted<string>>;
-}
-
-export class SecretStore extends Context.Service<SecretStore, SecretStoreService>()(
-  "@macrograph/plugin/HttpEndpoint/SecretStore",
 ) {}

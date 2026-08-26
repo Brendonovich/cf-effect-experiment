@@ -1,11 +1,12 @@
-import { Connection, Graph, Node, Project } from "@macrograph/core";
+import { Connection, Graph, Node, Project, ResourceConstant } from "@macrograph/core";
 import { Effect, FileSystem, Layer, Path, Schema, Semaphore } from "effect";
 
 import { Persistence, PersistenceError } from "../Persistence.ts";
 
 const ProjectMeta = Schema.Struct({
   name: Schema.String,
-  engines: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  engines: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
+  constants: Schema.optional(ResourceConstant.Collection),
 });
 
 export const layer = (dir: string) =>
@@ -28,7 +29,11 @@ export const layer = (dir: string) =>
         yield* fs
           .writeFileString(
             projectFilePath,
-            JSON.stringify({ name: project.name, engines: project.engines }, null, 2),
+            JSON.stringify(
+              { name: project.name, engines: project.engines, constants: project.constants },
+              null,
+              2,
+            ),
           )
           .pipe(PersistenceError.refail);
 
@@ -70,6 +75,7 @@ export const layer = (dir: string) =>
           name: meta.name,
           graphs,
           engines: meta.engines ?? {},
+          constants: meta.constants ?? {},
         };
       }, lock.withPermit);
 

@@ -5,23 +5,34 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./ClientSettings": "./src/ClientSettings.ts",
+    "./Credential": "./src/Credential.ts",
+    "./DataType": "./src/DataType.ts",
     "./Engine": "./src/Engine.ts",
     "./EngineTest": "./src/EngineTest.ts",
     "./HttpEndpoint": "./src/HttpEndpoint.ts",
     "./HttpIngress": "./src/HttpIngress.ts",
     "./Plugin": "./src/Plugin.ts",
     "./Registration": "./src/Registration.ts",
-    "./Resource": "./src/Resource.ts"
+    "./Resource": "./src/Resource.ts",
+    "./vite": "./src/vite.ts"
   },
   "scripts": {
     "build": "tsgo --build",
     "typecheck": "tsgo --build",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "effect": "catalog:"
+    "@babel/parser": "^7.29.3",
+    "effect": "catalog:",
+    "magic-string": "^0.30.21"
   },
   "devDependencies": {
-    "typescript": "^5.8"
+    "@effect/vitest": "catalog:",
+    "@types/node": "^24",
+    "typescript": "^5.8",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.0"
   }
 }

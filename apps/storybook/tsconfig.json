@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "../..",
+    "outDir": "dist/types",
+    "paths": {
+      "storybook-solidjs-vite": ["./node_modules/storybook-solidjs-vite/dist/index.d.ts"]
+    },
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "@macrograph/icons/types"],
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web"
+  },
+  "include": [
+    "src",
+    ".storybook",
+    "vite.config.ts",
+    "../../packages/editor-ui/src/**/*.stories.tsx",
+    "../../packages/editor-ui/src/editor/storybook-fixtures.ts",
+    "../../packages/plugins/*/src/**/*.stories.tsx"
+  ],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/editor-ui" },
+    { "path": "../../packages/plugin" },
+    { "path": "../../packages/plugins/kofi" },
+    { "path": "../../packages/plugins/obs" },
+    { "path": "../../packages/plugins/twitch" },
+    { "path": "../../packages/plugins/websocket-client" },
+    { "path": "../../packages/plugins/websocket-server" }
+  ]
+}

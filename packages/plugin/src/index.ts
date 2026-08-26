@@ -1,5 +1,9 @@
+export * as DataType from "./DataType.ts";
+export * as ClientSettings from "./ClientSettings.ts";
+export * as Credential from "./Credential.ts";
 export * as Engine from "./Engine.ts";
 export * as EngineTest from "./EngineTest.ts";
+export { type ExecutionContext, type NodeExecutionContext } from "./ExecutionContext.ts";
 export * as HttpEndpoint from "./HttpEndpoint.ts";
 export * as HttpIngress from "./HttpIngress.ts";
 export * as Plugin from "./Plugin.ts";

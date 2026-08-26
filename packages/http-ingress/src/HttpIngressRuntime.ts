@@ -1,7 +1,7 @@
 import { Engine, HttpEndpoint, HttpIngress } from "@macrograph/plugin";
 import { Effect, Schema } from "effect";
 
-export class DuplicateDeployment extends Schema.TaggedErrorClass<DuplicateDeployment>()(
+export class DuplicateDeployment extends Schema.TaggedError<DuplicateDeployment>()(
   "DuplicateHttpIngressDeployment",
   { pluginId: Schema.String },
 ) {}
@@ -13,17 +13,15 @@ export interface Service {
   readonly reconcile: (
     previous: HttpIngress.Manifest,
     desired: HttpIngress.Manifest,
+    options?: { readonly remount?: boolean },
   ) => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>, HttpIngress.ReconciliationError>;
   readonly handle: HttpIngress.RegistryService["handle"];
   readonly mergeManifests: HttpIngress.RegistryService["mergeManifests"];
   readonly allows: HttpIngress.RegistryService["allows"];
 }
 
-const entryKey = (entry: HttpIngress.ManifestEntry) =>
-  JSON.stringify([entry.pluginId, entry.handlerId, entry.instanceKey]);
-
 const entryConfiguration = (entry: HttpIngress.ManifestEntry) =>
-  JSON.stringify([entry.metadata, entry.configuration]);
+  JSON.stringify([entry.metadata, entry.configuration, entry.displayName]);
 
 export const make = (
   deployments: ReadonlyArray<Engine.AnyHttpIngressDeployment>,
@@ -44,23 +42,26 @@ export const make = (
     return {
       resolveManifest: (engines) =>
         Effect.forEach(deployments, (deployment) =>
-          deployment
-            .httpIngress.resolveRequirements(
+          deployment.httpIngress
+            .resolveRequirements(
               engines[deployment.pluginId] ?? deployment.definition.InitialStorage,
             )
             .pipe(Effect.flatMap(HttpIngress.manifest)),
         ).pipe(Effect.map((manifests) => manifests.flat())),
-      reconcile: (previous, desired) => {
-        const desiredKeys = new Set(desired.map(entryKey));
-        const previousByKey = new Map(previous.map((entry) => [entryKey(entry), entry]));
+      reconcile: (previous, desired, options) => {
+        const desiredKeys = new Set(desired.map(HttpIngress.manifestEntryKey));
+        const previousByKey = new Map(
+          previous.map((entry) => [HttpIngress.manifestEntryKey(entry), entry]),
+        );
         return Effect.gen(function* () {
           const mounted = yield* Effect.forEach(desired, (entry) => {
-            const previousEntry = previousByKey.get(entryKey(entry));
+            const previousEntry = previousByKey.get(HttpIngress.manifestEntryKey(entry));
             const definition = registry.definitions.find(
               (candidate) =>
                 candidate.id === entry.handlerId && candidate.pluginId === entry.pluginId,
             );
             if (
+              options?.remount === true ||
               previousEntry === undefined ||
               definition === undefined ||
               entryConfiguration(previousEntry) !== entryConfiguration(entry)
@@ -77,7 +78,7 @@ export const make = (
             );
           });
           yield* Effect.forEach(
-            previous.filter((entry) => !desiredKeys.has(entryKey(entry))),
+            previous.filter((entry) => !desiredKeys.has(HttpIngress.manifestEntryKey(entry))),
             (entry) => registry.unmount(entry, endpoints),
             { discard: true },
           );

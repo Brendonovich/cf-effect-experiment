@@ -15,14 +15,18 @@ export const Model = Schema.Struct({
 export type Model = typeof Model.Type;
 
 export const CreateInput = Schema.Struct({
-  outNodeId: Schema.String,
-  outIoId: IoId,
-  inNodeId: Schema.String,
-  inIoId: IoId,
+  outNodeId: Schema.String.annotate({
+    description: "Output node ID, or its temporary local ID when creating a complete graph.",
+  }),
+  outIoId: IoId.annotate({ description: "Output execution or data port ID from the node schema." }),
+  inNodeId: Schema.String.annotate({
+    description: "Input node ID, or its temporary local ID when creating a complete graph.",
+  }),
+  inIoId: IoId.annotate({ description: "Input execution or data port ID from the node schema." }),
 });
 export type CreateInput = typeof CreateInput.Type;
 
-export class InvalidError extends Schema.TaggedErrorClass<InvalidError>()(
+export class InvalidError extends Schema.TaggedError<InvalidError>()(
   "InvalidConnectionError",
   { reason: Schema.String },
 ) {}

@@ -3,10 +3,14 @@
   "version": "0.0.1",
   "type": "module",
   "main": "./src/Plugin.ts",
+  "macrograph": { "standaloneDeployment": "./src/Deployment/WebSocket.ts" },
   "exports": {
     ".": "./src/Plugin.ts",
     "./Definition": "./src/Definition.ts",
-    "./Deployment/WebSocket": "./src/Deployment/WebSocket.ts"
+    "./Events": "./src/Events.ts",
+    "./Deployment/WebSocket": "./src/Deployment/WebSocket.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Settings": "./src/Settings.tsx"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -15,12 +19,16 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
     "@macrograph/plugin": "workspace:*",
-    "effect": "catalog:"
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
-    "vitest": "^3"
+    "vitest": "^4.1.0"
   }
 }

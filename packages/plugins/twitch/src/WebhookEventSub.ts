@@ -1,7 +1,9 @@
 import { HttpEndpoint, HttpIngress } from "@macrograph/plugin";
 import {
   Context,
+  Clock,
   Effect,
+  Exit,
   HashMap,
   Layer,
   Option,
@@ -16,9 +18,17 @@ import {
 } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
+import { AppHelix } from "./AppHelix.ts";
+import { isCatalogEvent } from "./Catalog.ts";
 import { AccountId } from "./Definition.ts";
 import { buildCondition, EventSubSocket, SubscriptionEvent } from "./EventSub.ts";
-import { definitionsFor, helixError, type Make, type State } from "./EventSubImplementation.ts";
+import {
+  definitionsFor,
+  helixError,
+  listSubscriptions,
+  type Make,
+  type State,
+} from "./EventSubImplementation.ts";
 import { Helix } from "./Helix.ts";
 
 export const EventSubEndpointMetadata = Schema.Struct({ accountId: AccountId });
@@ -27,6 +37,7 @@ export type EventSubEndpointMetadata = typeof EventSubEndpointMetadata.Type;
 export const EventSubIngress = HttpIngress.make({
   id: "twitch:eventsub",
   pluginId: "twitch",
+  displayName: "EventSub Webhook",
   method: "POST",
   metadata: EventSubEndpointMetadata,
   event: SubscriptionEvent.Any,
@@ -39,7 +50,7 @@ export const EventSubIngress = HttpIngress.make({
 
 export const EventSubEndpoint = EventSubIngress;
 
-export class VerificationError extends Schema.TaggedErrorClass<VerificationError>()(
+export class VerificationError extends Schema.TaggedError<VerificationError>()(
   "VerificationError",
   { cause: Schema.Unknown },
 ) {}
@@ -138,21 +149,20 @@ export const layerWebCrypto = (crypto: globalThis.Crypto) =>
     },
   });
 
-export const make: Make<
-  Helix.AppCredentials | HttpClient.HttpClient | HttpEndpoint.Host | HttpEndpoint.SecretStore
-> = (context) =>
+export const make: Make<AppHelix.AppCredentials | HttpClient.HttpClient | HttpEndpoint.Host> = (
+  context,
+) =>
   Effect.gen(function* () {
-    const appCredentials = yield* Helix.AppCredentials;
+    const appCredentials = yield* AppHelix.AppCredentials;
     const httpClient = yield* HttpClient.HttpClient;
     const endpoints = yield* HttpEndpoint.Host;
-    const secrets = yield* HttpEndpoint.SecretStore;
     const state = yield* SubscriptionRef.make(
       HashMap.empty<AccountId, { readonly state: State }>(),
     );
     const operations = yield* Semaphore.make(1);
     const getHelix = yield* Effect.cached(
-      Helix.makeAppClient.pipe(
-        Effect.provideService(Helix.AppCredentials, appCredentials),
+      AppHelix.makeAppClient.pipe(
+        Effect.provideService(AppHelix.AppCredentials, appCredentials),
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
     );
@@ -161,12 +171,15 @@ export const make: Make<
       Effect.forkScoped,
     );
 
-    const subscriptionsForAccount = Effect.fnUntraced(function* (accountId: AccountId) {
+    const subscriptionsForAccount = Effect.fnUntraced(function* (
+      accountId: AccountId,
+      callback: string,
+    ) {
       const helix = yield* getHelix;
-      const response = yield* helixError(helix.eventsub.listSubscriptions({ query: {} }));
-      return response.data.filter(
+      return (yield* listSubscriptions(helix)).filter(
         (subscription) =>
           subscription.transport.method === "webhook" &&
+          subscription.transport.callback === callback &&
           belongsToAccount(subscription.condition, accountId),
       );
     });
@@ -179,8 +192,8 @@ export const make: Make<
         for (const accountId of accountIds) {
           if (HashMap.has(current, accountId)) continue;
           const endpoint = yield* endpoints.get(EventSubEndpoint, accountId).pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("Failed to determine EventSub webhook state", error, {
+            Effect.catch(() =>
+              Effect.logWarning("Failed to determine EventSub webhook state", {
                 accountId,
               }).pipe(Effect.as(Option.none())),
             ),
@@ -230,10 +243,24 @@ export const make: Make<
               reason: `Twitch EventSub webhooks require a public HTTPS callback on port 443; received ${endpoint.url}`,
             });
           }
-          const secret = yield* secrets.upsert(endpoint.id);
+          const secret = yield* endpoints.secret(endpoint.id);
           const helix = yield* getHelix;
           const definitions = definitionsFor(yield* context.getSubscriptions(accountId));
-          const existing = yield* subscriptionsForAccount(accountId);
+          const existing = (yield* listSubscriptions(helix)).filter((subscription) => {
+            if (
+              subscription.transport.method !== "webhook" ||
+              !belongsToAccount(subscription.condition, accountId)
+            ) {
+              return false;
+            }
+            if (subscription.transport.callback === endpoint.url) return true;
+            if (!URL.canParse(subscription.transport.callback)) return false;
+            const previousCallback = new URL(subscription.transport.callback);
+            return (
+              previousCallback.pathname === callbackUrl.pathname &&
+              previousCallback.pathname.endsWith(`/${endpoint.id}`)
+            );
+          });
           yield* Effect.logInfo("Reconciling Twitch EventSub webhook subscriptions", {
             accountId,
             desiredCount: definitions.length,
@@ -243,11 +270,12 @@ export const make: Make<
 
           const subscriptionsToDelete = existing.filter(
             (subscription) =>
-              subscription.transport.method !== "webhook" ||
-              subscription.transport.callback !== endpoint.url ||
+              (subscription.transport.method === "webhook" &&
+                subscription.transport.callback !== endpoint.url) ||
               !definitions.some(
                 (definition) =>
                   definition.type === subscription.type &&
+                  definition.version.toString() === subscription.version &&
                   conditionsEqual(subscription.condition, buildCondition(definition, accountId)),
               ),
           );
@@ -281,6 +309,7 @@ export const make: Make<
                   subscription.transport.method === "webhook" &&
                   subscription.transport.callback === endpoint.url &&
                   definition.type === subscription.type &&
+                  definition.version.toString() === subscription.version &&
                   conditionsEqual(subscription.condition, buildCondition(definition, accountId)),
               ),
           );
@@ -322,11 +351,15 @@ export const make: Make<
             accountId,
           });
         }).pipe(
-          Effect.tapError((error) =>
-            Effect.gen(function* () {
-              yield* Effect.logError("EventSub webhook connection failed", error, { accountId });
-              yield* SubscriptionRef.update(state, (current) => HashMap.remove(current, accountId));
-            }),
+          Effect.onExit((exit) =>
+            Exit.isFailure(exit)
+              ? Effect.gen(function* () {
+                  yield* Effect.logError("EventSub webhook connection failed", { accountId });
+                  yield* SubscriptionRef.update(state, (current) =>
+                    HashMap.remove(current, accountId),
+                  );
+                })
+              : Effect.void,
           ),
         );
       }, operations.withPermit),
@@ -340,7 +373,7 @@ export const make: Make<
             yield* Effect.logInfo("No EventSub webhook endpoint to disconnect", { accountId });
             return;
           }
-          const subscriptions = yield* subscriptionsForAccount(accountId);
+          const subscriptions = yield* subscriptionsForAccount(accountId, endpoint.value.url);
           const helix = yield* getHelix;
           yield* Effect.logInfo("Deleting Twitch EventSub webhook subscriptions", {
             accountId,
@@ -356,9 +389,7 @@ export const make: Make<
               ),
             { discard: true },
           );
-        }).pipe(
-          Effect.catch((error) => Effect.log("Failed to disconnect EventSub webhook", error)),
-        );
+        }).pipe(Effect.catch(() => Effect.log("Failed to disconnect EventSub webhook")));
         yield* SubscriptionRef.update(state, (current) =>
           HashMap.set(current, accountId, { state: "disconnected" }),
         );
@@ -370,16 +401,15 @@ export const make: Make<
 
 export const handler = EventSubIngress.implement(
   Effect.gen(function* () {
-    const appCredentials = yield* Helix.AppCredentials;
+    const appCredentials = yield* AppHelix.AppCredentials;
     const httpClient = yield* HttpClient.HttpClient;
-    const secrets = yield* HttpEndpoint.SecretStore;
+    const endpoints = yield* HttpEndpoint.Host;
     const verifier = yield* SignatureVerifier;
     const subscriptions = yield* Ref.make<ReadonlyMap<AccountId, ReadonlyArray<string>>>(new Map());
+    const delivered = yield* Ref.make<ReadonlySet<string>>(new Set());
 
     return Effect.gen(function* () {
-      const lifecycleContext = yield* Effect.context<
-        HttpEndpoint.Host | HttpEndpoint.SecretStore | Scope.Scope
-      >();
+      const lifecycleContext = yield* Effect.context<HttpEndpoint.Host | Scope.Scope>();
       const lifecycle = yield* make({
         getAccountIds: Ref.get(subscriptions).pipe(Effect.map((current) => [...current.keys()])),
         getHelix: () => Effect.die("Webhook EventSub uses Twitch app credentials"),
@@ -389,7 +419,7 @@ export const handler = EventSubIngress.implement(
         refresh: Effect.void,
       }).pipe(
         Effect.provideContext(lifecycleContext),
-        Effect.provideService(Helix.AppCredentials, appCredentials),
+        Effect.provideService(AppHelix.AppCredentials, appCredentials),
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.cached,
       );
@@ -418,7 +448,7 @@ export const handler = EventSubIngress.implement(
           yield* Effect.logInfo("Received Twitch EventSub webhook request", {
             accountId,
           });
-          const secret = yield* secrets.upsert(request.endpoint.id);
+          const secret = yield* endpoints.secret(request.endpoint.id);
           const messageId = getHeader(request.headers, "Twitch-Eventsub-Message-Id");
           const timestamp = getHeader(request.headers, "Twitch-Eventsub-Message-Timestamp");
           const signature = getHeader(request.headers, "Twitch-Eventsub-Message-Signature");
@@ -437,6 +467,10 @@ export const handler = EventSubIngress.implement(
             );
             return { status: 400 };
           }
+          const messageTimestamp = Date.parse(timestamp);
+          const now = yield* Clock.currentTimeMillis;
+          if (!Number.isFinite(messageTimestamp) || Math.abs(now - messageTimestamp) > 10 * 60_000)
+            return { status: 403 };
 
           yield* Effect.logInfo("Processing Twitch EventSub webhook delivery", {
             accountId,
@@ -475,6 +509,17 @@ export const handler = EventSubIngress.implement(
           )
             return { status: 400 };
 
+          const definition = definitionsFor([delivery.value.subscription.type])[0];
+          if (
+            definition === undefined ||
+            definition.version.toString() !== delivery.value.subscription.version ||
+            !conditionsEqual(
+              delivery.value.subscription.condition,
+              buildCondition(definition, accountId),
+            )
+          )
+            return { status: 400 };
+
           if (messageType === "webhook_callback_verification") {
             if (delivery.value.challenge === undefined) return { status: 400 };
             yield* Effect.logInfo("Accepted Twitch EventSub webhook callback verification", {
@@ -489,7 +534,20 @@ export const handler = EventSubIngress.implement(
           }
 
           if (messageType === "notification") {
+            if (!request.configuration.subscriptions.includes(delivery.value.subscription.type))
+              return { status: 204 };
             if (delivery.value.event === undefined) return { status: 400 };
+            const duplicate = yield* Ref.modify(delivered, (current) => {
+              if (current.has(messageId)) return [true, current] as const;
+              const next = new Set(current);
+              next.add(messageId);
+              if (next.size > 2_048) {
+                const oldest = next.values().next().value;
+                if (oldest !== undefined) next.delete(oldest);
+              }
+              return [false, next] as const;
+            });
+            if (duplicate) return { status: 204 };
             const decoded = SubscriptionEvent.decodeAny({
               _tag: delivery.value.subscription.type,
               ...(typeof delivery.value.event === "object" && delivery.value.event !== null
@@ -497,6 +555,7 @@ export const handler = EventSubIngress.implement(
                 : {}),
             });
             if (Result.isFailure(decoded)) return { status: 400 };
+            if (!isCatalogEvent(decoded.success, accountId)) return { status: 400 };
             yield* Effect.logInfo("Accepted Twitch EventSub webhook notification", {
               accountId,
               eventType: decoded.success._tag,
@@ -523,4 +582,4 @@ export const handler = EventSubIngress.implement(
   }),
 );
 
-export { AppCredentials } from "./Helix.ts";
+export { AppCredentials } from "./AppHelix.ts";

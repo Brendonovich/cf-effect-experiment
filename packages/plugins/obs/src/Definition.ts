@@ -1,4 +1,5 @@
-import { Engine, Resource } from "@macrograph/plugin";
+import * as Engine from "@macrograph/plugin/Engine";
+import * as Resource from "@macrograph/plugin/Resource";
 import { Array, Schema } from "effect";
 import * as S from "effect/Schema";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
@@ -8,15 +9,15 @@ import { SocketAddress } from "./Types.ts";
 
 export { SocketAddress } from "./Types.ts";
 
-export class ConnectionFailed extends S.TaggedErrorClass<ConnectionFailed>()("ConnectionFailed", {
-  cause: S.Unknown,
+export class ConnectionFailed extends S.TaggedError<ConnectionFailed>()("ConnectionFailed", {
+  reason: S.String,
 }) {}
 
-export class SocketNotFound extends S.TaggedErrorClass<SocketNotFound>()("SocketNotFound", {
+export class SocketNotFound extends S.TaggedError<SocketNotFound>()("SocketNotFound", {
   address: SocketAddress,
 }) {}
 
-export class RequestFailed extends S.TaggedErrorClass<RequestFailed>()("RequestFailed", {
+export class RequestFailed extends S.TaggedError<RequestFailed>()("RequestFailed", {
   requestType: S.String,
   code: S.Number,
   comment: S.optional(S.String),
@@ -34,6 +35,16 @@ export class ClientRpcs extends RpcGroup.make(
       name: S.optional(S.String),
     }),
     error: ConnectionFailed,
+  }),
+  Rpc.make("UpdateSocket", {
+    payload: S.Struct({
+      currentAddress: SocketAddress,
+      address: SocketAddress,
+      password: S.optional(S.String),
+      name: S.optional(S.String),
+      connectOnStartup: S.Boolean,
+    }),
+    error: S.Union([ConnectionFailed, SocketNotFound]),
   }),
   Rpc.make("RemoveSocket", { payload: S.Struct({ address: SocketAddress }) }),
   Rpc.make("ConnectSocket", {
@@ -71,7 +82,14 @@ export const ClientState = Schema.Struct({
     Schema.Struct({
       name: Schema.optional(Schema.String),
       address: SocketAddress,
-      state: S.Union([S.Literal("disconnected"), S.Literal("connecting"), S.Literal("connected")]),
+      connectOnStartup: Schema.Boolean,
+      state: S.Union([
+        S.Literal("disconnected"),
+        S.Literal("connecting"),
+        S.Literal("connected"),
+        S.Literal("error"),
+      ]),
+      error: Schema.optional(Schema.String),
     }),
   ),
 });

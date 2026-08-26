@@ -20,6 +20,6 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
-    "vitest": "^3"
+    "vitest": "^4.1.0"
   }
 }

@@ -1,14 +1,8 @@
-import { Context, Data, Option, Redacted, Ref } from "effect";
+import { Data, Option, Ref } from "effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as S from "effect/Schema";
-import {
-  Headers,
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
+import { Headers, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
 import {
   HttpApi,
   HttpApiClient,
@@ -20,40 +14,204 @@ import {
 
 export const DEFAULT_CLIENT_ID = "ldbp0fkq9yalf2lzsi146i0cip8y59";
 
-export class HelixError extends S.TaggedErrorClass<HelixError>()("HelixError", {
+export class HelixError extends S.TaggedError<HelixError>()("HelixError", {
   reason: S.String,
   status: S.optional(S.Number),
-  body: S.optional(S.String),
+  rateLimit: S.optional(S.Number),
+  rateLimitRemaining: S.optional(S.Number),
+  rateLimitReset: S.optional(S.Number),
 }) {}
 
-export class AppCredentials extends Context.Service<
-  AppCredentials,
-  {
-    readonly clientId: string;
-    readonly clientSecret: Redacted.Redacted;
-  }
->()("@macrograph/plugin-twitch/Helix/AppCredentials") {}
+const headerNumber = (value: string | undefined) => {
+  if (value === undefined) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+};
 
 export const fromHttpClientError = Effect.fnUntraced(function* (
   error: HttpClientError.HttpClientError,
 ) {
   const response = error.response;
-  const body =
-    response === undefined
-      ? undefined
-      : yield* response.text.pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const rateLimit = headerNumber(response?.headers["ratelimit-limit"]);
+  const rateLimitRemaining = headerNumber(response?.headers["ratelimit-remaining"]);
+  const rateLimitReset = headerNumber(response?.headers["ratelimit-reset"]);
   return yield* new HelixError({
-    reason: error.message,
+    reason:
+      response?.status === 401
+        ? "Twitch rejected the credential; reconnect the selected account"
+        : response?.status === 403
+          ? "The selected Twitch account lacks a required scope or channel role"
+          : "Twitch request could not be completed",
     ...(response === undefined ? {} : { status: response.status }),
-    ...(body === undefined || body.length === 0 ? {} : { body }),
+    ...(rateLimit === undefined ? {} : { rateLimit }),
+    ...(rateLimitRemaining === undefined ? {} : { rateLimitRemaining }),
+    ...(rateLimitReset === undefined ? {} : { rateLimitReset }),
   });
 });
 
 export namespace Api {
-  class ChatGroup extends HttpApiGroup.make("chat").add(
-    HttpApiEndpoint.post("sendMessage", "/chat/messages"),
-    // .setPayload(SendChatMessagePayload)
-    // .addSuccess(ChatMessageResponse),
+  const ChatSettings = S.Struct({
+    emote_mode: S.Boolean,
+    follower_mode: S.Boolean,
+    slow_mode: S.Boolean,
+    subscriber_mode: S.Boolean,
+  });
+  class ChatGroup extends HttpApiGroup.make("chat")
+    .add(
+      HttpApiEndpoint.post("sendMessage", "/chat/messages", {
+        payload: S.Struct({
+          broadcaster_id: S.String,
+          sender_id: S.String,
+          message: S.String,
+          reply_parent_message_id: S.optional(S.String),
+        }),
+        success: S.Struct({
+          data: S.Array(
+            S.Struct({
+              message_id: S.String,
+              is_sent: S.Boolean,
+              drop_reason: S.optional(S.Struct({ code: S.String, message: S.String })),
+            }),
+          ),
+        }),
+      }),
+    )
+    .add(
+      HttpApiEndpoint.get("getSettings", "/chat/settings", {
+        query: S.Struct({ broadcaster_id: S.String }),
+        success: S.Struct({ data: S.Array(ChatSettings) }),
+      }),
+    )
+    .add(
+      HttpApiEndpoint.patch("updateSettings", "/chat/settings", {
+        query: S.Struct({ broadcaster_id: S.String, moderator_id: S.String }),
+        payload: S.Struct({
+          emote_mode: S.optional(S.Boolean),
+          follower_mode: S.optional(S.Boolean),
+          slow_mode: S.optional(S.Boolean),
+          subscriber_mode: S.optional(S.Boolean),
+        }),
+        success: S.Struct({ data: S.Array(ChatSettings) }),
+      }),
+    ) {}
+
+  const ChannelInformation = S.Struct({
+    broadcaster_id: S.String,
+    broadcaster_login: S.String,
+    broadcaster_name: S.String,
+    broadcaster_language: S.String,
+    game_id: S.String,
+    game_name: S.String,
+    title: S.String,
+  });
+  class ChannelsGroup extends HttpApiGroup.make("channels")
+    .add(
+      HttpApiEndpoint.get("getInformation", "/channels", {
+        query: S.Struct({ broadcaster_id: S.String }),
+        success: S.Struct({ data: S.Array(ChannelInformation) }),
+      }),
+    )
+    .add(
+      HttpApiEndpoint.patch("modifyInformation", "/channels", {
+        query: S.Struct({ broadcaster_id: S.String }),
+        payload: S.Struct({
+          game_id: S.optional(S.String),
+          broadcaster_language: S.optional(S.String),
+          title: S.optional(S.String),
+        }),
+      }),
+    ) {}
+
+  class StreamsGroup extends HttpApiGroup.make("streams").add(
+    HttpApiEndpoint.get("getStreams", "/streams", {
+      query: S.Struct({ user_id: S.String }),
+      success: S.Struct({
+        data: S.Array(
+          S.Struct({
+            id: S.String,
+            user_id: S.String,
+            game_name: S.optional(S.String),
+            title: S.String,
+            viewer_count: S.Int,
+          }),
+        ),
+      }),
+    }),
+  ) {}
+
+  class ClipsGroup extends HttpApiGroup.make("clips").add(
+    HttpApiEndpoint.post("createClip", "/clips", {
+      query: S.Struct({ broadcaster_id: S.String }),
+      success: S.Struct({ data: S.Array(S.Struct({ id: S.String, edit_url: S.String })) }).pipe(
+        HttpApiSchema.status(202),
+      ),
+    }),
+  ) {}
+
+  class PollsGroup extends HttpApiGroup.make("polls")
+    .add(
+      HttpApiEndpoint.post("createPoll", "/polls", {
+        payload: S.Struct({
+          broadcaster_id: S.String,
+          title: S.String,
+          choices: S.Array(S.Struct({ title: S.String })),
+          duration: S.Int,
+        }),
+        success: S.Struct({ data: S.Array(S.Struct({ id: S.String })) }),
+      }),
+    )
+    .add(
+      HttpApiEndpoint.patch("endPoll", "/polls", {
+        payload: S.Struct({ broadcaster_id: S.String, id: S.String, status: S.String }),
+        success: S.Struct({ data: S.Array(S.Struct({ id: S.String })) }),
+      }),
+    ) {}
+
+  class PredictionsGroup extends HttpApiGroup.make("predictions")
+    .add(
+      HttpApiEndpoint.post("createPrediction", "/predictions", {
+        payload: S.Struct({
+          broadcaster_id: S.String,
+          title: S.String,
+          outcomes: S.Array(S.Struct({ title: S.String })),
+          prediction_window: S.Int,
+        }),
+        success: S.Struct({ data: S.Array(S.Struct({ id: S.String })) }),
+      }),
+    )
+    .add(
+      HttpApiEndpoint.patch("endPrediction", "/predictions", {
+        payload: S.Struct({
+          broadcaster_id: S.String,
+          id: S.String,
+          status: S.String,
+          winning_outcome_id: S.optional(S.String),
+        }),
+        success: S.Struct({ data: S.Array(S.Struct({ id: S.String })) }),
+      }),
+    ) {}
+
+  class UsersGroup extends HttpApiGroup.make("users").add(
+    HttpApiEndpoint.get("getUsers", "/users", {
+      query: S.Struct({ id: S.optional(S.String), login: S.optional(S.String) }),
+      success: S.Struct({
+        data: S.Array(
+          S.Struct({
+            id: S.String,
+            display_name: S.String,
+            broadcaster_type: S.String,
+            description: S.String,
+          }),
+        ),
+      }),
+    }),
+  ) {}
+
+  class FollowersGroup extends HttpApiGroup.make("followers").add(
+    HttpApiEndpoint.get("getFollowers", "/channels/followers", {
+      query: S.Struct({ broadcaster_id: S.String }),
+      success: S.Struct({ total: S.Int }),
+    }),
   ) {}
 
   const EventSubSubscription = S.Struct({
@@ -97,7 +255,7 @@ export namespace Api {
         total: S.Int,
         total_cost: S.Int,
         max_total_cost: S.Int,
-        // pagination: S.optional(Pagination),
+        pagination: S.optional(S.Struct({ cursor: S.optional(S.String) })),
       }),
     }),
     HttpApiEndpoint.delete("deleteSubscription", "/eventsub/subscriptions", {
@@ -126,6 +284,13 @@ export namespace Api {
     })
     .annotate(OpenApi.Servers, [{ url: "https://api.twitch.tv/helix" }])
     .add(ChatGroup)
+    .add(ChannelsGroup)
+    .add(StreamsGroup)
+    .add(ClipsGroup)
+    .add(PollsGroup)
+    .add(PredictionsGroup)
+    .add(UsersGroup)
+    .add(FollowersGroup)
     .add(EventSubGroup) {}
 }
 
@@ -180,27 +345,12 @@ export const makeClient = (
         refreshCredentialsRetry(
           refreshCredential.pipe(Effect.flatMap((newToken) => Ref.set(tokenRef, newToken))),
         ),
+        // Twitch's CORS policy rejects Effect's b3 and traceparent headers.
+        HttpClient.transformResponse(
+          Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+        ),
       ),
     });
   });
-
-const AppAccessTokenResponse = S.Struct({ access_token: S.String });
-
-export const makeAppClient = Effect.gen(function* () {
-  const { clientId, clientSecret } = yield* AppCredentials;
-  const httpClient = yield* HttpClient.HttpClient;
-  const getToken = HttpClientRequest.post("https://id.twitch.tv/oauth2/token").pipe(
-    HttpClientRequest.bodyUrlParams({
-      client_id: clientId,
-      client_secret: Redacted.value(clientSecret),
-      grant_type: "client_credentials",
-    }),
-    HttpClient.filterStatusOk(httpClient).execute,
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(AppAccessTokenResponse)),
-    Effect.map((response) => response.access_token),
-    Effect.mapError((cause) => new HelixError({ reason: String(cause) })),
-  );
-  return yield* makeClient(yield* getToken, getToken.pipe(Effect.orDie), clientId);
-});
 
 export * as Helix from "./Helix.ts";

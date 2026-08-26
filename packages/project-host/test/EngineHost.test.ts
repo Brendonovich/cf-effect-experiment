@@ -1,9 +1,9 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Editor, Packages, ProjectPubSub } from "@macrograph/editor";
+import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
-import { Engine, Plugin } from "@macrograph/plugin";
-import { Effect, Layer, Schema } from "effect";
+import { Engine, HttpEndpoint, Plugin } from "@macrograph/plugin";
+import { Effect, Layer, PubSub, Schema } from "effect";
 
 import { EngineHost } from "../src/EngineHost.ts";
 
@@ -15,10 +15,10 @@ it.effect("reconciles endpoints after saving storage", () => {
   let storage = { enabled: false };
   const operations: Array<string> = [];
   const endpoint = {
-    id: "endpoint-1",
+    id: HttpEndpoint.Id.make("endpoint-1"),
     url: "https://example.com/endpoint-1",
-    handlerId: "test:event",
-    instanceKey: "primary",
+    schema: { id: HttpEndpoint.HandlerId.make("test:event"), displayName: "Test Event" },
+    instanceKey: HttpEndpoint.InstanceKey.make("primary"),
     metadata: {},
   };
   const layer = EngineHost.contextLayer(HostedEngine, {
@@ -69,31 +69,29 @@ it.effect("persists editor-backed storage and endpoints", () => {
     HostedEngine.toLayer(() => Effect.die("Test engine is not hosted")),
   );
   const endpoint = {
-    id: "endpoint-1",
+    id: HttpEndpoint.Id.make("endpoint-1"),
     url: "https://example.com/endpoint-1",
-    handlerId: "test:event",
-    instanceKey: "primary",
+    schema: { id: HttpEndpoint.HandlerId.make("test:event"), displayName: "Test Event" },
+    instanceKey: HttpEndpoint.InstanceKey.make("primary"),
     metadata: {},
   };
   const seedLayer = Layer.effectDiscard(
     Effect.flatMap(Persistence.Service, (persistence) =>
-      persistence.saveProject({ name: "test", graphs: {}, engines: {} }),
+      persistence.saveProject({ name: "test", graphs: {}, engines: {}, constants: {} }),
     ),
   );
   const editorLayer = Editor.defaultLayer.pipe(
     Layer.provide(seedLayer),
     Layer.provideMerge(Packages.defaultLayer),
-    Layer.provideMerge(Layer.mergeAll(Persistence.layerMemory, ProjectPubSub.defaultLayer)),
+    Layer.provideMerge(Persistence.layerMemory),
     Layer.provide(NodeServices.layer),
   );
-  const layer = EngineHost.editorHttpIngressContextLayer(deployment, {
+  const layer = EngineHost.editorContextLayer(deployment, {
     emit: () => Effect.void,
+    reconcile: () => Effect.succeed([endpoint]),
   }).pipe(
     Layer.provide(
       Layer.mergeAll(
-        Layer.succeed(EngineHost.HttpIngressHost, {
-          reconcile: () => Effect.succeed([endpoint]),
-        }),
         Layer.succeed(Engine.Credentials, {
           get: Effect.succeed([]),
           refresh: () => Effect.die("No credentials"),
@@ -107,9 +105,22 @@ it.effect("persists editor-backed storage and endpoints", () => {
   return Effect.gen(function* () {
     const context = yield* HostedEngine.EngineContext;
     const editor = yield* Editor.Service;
+    const events = yield* EditorEvents.Service.pipe(Effect.flatMap((events) => events.subscribe));
     yield* editor.plugin(HostedPlugin, deployment);
     yield* context.storage.update((state) => ({ enabled: !state.enabled }));
     expect((yield* editor.project.get()).engines.hosted).toEqual({ enabled: true });
     expect(yield* editor.engine.getEndpoints()).toEqual([endpoint]);
+    yield* context.client.refresh;
+    expect(yield* PubSub.take(events)).toEqual({
+      _tag: "EngineStateChanged",
+      actor: { type: "SYSTEM" },
+      pluginId: "hosted",
+      state: { enabled: true },
+    });
+    expect(yield* PubSub.take(events)).toEqual({
+      _tag: "PluginClientStateDirty",
+      actor: { type: "SYSTEM" },
+      pluginId: "hosted",
+    });
   }).pipe(Effect.provide(layer), Effect.provide(editorLayer));
 });

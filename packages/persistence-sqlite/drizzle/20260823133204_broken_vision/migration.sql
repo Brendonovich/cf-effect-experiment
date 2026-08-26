@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `fold_pins` integer DEFAULT false NOT NULL;

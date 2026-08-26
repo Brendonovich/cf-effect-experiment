@@ -23,6 +23,9 @@
       "path": "packages/plugin"
     },
     {
+      "path": "packages/cloud-credentials"
+    },
+    {
       "path": "packages/cloud-api"
     },
     {
@@ -35,10 +38,16 @@
       "path": "packages/persistence-sqlite"
     },
     {
+      "path": "packages/planetscale-logical-db"
+    },
+    {
       "path": "packages/execution"
     },
     {
       "path": "packages/editor"
+    },
+    {
+      "path": "packages/editor-ui"
     },
     {
       "path": "packages/http-ingress"
@@ -56,10 +65,34 @@
       "path": "packages/plugins/obs"
     },
     {
+      "path": "packages/plugins/http-client"
+    },
+    {
+      "path": "packages/plugins/utilities"
+    },
+    {
+      "path": "packages/plugins/websocket-client"
+    },
+    {
+      "path": "packages/plugins/websocket-server"
+    },
+    {
       "path": "apps/server"
     },
     {
+      "path": "apps/server/client"
+    },
+    {
       "path": "apps/cloudflare"
+    },
+    {
+      "path": "apps/cloudflare/frontend"
+    },
+    {
+      "path": "apps/playground"
+    },
+    {
+      "path": "apps/storybook"
     }
   ]
 }

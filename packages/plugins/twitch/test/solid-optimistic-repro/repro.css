@@ -1,0 +1,20 @@
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  overflow: auto;
+}
+
+#app {
+  box-sizing: border-box;
+  max-width: 672px;
+  padding: 12px;
+}
+
+.loading {
+  color: var(--gray-11);
+  font-size: 12px;
+}

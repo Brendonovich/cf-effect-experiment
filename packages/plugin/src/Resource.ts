@@ -1,83 +1,94 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Schema, Semaphore, Stream, SubscriptionRef } from "effect";
 
-export interface Def<Self> {
-  new (_: never): {};
+let resourceSequence = 0;
 
-  id: string;
-  name: string;
-
-  reload(): Effect.Effect<void, never, Self>;
+export interface Value<Identifier> {
+  readonly id: Identifier;
+  readonly display: string;
 }
 
-export type Self<T> = T extends Def<infer Self> ? Self : never;
+export interface HandlerService<Identifier extends string, Shape> {
+  readonly tag: Identifier;
+  readonly values: Effect.Effect<ReadonlyArray<Value<Shape>>>;
+  readonly reload: Effect.Effect<void>;
+  readonly changes: Stream.Stream<ReadonlyArray<Value<Shape>>>;
+}
+
+export interface Handler<Identifier extends string, Shape>
+  extends Context.ServiceClass.Shape<
+    `macrograph/Plugin/Resource/${Identifier}`,
+    HandlerService<Identifier, Shape>
+  > {}
+
+export interface AnyClass {
+  readonly key: string;
+  readonly definition: { readonly name: string; readonly description?: string };
+}
 
 export type ToHandler<R extends ResourceClass<any, any, any>> =
-  R extends ResourceClass<any, infer Identifier, any> ? Handler<Identifier> : never;
+  R extends ResourceClass<unknown, infer Identifier, infer Shape>
+    ? Handler<Identifier, Shape>
+    : never;
 
-export interface Handler<Tag extends string> extends Context.ServiceClass.Shape<
-  `macrograph/Plugin/Resource/${Tag}`,
-  HandlerService<Tag>
-> {
-  readonly Tag: Tag;
-}
-
-export interface HandlerService<Tag extends string> {
-  readonly tag: Tag;
-  readonly handler: Effect.Effect<any>;
-}
-
-export const make = <Self, Shape>() => {
-  return <const Identifier extends string>(id: Identifier, _opts: { name: string }) => {
-    const handlerTag = Context.Service<Handler<Identifier>, HandlerService<Identifier>>(
-      `macrograph/Plugin/Resource/${id}`,
+export const make = <Self, Shape extends Schema.Json>() =>
+  <const Identifier extends string>(
+    id: Identifier,
+    opts: { readonly name: string; readonly description?: string },
+  ) => {
+    const sequence = resourceSequence++;
+    const HandlerTag = Context.Service<Handler<Identifier, Shape>, HandlerService<Identifier, Shape>>(
+      `macrograph/Plugin/Resource/${sequence}/${id}`,
     );
-    const cls: any = class {
-      static key = id;
-      key = id;
 
-      constructor() {
-        return {
-          key: id,
-          Resource: cls as any,
-        } as any;
+    class Resource {
+      static readonly key = id;
+      static readonly definition = opts;
+      static readonly Handler = HandlerTag;
+
+      static readonly values = Effect.flatMap(HandlerTag, (handler) => handler.values);
+      static readonly reload = Effect.flatMap(HandlerTag, (handler) => handler.reload);
+      static readonly changes = Stream.unwrap(Effect.map(HandlerTag, (handler) => handler.changes));
+
+      static toLayer(load: Effect.Effect<ReadonlyArray<Value<Shape>>>) {
+        return Layer.effect(
+          HandlerTag,
+          Effect.gen(function* () {
+            const state = yield* SubscriptionRef.make<ReadonlyArray<Value<Shape>>>([]);
+            const lock = yield* Semaphore.make(1);
+            const reload = load.pipe(
+              Effect.flatMap((values) => SubscriptionRef.set(state, values)),
+              lock.withPermit,
+            );
+            yield* reload;
+            return {
+              tag: id,
+              values: SubscriptionRef.get(state),
+              reload,
+              changes: SubscriptionRef.changes(state),
+            };
+          }),
+        );
       }
+    }
 
-      static reload() {
-        return Effect.gen(function* () {});
-      }
-
-      static toLayer(effect: Effect.Effect<Array<{ id: Shape; display: string }>>) {
-        return Layer.succeed(handlerTag)({
-          tag: id,
-          handler: effect,
-        });
-      }
-    };
-
-    return cls as ResourceClass<Self, Identifier, Shape>;
+    return Resource as unknown as ResourceClass<Self, Identifier, Shape>;
   };
-};
 
-export interface Resource<_Identifier, _Shape> {
-  // reload(): Effect.Effect<void, never, Identifier>
-}
-
-export interface ResourceClass<Self, Identifier extends string, Shape> extends Resource<
-  Self,
-  Shape
-> {
-  new (_: never): ResourceClassShape<Identifier, Shape>;
+export interface ResourceClass<_Self, Identifier extends string, Shape> {
+  new (_: never): {};
   readonly key: Identifier;
-
-  toLayer(
-    effect: Effect.Effect<Array<{ id: Shape; display: string }>>,
-  ): Layer.Layer<Handler<Identifier>>;
+  readonly definition: { readonly name: string; readonly description?: string };
+  readonly Handler: Context.Service<
+    Handler<Identifier, Shape>,
+    HandlerService<Identifier, Shape>
+  >;
+  readonly values: Effect.Effect<ReadonlyArray<Value<Shape>>, never, Handler<Identifier, Shape>>;
+  readonly reload: Effect.Effect<void, never, Handler<Identifier, Shape>>;
+  readonly changes: Stream.Stream<ReadonlyArray<Value<Shape>>, never, Handler<Identifier, Shape>>;
+  readonly toLayer: (
+    load: Effect.Effect<ReadonlyArray<Value<Shape>>>,
+  ) => Layer.Layer<Handler<Identifier, Shape>>;
 }
 
-export interface ResourceClassShape<Identifier extends string, Resource> {
-  readonly key: Identifier;
-  readonly Resource: Resource;
-}
-
-export type ResourceClassSelf<T extends ResourceClass<any, any, any>> =
-  T extends ResourceClass<any, any, infer Self> ? Self : never;
+export type ResourceClassSelf<T extends AnyClass> =
+  T extends ResourceClass<unknown, string, infer Shape> ? Shape : never;

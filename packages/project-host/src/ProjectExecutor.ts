@@ -12,12 +12,7 @@ export const make = Effect.fnUntraced(function* (
   project: Project.Model,
   options?: MakeOptions,
 ): Effect.fn.Return<Executor.Service> {
-  const executor = yield* Executor.make(
-    project,
-    options?.executionDriver === undefined
-      ? undefined
-      : { executionDriver: options.executionDriver },
-  );
+  const executor = yield* Executor.make(project, options);
   if (options?.plugins !== undefined) yield* options.plugins.register(executor);
   return executor;
 });

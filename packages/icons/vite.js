@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import AutoImport from "unplugin-auto-import/vite";
 import IconsResolver from "unplugin-icons/resolver";
 import UnpluginIcons from "unplugin-icons/vite";
@@ -19,12 +20,15 @@ const FixedAutoImport = (options) => {
   return autoImport;
 };
 
-export function Icons() {
+export function Icons(dts) {
   return [
     FixedAutoImport({
       resolvers: [IconsResolver({ prefix: "Icon", extension: "jsx" })],
-      dts: new URL("./auto-imports.d.ts", import.meta.url).pathname,
+      dts,
     }),
-    UnpluginIcons({ compiler: "solid" }),
+    UnpluginIcons({
+      compiler: "solid",
+      collectionsNodeResolvePath: fileURLToPath(new URL(".", import.meta.url)),
+    }),
   ];
 }

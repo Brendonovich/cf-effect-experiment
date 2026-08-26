@@ -3,9 +3,11 @@
   "version": "0.0.1",
   "type": "module",
   "main": "./src/Plugin.ts",
+  "macrograph": { "standaloneDeployment": "./src/Deployment/WebSocket.ts" },
   "exports": {
     ".": "./src/Plugin.ts",
     "./Definition": "./src/Definition.ts",
+    "./Engine": "./src/Engine.ts",
     "./Settings": "./src/Settings.tsx",
     "./EventSub/WebSocket": "./src/WebSocketEventSub.ts",
     "./EventSub/Webhook": "./src/WebhookEventSub.ts",
@@ -16,17 +18,22 @@
     "build": "tsgo --build",
     "typecheck": "tsgo --build",
     "test": "vitest",
+    "test:solid-repro": "vite test/solid-optimistic-repro --config test/solid-optimistic-repro/vite.config.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
     "@macrograph/plugin": "workspace:*",
     "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.1"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@stylexjs/unplugin": "0.19.0",
     "typescript": "^5.8",
-    "vitest": "^3"
+    "vitest": "^4.1.0"
   }
 }

@@ -1,576 +1,293 @@
-import type { ProjectRecord, SessionStatus, TeamMember, TeamRecord } from "@macrograph/cloud-api";
-
-import { useNavigate, useParams, useRouteMatches, type RouteSectionProps } from "@solidjs/router";
 import {
-  For,
-  Show,
-  Loading,
-  action,
-  createContext,
-  createEffect,
-  createMemo,
-  createSignal,
-  onSettled,
-  refresh,
-  useContext,
-} from "solid-js";
+  Button,
+  CredentialSettings,
+  createEditorController,
+  RealtimeWorkspace,
+  macrographLogo,
+} from "@macrograph/editor-ui";
+import { colors } from "@macrograph/editor-ui/tokens.stylex";
+import * as stylex from "@stylexjs/stylex";
+import { createSignal, For, onSettled, Show } from "solid-js";
+import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
 
-import type { ApiClient } from "./api";
+import { makeBrowserCredentialProvider } from "./local/BrowserCredentials";
+import { makeLocalConnection } from "./local/LocalRuntime";
+import {
+  MAX_LOCAL_PROJECT_BYTES,
+  makeLocalProjectStore,
+  type LocalProjectStatus,
+} from "./local/LocalStoragePersistence";
 
-import { makeApiClient, runApi } from "./api";
-import macrographLogo from "./assets/macrograph-logo.png";
-import { createPresence } from "./createPresence";
-import { CreateProjectDialog } from "./CreateProjectForm";
-import { CreateTeamDialog } from "./CreateTeamForm";
-import { LoadingState } from "./LoadingState";
-import { Playground } from "./routes/teams/projects/editor/Playground";
-import { TeamSettings } from "./TeamSettings";
+const localPath = (path: string) =>
+  new URL(
+    path.replace(/^\//, ""),
+    new URL(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/`, location.origin),
+  );
 
-const storedSessionId = () => {
-  const stored = localStorage.getItem("macrograph:sessionId");
-  if (stored !== null) return stored;
+const localUserId = () => {
+  const key = "macrograph:local-user";
   const created = crypto.randomUUID();
-  localStorage.setItem("macrograph:sessionId", created);
-  localStorage.setItem("macrograph:loggedIn", "false");
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored !== null) return stored;
+    localStorage.setItem(key, created);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
   return created;
 };
-const publicRuntimeOrigin = () =>
-  new URL(
-    "/runtime",
-    import.meta.env.VITE_PUBLIC_RUNTIME_ORIGIN ??
-      import.meta.env.VITE_WORKER_URL ??
-      location.origin,
-  ).href;
 
-const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
-const editorTab = (value: string): "rpcs" | "graphs" | "plugin" =>
-  value === "rpcs" || value === "plugin" ? value : "graphs";
+const styles = stylex.create({
+  root: {
+    backgroundColor: colors.gray1,
+    color: colors.gray12,
+    colorScheme: "dark",
+    display: "flex",
+    flexDirection: "column",
+    fontSize: 14,
+    height: "100vh",
+    overflow: "hidden",
+    width: "100vw",
+  },
+  header: {
+    alignItems: "center",
+    borderBottomColor: colors.gray5,
+    borderBottomStyle: "solid",
+    borderBottomWidth: 1,
+    display: "grid",
+    gridTemplateColumns: {
+      default: "auto minmax(0, 1fr)",
+      "@media (min-width: 768px)": "1fr auto 1fr",
+    },
+    flexShrink: 0,
+    columnGap: 8,
+    minHeight: 44,
+    paddingBlock: 6,
+    paddingInline: 12,
+  },
+  brand: { display: "flex", alignItems: "center", gap: 8, minHeight: 44 },
+  logo: { borderRadius: 6, height: 28, width: 28 },
+  title: { fontWeight: 600, letterSpacing: "-0.025em" },
+  nav: {
+    display: "flex",
+    alignSelf: "stretch",
+    justifySelf: "center",
+    gridColumn: { default: "1 / -1", "@media (min-width: 768px)": "2" },
+    gridRowStart: { default: 2, "@media (min-width: 768px)": 1 },
+  },
+  navItem: {
+    borderBottomStyle: "solid",
+    borderBottomWidth: 2,
+    paddingBlock: 8,
+    paddingInline: 16,
+    fontSize: 12,
+    fontWeight: 500,
+    textTransform: "capitalize",
+    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    cursor: "pointer",
+  },
+  navActive: { borderBottomColor: colors.focus, color: colors.gray12 },
+  navIdle: {
+    borderBottomColor: "transparent",
+    color: { default: colors.gray10, ":hover": colors.gray12 },
+  },
+  controls: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "flex-end",
+    justifySelf: "end",
+    gridRowStart: 1,
+    gridColumnStart: -2,
+    minWidth: 0,
+  },
+  reset: {
+    backgroundColor: { default: "transparent", ":hover": colors.red3 },
+    borderColor: `color-mix(in srgb, ${colors.red9} 60%, transparent)`,
+    color: colors.red10,
+  },
+  status: { flexShrink: 0, fontSize: 12, paddingBlock: 8, paddingInline: 12 },
+  errorStatus: { backgroundColor: colors.red4, color: colors.red11 },
+  recoveredStatus: {
+    backgroundColor: `color-mix(in srgb, ${colors.focus} 24%, transparent)`,
+    color: colors.focus,
+  },
+  main: { flex: 1, minHeight: 0 },
+});
 
-interface WorkspaceContextValue {
-  readonly api: ApiClient;
-  readonly teams: () => ReadonlyArray<TeamRecord>;
-  readonly projects: () => ReadonlyArray<ProjectRecord>;
-  readonly selectedProject: () => ProjectRecord | undefined;
-  readonly selectedTeam: () => TeamRecord | undefined;
-  readonly teamMembers: () => ReadonlyArray<TeamMember>;
-  readonly editorUrl: (projectId: string) => string;
-}
-
-const WorkspaceContext = createContext<WorkspaceContextValue>();
-
-export const useWorkspace = () => {
-  return useContext(WorkspaceContext);
-};
-
-export function App(props: RouteSectionProps) {
-  const navigate = useNavigate();
-  const matches = useRouteMatches();
-  const routeParams = useParams<{
-    teamId?: string;
-    projectId?: string;
-    editorTab?: string;
-    graphId?: string;
-    revisionId?: string;
-    ingestEventId?: string;
-  }>();
-  const hasStoredSessionId = localStorage.getItem("macrograph:sessionId") !== null;
-  const wasLoggedIn = localStorage.getItem("macrograph:loggedIn") === "true";
-  const sessionId = storedSessionId();
-  const api = makeApiClient(sessionId, publicRuntimeOrigin());
-  const [teamSwitcherOpen, setTeamSwitcherOpen] = createSignal(false);
-  const [projectSwitcherOpen, setProjectSwitcherOpen] = createSignal(false);
-  const [teamSwitcherPopup, setTeamSwitcherPopup] = createSignal<HTMLDivElement | null>(null);
-  const [projectSwitcherPopup, setProjectSwitcherPopup] = createSignal<HTMLDivElement | null>(null);
-  const teamSwitcherPresence = createPresence({
-    show: teamSwitcherOpen,
-    element: teamSwitcherPopup,
+export function App() {
+  const [view, setView] = createSignal<"editor" | "events">("editor");
+  const store = makeLocalProjectStore(localStorage);
+  const credentialBaseUrl =
+    import.meta.env.VITE_MACROGRAPH_CREDENTIALS_BASE_URL ??
+    (import.meta.env.DEV ? new URL("__macrograph_credentials", location.origin).href : undefined);
+  const credentials = makeBrowserCredentialProvider({
+    storage: localStorage,
+    fetch,
+    ...(credentialBaseUrl === undefined ? {} : { baseUrl: credentialBaseUrl }),
   });
-  const projectSwitcherPresence = createPresence({
-    show: projectSwitcherOpen,
-    element: projectSwitcherPopup,
+  const editor = createEditorController({
+    connection: makeLocalConnection(store, credentials),
+    workspaceId: "local-browser",
+    userId: localUserId(),
+    settingsDescriptors: discoveredPluginSettings,
+    projectSettings: true,
   });
-  let workspaceSwitcher: HTMLDivElement | undefined;
-  let createTeamDialog!: HTMLDialogElement;
-  let createProjectDialog!: HTMLDialogElement;
+  const [status, setStatus] = createSignal<LocalProjectStatus>();
+  const statusMessage = () => {
+    const current = status();
+    return current === undefined || current.type === "saved" ? "" : current.message;
+  };
+  let importInput!: HTMLInputElement;
 
   onSettled(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      if (!workspaceSwitcher?.contains(event.target as globalThis.Node)) {
-        setTeamSwitcherOpen(false);
-        setProjectSwitcherOpen(false);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setTeamSwitcherOpen(false);
-      setProjectSwitcherOpen(false);
-    };
-    window.addEventListener("pointerdown", closeOnOutsideClick);
-    window.addEventListener("keydown", closeOnEscape);
+    const unsubscribe = store.subscribe(setStatus);
+    const flush = () => store.flush();
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
     return () => {
-      window.removeEventListener("pointerdown", closeOnOutsideClick);
-      window.removeEventListener("keydown", closeOnEscape);
+      unsubscribe();
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
     };
   });
 
-  const params = () => routeParams;
-  const [editorProjectId, setEditorProjectId] = createSignal<string>();
-  const [activeEditorTab, setActiveEditorTab] = createSignal<"rpcs" | "graphs" | "plugin">(
-    "graphs",
-  );
-  const [activeEditorGraphId, setActiveEditorGraphId] = createSignal<string>();
-  createEffect(
-    () => ({
-      editorProjectId: editorProjectId(),
-      editorTab: params().editorTab,
-      graphId: params().graphId,
-      projectId: params().projectId,
-    }),
-    (route) => {
-      if (route.projectId === undefined) {
-        setEditorProjectId(undefined);
-        return;
-      }
-      if (route.editorTab === undefined) {
-        if (route.editorProjectId !== route.projectId) setEditorProjectId(undefined);
-        return;
-      }
-      setEditorProjectId(route.projectId);
-      setActiveEditorTab(editorTab(route.editorTab));
-      setActiveEditorGraphId(route.graphId);
-    },
-  );
-  const editorVisible = () =>
-    params().editorTab !== undefined && editorProjectId() === params().projectId;
-
-  const cloudAuth = createMemo<SessionStatus | undefined>(async function* () {
-    const headers = { authorization: `Bearer ${sessionId}` };
-    let state = await runApi(api.session.get({ headers }));
-    if (state === undefined) {
-      yield { state: "disconnected" };
+  const exportProject = () => {
+    const blob = new Blob([store.exportProject()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "macrograph-local-project.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const importProject = (file: File) => {
+    if (!window.confirm("Importing replaces the current local project. Continue?")) return;
+    if (file.size > MAX_LOCAL_PROJECT_BYTES) {
+      setStatus({
+        type: "error",
+        message: `The selected project exceeds the ${MAX_LOCAL_PROJECT_BYTES} byte limit.`,
+      });
       return;
     }
-    if (state.state === "disconnected") {
-      state = (await runApi(api.session.start({ headers }))) ?? state;
-    } else if (state.state === "pending") {
-      state = (await runApi(api.session.poll({ headers }))) ?? state;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      try {
+        if (typeof reader.result !== "string") throw new Error("The selected file is not text.");
+        store.importProject(reader.result);
+        location.assign(localPath("editor"));
+      } catch (error) {
+        setStatus({
+          type: "error",
+          message: error instanceof Error ? error.message : "The project could not be imported.",
+        });
+      }
+    });
+    reader.addEventListener("error", () =>
+      setStatus({ type: "error", message: "The selected project file could not be read." }),
+    );
+    reader.readAsText(file);
+  };
+  const reset = () => {
+    if (!window.confirm("Reset the local project? All graphs and plugin settings will be deleted."))
+      return;
+    if (store.reset()) {
+      location.assign(localPath("editor"));
     }
-    yield state;
-    while (state.state === "pending") {
-      await sleep(2000);
-      const next = await runApi(api.session.poll({ headers }));
-      if (next === undefined) continue;
-      state = next;
-      yield state;
-    }
-  });
-
-  const teams = createMemo(async () => {
-    if (cloudAuth()?.state !== "connected") return [];
-    return (await runApi(api.teams.list()))?.teams ?? [];
-  });
-
-  const projects = createMemo(async () => {
-    if (cloudAuth()?.state !== "connected") return [];
-    return (await runApi(api.projects.list()))?.projects ?? [];
-  });
-
-  const selectedProject = createMemo(() =>
-    projects().find(
-      (project) => project.id === params().projectId && project.teamId === params().teamId,
-    ),
+  };
+  const controls = () => (
+    <div sx={styles.controls}>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        onClick={() => {
+          setView("editor");
+          editor.openProjectSettings();
+        }}
+      >
+        Settings
+      </Button>
+      <Button type="button" size="sm" variant="secondary" onClick={exportProject}>
+        Export
+      </Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => importInput.click()}>
+        Import
+      </Button>
+      <Button type="button" size="sm" variant="secondary" sx={styles.reset} onClick={reset}>
+        Reset
+      </Button>
+    </div>
   );
 
-  const selectedTeam = createMemo(() => {
-    const routeTeamId = params().teamId;
-    return routeTeamId === undefined
-      ? (teams().find((team) => team.kind === "personal") ?? teams()[0])
-      : teams().find((team) => team.id === routeTeamId);
-  });
-
-  const selectedTeamId = () => params().teamId ?? selectedTeam()?.id;
-
-  const teamMembers = createMemo(async () => {
-    const teamId = selectedTeamId();
-    if (cloudAuth()?.state !== "connected" || teamId === undefined) return [];
-    return (await runApi(api.teams.listMembers({ params: { teamId } })))?.members ?? [];
-  });
-
-  const connectedUserEmail = createMemo(() => {
-    const auth = cloudAuth();
-    return auth?.state === "connected" ? auth.email : "";
-  });
-  const [showCloudLogin, setShowCloudLogin] = createSignal(!hasStoredSessionId || !wasLoggedIn);
-  const [verificationUrl, setVerificationUrl] = createSignal<string>();
-
-  createEffect(cloudAuth, (auth) => {
-    if (auth?.state === "connected") {
-      localStorage.setItem("macrograph:loggedIn", "true");
-      setShowCloudLogin(false);
-      setVerificationUrl(undefined);
-    } else if (auth?.state === "pending") {
-      localStorage.setItem("macrograph:loggedIn", "false");
-      setShowCloudLogin(true);
-      setVerificationUrl(auth.verificationUrl);
-    } else if (auth?.state === "disconnected") {
-      localStorage.setItem("macrograph:loggedIn", "false");
-      setShowCloudLogin(true);
-      setVerificationUrl(undefined);
-    }
-  });
-
-  const disconnectCloud = action(async function* () {
-    yield runApi(
-      api.session.disconnect({
-        headers: { authorization: `Bearer ${sessionId}` },
-      }),
-    );
-    localStorage.removeItem("macrograph:sessionId");
-    localStorage.setItem("macrograph:loggedIn", "false");
-    window.location.assign("/");
-  });
-
-  const visibleProjects = () => projects().filter((project) => project.teamId === selectedTeamId());
-  const workspaceView = () => matches().at(-1)?.route.info?.workspaceView;
-  const openWorkspaceView = (view: "editor" | "revisions" | "events" | "settings") => {
-    const project = selectedProject();
-    if (project === undefined) return;
-    const projectPath = `/teams/${encodeURIComponent(project.teamId)}/projects/${encodeURIComponent(project.id)}`;
-    if (view === "editor") {
-      const tab = editorProjectId() === project.id ? activeEditorTab() : "graphs";
-      const graphId = editorProjectId() === project.id ? activeEditorGraphId() : undefined;
-      navigate(
-        `${projectPath}/editor/${tab}${graphId === undefined ? "" : `/${encodeURIComponent(graphId)}`}`,
-      );
-    }
-    else if (view === "revisions")
-      navigate(
-        `${projectPath}/revisions${project.currentRevisionId === null ? "" : `/${encodeURIComponent(project.currentRevisionId)}`}`,
-      );
-    else navigate(`${projectPath}/${view}`);
-  };
-  const editorUrl = (projectId: string) => {
-    const url = new URL("/rpc", window.location.origin);
-    url.searchParams.set("projectId", projectId);
-    url.searchParams.set("sessionId", sessionId);
-    url.searchParams.set("publicOrigin", publicRuntimeOrigin());
-    return url.href;
-  };
-
-  const workspace: WorkspaceContextValue = {
-    api,
-    teams,
-    projects,
-    selectedProject,
-    selectedTeam,
-    teamMembers,
-    editorUrl,
-  };
+  const rootAttrs = stylex.attrs(styles.root);
 
   return (
-    <WorkspaceContext value={workspace}>
-      <div class="dark dark-theme relative flex h-screen w-screen flex-col overflow-hidden bg-gray-1 text-sm text-gray-12 [color-scheme:dark]">
-        <Show when={showCloudLogin()}>
-          <div class="absolute inset-0 z-50 grid place-items-center bg-gray-1 px-6">
-            <div class="w-full max-w-sm text-center">
-              <img src={macrographLogo} alt="Macrograph" class="mx-auto mb-7 size-24 rounded-2xl" />
-              <h1 class="text-xl font-semibold tracking-tight">Connect to Macrograph Cloud</h1>
-              <p class="mt-2 text-sm leading-6 text-gray-10">
-                Sign in in a new tab, then return here. Keep this tab open while Macrograph
-                completes the connection.
-              </p>
-              <a
-                href={verificationUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-disabled={verificationUrl() === undefined}
-                onClick={(event) => {
-                  if (verificationUrl() === undefined) event.preventDefault();
-                }}
-                class="mt-6 inline-flex h-10 items-center justify-center rounded-md bg-gray-12 px-5 text-sm font-semibold text-gray-1 transition hover:bg-gray-11"
+    <div {...rootAttrs}>
+      <header sx={styles.header}>
+        <div sx={styles.brand}>
+          <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
+          <span sx={styles.title}>MacroGraph</span>
+        </div>
+        <nav sx={styles.nav} aria-label="Workspace">
+          <For each={["editor", "events"] as const}>
+            {(tab) => (
+              <button
+                type="button"
+                sx={[styles.navItem, view() === tab ? styles.navActive : styles.navIdle]}
+                aria-current={view() === tab ? "page" : undefined}
+                onClick={() => setView(tab)}
               >
-                Continue to sign in
-              </a>
-              <div class="mt-5 flex items-center justify-center gap-2 text-xs text-gray-9">
-                <span class="size-1.5 animate-pulse rounded-full bg-blue-400" />
-                Waiting for authorization
-              </div>
-            </div>
-          </div>
-        </Show>
-        <header class="relative z-40 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-y-1 border-b border-gray-5 bg-gray-1 px-3 py-1 md:h-12 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:py-0">
-          <div ref={workspaceSwitcher} class="flex min-w-0 items-center gap-1.5">
-            <img
-              src={macrographLogo}
-              alt="Macrograph"
-              class="mr-1 hidden size-7 shrink-0 rounded-md sm:block"
-            />
-            <Loading fallback={<span class="h-3 w-16 animate-pulse rounded bg-gray-4" />}>
-              <Show when={params().teamId !== undefined}>
-                <>
-                  <div class="relative min-w-0">
-                    <button
-                      type="button"
-                      class="flex h-8 max-w-28 items-center gap-2 rounded-md px-2 font-medium hover:bg-gray-3 sm:max-w-56"
-                      aria-haspopup="menu"
-                      aria-expanded={teamSwitcherOpen()}
-                      onClick={() => {
-                        setTeamSwitcherOpen((open) => !open);
-                        setProjectSwitcherOpen(false);
-                      }}
-                    >
-                      <span class="grid size-5 shrink-0 place-items-center rounded bg-gray-4 text-[10px] font-semibold">
-                        {selectedTeam()?.name.slice(0, 1).toUpperCase() ?? "T"}
-                      </span>
-                      <span class="truncate">{selectedTeam()?.name ?? "Select team"}</span>
-                      <IconLucideChevronDown class="ml-auto size-3 shrink-0 text-gray-10" />
-                    </button>
-                    <Show when={teamSwitcherPresence.present()}>
-                      <div
-                        ref={setTeamSwitcherPopup}
-                        class={`fixed left-3 right-3 top-[4.625rem] origin-top-left overflow-hidden rounded-lg border border-gray-6 bg-gray-2 shadow-2xl motion-reduce:duration-1 md:absolute md:left-0 md:right-auto md:top-10 md:w-72 ${
-                          teamSwitcherPresence.state() === "hiding"
-                            ? "pointer-events-none animate-out fade-out-0 zoom-out-95 slide-out-to-top-1 duration-100"
-                            : "animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150"
-                        }`}
-                      >
-                        <div class="px-3 pb-1.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-10">
-                          Teams
-                        </div>
-                        <div class="max-h-72 overflow-y-auto px-1 pb-1">
-                          <Loading
-                            fallback={<LoadingState label="Loading teams" class="h-11 px-2" />}
-                          >
-                            <For each={teams()}>
-                              {(team) => (
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-gray-4"
-                                  onClick={() => {
-                                    const firstProject = projects().find(
-                                      (project) => project.teamId === team.id,
-                                    );
-                                    setTeamSwitcherOpen(false);
-                                    navigate(
-                                      firstProject === undefined
-                                        ? `/teams/${encodeURIComponent(team.id)}`
-                                        : `/teams/${encodeURIComponent(team.id)}/projects/${encodeURIComponent(firstProject.id)}/editor/graphs`,
-                                    );
-                                  }}
-                                >
-                                  <span class="grid size-7 shrink-0 place-items-center rounded-md border border-gray-6 bg-gray-3 text-xs font-semibold">
-                                    {team.name.slice(0, 1).toUpperCase()}
-                                  </span>
-                                  <span class="min-w-0 flex-1">
-                                    <span class="block truncate font-medium">{team.name}</span>
-                                    <span class="block text-[10px] capitalize text-gray-10">
-                                      {team.role}
-                                    </span>
-                                  </span>
-                                  <Show when={team.id === selectedTeamId()}>
-                                    <IconTablerCheck class="size-4 shrink-0 text-blue-400" />
-                                  </Show>
-                                </button>
-                              )}
-                            </For>
-                          </Loading>
-                        </div>
-                        <div class="border-t border-gray-5 p-1">
-                          <button
-                            type="button"
-                            class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                            onClick={() => {
-                              setTeamSwitcherOpen(false);
-                              createTeamDialog.showModal();
-                            }}
-                          >
-                            <span class="grid size-7 place-items-center rounded-md border border-gray-6">
-                              <IconMaterialSymbolsAddRounded class="size-5 shrink-0" />
-                            </span>
-                            New team
-                          </button>
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
-                  <Show when={params().projectId !== undefined}>
-                    <>
-                      <span class="text-gray-8">/</span>
-                      <div class="relative min-w-0">
-                        <button
-                          type="button"
-                          class="flex h-8 max-w-28 items-center gap-2 rounded-md px-2 font-medium hover:bg-gray-3 sm:max-w-56"
-                          aria-haspopup="menu"
-                          aria-expanded={projectSwitcherOpen()}
-                          onClick={() => {
-                            setProjectSwitcherOpen((open) => !open);
-                            setTeamSwitcherOpen(false);
-                          }}
-                        >
-                          <span class="truncate">
-                            {selectedProject()?.name ?? "Select project"}
-                          </span>
-                          <IconLucideChevronDown class="size-3 shrink-0 text-gray-10" />
-                        </button>
-                        <Show when={projectSwitcherPresence.present()}>
-                          <div
-                            ref={setProjectSwitcherPopup}
-                            class={`fixed left-3 right-3 top-[4.625rem] origin-top-left overflow-hidden rounded-lg border border-gray-6 bg-gray-2 shadow-2xl motion-reduce:duration-1 md:absolute md:left-0 md:right-auto md:top-10 md:w-72 ${
-                              projectSwitcherPresence.state() === "hiding"
-                                ? "pointer-events-none animate-out fade-out-0 zoom-out-95 slide-out-to-top-1 duration-100"
-                                : "animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150"
-                            }`}
-                          >
-                            <div class="max-h-72 overflow-y-auto p-1">
-                              <div class="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-10">
-                                Projects
-                              </div>
-                              <Loading
-                                fallback={
-                                  <LoadingState label="Loading projects" class="h-10 px-2" />
-                                }
-                              >
-                                <For
-                                  each={visibleProjects()}
-                                  fallback={
-                                    <div class="px-2 py-3 text-xs text-gray-10">
-                                      No projects yet
-                                    </div>
-                                  }
-                                >
-                                  {(project) => (
-                                    <button
-                                      type="button"
-                                      role="menuitem"
-                                      class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-gray-4"
-                                      onClick={() => {
-                                        setProjectSwitcherOpen(false);
-                                        navigate(
-                                          `/teams/${encodeURIComponent(project.teamId)}/projects/${encodeURIComponent(project.id)}/editor/graphs`,
-                                        );
-                                      }}
-                                    >
-                                      <span class="grid size-7 shrink-0 place-items-center rounded-md border border-gray-6 bg-gray-3 font-mono text-[10px]">
-                                        {project.name.slice(0, 2).toUpperCase()}
-                                      </span>
-                                      <span class="min-w-0 flex-1 truncate font-medium">
-                                        {project.name}
-                                      </span>
-                                      <Show when={project.id === params().projectId}>
-                                        <IconTablerCheck class="size-4 shrink-0 text-blue-400" />
-                                      </Show>
-                                    </button>
-                                  )}
-                                </For>
-                              </Loading>
-                            </div>
-                            <div class="border-t border-gray-5 p-1">
-                              <button
-                                type="button"
-                                class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-gray-11 hover:bg-gray-4 hover:text-gray-12"
-                                onClick={() => {
-                                  setProjectSwitcherOpen(false);
-                                  createProjectDialog.showModal();
-                                }}
-                              >
-                                <span class="grid size-7 place-items-center rounded-md border border-gray-6">
-                                  <IconMaterialSymbolsAddRounded class="size-5 shrink-0" />
-                                </span>
-                                New project
-                              </button>
-                            </div>
-                          </div>
-                        </Show>
-                      </div>
-                    </>
-                  </Show>
-                  <TeamSettings
-                    api={api.teams}
-                    team={selectedTeam()}
-                    members={teamMembers()}
-                    onMembersChanged={() => refresh(teamMembers)}
-                  />
-                  <CreateTeamDialog
-                    api={api.teams}
-                    dialogRef={(dialog) => (createTeamDialog = dialog)}
-                    onCreated={(teamId) => {
-                      refresh(teams);
-                      navigate(`/teams/${encodeURIComponent(teamId)}`);
-                    }}
-                  />
-                  <CreateProjectDialog
-                    api={api.projects}
-                    teamId={selectedTeamId()}
-                    members={teamMembers()}
-                    dialogRef={(dialog) => (createProjectDialog = dialog)}
-                    onCreated={(project) => {
-                      refresh(projects);
-                      navigate(
-                        `/teams/${encodeURIComponent(project.teamId)}/projects/${encodeURIComponent(project.id)}/editor/graphs`,
-                      );
-                    }}
-                  />
-                </>
-              </Show>
-            </Loading>
-          </div>
-          <Show when={params().projectId !== undefined}>
-            <nav class="col-span-2 row-start-2 flex justify-self-center rounded-md bg-gray-3 p-0.5 md:col-span-1 md:col-start-2 md:row-start-1">
-              <For each={["editor", "revisions", "events", "settings"] as const}>
-                {(view) => (
-                  <button
-                    type="button"
-                    class={`rounded px-2 py-1 text-xs font-medium capitalize transition sm:px-3 ${
-                      workspaceView() === view
-                        ? "bg-gray-5 text-gray-12 shadow-sm"
-                        : "text-gray-11 hover:text-gray-12"
-                    }`}
-                    onClick={() => openWorkspaceView(view)}
-                  >
-                    {view}
-                  </button>
-                )}
-              </For>
-            </nav>
-          </Show>
-          <div class="ml-3 flex min-w-0 items-center justify-self-end gap-2 md:col-start-3">
-            <Loading fallback={null}>
-              <span class="hidden max-w-48 truncate text-xs text-gray-10 lg:block">
-                {connectedUserEmail()}
-              </span>
-            </Loading>
-            <button
-              class="shrink-0 rounded-md px-2 py-1.5 text-xs font-medium text-gray-11 hover:bg-gray-3 hover:text-gray-12"
-              onClick={() => void disconnectCloud()}
-            >
-              Log out
-            </button>
-          </div>
-        </header>
-        <main class="flex min-h-0 min-w-0 flex-1 flex-col bg-gray-2">
-          <Show when={editorProjectId()} keyed>
-            {(projectId) => (
-              <div class={editorVisible() ? "h-full min-h-0" : "hidden"}>
-                <Playground
-                  wsUrl={editorUrl(projectId)}
-                  activeTab={activeEditorTab()}
-                  selectedGraphId={activeEditorGraphId()}
-                  onSelectionChange={(tab, graphId, replace) => {
-                    const teamId = params().teamId;
-                    if (!editorVisible() || teamId === undefined) return;
-                    navigate(
-                      `/teams/${encodeURIComponent(teamId)}/projects/${encodeURIComponent(projectId)}/editor/${tab}${graphId === undefined ? "" : `/${encodeURIComponent(graphId)}`}`,
-                      replace === undefined ? undefined : { replace },
-                    );
-                  }}
-                />
-              </div>
+                {tab}
+              </button>
             )}
-          </Show>
-          <Show when={!editorVisible()}>{props.children}</Show>
-        </main>
-      </div>
-    </WorkspaceContext>
+          </For>
+        </nav>
+        {controls()}
+      </header>
+      <input
+        ref={importInput}
+        style={{ display: "none" }}
+        type="file"
+        accept="application/json,.json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (file !== undefined) importProject(file);
+        }}
+      />
+      <Show when={status()?.type === "error" || status()?.type === "recovered"}>
+        <div
+          sx={[
+            styles.status,
+            status()?.type === "error" ? styles.errorStatus : styles.recoveredStatus,
+          ]}
+          role="status"
+        >
+          {statusMessage()}
+        </div>
+      </Show>
+      <main sx={styles.main}>
+        <RealtimeWorkspace
+          controller={editor}
+          runtimeLabel="Browser"
+          view={view()}
+          renderProjectSettings={(context) => (
+            <CredentialSettings
+              client={context.client}
+              description={
+                <>
+                  Authorize this browser to use credentials managed by macrograph.app. Authorization
+                  stays in this browser, separate from project exports, imports, and resets.
+                </>
+              }
+              loadingLabel="Loading browser authorization..."
+              onChanged={context.refreshPluginData}
+            />
+          )}
+        />
+      </main>
+    </div>
   );
 }

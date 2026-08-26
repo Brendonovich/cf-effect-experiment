@@ -1,10 +1,10 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { EngineTest } from "@macrograph/plugin";
-import { Deferred, Effect, Layer, Option } from "effect";
+import { Deferred, Effect, Layer, Option, Redacted } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { Socket } from "effect/unstable/socket";
 
-import { AccountId, TwitchEngine } from "../src/Definition.ts";
+import { AccountId, TwitchEngine, TwitchEventSub } from "../src/Definition.ts";
 import deployment from "../src/Deployment/WebSocket.ts";
 
 interface HttpCall {
@@ -12,6 +12,7 @@ interface HttpCall {
   readonly url: string;
   readonly headers: Record<string, string>;
   readonly body: unknown;
+  readonly query: Record<string, string>;
 }
 
 describe("TwitchEngine", () => {
@@ -20,21 +21,16 @@ describe("TwitchEngine", () => {
     assert.strictEqual("httpIngress" in deployment, false);
   });
 
-  it.effect("records HTTP and WebSocket calls from engine RPCs", () =>
+  it.effect("runs EventSub and actions when validation is blocked", () =>
     Effect.gen(function* () {
       const accountId = AccountId.make("account-1");
       const httpCalls: Array<HttpCall> = [];
       const webSocketCalls: Array<string> = [];
+      const webSockets: Array<EventTarget> = [];
+      let webSocketCloses = 0;
       const webSocketOpened = yield* Deferred.make<void>();
       let chatAttempts = 0;
-      const credentialSubscriber =
-        yield* Deferred.make<
-          (credential: {
-            id: string;
-            provider: string;
-            token: { access: string };
-          }) => Effect.Effect<void>
-        >();
+      const credentialSubscriber = yield* Deferred.make<() => Effect.Effect<void>>();
       const refreshClient = vi.fn();
       const refreshResource = vi.fn();
       const setStorage = vi.fn();
@@ -46,7 +42,7 @@ describe("TwitchEngine", () => {
       const refreshCredential = vi.fn((_provider: string, _id: string) => ({
         id: accountId,
         provider: "twitch",
-        token: { access: "refreshed-token" },
+        token: { access: Redacted.make("refreshed-token") },
       }));
 
       const httpClient = HttpClient.makeWith<
@@ -63,12 +59,22 @@ describe("TwitchEngine", () => {
               method: request.method,
               url: request.url,
               headers: { ...request.headers },
+              query: Object.fromEntries(request.urlParams),
               body:
                 request.body._tag === "Uint8Array"
                   ? JSON.parse(new TextDecoder().decode(request.body.body))
                   : undefined,
             });
 
+            if (request.url === "https://id.twitch.tv/oauth2/validate")
+              return Effect.fail(
+                new HttpClientError.HttpClientError({
+                  reason: new HttpClientError.TransportError({
+                    request,
+                    cause: new TypeError("Failed to fetch"),
+                  }),
+                }),
+              );
             const response =
               request.method === "GET"
                 ? {
@@ -79,7 +85,21 @@ describe("TwitchEngine", () => {
                   }
                 : request.url.endsWith("/eventsub/subscriptions")
                   ? { data: [{ id: "subscription-1" }] }
-                  : undefined;
+                  : request.url.endsWith("/moderation/bans")
+                    ? {
+                        data: [
+                          {
+                            broadcaster_id: "broadcaster-1",
+                            moderator_id: accountId,
+                            user_id: "viewer-1",
+                            created_at: "2026-08-23T00:00:00Z",
+                            end_time: "2026-08-23T00:10:00Z",
+                          },
+                        ],
+                      }
+                    : request.url.endsWith("/chat/messages")
+                      ? { data: [{ message_id: "message-1", is_sent: true }] }
+                      : undefined;
 
             return Effect.succeed(
               HttpClientResponse.fromWeb(
@@ -87,11 +107,14 @@ describe("TwitchEngine", () => {
                 new Response(response === undefined ? undefined : JSON.stringify(response), {
                   status: isExpiredCredential
                     ? 401
-                    : response === undefined
-                      ? 204
-                      : request.method === "POST" && request.url.endsWith("/eventsub/subscriptions")
-                        ? 202
-                        : 200,
+                    : request.url.endsWith("/clips")
+                      ? 403
+                      : response === undefined
+                        ? 204
+                        : request.method === "POST" &&
+                            request.url.endsWith("/eventsub/subscriptions")
+                          ? 202
+                          : 200,
                   ...(response === undefined
                     ? {}
                     : { headers: { "content-type": "application/json" } }),
@@ -109,6 +132,7 @@ describe("TwitchEngine", () => {
         constructor(url: string) {
           super();
           this.url = url;
+          webSockets.push(this);
           webSocketCalls.push(url);
           Effect.runFork(Deferred.succeed(webSocketOpened, undefined));
           queueMicrotask(() => {
@@ -133,7 +157,9 @@ describe("TwitchEngine", () => {
         }
 
         send() {}
-        close() {}
+        close() {
+          webSocketCloses++;
+        }
       }
 
       const dependencies = Layer.mergeAll(
@@ -164,7 +190,8 @@ describe("TwitchEngine", () => {
                 id: accountId,
                 provider: "twitch",
                 displayName: "Streamer",
-                token: { access: "test-token" },
+                clientId: "custom-client-id",
+                token: { access: Redacted.make("test-token") },
               },
             ]),
             refresh: (provider, id) => Effect.sync(() => refreshCredential(provider, id)),
@@ -188,38 +215,76 @@ describe("TwitchEngine", () => {
         const credentialSubscriberResult = yield* Deferred.poll(credentialSubscriber);
         assert(Option.isSome(credentialSubscriberResult));
         const notifyCredentialChange = yield* credentialSubscriberResult.value;
-        yield* notifyCredentialChange({
-          id: accountId,
-          provider: "twitch",
-          token: { access: "test-token" },
-        });
+        yield* notifyCredentialChange();
+        while (webSocketCalls.length < 2) yield* Effect.yieldNow;
 
-        expect(refreshResource).toHaveBeenCalledOnce();
         expect(refreshResource).toHaveBeenCalledWith(TwitchEngine.Resource[0]);
+        expect(refreshResource).toHaveBeenCalledWith(TwitchEngine.Resource[1]);
 
         yield* client.ConnectEventSub({ accountId });
 
-        assert.deepStrictEqual(webSocketCalls, ["wss://eventsub.wss.twitch.tv/ws"]);
         assert.deepStrictEqual(
-          httpCalls.map(({ method, url }) => ({ method, url })),
-          [
-            { method: "GET", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
-            { method: "POST", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
-          ],
+          yield* TwitchEventSub.values.pipe(Effect.provide(engine.resources)),
+          [{ id: accountId, display: "Streamer" }],
         );
-        assert.deepStrictEqual(httpCalls[1]?.body, {
-          type: "channel.ban",
-          version: "1",
-          condition: { broadcaster_user_id: accountId },
-          transport: { method: "websocket", session_id: "session-1" },
-        });
-        expect(refreshClient).toHaveBeenCalledTimes(3);
+
+        assert.deepStrictEqual(webSocketCalls, [
+          "wss://eventsub.wss.twitch.tv/ws",
+          "wss://eventsub.wss.twitch.tv/ws",
+        ]);
+        assert.strictEqual(
+          httpCalls.filter(({ url }) => url === "https://id.twitch.tv/oauth2/validate").length,
+          2,
+        );
+        assert.strictEqual(
+          httpCalls.filter(
+            ({ method, url }) =>
+              method === "POST" && url === "https://api.twitch.tv/helix/eventsub/subscriptions",
+          ).length,
+          2,
+        );
+        assert.deepStrictEqual(
+          httpCalls.findLast(
+            ({ method, url }) =>
+              method === "POST" && url === "https://api.twitch.tv/helix/eventsub/subscriptions",
+          )?.body,
+          {
+            type: "channel.ban",
+            version: "1",
+            condition: { broadcaster_user_id: accountId },
+            transport: { method: "websocket", session_id: "session-1" },
+          },
+        );
+        webSockets[1]?.dispatchEvent(
+          new MessageEvent("message", {
+            data: JSON.stringify({
+              metadata: {
+                message_id: "reconnect-1",
+                message_timestamp: "2026-07-22T00:01:00.000Z",
+                message_type: "session_reconnect",
+              },
+              payload: {
+                session: {
+                  id: "session-1",
+                  reconnect_url: "wss://eventsub.wss.twitch.tv/ws?reconnect=1",
+                },
+              },
+            }),
+          }),
+        );
+        while (!webSocketCalls.includes("wss://eventsub.wss.twitch.tv/ws?reconnect=1"))
+          yield* Effect.yieldNow;
 
         yield* client.ToggleEventSubSubscription({
           accountId,
           subscriptionType: "channel.ban",
           enabled: false,
         });
+        assert.deepStrictEqual(webSocketCalls, [
+          "wss://eventsub.wss.twitch.tv/ws",
+          "wss://eventsub.wss.twitch.tv/ws",
+          "wss://eventsub.wss.twitch.tv/ws?reconnect=1",
+        ]);
         expect(setStorage).toHaveBeenCalledOnce();
         expect(setStorage).toHaveBeenCalledWith({
           accounts: {
@@ -247,20 +312,54 @@ describe("TwitchEngine", () => {
         expect(refreshCredential).toHaveBeenCalledOnce();
         expect(refreshCredential).toHaveBeenCalledWith("twitch", accountId);
         assert.deepStrictEqual(
-          httpCalls.map(({ method, url }) => ({ method, url })),
+          httpCalls.slice(-2).map(({ method, url, headers }) => ({
+            method,
+            url,
+            authorization: headers.authorization,
+            clientId: headers["client-id"],
+          })),
           [
-            { method: "GET", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
-            { method: "POST", url: "https://api.twitch.tv/helix/eventsub/subscriptions" },
-            { method: "POST", url: "https://api.twitch.tv/helix/chat/messages" },
-            { method: "POST", url: "https://api.twitch.tv/helix/chat/messages" },
+            {
+              method: "POST",
+              url: "https://api.twitch.tv/helix/chat/messages",
+              authorization: "Bearer test-token",
+              clientId: "custom-client-id",
+            },
+            {
+              method: "POST",
+              url: "https://api.twitch.tv/helix/chat/messages",
+              authorization: "Bearer refreshed-token",
+              clientId: "custom-client-id",
+            },
           ],
         );
-        assert.deepStrictEqual(
-          httpCalls.map((call) => call.headers.authorization),
-          ["Bearer test-token", "Bearer test-token", "Bearer test-token", "Bearer refreshed-token"],
+
+        const scopeFailure = yield* Effect.flip(
+          runtime.CreateClip({
+            account_id: accountId,
+            broadcaster_id: "broadcaster-1",
+          }),
         );
+        assert.strictEqual(scopeFailure._tag, "HelixError");
+        if (scopeFailure._tag === "HelixError") {
+          assert.strictEqual(scopeFailure.status, 403);
+          assert.include(scopeFailure.reason, "required scope or channel role");
+        }
+        assert.strictEqual(httpCalls.at(-1)?.url, "https://api.twitch.tv/helix/clips");
+        assert.strictEqual(httpCalls.at(-1)?.headers.authorization, "Bearer refreshed-token");
+        expect(refreshCredential).toHaveBeenCalledOnce();
+
+        const identityFailure = yield* Effect.flip(
+          runtime.UpdateChatSettings({
+            account_id: accountId,
+            broadcaster_id: "broadcaster-1",
+            moderator_id: "different-account",
+          }),
+        );
+        assert.strictEqual(identityFailure._tag, "TwitchCredentialAuthorizationError");
 
         yield* client.DisconnectEventSub({ accountId });
+        assert.isTrue(webSocketCloses > 0);
         expect(setStorage).toHaveBeenLastCalledWith({
           accounts: {
             [accountId]: { enabled: false, subscriptions: [] },
@@ -269,6 +368,10 @@ describe("TwitchEngine", () => {
         assert.deepStrictEqual((yield* engine.client.state).accounts[0]?.eventSubSocket, {
           state: "disconnected",
         });
+        assert.strictEqual(
+          httpCalls.filter(({ url }) => url === "https://id.twitch.tv/oauth2/validate").length,
+          2,
+        );
       }).pipe(Effect.provide(deployment.layer.pipe(Layer.provide(dependencies))));
     }),
   );

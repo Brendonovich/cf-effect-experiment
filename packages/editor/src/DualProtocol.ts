@@ -2,8 +2,8 @@ import { Cause, Effect, Queue, Result, Scope, Stream, Types } from "effect";
 import { RpcClient, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
 
-const TAG_RPC = 0;
-const TAG_CUSTOM = 1;
+export const rpcFrameTag = 0;
+export const customFrameTag = 1;
 
 const enc = new TextEncoder();
 
@@ -17,10 +17,20 @@ const frame = (tag: number, payload: Uint8Array): Uint8Array => {
 const toBytes = (data: string | Uint8Array): Uint8Array =>
   typeof data === "string" ? enc.encode(data) : data;
 
-const isSocketClose = (error: {
-  readonly _tag: string;
-  readonly reason: { readonly _tag: string };
-}) => error._tag === "SocketError" && error.reason._tag === "SocketCloseError";
+export const frameRpc = (payload: string | Uint8Array): Uint8Array =>
+  frame(rpcFrameTag, toBytes(payload));
+
+const isSocketClose = (error: unknown) => {
+  if (typeof error !== "object" || error === null || !("_tag" in error)) return false;
+  if (error._tag !== "SocketError" || !("reason" in error)) return false;
+  const reason = error.reason;
+  return (
+    typeof reason === "object" &&
+    reason !== null &&
+    "_tag" in reason &&
+    reason._tag === "SocketCloseError"
+  );
+};
 
 export const makeDualServerProtocol = (
   onCustom?: (customSocket: Socket.Socket) => Effect.Effect<void, never, Scope.Scope>,
@@ -76,15 +86,15 @@ export const makeDualServerProtocol = (
             try {
               const encoded = parser.encode(response);
               if (encoded === undefined) return Effect.void;
-              return Effect.orDie(writeRaw(frame(TAG_RPC, toBytes(encoded))));
+              return Effect.orDie(writeRaw(frameRpc(encoded)));
             } catch (cause) {
               const defect = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
-              return Effect.orDie(writeRaw(frame(TAG_RPC, toBytes(defect ?? new Uint8Array()))));
+              return Effect.orDie(writeRaw(frameRpc(defect ?? new Uint8Array())));
             }
           };
 
           const writeCustom = (data: Uint8Array): Effect.Effect<void> =>
-            Effect.orDie(writeRaw(frame(TAG_CUSTOM, data)));
+            Effect.orDie(writeRaw(frame(customFrameTag, data)));
 
           clients.set(id, { writeRpc, writeCustom });
           clientIds.add(id);
@@ -115,7 +125,7 @@ export const makeDualServerProtocol = (
               const payload = bytes.subarray(1);
 
               switch (tag) {
-                case TAG_RPC:
+                case rpcFrameTag:
                   try {
                     const decoded = parser.decode(
                       payload,
@@ -135,11 +145,9 @@ export const makeDualServerProtocol = (
                     );
                   } catch (cause) {
                     const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
-                    return Effect.orDie(
-                      writeRaw(frame(TAG_RPC, toBytes(encoded ?? new Uint8Array()))),
-                    );
+                    return Effect.orDie(writeRaw(frameRpc(encoded ?? new Uint8Array())));
                   }
-                case TAG_CUSTOM:
+                case customFrameTag:
                   return Queue.offer(customInput, payload);
                 default:
                   return Effect.void;
@@ -148,7 +156,7 @@ export const makeDualServerProtocol = (
             .pipe(
               Effect.catchCause((cause) => {
                 const failure = Cause.findFail(cause);
-                if (Result.isSuccess(failure) && isSocketClose(failure.success as any)) {
+                if (Result.isSuccess(failure) && isSocketClose(failure.success)) {
                   return Effect.void;
                 }
                 return Effect.failCause(cause);
@@ -225,19 +233,20 @@ export const makeDualClientProtocol: Effect.Effect<
             const tag = bytes[0];
             const payload = bytes.subarray(1);
 
-            if (tag === TAG_RPC) {
+            if (tag === rpcFrameTag) {
               try {
                 const responses = parser.decode(
                   payload,
                 ) as ReadonlyArray<RpcMessage.FromServerEncoded>;
-                console.log({ responses });
                 if (responses.length === 0) return Effect.void;
 
                 return Effect.forEach(
                   responses,
                   (response) => {
                     if (response._tag === "Pong") return Effect.void;
-                    const cid = requestClientMap.get((response as any).requestId) ?? 0;
+                    const cid =
+                      "requestId" in response ? (requestClientMap.get(response.requestId) ?? 0) : 0;
+                    if (response._tag === "Exit") requestClientMap.delete(response.requestId);
                     return writeResponse(cid, response);
                   },
                   { discard: true },
@@ -245,7 +254,7 @@ export const makeDualClientProtocol: Effect.Effect<
               } catch {
                 return Effect.void;
               }
-            } else if (tag === TAG_CUSTOM) {
+            } else if (tag === customFrameTag) {
               return Queue.offer(customMessages, payload);
             }
 
@@ -254,7 +263,7 @@ export const makeDualClientProtocol: Effect.Effect<
           .pipe(
             Effect.catchCause((cause) => {
               const failure = Cause.findFail(cause);
-              if (Result.isSuccess(failure) && isSocketClose(failure.success as any)) {
+              if (Result.isSuccess(failure) && isSocketClose(failure.success)) {
                 return Effect.void;
               }
               return Effect.failCause(cause);
@@ -274,7 +283,7 @@ export const makeDualClientProtocol: Effect.Effect<
             }
             const encoded = parser.encode(request);
             if (encoded === undefined) return Effect.void;
-            return Effect.orDie(writeRaw(frame(TAG_RPC, toBytes(encoded))));
+            return Effect.orDie(writeRaw(frameRpc(encoded)));
           },
           supportsAck: false,
           supportsTransferables: false,
@@ -283,7 +292,7 @@ export const makeDualClientProtocol: Effect.Effect<
   );
 
   const sendCustom = (data: Uint8Array): Effect.Effect<void> =>
-    Effect.orDie(writeRaw(frame(TAG_CUSTOM, data)));
+    Effect.orDie(writeRaw(frame(customFrameTag, data)));
 
   return {
     protocol,

@@ -23,7 +23,8 @@
     "@effect/platform-node-shared": "catalog:",
     "@effect/vitest": "catalog:",
     "@macrograph/persistence-sqlite": "workspace:*",
+    "@macrograph/plugin-utilities": "workspace:*",
     "typescript": "^5.8",
-    "vitest": "^3"
+    "vitest": "^4.1.0"
   }
 }

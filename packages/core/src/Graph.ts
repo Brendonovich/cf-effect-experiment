@@ -28,7 +28,7 @@ export const empty = (id: string): Model => ({
   connections: [],
 });
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("GraphNotFoundError", {
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("GraphNotFoundError", {
   id: Schema.String,
 }) {}
 

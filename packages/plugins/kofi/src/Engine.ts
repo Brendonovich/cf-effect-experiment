@@ -1,11 +1,20 @@
 import { Effect, Layer } from "effect";
 
-import { ClientRpcs, KofiEngine, WebhookId } from "./Definition.ts";
+import { ClientRpcs, KofiEngine, KofiWebhook, WebhookId } from "./Definition.ts";
 
 export const make = (makeWebhookId: () => string = () => crypto.randomUUID()) =>
   KofiEngine.toLayer((mg) =>
     Effect.succeed({
-      resources: Layer.empty,
+      resources: KofiWebhook.toLayer(
+        mg.storage.get.pipe(
+          Effect.map((storage) =>
+            Object.entries(storage.webhooks).map(([id, webhook]) => ({
+              id: WebhookId.make(id),
+              display: webhook.name ?? "Webhook",
+            })),
+          ),
+        ),
+      ),
       rpcs: Layer.empty,
       client: {
         state: mg.storage.get.pipe(
@@ -25,6 +34,7 @@ export const make = (makeWebhookId: () => string = () => crypto.randomUUID()) =>
                 [webhookId]: { name, verificationToken },
               },
             }));
+            yield* mg.resource.refresh(KofiWebhook);
             yield* mg.client.refresh;
             return webhookId;
           }),
@@ -39,6 +49,7 @@ export const make = (makeWebhookId: () => string = () => crypto.randomUUID()) =>
                 },
               };
             });
+            yield* mg.resource.refresh(KofiWebhook);
             yield* mg.client.refresh;
           }),
           KofiRemoveWebhook: Effect.fnUntraced(function* ({ webhookId }) {
@@ -47,6 +58,7 @@ export const make = (makeWebhookId: () => string = () => crypto.randomUUID()) =>
               delete webhooks[webhookId];
               return { webhooks };
             });
+            yield* mg.resource.refresh(KofiWebhook);
             yield* mg.client.refresh;
           }),
         }),

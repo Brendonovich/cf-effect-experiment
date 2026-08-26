@@ -1,7 +1,7 @@
 import { Connection, Graph, Node, Project } from "@macrograph/core";
 import { Cause, Context, Data, Effect, Layer, Option, Ref, Schema } from "effect";
 
-export class PersistenceError extends Schema.TaggedErrorClass<PersistenceError>()(
+export class PersistenceError extends Schema.TaggedError<PersistenceError>()(
   "PersistenceError",
   { cause: Schema.Defect() },
 ) {
@@ -12,6 +12,7 @@ export class PersistenceError extends Schema.TaggedErrorClass<PersistenceError>(
   }
 }
 
+/** Persists and retrieves projects, graphs, nodes, and connections. */
 export class Service extends Context.Service<
   Service,
   {

@@ -25,7 +25,7 @@ export class CurrentSceneCollectionChanged extends S.TaggedClass<CurrentSceneCol
 
 export class SceneCollectionListChanged extends S.TaggedClass<SceneCollectionListChanged>()(
   "SceneCollectionListChanged",
-  { sceneCollections: S.Unknown, address: SocketAddress },
+  { sceneCollections: S.Array(S.String), address: SocketAddress },
 ) {}
 
 export class CurrentProfileChanging extends S.TaggedClass<CurrentProfileChanging>()(
@@ -38,10 +38,13 @@ export class CurrentProfileChanged extends S.TaggedClass<CurrentProfileChanged>(
   { profileName: S.String, address: SocketAddress },
 ) {}
 
-export class ProfileListChanged extends S.TaggedClass<ProfileListChanged>()("ProfileListChanged", {
-  profiles: S.Unknown,
-  address: SocketAddress,
-}) {}
+export class ProfileListChanged extends S.TaggedClass<ProfileListChanged>()(
+  "ProfileListChanged",
+  {
+    profiles: S.Array(S.String),
+    address: SocketAddress,
+  },
+) {}
 
 // Filter events
 export class SourceFilterListReindexed extends S.TaggedClass<SourceFilterListReindexed>()(
@@ -57,6 +60,7 @@ export class SourceFilterCreated extends S.TaggedClass<SourceFilterCreated>()(
     filterKind: S.String,
     filterIndex: S.Number,
     filterSettings: S.Unknown,
+    defaultFilterSettings: S.Unknown,
     address: SocketAddress,
   },
 ) {}
@@ -97,26 +101,38 @@ export class SourceFilterEnableStateChanged extends S.TaggedClass<SourceFilterEn
 ) {}
 
 // Input events
-export class InputCreated extends S.TaggedClass<InputCreated>()("InputCreated", {
-  inputName: S.String,
-  inputUuid: S.String,
-  inputKind: S.String,
-  inputSettings: S.Unknown,
-  address: SocketAddress,
-}) {}
+export class InputCreated extends S.TaggedClass<InputCreated>()(
+  "InputCreated",
+  {
+    inputName: S.String,
+    inputUuid: S.String,
+    inputKind: S.String,
+    unversionedInputKind: S.String,
+    inputKindCaps: S.Number,
+    inputSettings: S.Unknown,
+    defaultInputSettings: S.Unknown,
+    address: SocketAddress,
+  },
+) {}
 
-export class InputRemoved extends S.TaggedClass<InputRemoved>()("InputRemoved", {
-  inputName: S.String,
-  inputUuid: S.String,
-  address: SocketAddress,
-}) {}
+export class InputRemoved extends S.TaggedClass<InputRemoved>()(
+  "InputRemoved",
+  {
+    inputName: S.String,
+    inputUuid: S.String,
+    address: SocketAddress,
+  },
+) {}
 
-export class InputNameChanged extends S.TaggedClass<InputNameChanged>()("InputNameChanged", {
-  inputUuid: S.String,
-  oldInputName: S.String,
-  inputName: S.String,
-  address: SocketAddress,
-}) {}
+export class InputNameChanged extends S.TaggedClass<InputNameChanged>()(
+  "InputNameChanged",
+  {
+    inputUuid: S.String,
+    oldInputName: S.String,
+    inputName: S.String,
+    address: SocketAddress,
+  },
+) {}
 
 export class InputSettingsChanged extends S.TaggedClass<InputSettingsChanged>()(
   "InputSettingsChanged",
@@ -138,13 +154,16 @@ export class InputMuteStateChanged extends S.TaggedClass<InputMuteStateChanged>(
   },
 ) {}
 
-export class InputVolumeChanged extends S.TaggedClass<InputVolumeChanged>()("InputVolumeChanged", {
-  inputName: S.String,
-  inputUuid: S.String,
-  inputVolumeMul: S.Number,
-  inputVolumeDb: S.Number,
-  address: SocketAddress,
-}) {}
+export class InputVolumeChanged extends S.TaggedClass<InputVolumeChanged>()(
+  "InputVolumeChanged",
+  {
+    inputName: S.String,
+    inputUuid: S.String,
+    inputVolumeMul: S.Number,
+    inputVolumeDb: S.Number,
+    address: SocketAddress,
+  },
+) {}
 
 export class InputAudioBalanceChanged extends S.TaggedClass<InputAudioBalanceChanged>()(
   "InputAudioBalanceChanged",
@@ -208,18 +227,24 @@ export class MediaInputActionTriggered extends S.TaggedClass<MediaInputActionTri
 ) {}
 
 // Output events
-export class StreamStateChanged extends S.TaggedClass<StreamStateChanged>()("StreamStateChanged", {
-  outputActive: S.Boolean,
-  outputState: S.String,
-  address: SocketAddress,
-}) {}
+export class StreamStateChanged extends S.TaggedClass<StreamStateChanged>()(
+  "StreamStateChanged",
+  {
+    outputActive: S.Boolean,
+    outputState: S.String,
+    address: SocketAddress,
+  },
+) {}
 
-export class RecordStateChanged extends S.TaggedClass<RecordStateChanged>()("RecordStateChanged", {
-  outputActive: S.Boolean,
-  outputState: S.String,
-  outputPath: S.String,
-  address: SocketAddress,
-}) {}
+export class RecordStateChanged extends S.TaggedClass<RecordStateChanged>()(
+  "RecordStateChanged",
+  {
+    outputActive: S.Boolean,
+    outputState: S.String,
+    outputPath: S.String,
+    address: SocketAddress,
+  },
+) {}
 
 export class ReplayBufferStateChanged extends S.TaggedClass<ReplayBufferStateChanged>()(
   "ReplayBufferStateChanged",
@@ -231,30 +256,39 @@ export class VirtualcamStateChanged extends S.TaggedClass<VirtualcamStateChanged
   { outputActive: S.Boolean, outputState: S.String, address: SocketAddress },
 ) {}
 
-export class ReplayBufferSaved extends S.TaggedClass<ReplayBufferSaved>()("ReplayBufferSaved", {
-  savedReplayPath: S.String,
-  address: SocketAddress,
-}) {}
+export class ReplayBufferSaved extends S.TaggedClass<ReplayBufferSaved>()(
+  "ReplayBufferSaved",
+  {
+    savedReplayPath: S.String,
+    address: SocketAddress,
+  },
+) {}
 
 // Scene item events
-export class SceneItemCreated extends S.TaggedClass<SceneItemCreated>()("SceneItemCreated", {
-  sceneName: S.String,
-  sceneUuid: S.String,
-  sourceName: S.String,
-  sourceUuid: S.String,
-  sceneItemId: S.Number,
-  sceneItemIndex: S.Number,
-  address: SocketAddress,
-}) {}
+export class SceneItemCreated extends S.TaggedClass<SceneItemCreated>()(
+  "SceneItemCreated",
+  {
+    sceneName: S.String,
+    sceneUuid: S.String,
+    sourceName: S.String,
+    sourceUuid: S.String,
+    sceneItemId: S.Number,
+    sceneItemIndex: S.Number,
+    address: SocketAddress,
+  },
+) {}
 
-export class SceneItemRemoved extends S.TaggedClass<SceneItemRemoved>()("SceneItemRemoved", {
-  sceneName: S.String,
-  sceneUuid: S.String,
-  sourceName: S.String,
-  sourceUuid: S.String,
-  sceneItemId: S.Number,
-  address: SocketAddress,
-}) {}
+export class SceneItemRemoved extends S.TaggedClass<SceneItemRemoved>()(
+  "SceneItemRemoved",
+  {
+    sceneName: S.String,
+    sceneUuid: S.String,
+    sourceName: S.String,
+    sourceUuid: S.String,
+    sceneItemId: S.Number,
+    address: SocketAddress,
+  },
+) {}
 
 export class SceneItemListReindexed extends S.TaggedClass<SceneItemListReindexed>()(
   "SceneItemListReindexed",
@@ -288,34 +322,46 @@ export class SceneItemLockStateChanged extends S.TaggedClass<SceneItemLockStateC
   },
 ) {}
 
-export class SceneItemSelected extends S.TaggedClass<SceneItemSelected>()("SceneItemSelected", {
-  sceneName: S.String,
-  sceneUuid: S.String,
-  sceneItemId: S.Number,
-  address: SocketAddress,
-}) {}
+export class SceneItemSelected extends S.TaggedClass<SceneItemSelected>()(
+  "SceneItemSelected",
+  {
+    sceneName: S.String,
+    sceneUuid: S.String,
+    sceneItemId: S.Number,
+    address: SocketAddress,
+  },
+) {}
 
 // Scene events
-export class SceneCreated extends S.TaggedClass<SceneCreated>()("SceneCreated", {
-  sceneName: S.String,
-  sceneUuid: S.String,
-  isGroup: S.Boolean,
-  address: SocketAddress,
-}) {}
+export class SceneCreated extends S.TaggedClass<SceneCreated>()(
+  "SceneCreated",
+  {
+    sceneName: S.String,
+    sceneUuid: S.String,
+    isGroup: S.Boolean,
+    address: SocketAddress,
+  },
+) {}
 
-export class SceneRemoved extends S.TaggedClass<SceneRemoved>()("SceneRemoved", {
-  sceneName: S.String,
-  sceneUuid: S.String,
-  isGroup: S.Boolean,
-  address: SocketAddress,
-}) {}
+export class SceneRemoved extends S.TaggedClass<SceneRemoved>()(
+  "SceneRemoved",
+  {
+    sceneName: S.String,
+    sceneUuid: S.String,
+    isGroup: S.Boolean,
+    address: SocketAddress,
+  },
+) {}
 
-export class SceneNameChanged extends S.TaggedClass<SceneNameChanged>()("SceneNameChanged", {
-  sceneUuid: S.String,
-  oldSceneName: S.String,
-  sceneName: S.String,
-  address: SocketAddress,
-}) {}
+export class SceneNameChanged extends S.TaggedClass<SceneNameChanged>()(
+  "SceneNameChanged",
+  {
+    sceneUuid: S.String,
+    oldSceneName: S.String,
+    sceneName: S.String,
+    address: SocketAddress,
+  },
+) {}
 
 export class CurrentProgramSceneChanged extends S.TaggedClass<CurrentProgramSceneChanged>()(
   "CurrentProgramSceneChanged",
@@ -327,10 +373,13 @@ export class CurrentPreviewSceneChanged extends S.TaggedClass<CurrentPreviewScen
   { sceneName: S.String, sceneUuid: S.String, address: SocketAddress },
 ) {}
 
-export class SceneListChanged extends S.TaggedClass<SceneListChanged>()("SceneListChanged", {
-  scenes: S.Unknown,
-  address: SocketAddress,
-}) {}
+export class SceneListChanged extends S.TaggedClass<SceneListChanged>()(
+  "SceneListChanged",
+  {
+    scenes: S.Unknown,
+    address: SocketAddress,
+  },
+) {}
 
 // Transition events
 export class CurrentSceneTransitionChanged extends S.TaggedClass<CurrentSceneTransitionChanged>()(
@@ -380,10 +429,13 @@ export class StudioModeStateChanged extends S.TaggedClass<StudioModeStateChanged
   { studioModeEnabled: S.Boolean, address: SocketAddress },
 ) {}
 
-export class ScreenshotSaved extends S.TaggedClass<ScreenshotSaved>()("ScreenshotSaved", {
-  savedScreenshotPath: S.String,
-  address: SocketAddress,
-}) {}
+export class ScreenshotSaved extends S.TaggedClass<ScreenshotSaved>()(
+  "ScreenshotSaved",
+  {
+    savedScreenshotPath: S.String,
+    address: SocketAddress,
+  },
+) {}
 
 // Vendor events
 export class VendorEvent extends S.TaggedClass<VendorEvent>()("VendorEvent", {
@@ -455,7 +507,9 @@ export const decode = (
   address: SocketAddress,
 ) =>
   S.decodeUnknownEffect(Any)({
-    ...(typeof event.eventData === "object" && event.eventData !== null ? event.eventData : {}),
+    ...(typeof event.eventData === "object" && event.eventData !== null
+      ? event.eventData
+      : {}),
     _tag: event.eventType,
     address,
   });

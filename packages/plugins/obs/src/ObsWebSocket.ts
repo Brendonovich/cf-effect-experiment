@@ -1,24 +1,42 @@
-import { Crypto, Deferred, Effect, Fiber, PubSub, Schema, Scope, Stream } from "effect";
+import {
+  Crypto,
+  Deferred,
+  Effect,
+  Fiber,
+  PubSub,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { Socket } from "effect/unstable/socket";
 
-export class ProtocolError extends Schema.TaggedErrorClass<ProtocolError>()("ProtocolError", {
-  reason: Schema.String,
-}) {}
+export class ProtocolError extends Schema.TaggedError<ProtocolError>()(
+  "ProtocolError",
+  {
+    reason: Schema.String,
+  },
+) {}
 
-export class AuthenticationError extends Schema.TaggedErrorClass<AuthenticationError>()(
+export class AuthenticationError extends Schema.TaggedError<AuthenticationError>()(
   "AuthenticationError",
   { reason: Schema.String },
 ) {}
 
-export class RequestError extends Schema.TaggedErrorClass<RequestError>()("RequestError", {
-  requestType: Schema.String,
-  code: Schema.Number,
-  comment: Schema.optional(Schema.String),
-}) {}
+export class RequestError extends Schema.TaggedError<RequestError>()(
+  "RequestError",
+  {
+    requestType: Schema.String,
+    code: Schema.Number,
+    comment: Schema.optional(Schema.String),
+  },
+) {}
 
-export class ConnectionError extends Schema.TaggedErrorClass<ConnectionError>()("ConnectionError", {
-  reason: Schema.String,
-}) {}
+export class ConnectionError extends Schema.TaggedError<ConnectionError>()(
+  "ConnectionError",
+  {
+    reason: Schema.String,
+  },
+) {}
 
 const Authentication = Schema.Struct({
   challenge: Schema.String,
@@ -61,7 +79,9 @@ const IncomingPacket = Schema.Union([
   }),
 ]);
 
-const decodePacket = Schema.decodeUnknownEffect(Schema.fromJsonString(IncomingPacket));
+const decodePacket = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(IncomingPacket),
+);
 type IncomingPacket = Schema.Schema.Type<typeof IncomingPacket>;
 
 export interface ObsEvent {
@@ -71,7 +91,10 @@ export interface ObsEvent {
 }
 
 export type CallError = RequestError | ConnectionError;
-export type ConnectError = ProtocolError | AuthenticationError | ConnectionError;
+export type ConnectError =
+  | ProtocolError
+  | AuthenticationError
+  | ConnectionError;
 
 export interface Client {
   readonly call: (
@@ -115,11 +138,19 @@ export const make = Effect.fnUntraced(function* (
   Crypto.Crypto | Scope.Scope | Socket.WebSocketConstructor
 > {
   const crypto = yield* Crypto.Crypto;
-  const socket = yield* Socket.makeWebSocket(address, { closeCodeIsError: () => true });
+  const socket = yield* Socket.makeWebSocket(address, {
+    closeCodeIsError: () => true,
+  });
   const write = yield* socket.writer;
   const identified = yield* Deferred.make<void, ConnectError>();
   const eventBus = yield* PubSub.unbounded<ObsEvent>();
-  const pending = new Map<string, Deferred.Deferred<unknown, CallError>>();
+  const pending = new Map<
+    string,
+    {
+      readonly requestType: string;
+      readonly response: Deferred.Deferred<unknown, CallError>;
+    }
+  >();
   const requestPrefix = yield* crypto.randomUUIDv4.pipe(
     Effect.mapError((cause) => new ConnectionError({ reason: cause.message })),
   );
@@ -132,20 +163,27 @@ export const make = Effect.fnUntraced(function* (
       connected = false;
       const error = new ConnectionError({ reason });
       yield* Deferred.fail(identified, error);
-      yield* Effect.forEach(pending.values(), (deferred) => Deferred.fail(deferred, error), {
-        discard: true,
-      });
+      yield* Effect.forEach(
+        pending.values(),
+        ({ response }) => Deferred.fail(response, error),
+        { discard: true },
+      );
       pending.clear();
       yield* PubSub.shutdown(eventBus);
     });
 
   const handlePacket = (
     packet: IncomingPacket,
-  ): Effect.Effect<void, ProtocolError | AuthenticationError | Socket.SocketError> => {
+  ): Effect.Effect<
+    void,
+    ProtocolError | AuthenticationError | Socket.SocketError
+  > => {
     switch (packet.op) {
       case 0:
         if (helloReceived) {
-          return Effect.fail(new ProtocolError({ reason: "Received Hello more than once" }));
+          return Effect.fail(
+            new ProtocolError({ reason: "Received Hello more than once" }),
+          );
         }
         helloReceived = true;
         return Effect.gen(function* () {
@@ -156,7 +194,11 @@ export const make = Effect.fnUntraced(function* (
                 ? yield* new AuthenticationError({
                     reason: "OBS requires a password, but none was provided",
                   })
-                : yield* authenticate(crypto, password, packet.d.authentication);
+                : yield* authenticate(
+                    crypto,
+                    password,
+                    packet.d.authentication,
+                  );
           yield* write(
             JSON.stringify({
               op: 1,
@@ -171,20 +213,22 @@ export const make = Effect.fnUntraced(function* (
       case 2:
         return helloReceived
           ? Deferred.succeed(identified, undefined).pipe(Effect.asVoid)
-          : Effect.fail(new ProtocolError({ reason: "Received Identified before Hello" }));
+          : Effect.fail(
+              new ProtocolError({ reason: "Received Identified before Hello" }),
+            );
       case 5:
         return PubSub.publish(eventBus, packet.d).pipe(Effect.asVoid);
       case 7: {
-        const deferred = pending.get(packet.d.requestId);
-        if (deferred === undefined) return Effect.void;
+        const pendingRequest = pending.get(packet.d.requestId);
+        if (pendingRequest === undefined) return Effect.void;
         pending.delete(packet.d.requestId);
         return (
           packet.d.requestStatus.result
-            ? Deferred.succeed(deferred, packet.d.responseData)
+            ? Deferred.succeed(pendingRequest.response, packet.d.responseData)
             : Deferred.fail(
-                deferred,
+                pendingRequest.response,
                 new RequestError({
-                  requestType: packet.d.requestType,
+                  requestType: pendingRequest.requestType,
                   code: packet.d.requestStatus.code,
                   comment: packet.d.requestStatus.comment,
                 }),
@@ -196,10 +240,14 @@ export const make = Effect.fnUntraced(function* (
 
   const run = socket
     .runRaw((input) =>
-      decodePacket(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
+      decodePacket(
+        typeof input === "string" ? input : new TextDecoder().decode(input),
+      ).pipe(
         Effect.mapError(
           (cause) =>
-            new ProtocolError({ reason: `Invalid OBS WebSocket message: ${cause.message}` }),
+            new ProtocolError({
+              reason: `Invalid OBS WebSocket message: ${cause.message}`,
+            }),
         ),
         Effect.flatMap(handlePacket),
       ),
@@ -217,27 +265,34 @@ export const make = Effect.fnUntraced(function* (
   const socketFiber = yield* Effect.forkScoped(run);
   yield* Deferred.await(identified);
 
-  const call: Client["call"] = Effect.fnUntraced(function* (requestType, requestData) {
-    if (!connected) return yield* new ConnectionError({ reason: "OBS WebSocket is disconnected" });
+  const call: Client["call"] = Effect.fnUntraced(
+    function* (requestType, requestData) {
+      if (!connected)
+        return yield* new ConnectionError({
+          reason: "OBS WebSocket is disconnected",
+        });
 
-    const requestId = `${requestPrefix}-${requestSequence++}`;
-    const response = yield* Deferred.make<unknown, CallError>();
-    pending.set(requestId, response);
-    const packet = JSON.stringify({
-      op: 6,
-      d: {
-        requestType,
-        requestId,
-        ...(requestData === undefined ? {} : { requestData }),
-      },
-    });
+      const requestId = `${requestPrefix}-${requestSequence++}`;
+      const response = yield* Deferred.make<unknown, CallError>();
+      pending.set(requestId, { requestType, response });
+      const packet = JSON.stringify({
+        op: 6,
+        d: {
+          requestType,
+          requestId,
+          ...(requestData === undefined ? {} : { requestData }),
+        },
+      });
 
-    return yield* write(packet).pipe(
-      Effect.mapError((error) => new ConnectionError({ reason: error.message })),
-      Effect.andThen(Deferred.await(response)),
-      Effect.ensuring(Effect.sync(() => pending.delete(requestId))),
-    );
-  });
+      return yield* write(packet).pipe(
+        Effect.mapError(
+          (error) => new ConnectionError({ reason: error.message }),
+        ),
+        Effect.andThen(Deferred.await(response)),
+        Effect.ensuring(Effect.sync(() => pending.delete(requestId))),
+      );
+    },
+  );
 
   return {
     call,

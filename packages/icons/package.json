@@ -4,7 +4,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    "./vite": "./vite.js",
+    "./vite": {
+      "types": "./vite.d.ts",
+      "default": "./vite.js"
+    },
     "./types": {
       "types": "./auto-imports.d.ts"
     }

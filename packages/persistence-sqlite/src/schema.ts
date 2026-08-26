@@ -1,8 +1,18 @@
-import { real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import type { ResourceConstant } from "@macrograph/core";
+import type { Schema } from "effect";
+
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
   name: text("name").notNull(),
-  engines: text("engines", { mode: "json" }).notNull().$type<Record<string, unknown>>().default({}),
+  engines: text("engines", { mode: "json" })
+    .notNull()
+    .$type<Record<string, Schema.Json>>()
+    .default({}),
+  constants: text("constants", { mode: "json" })
+    .notNull()
+    .$type<Record<string, ResourceConstant.Model>>()
+    .default({}),
 });
 
 export const graphs = sqliteTable("graphs", {
@@ -13,7 +23,12 @@ export const graphs = sqliteTable("graphs", {
 export const nodes = sqliteTable("nodes", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  properties: text("properties", { mode: "json" }).notNull().$type<Record<string, any>>(),
+  properties: text("properties", { mode: "json" }).notNull().$type<Record<string, Schema.Json>>(),
+  inputDefaults: text("input_defaults", { mode: "json" })
+    .notNull()
+    .$type<Record<string, Schema.Json>>()
+    .default({}),
+  foldPins: integer("fold_pins", { mode: "boolean" }).notNull().default(false),
   schemaPackage: text("schema_package").notNull(),
   schemaSchema: text("schema_schema").notNull(),
   positionX: real("position_x").notNull(),

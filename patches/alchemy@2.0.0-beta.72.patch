@@ -1,0 +1,173 @@
+diff --git a/lib/Cloudflare/Workers/DurableObjectBridge.js b/lib/Cloudflare/Workers/DurableObjectBridge.js
+index 8403a8380c8693b96108f60022853ffcb8c27094..44628ad60a92a6207bec4acd7be6b028a68822cc 100644
+--- a/lib/Cloudflare/Workers/DurableObjectBridge.js
++++ b/lib/Cloudflare/Workers/DurableObjectBridge.js
+@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
+ import * as Scope from "effect/Scope";
+ import * as Stream from "effect/Stream";
+ import { HttpServerResponse } from "effect/unstable/http";
+-import { buildEventTelemetry } from "../../Telemetry.js";
++import { buildEventTelemetry, CurrentEventEntrypoint } from "../../Telemetry.js";
+ import { DurableObjectState, fromDurableObjectState, } from "./DurableObjectState.js";
+ import { isScopeEjected, makeRequestEffect } from "./HttpServer.js";
+ import { fromWebSocket } from "./WebSocket.js";
+@@ -85,7 +85,7 @@ export const makeDurableObjectBridge = (DurableObject, { entrypoint, stack, }) =
+             // scope by `buildEventTelemetry` so buffered telemetry
+             // flushes when the scope closes into `waitUntil` below (the
+             // isolate scope never finalizes on workerd).
+-            Layer.effectContext(buildEventTelemetry(context, scope, telemetry()))).pipe(Layer.provideMerge(Layer.succeedContext(services)), Layer.provideMerge(Layer.succeedContext(context)))), Effect.runPromiseExit)
++            Layer.effectContext(buildEventTelemetry(context, scope, telemetry()).pipe(Effect.provideService(CurrentEventEntrypoint, className)))).pipe(Layer.provideMerge(Layer.succeedContext(services)), Layer.provideMerge(Layer.succeedContext(context)))), Effect.runPromiseExit)
+                 .then((exit) => onExit
+                 ? onExit(exit, scope)
+                 : exit._tag === "Success"
+diff --git a/lib/Cloudflare/Workflows/WorkflowBridge.js b/lib/Cloudflare/Workflows/WorkflowBridge.js
+index bfbf9950e7c6dcdfc273d8ee56ea35889e4b9653..065d459e9d302fb015eb826d5ecfc76292523d0c 100644
+--- a/lib/Cloudflare/Workflows/WorkflowBridge.js
++++ b/lib/Cloudflare/Workflows/WorkflowBridge.js
+@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
+ import * as Exit from "effect/Exit";
+ import * as Layer from "effect/Layer";
+ import * as Scope from "effect/Scope";
+-import { buildEventTelemetry } from "../../Telemetry.js";
++import { buildEventTelemetry, CurrentEventEntrypoint } from "../../Telemetry.js";
+ import { isScopeEjected } from "../Workers/HttpServer.js";
+ import { getWorkerExport } from "../Workers/WorkerBridge.js";
+ import { WorkflowEvent as WorkflowEventService, WorkflowStep, WorkflowStepContext, } from "./Workflow.js";
+@@ -48,7 +48,7 @@ export const makeWorkflowBridge = (WorkflowEntrypoint, { entrypoint, stack, }) =
+             // scope by `buildEventTelemetry` so buffered telemetry
+             // flushes when the scope closes at the end of the
+             // run-invocation.
+-            Layer.effectContext(buildEventTelemetry(context, scope, telemetry()))).pipe(Layer.provideMerge(Layer.succeedContext(context))))));
++            Layer.effectContext(buildEventTelemetry(context, scope, telemetry()).pipe(Effect.provideService(CurrentEventEntrypoint, className)))).pipe(Layer.provideMerge(Layer.succeedContext(context))))));
+             // Settle the run's resources with its real exit, unless a binding
+             // ejected the scope to outlive the invocation. The workflow runtime has
+             // no `waitUntil` to detach cleanup to, so close inline — a failing
+diff --git a/lib/Planetscale/Postgres/PostgresDatabase.js b/lib/Planetscale/Postgres/PostgresDatabase.js
+index b76d5f98ba841e5f41342b2f23e44c0d8a37ed83..409039ce90917bf19c370f5490703718b699fbe8 100644
+--- a/lib/Planetscale/Postgres/PostgresDatabase.js
++++ b/lib/Planetscale/Postgres/PostgresDatabase.js
+@@ -150,6 +150,14 @@ export const PostgresDatabaseProvider = () => Provider.succeed(PostgresDatabase,
+             database: observedName,
+         })
+             .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
++        if (!observed && observedName !== newName) {
++            observed = yield* planetscale
++                .getDatabase({
++                organization,
++                database: newName,
++            })
++                .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
++        }
+         // Ensure — if missing, create.
+         if (!observed) {
+             yield* session.note("Creating database...");
+diff --git a/lib/Telemetry.d.ts b/lib/Telemetry.d.ts
+index 994eafb82ff692c800d1a493375784767d3130fd..79126208d839e0dff0af0dd3e6d1c4b3c773d49a 100644
+--- a/lib/Telemetry.d.ts
++++ b/lib/Telemetry.d.ts
+@@ -18,6 +18,7 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
+  * see the module documentation.
+  */
+ export declare const Telemetry: Context.Reference<TelemetryLayer>;
++export declare const CurrentEventEntrypoint: Context.Reference<string | undefined>;
+ /**
+  * Install a custom telemetry Layer (any Layer providing a `Tracer`,
+  * loggers, and/or metric exporters). It is built once per event into the
+diff --git a/lib/Telemetry.js b/lib/Telemetry.js
+index 195cf121c01528c7305b10cfce641294deb855b3..02690a25999c1b9d4f5a86c0a75444be813f1f48 100644
+--- a/lib/Telemetry.js
++++ b/lib/Telemetry.js
+@@ -303,6 +303,9 @@ const fromBoundConfigProcess = makeExporterLayer();
+ export const Telemetry = Context.Reference("alchemy/Telemetry", {
+     defaultValue: () => fromBoundConfig,
+ });
++export const CurrentEventEntrypoint = Context.Reference("alchemy/Telemetry/CurrentEventEntrypoint", {
++    defaultValue: () => undefined,
++});
+ const reference = Telemetry;
+ /**
+  * Install a custom telemetry Layer (any Layer providing a `Tracer`,
+diff --git a/src/Cloudflare/Workers/DurableObjectBridge.ts b/src/Cloudflare/Workers/DurableObjectBridge.ts
+index e014f8c1cdb380b6d2b3fc7c5e2b04cfafc7e625..45532622092fe56b5855875fa823f991d0bda7fa 100644
+--- a/src/Cloudflare/Workers/DurableObjectBridge.ts
++++ b/src/Cloudflare/Workers/DurableObjectBridge.ts
+@@ -9,7 +9,7 @@ import * as Scope from "effect/Scope";
+ import * as Stream from "effect/Stream";
+ 
+ import { HttpServerResponse } from "effect/unstable/http";
+-import { buildEventTelemetry } from "../../Telemetry.ts";
++import { buildEventTelemetry, CurrentEventEntrypoint } from "../../Telemetry.ts";
+ import type {
+   DurableObjectExport,
+   DurableObjectShape,
+@@ -146,7 +146,9 @@ export const makeDurableObjectBridge =
+                 // flushes when the scope closes into `waitUntil` below (the
+                 // isolate scope never finalizes on workerd).
+                 Layer.effectContext(
+-                  buildEventTelemetry(context, scope, telemetry()),
++                  buildEventTelemetry(context, scope, telemetry()).pipe(
++                    Effect.provideService(CurrentEventEntrypoint, className),
++                  ),
+                 ),
+               ).pipe(
+                 Layer.provideMerge(Layer.succeedContext(services)),
+diff --git a/src/Cloudflare/Workflows/WorkflowBridge.ts b/src/Cloudflare/Workflows/WorkflowBridge.ts
+index 2212955e946bb1360890eece9f2ec40d0411618c..b673754287f9badb77ea70d2bbe049afb4716a60 100644
+--- a/src/Cloudflare/Workflows/WorkflowBridge.ts
++++ b/src/Cloudflare/Workflows/WorkflowBridge.ts
+@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
+ import * as Exit from "effect/Exit";
+ import * as Layer from "effect/Layer";
+ import * as Scope from "effect/Scope";
+-import { buildEventTelemetry } from "../../Telemetry.ts";
++import { buildEventTelemetry, CurrentEventEntrypoint } from "../../Telemetry.ts";
+ import { isScopeEjected } from "../Workers/HttpServer.ts";
+ import { getWorkerExport } from "../Workers/WorkerBridge.ts";
+ import {
+@@ -95,7 +95,9 @@ export const makeWorkflowBridge =
+                 // flushes when the scope closes at the end of the
+                 // run-invocation.
+                 Layer.effectContext(
+-                  buildEventTelemetry(context, scope, telemetry()),
++                  buildEventTelemetry(context, scope, telemetry()).pipe(
++                    Effect.provideService(CurrentEventEntrypoint, className),
++                  ),
+                 ),
+               ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
+             ),
+diff --git a/src/Planetscale/Postgres/PostgresDatabase.ts b/src/Planetscale/Postgres/PostgresDatabase.ts
+index 30137e7c7fe43f521c9a472030a70a2613196a46..079ccd29b03b040e5f3467c989ecd476f29dc52c 100644
+--- a/src/Planetscale/Postgres/PostgresDatabase.ts
++++ b/src/Planetscale/Postgres/PostgresDatabase.ts
+@@ -268,6 +268,15 @@ export const PostgresDatabaseProvider = () =>
+         })
+         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+ 
++      if (!observed && observedName !== newName) {
++        observed = yield* planetscale
++          .getDatabase({
++            organization,
++            database: newName,
++          })
++          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
++      }
++
+       // Ensure — if missing, create.
+       if (!observed) {
+         yield* session.note("Creating database...");
+diff --git a/src/Telemetry.ts b/src/Telemetry.ts
+index bf69632601ca6195bf85f95d542345394c0a1018..91bf5376737f74c8ea2442095b94534b725779d2 100644
+--- a/src/Telemetry.ts
++++ b/src/Telemetry.ts
+@@ -415,6 +415,11 @@ export const Telemetry = Context.Reference<TelemetryLayer>(
+   },
+ );
+ 
++export const CurrentEventEntrypoint = Context.Reference<string | undefined>(
++  "alchemy/Telemetry/CurrentEventEntrypoint",
++  { defaultValue: () => undefined },
++);
++
+ const reference = Telemetry;
+ 
+ /**

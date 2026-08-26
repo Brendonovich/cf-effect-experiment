@@ -1,9 +1,11 @@
-import { Cause, Context, Effect, Layer, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Redacted, Schema } from "effect";
 import * as S from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { RpcGroup, type Rpc } from "effect/unstable/rpc";
+import { RpcClient, RpcGroup, type Rpc } from "effect/unstable/rpc";
 
 import type { Live, Requirement } from "./HttpIngress.ts";
+import type { Catalog } from "./Credential.ts";
+import { unavailable } from "./Credential.ts";
 import type { Plugin } from "./Plugin.ts";
 import type { ResourceClass, ToHandler } from "./Resource.ts";
 
@@ -13,12 +15,19 @@ export interface AnyDef {
   readonly [EngineTypeId]: typeof EngineTypeId;
   readonly Storage: S.Codec<unknown, unknown, never, never>;
   readonly InitialStorage: unknown;
+  readonly Resource: ReadonlyArray<ResourceClass<any, any, any>>;
 }
 
 export type EventOf<Definition extends AnyDef> = Definition extends {
   readonly Event: ReadonlyArray<infer Event>;
 }
   ? Extract<Event, { readonly _tag: string }>
+  : never;
+
+export type RuntimeClientOf<Definition extends AnyDef> = Definition extends {
+  readonly Rpcs: RpcGroup.RpcGroup<infer Rpcs>;
+}
+  ? RpcClient.RpcClient<Rpcs>
   : never;
 
 export type InstanceOf<Definition extends AnyDef> =
@@ -112,17 +121,22 @@ export type Credential = {
   id: string;
   provider: string;
   displayName?: string | null;
-  token: { access: string };
+  clientId?: string;
+  token: { access: Redacted.Redacted<string> };
 };
 
 export interface CredentialService {
   readonly get: Effect.Effect<Array<Credential>>;
   readonly refresh: (provider: string, id: string) => Effect.Effect<Credential>;
   readonly subscribe: (
-    callback: (credential: Credential) => Effect.Effect<void>,
+    callback: () => Effect.Effect<void>,
   ) => Effect.Effect<void, never, Scope.Scope>;
+  readonly catalog?: Effect.Effect<Catalog>;
+  readonly refetch?: Effect.Effect<Catalog>;
+  readonly auth?: import("./Credential.ts").AuthController;
 }
 
+/** Provides plugin engines with credential access, refresh, and change notifications. */
 export class Credentials extends Context.Service<Credentials, CredentialService>()(
   "@macrograph/plugin/Engine/Credentials",
 ) {}
@@ -131,6 +145,8 @@ export const emptyCredentialsLayer = Layer.succeed(Credentials, {
   get: Effect.succeed([]),
   refresh: (provider, id) => Effect.die(`Credential ${provider}/${id} is not configured`),
   subscribe: () => Effect.void,
+  catalog: Effect.succeed(unavailable("no-provider", "No credential provider is configured.")),
+  refetch: Effect.succeed(unavailable("no-provider", "No credential provider is configured.")),
 });
 
 export type ToLayerCtx<
@@ -207,7 +223,7 @@ export const make = <
   return Engine;
 };
 
-export class DeploymentError extends Schema.TaggedErrorClass<DeploymentError>()(
+export class DeploymentError extends Schema.TaggedError<DeploymentError>()(
   "EngineDeploymentError",
   { pluginId: Schema.String, cause: Schema.Unknown },
 ) {}

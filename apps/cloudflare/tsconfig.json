@@ -12,6 +12,9 @@
   "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
     {
+      "path": "../../packages/cloud-credentials"
+    },
+    {
       "path": "../../packages/cloud-api"
     },
     {
@@ -25,6 +28,9 @@
     },
     {
       "path": "../../packages/persistence-sqlite"
+    },
+    {
+      "path": "../../packages/planetscale-logical-db"
     },
     {
       "path": "../../packages/editor"
@@ -43,6 +49,18 @@
     },
     {
       "path": "../../packages/plugins/kofi"
+    },
+    {
+      "path": "../../packages/plugins/http-client"
+    },
+    {
+      "path": "../../packages/plugins/utilities"
+    },
+    {
+      "path": "../../packages/plugins/websocket-client"
+    },
+    {
+      "path": "../../packages/plugins/websocket-server"
     }
   ]
 }

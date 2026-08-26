@@ -21,9 +21,13 @@ interface HttpCall {
   readonly body: unknown;
 }
 
-const headers = (type: string, signature = "sha256=valid"): Request["headers"] => ({
-  "Twitch-Eventsub-Message-Id": `${type}-1`,
-  "Twitch-Eventsub-Message-Timestamp": "2026-07-23T00:00:00Z",
+const headers = (
+  type: string,
+  signature = "sha256=valid",
+  id = `${type}-1`,
+): Request["headers"] => ({
+  "Twitch-Eventsub-Message-Id": id,
+  "Twitch-Eventsub-Message-Timestamp": "1970-01-01T00:00:00Z",
   "Twitch-Eventsub-Message-Signature": signature,
   "Twitch-Eventsub-Message-Type": type,
 });
@@ -48,16 +52,18 @@ describe("WebhookEventSub", () => {
       });
       assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
         {
-          handlerId: "twitch:eventsub",
+          handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
           pluginId: "twitch",
-          instanceKey: "account-1",
+          instanceKey: HttpEndpoint.InstanceKey.make("account-1"),
+          displayName: "EventSub Webhook",
           metadata: { accountId: "account-1" },
           configuration: { subscriptions: ["channel.ban"] },
         },
         {
-          handlerId: "twitch:eventsub",
+          handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
           pluginId: "twitch",
-          instanceKey: "account-2",
+          instanceKey: HttpEndpoint.InstanceKey.make("account-2"),
+          displayName: "EventSub Webhook",
           metadata: { accountId: "account-2" },
           configuration: { subscriptions: ["channel.ban", "channel.unban"] },
         },
@@ -104,10 +110,10 @@ describe("WebhookEventSub", () => {
       }> = [];
       let clientRefreshes = 0;
       const endpoint = {
-        id: "endpoint-1",
-        url: "https://example.com/webhooks/twitch/account-1",
-        handlerId: EventSubEndpoint.id,
-        instanceKey: accountId,
+        id: HttpEndpoint.Id.make("endpoint-1"),
+        url: "https://new.trycloudflare.com/ingress/project-1/endpoint-1",
+        schema: { id: EventSubEndpoint.id, displayName: EventSubEndpoint.displayName },
+        instanceKey: HttpEndpoint.InstanceKey.make(accountId),
         metadata: { accountId },
       };
 
@@ -138,19 +144,58 @@ describe("WebhookEventSub", () => {
                     token_type: "bearer",
                   }
                 : request.method === "GET"
-                  ? {
-                      data: [],
-                      total: 0,
-                      total_cost: 0,
-                      max_total_cost: 10_000,
-                    }
+                  ? Object.hasOwn(Object.fromEntries(request.urlParams), "after")
+                    ? {
+                        data: [],
+                        total: 1,
+                        total_cost: 0,
+                        max_total_cost: 10_000,
+                        pagination: {},
+                      }
+                    : {
+                        data: [
+                          {
+                            id: "other-project-subscription",
+                            type: "channel.ban",
+                            version: "1",
+                            status: "enabled",
+                            condition: { broadcaster_user_id: accountId },
+                            transport: {
+                              method: "webhook",
+                              callback: "https://other.example/webhooks/twitch/account-1",
+                            },
+                            created_at: "2026-07-23T00:00:00Z",
+                            cost: 0,
+                          },
+                          {
+                            id: "previous-tunnel-subscription",
+                            type: "channel.ban",
+                            version: "1",
+                            status: "enabled",
+                            condition: { broadcaster_user_id: accountId },
+                            transport: {
+                              method: "webhook",
+                              callback:
+                                "https://old.trycloudflare.com/ingress/project-1/endpoint-1",
+                            },
+                            created_at: "2026-07-23T00:00:00Z",
+                            cost: 0,
+                          },
+                        ],
+                        total: 1,
+                        total_cost: 0,
+                        max_total_cost: 10_000,
+                        pagination: { cursor: "next-page" },
+                      }
                   : { data: [{ id: "subscription-1" }] };
             return HttpClientResponse.fromWeb(
               request,
-              new Response(JSON.stringify(response), {
-                status: request.method === "POST" ? 202 : 200,
-                headers: { "content-type": "application/json" },
-              }),
+              request.method === "DELETE"
+                ? new Response(null, { status: 204 })
+                : new Response(JSON.stringify(response), {
+                    status: request.method === "POST" ? 202 : 200,
+                    headers: { "content-type": "application/json" },
+                  }),
             );
           }),
         Effect.succeed,
@@ -167,14 +212,14 @@ describe("WebhookEventSub", () => {
             {
               id: accountId,
               provider: "twitch",
-              token: { access: "cloud-token" },
+              token: { access: Redacted.make("cloud-token") },
             },
           ]),
           refresh: () =>
             Effect.succeed({
               id: accountId,
               provider: "twitch",
-              token: { access: "refreshed-cloud-token" },
+              token: { access: Redacted.make("refreshed-cloud-token") },
             }),
           subscribe: () => Effect.void,
         }),
@@ -188,26 +233,24 @@ describe("WebhookEventSub", () => {
               return {
                 id: endpoint.id,
                 url: endpoint.url,
-                handlerId: handler.id,
-                instanceKey: options.instanceKey,
+                schema: { id: handler.id, displayName: handler.displayName },
+                instanceKey: HttpEndpoint.InstanceKey.make(options.instanceKey),
                 metadata: options.metadata,
               };
             }),
-          get: <Metadata>(handler: HttpEndpoint.Handler<Metadata>, instanceKey: string) =>
+          get: <Metadata>(_handler: HttpEndpoint.Handler<Metadata>, instanceKey: string) =>
             Effect.succeed(
               Option.some({
                 id: endpoint.id,
                 url: endpoint.url,
-                handlerId: handler.id,
-                instanceKey,
+                schema: endpoint.schema,
+                instanceKey: HttpEndpoint.InstanceKey.make(instanceKey),
                 metadata: endpoint.metadata as Metadata,
               }),
             ),
           remove: () => Effect.void,
           lookup: () => Effect.succeed(Option.some(endpoint)),
-        }),
-        Layer.succeed(HttpEndpoint.SecretStore)({
-          upsert: (endpointId) =>
+          secret: (endpointId) =>
             Effect.sync(() => {
               assert.strictEqual(endpointId, endpoint.id);
               return Redacted.make("webhook-secret");
@@ -242,16 +285,17 @@ describe("WebhookEventSub", () => {
 
         yield* ingressRegistry.mount(
           {
-            handlerId: "twitch:eventsub",
+            handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
             pluginId: "twitch",
-            instanceKey: accountId,
+            instanceKey: HttpEndpoint.InstanceKey.make(accountId),
+            displayName: "EventSub Webhook",
             metadata: { accountId },
             configuration: { subscriptions: ["channel.ban", "channel.unban"] },
           },
           endpointHost,
         );
         assert.deepStrictEqual(provisioned, [
-          { handlerId: "twitch:eventsub", instanceKey: accountId },
+          { handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"), instanceKey: accountId },
         ]);
         assert.deepStrictEqual(
           calls.map(({ method, url }) => ({ method, url })),
@@ -259,6 +303,14 @@ describe("WebhookEventSub", () => {
             { method: "POST", url: "https://id.twitch.tv/oauth2/token" },
             {
               method: "GET",
+              url: "https://api.twitch.tv/helix/eventsub/subscriptions",
+            },
+            {
+              method: "GET",
+              url: "https://api.twitch.tv/helix/eventsub/subscriptions",
+            },
+            {
+              method: "DELETE",
               url: "https://api.twitch.tv/helix/eventsub/subscriptions",
             },
             {
@@ -275,7 +327,7 @@ describe("WebhookEventSub", () => {
           calls[0]?.body,
           "client_id=test-client-id&client_secret=test-client-secret&grant_type=client_credentials",
         );
-        assert.deepStrictEqual(calls[2]?.body, {
+        assert.deepStrictEqual(calls[4]?.body, {
           type: "channel.ban",
           version: "1",
           condition: { broadcaster_user_id: accountId },
@@ -285,9 +337,9 @@ describe("WebhookEventSub", () => {
             secret: "webhook-secret",
           },
         });
-        assert.strictEqual(calls[2]?.headers.authorization, "Bearer app-token");
-        assert.strictEqual(calls[2]?.headers["client-id"], "test-client-id");
-        assert.deepStrictEqual(calls[3]?.body, {
+        assert.strictEqual(calls[4]?.headers.authorization, "Bearer app-token");
+        assert.strictEqual(calls[4]?.headers["client-id"], "test-client-id");
+        assert.deepStrictEqual(calls[5]?.body, {
           type: "channel.unban",
           version: "1",
           condition: { broadcaster_user_id: accountId },
@@ -327,6 +379,15 @@ describe("WebhookEventSub", () => {
             condition: { broadcaster_user_id: accountId },
           },
           event: {
+            broadcaster_user_id: accountId,
+            broadcaster_user_login: "streamer",
+            broadcaster_user_name: "Streamer",
+            user_id: "viewer-1",
+            user_login: "viewer",
+            user_name: "Viewer",
+            moderator_user_id: accountId,
+            moderator_user_login: "streamer",
+            moderator_user_name: "Streamer",
             reason: "spam",
             banned_at: "2026-07-23T00:00:00Z",
             ends_at: null,
@@ -351,12 +412,21 @@ describe("WebhookEventSub", () => {
           )(notification.events[0]?.payload),
           { _tag: "channel.ban", reason: "spam" },
         );
+        const duplicate = yield* ingressRegistry.handle({
+          endpoint,
+          configuration: { subscriptions: ["channel.ban"] },
+          method: "POST",
+          headers: headers("notification"),
+          body: notificationBody,
+        });
+        assert.strictEqual(duplicate.status, 204);
+        assert.deepStrictEqual(duplicate.events, []);
 
         const unban = yield* ingressRegistry.handle({
           endpoint,
           configuration: { subscriptions: ["channel.ban", "channel.unban"] },
           method: "POST",
-          headers: headers("notification"),
+          headers: headers("notification", "sha256=valid", "notification-2"),
           body: body({
             subscription: {
               id: "subscription-2",
@@ -380,6 +450,25 @@ describe("WebhookEventSub", () => {
         });
         assert.strictEqual(unban.status, 204);
         assert.strictEqual(unban.events[0]?.eventType, "channel.unban");
+
+        const disabled = yield* ingressRegistry.handle({
+          endpoint,
+          configuration: { subscriptions: ["channel.ban"] },
+          method: "POST",
+          headers: headers("notification", "sha256=valid", "notification-3"),
+          body: body({
+            subscription: {
+              id: "subscription-2",
+              status: "enabled",
+              type: "channel.unban",
+              version: "1",
+              condition: { broadcaster_user_id: accountId },
+            },
+            event: {},
+          }),
+        });
+        assert.strictEqual(disabled.status, 204);
+        assert.deepStrictEqual(disabled.events, []);
 
         assert.deepStrictEqual(
           yield* ingressRegistry.handle({
@@ -417,7 +506,7 @@ describe("WebhookEventSub", () => {
           }),
           { status: 400, events: [] },
         );
-        assert.strictEqual(verifiedMessages.length, 5);
+        assert.strictEqual(verifiedMessages.length, 7);
         assert.ok(verifiedMessages[1]?.endsWith(new TextDecoder().decode(notificationBody)));
 
         const refreshesBeforeDisconnect = clientRefreshes;

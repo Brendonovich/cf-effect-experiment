@@ -1,46 +1,14 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { writeFile } from "node:fs/promises";
-import { createConnection, createServer } from "node:net";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
-const isListening = (port: number, host: string) =>
-  new Promise<boolean>((resolve) => {
-    const socket = createConnection({ port, host });
-    const finish = (listening: boolean) => {
-      socket.destroy();
-      resolve(listening);
-    };
-    socket.once("connect", () => finish(true));
-    socket.once("error", () => finish(false));
-    socket.setTimeout(100, () => finish(false));
-  });
-
-const findAvailablePort = async (start: number) => {
-  for (let port = start; port <= 65_535; port++) {
-    const loopbackInUse = await Promise.all([
-      isListening(port, "127.0.0.1"),
-      isListening(port, "::1"),
-    ]);
-    if (loopbackInUse.some(Boolean)) continue;
-
-    const server = createServer();
-    const available = await new Promise<boolean>((resolve) => {
-      server.once("error", () => resolve(false));
-      server.once("listening", () => server.close(() => resolve(true)));
-      server.listen(port, "0.0.0.0");
-    });
-    if (available) return port;
-  }
-  throw new Error(`No available port found starting at ${start}`);
-};
-
-const vitePort = await findAvailablePort(5173);
+const vitePort = 5175;
 console.log(`Local app: http://localhost:${vitePort}`);
 
 const tunnel = spawn(
   "cloudflared",
-  ["tunnel", "--url", "http://localhost:1337", "--no-autoupdate"],
+  ["tunnel", "--url", "http://localhost:1338", "--no-autoupdate"],
   { stdio: ["ignore", "pipe", "pipe"] },
 );
 
@@ -65,18 +33,46 @@ const tunnelUrl = await Promise.any([
   findTunnelUrl(tunnel.stdout, process.stdout),
   findTunnelUrl(tunnel.stderr, process.stderr),
 ]);
+await mkdir(".alchemy", { recursive: true });
 await writeFile(".alchemy/dev-tunnel-url", tunnelUrl);
-console.log(`Public runtime: ${tunnelUrl}`);
+console.log(`Public ingress: ${tunnelUrl}`);
+
+const reconcileIngress = async () => {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try {
+      const response = await fetch("http://localhost:1338/__macrograph/reconcile-ingress", {
+        method: "POST",
+        headers: { "x-macrograph-public-origin": tunnelUrl },
+      });
+      if (!response.ok) throw new Error(`Ingress reconciliation failed: ${response.status}`);
+      const result: unknown = await response.json();
+      console.log("Reconciled deployed ingress for public ingress worker", result);
+      return;
+    } catch (error) {
+      if (attempt === 59) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+  }
+};
+
+void reconcileIngress().catch((error) => {
+  console.error("Failed to reconcile deployed ingress", error);
+});
 
 vite = spawn(
   "pnpm",
   ["exec", "vite", "--host", "0.0.0.0", "--port", String(vitePort), "--strictPort"],
   {
-    cwd: "../playground",
+    cwd: "frontend",
     env: {
       ...process.env,
+      ...(process.env.AXIOM_ORG_ID === undefined
+        ? {}
+        : { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
+      VITE_AXIOM_TRACE_DATASET: "macrograph-traces",
       VITE_WORKER_URL: "http://localhost:1337",
-      VITE_PUBLIC_RUNTIME_ORIGIN: tunnelUrl,
+      VITE_PUBLIC_WORKER_ORIGIN: `http://localhost:${vitePort}`,
+      VITE_PUBLIC_INGRESS_ORIGIN: tunnelUrl,
     },
     stdio: "inherit",
   },

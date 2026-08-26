@@ -13,6 +13,7 @@ export default Engine.withHttpIngress(Engine.deployment(KofiPlugin, KofiEngineLi
       Object.entries(state.webhooks).map(([webhookId, webhook]) =>
         WebhookIngress.require({
           instanceKey: webhookId,
+          displayName: webhook.name ?? "Webhook",
           metadata: { webhookId: WebhookId.make(webhookId) },
           configuration: { verificationToken: webhook.verificationToken },
         }),

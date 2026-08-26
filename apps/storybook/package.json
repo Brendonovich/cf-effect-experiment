@@ -1,0 +1,40 @@
+{
+  "name": "@macrograph/storybook",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "storybook dev -p 6006",
+    "build": "storybook build --output-dir dist/storybook",
+    "typecheck": "tsgo --build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/core": "workspace:*",
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@macrograph/plugin-kofi": "workspace:*",
+    "@macrograph/plugin-obs": "workspace:*",
+    "@macrograph/plugin-twitch": "workspace:*",
+    "@macrograph/plugin-websocket-client": "workspace:*",
+    "@macrograph/plugin-websocket-server": "workspace:*",
+    "@solidjs/signals": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@iconify/json": "2.2.196",
+    "@macrograph/icons": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@storybook/addon-docs": "10.5.10",
+    "@stylexjs/unplugin": "catalog:",
+    "@types/node": "^24",
+    "storybook": "10.5.10",
+    "storybook-solidjs-vite": "10.7.1",
+    "typescript": "^5.8",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "npm:@solidjs/vite-plugin@3.0.0-next.31"
+  }
+}

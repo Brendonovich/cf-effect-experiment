@@ -1,25 +1,49 @@
-import { Fiber, HashMap, Option, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
+import {
+  Cause,
+  Deferred,
+  Exit,
+  Fiber,
+  HashMap,
+  Option,
+  Result,
+  Semaphore,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import * as Effect from "effect/Effect";
 import { Socket } from "effect/unstable/socket";
 
-import type { AccountId } from "./Definition.ts";
+import type { AccountId, MissingCredential } from "./Definition.ts";
 
+import { isCatalogEvent } from "./Catalog.ts";
 import { buildCondition, EventSubMessage, EventSubSocket, SubscriptionEvent } from "./EventSub.ts";
-import { definitionsFor, helixError, type Make, type State } from "./EventSubImplementation.ts";
+import {
+  definitionsFor,
+  helixError,
+  listSubscriptions,
+  type Make,
+  type State,
+} from "./EventSubImplementation.ts";
+import { Helix } from "./Helix.ts";
+
+type ConnectError = EventSubSocket.ConnectionFailed | Helix.HelixError | MissingCredential;
 
 type Entry = { readonly lock: Semaphore.Semaphore } & (
   | { readonly state: "connecting" }
   | {
       readonly state: "connected";
       readonly id: string;
-      readonly fiber: Fiber.Fiber<void, EventSubSocket.ConnectionFailed>;
+      readonly fiber: Fiber.Fiber<void, ConnectError>;
     }
 );
 
 export const make: Make<Socket.WebSocketConstructor> = (context) =>
   Effect.gen(function* () {
     const state = yield* SubscriptionRef.make(HashMap.empty<AccountId, Entry>());
-    const socketContext = yield* Effect.context<Scope.Scope | Socket.WebSocketConstructor>();
+    const scope = yield* Effect.scope;
+    const webSocketConstructor = yield* Socket.WebSocketConstructor;
+    const delivered = new Set<string>();
+    const operations = yield* Semaphore.make(1);
 
     yield* Stream.runForEach(SubscriptionRef.changes(state), () => context.refresh).pipe(
       Effect.forkScoped,
@@ -34,12 +58,92 @@ export const make: Make<Socket.WebSocketConstructor> = (context) =>
         });
         return;
       }
-      yield* Fiber.interrupt(entry.value.fiber);
+      const active = entry.value;
+      yield* Fiber.interrupt(active.fiber);
+      yield* Effect.gen(function* () {
+          const helix = yield* context.getHelix(id);
+          const subscriptions = yield* listSubscriptions(helix);
+          const sessionSubscriptions = subscriptions.filter(
+            (subscription) =>
+              subscription.transport.method === "websocket" &&
+              subscription.transport.session_id === active.id,
+          );
+          yield* Effect.logInfo("Deleting EventSub WebSocket subscriptions", {
+            accountId: id,
+            sessionId: active.id,
+            count: sessionSubscriptions.length,
+          });
+          yield* Effect.forEach(
+            sessionSubscriptions,
+            (subscription) =>
+              helixError(helix.eventsub.deleteSubscription({ query: { id: subscription.id } })),
+            { discard: true },
+          );
+        }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("Failed to delete disconnected EventSub subscriptions", {
+            accountId: id,
+            sessionId: active.id,
+            error,
+          }),
+        ),
+      );
       yield* Effect.logInfo("EventSub WebSocket disconnected", {
         accountId: id,
-        sessionId: entry.value.id,
+        sessionId: active.id,
       });
-    });
+    }, operations.withPermit);
+
+    const reconcile = Effect.fnUntraced(function* (id: AccountId) {
+      const entry = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(id)));
+      if (Option.isNone(entry) || entry.value.state !== "connected") return;
+
+      const active = entry.value;
+      yield* Effect.gen(function* () {
+        const helix = yield* context.getHelix(id);
+        const definitions = definitionsFor(yield* context.getSubscriptions(id));
+        const existing = (yield* listSubscriptions(helix)).filter(
+          (subscription) =>
+            subscription.transport.method === "websocket" &&
+            subscription.transport.session_id === active.id,
+        );
+        const matches = (
+          subscription: (typeof existing)[number],
+          definition: (typeof definitions)[number],
+        ) =>
+          definition.type === subscription.type &&
+          definition.version.toString() === subscription.version &&
+          Object.entries(buildCondition(definition, id)).every(
+            ([key, value]) => subscription.condition[key] === value,
+          );
+
+        yield* Effect.forEach(
+          existing.filter(
+            (subscription) => !definitions.some((definition) => matches(subscription, definition)),
+          ),
+          (subscription) =>
+            helixError(helix.eventsub.deleteSubscription({ query: { id: subscription.id } })),
+          { discard: true },
+        );
+        yield* Effect.forEach(
+          definitions.filter(
+            (definition) => !existing.some((subscription) => matches(subscription, definition)),
+          ),
+          (definition) =>
+            helixError(
+              helix.eventsub.createSubscription({
+                payload: {
+                  type: definition.type,
+                  version: definition.version.toString(),
+                  condition: buildCondition(definition, id),
+                  transport: { method: "websocket", session_id: active.id },
+                },
+              }),
+            ),
+          { discard: true },
+        );
+      }).pipe(active.lock.withPermit);
+    }, operations.withPermit);
 
     return {
       transport: "websocket" as const,
@@ -63,8 +167,9 @@ export const make: Make<Socket.WebSocketConstructor> = (context) =>
         }
 
         const lock = yield* Semaphore.make(1);
-        yield* Effect.logDebug("Loading Twitch Helix client", { accountId: id });
+        yield* Effect.logInfo("Loading Twitch Helix client for EventSub", { accountId: id });
         const helix = yield* context.getHelix(id);
+        let connectionStage = "loading-subscriptions";
 
         yield* Effect.gen(function* () {
           yield* SubscriptionRef.update(state, (current) =>
@@ -74,152 +179,252 @@ export const make: Make<Socket.WebSocketConstructor> = (context) =>
             accountId: id,
           });
 
-          const socket = yield* Effect.gen(function* () {
-            const socket = yield* EventSubSocket.make;
-            yield* Effect.logInfo("EventSub WebSocket handshake completed", {
-              accountId: id,
-              sessionId: socket.id,
-            });
-            const existingSubscriptions = yield* helixError(
-              helix.eventsub.listSubscriptions({ query: {} }),
-            );
-            yield* Effect.logInfo("Listed Twitch EventSub subscriptions", {
-              accountId: id,
-              count: existingSubscriptions.data.length,
-            });
-
-            const disconnectedSubscriptions = existingSubscriptions.data.filter(
-              (subscription) => subscription.status === "websocket_disconnected",
-            );
-            yield* Effect.logInfo("Removing disconnected Twitch EventSub subscriptions", {
-              accountId: id,
-              count: disconnectedSubscriptions.length,
-            });
-            yield* Effect.all(
-              disconnectedSubscriptions.map((subscription) =>
-                helixError(
-                  helix.eventsub.deleteSubscription({ query: { id: subscription.id } }),
-                ).pipe(
-                  Effect.tap(() =>
-                    Effect.logDebug("Deleted disconnected Twitch EventSub subscription", {
-                      accountId: id,
-                      subscriptionId: subscription.id,
+          const definitions = definitionsFor(yield* context.getSubscriptions(id));
+          yield* Effect.logInfo("Loaded EventSub subscription configuration", {
+            accountId: id,
+            subscriptionCount: definitions.length,
+            subscriptionTypes: definitions.map((definition) => definition.type),
+          });
+          type EventSocket = Effect.Success<ReturnType<typeof EventSubSocket.make>>;
+          const subscribe = (sessionId: string) =>
+            Effect.gen(function* () {
+              connectionStage = "creating-subscriptions";
+              yield* Effect.logInfo("Creating Twitch EventSub subscriptions for WebSocket", {
+                accountId: id,
+                sessionId,
+                count: definitions.length,
+                subscriptionTypes: definitions.map((definition) => definition.type),
+              });
+              yield* Effect.all(
+                definitions.map((definition) =>
+                  helixError(
+                    helix.eventsub.createSubscription({
+                      payload: {
+                        type: definition.type,
+                        version: definition.version.toString(),
+                        condition: buildCondition(definition, id),
+                        transport: { method: "websocket", session_id: sessionId },
+                      },
                     }),
+                  ).pipe(
+                    Effect.tap(() =>
+                      Effect.logInfo("Created Twitch EventSub subscription", {
+                        accountId: id,
+                        sessionId,
+                        subscriptionType: definition.type,
+                      }),
+                    ),
                   ),
-                  Effect.catch((error) =>
-                    Effect.logWarning("Failed to delete Twitch EventSub subscription", error, {
-                      accountId: id,
-                      subscriptionId: subscription.id,
-                    }),
-                  ),
-                  Effect.ignore,
                 ),
-              ),
-              { concurrency: 3 },
-            );
-
-            const definitions = definitionsFor(yield* context.getSubscriptions(id));
-            yield* Effect.logInfo("Creating Twitch EventSub subscriptions for WebSocket", {
-              accountId: id,
-              count: definitions.length,
-              subscriptionTypes: definitions.map((definition) => definition.type),
+                { concurrency: 5 },
+              );
             });
-            yield* Effect.all(
-              definitions.map((definition) =>
-                helixError(
-                  helix.eventsub.createSubscription({
-                    payload: {
-                      type: definition.type,
-                      version: definition.version.toString(),
-                      condition: buildCondition(definition, id),
-                      transport: { method: "websocket", session_id: socket.id },
-                    },
+          const listen = (current: EventSocket) => {
+            let reconnectUrl: string | undefined;
+            return current.stream.pipe(
+                Stream.timeoutOrElse({
+                  duration: `${current.keepaliveTimeoutSeconds + 5} seconds`,
+                  orElse: () =>
+                    Stream.fail(
+                      new EventSubSocket.ConnectionFailed({ cause: "keepalive-timeout" }),
+                    ),
+                }),
+                Stream.takeUntilEffect((event) =>
+                  EventSubMessage.isType(event, "session_reconnect")
+                    ? Effect.sync(() => {
+                        reconnectUrl = event.payload.session.reconnect_url;
+                        return true;
+                      })
+                    : Effect.succeed(false),
+                ),
+                Stream.runForEach((event) =>
+                  Effect.gen(function* () {
+                    if (EventSubMessage.isType(event, "session_reconnect")) {
+                      yield* Effect.logInfo("Reconnecting Twitch EventSub WebSocket", {
+                        accountId: id,
+                        sessionId: current.id,
+                      });
+                      return;
+                    }
+                    if (EventSubMessage.isType(event, "revocation")) {
+                      yield* Effect.logWarning("Twitch revoked an EventSub subscription", {
+                        accountId: id,
+                        status: event.payload.subscription.status,
+                        subscriptionId: event.payload.subscription.id,
+                        subscriptionType: event.payload.subscription.type,
+                      });
+                      return yield* new EventSubSocket.ConnectionFailed({
+                        cause: `subscription-revoked:${event.payload.subscription.status}`,
+                      });
+                    }
+                    if (!EventSubMessage.isType(event, "notification")) return;
+                    if (delivered.has(event.metadata.message_id)) return;
+                    const definition = definitionsFor([event.payload.subscription.type])[0];
+                    if (
+                      definition === undefined ||
+                      definition.version.toString() !== event.payload.subscription.version ||
+                      Object.entries(buildCondition(definition, id)).some(
+                        ([key, value]) => event.payload.subscription.condition[key] !== value,
+                      )
+                    )
+                      return;
+                    const decoded = SubscriptionEvent.decodeAny({
+                      _tag: event.payload.subscription.type,
+                      ...(typeof event.payload.event === "object" && event.payload.event !== null
+                        ? event.payload.event
+                        : {}),
+                    });
+                    if (Result.isFailure(decoded)) return;
+                    if (!isCatalogEvent(decoded.success, id)) return;
+                    delivered.add(event.metadata.message_id);
+                    if (delivered.size > 2_048) {
+                      const oldest = delivered.values().next().value;
+                      if (oldest !== undefined) delivered.delete(oldest);
+                    }
+                    yield* Effect.logDebug("Received Twitch EventSub notification", {
+                      accountId: id,
+                      eventType: decoded.success._tag,
+                      sessionId: current.id,
+                    });
+                    yield* context.emit(decoded.success);
                   }),
-                ).pipe(
-                  Effect.tap(() =>
-                    Effect.logInfo("Created Twitch EventSub subscription", {
+                ),
+                Effect.flatMap(() =>
+                  reconnectUrl === undefined
+                    ? new EventSubSocket.ConnectionFailed({ cause: "socket-closed" })
+                    : Effect.succeed(reconnectUrl),
+                ),
+              );
+          };
+          const ready = yield* Deferred.make<string>();
+          let initialized = false;
+          const runSocket = (
+            url: string | undefined,
+            onOpen: (socket: EventSocket) => Effect.Effect<void, ConnectError>,
+          ): Effect.Effect<void, ConnectError, Socket.WebSocketConstructor> =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                connectionStage = "opening-websocket";
+                yield* Effect.logInfo("Opening Twitch EventSub WebSocket", {
+                  accountId: id,
+                  ...(url === undefined ? {} : { reconnectUrl: url }),
+                });
+                const socket = yield* EventSubSocket.make(url);
+                yield* Effect.logInfo("EventSub WebSocket handshake completed", {
+                  accountId: id,
+                  sessionId: socket.id,
+                });
+                yield* onOpen(socket);
+                connectionStage = "starting-listener";
+                return yield* listen(socket);
+              }),
+            ).pipe(
+              Effect.flatMap((reconnectUrl) =>
+                Effect.suspend(() =>
+                  runSocket(reconnectUrl, (socket) =>
+                    Effect.logInfo("Reconnecting Twitch EventSub WebSocket", {
                       accountId: id,
                       sessionId: socket.id,
-                      subscriptionType: definition.type,
-                    }),
-                  ),
-                  Effect.catch((error) =>
-                    Effect.logWarning("Failed to create Twitch EventSub subscription", error, {
-                      accountId: id,
-                      sessionId: socket.id,
-                      subscriptionType: definition.type,
-                    }),
+                    }).pipe(Effect.andThen(subscribe(socket.id))),
                   ),
                 ),
               ),
-              { concurrency: 5 },
+              Effect.catch((error) =>
+                !initialized ||
+                (error instanceof EventSubSocket.ConnectionFailed &&
+                  typeof error.cause === "string" &&
+                  error.cause.startsWith("subscription-revoked:"))
+                  ? Effect.fail(error)
+                  : Effect.logWarning("Recovering Twitch EventSub WebSocket", {
+                      accountId: id,
+                      error,
+                    }).pipe(
+                      Effect.andThen(Effect.sleep("5 seconds")),
+                      Effect.andThen(
+                        Effect.suspend(() => runSocket(undefined, (socket) => subscribe(socket.id))),
+                      ),
+                    ),
+              ),
             );
-
-            const fiber = yield* socket.stream.pipe(
-              Stream.filter((event) => EventSubMessage.isType(event, "notification")),
-              Stream.filterMap((event) =>
-                SubscriptionEvent.decodeAny({
-                  _tag: event.payload.subscription.type,
-                  ...event.payload.event,
-                }),
+          const lifecycle = runSocket(undefined, (socket) =>
+            Effect.gen(function* () {
+              connectionStage = "listing-subscriptions";
+              const existingSubscriptions = yield* listSubscriptions(helix);
+              yield* Effect.logInfo("Listed Twitch EventSub subscriptions", {
+                accountId: id,
+                count: existingSubscriptions.length,
+                subscriptions: JSON.stringify(existingSubscriptions, null, 2),
+              });
+              const disconnectedSubscriptions = existingSubscriptions.filter((subscription) =>
+                subscription.status.startsWith("websocket_"),
+              );
+              connectionStage = "removing-stale-subscriptions";
+              yield* Effect.forEach(
+                disconnectedSubscriptions,
+                (subscription) =>
+                  helixError(
+                    helix.eventsub.deleteSubscription({ query: { id: subscription.id } }),
+                  ),
+                { discard: true, concurrency: 3 },
+              );
+              yield* subscribe(socket.id);
+              initialized = true;
+              yield* Deferred.succeed(ready, socket.id);
+            }),
+          ).pipe(
+            Effect.ensuring(
+              SubscriptionRef.update(state, (current) => HashMap.remove(current, id)).pipe(
+                lock.withPermit,
+                Effect.andThen(Effect.logInfo("EventSub WebSocket state removed", { accountId: id })),
               ),
-              Stream.tap((event) =>
-                Effect.logDebug("Received Twitch EventSub notification", {
-                  accountId: id,
-                  eventType: event._tag,
-                  sessionId: socket.id,
-                }),
-              ),
-              Stream.runForEach(context.emit),
-              Effect.onExit((exit) =>
-                Effect.logInfo("EventSub WebSocket listener stopped", {
-                  accountId: id,
-                  exit,
-                  sessionId: socket.id,
-                }),
-              ),
-              Effect.ensuring(
-                Effect.gen(function* () {
-                  yield* SubscriptionRef.update(state, (current) =>
-                    HashMap.remove(current, id),
-                  ).pipe(lock.withPermit);
-                  yield* Effect.logInfo("EventSub WebSocket state removed", { accountId: id });
-                }),
-              ),
-              Effect.forkScoped,
-            );
-
-            return { id: socket.id, fiber };
-          }).pipe(
-            Effect.forkScoped,
-            Effect.provideContext(socketContext),
-            Effect.flatMap(Fiber.join),
+            ),
+            Effect.provideService(Socket.WebSocketConstructor, webSocketConstructor),
           );
-
+          const fiber = yield* lifecycle.pipe(Effect.forkIn(scope));
+          const sessionId = yield* Deferred.await(ready).pipe(
+            Effect.raceFirst(
+              Fiber.join(fiber).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new EventSubSocket.ConnectionFailed({ cause: "listener-stopped-before-ready" }),
+                  ),
+                ),
+              ),
+            ),
+          );
+          connectionStage = "publishing-connected-state";
           yield* SubscriptionRef.update(state, (current) =>
-            HashMap.set(current, id, {
+            HashMap.set(HashMap.remove(current, id), id, {
               lock,
               state: "connected",
-              id: socket.id,
-              fiber: socket.fiber,
+              id: sessionId,
+              fiber,
             }),
           );
           yield* Effect.logInfo("EventSub WebSocket state changed to connected", {
             accountId: id,
-            sessionId: socket.id,
+            sessionId,
           });
         }).pipe(
           lock.withPermit,
-          Effect.tapError((error) =>
-            Effect.gen(function* () {
-              yield* Effect.logError("EventSub WebSocket connection failed", error, {
-                accountId: id,
-              });
-              yield* SubscriptionRef.update(state, (current) => HashMap.remove(current, id));
-            }),
+          Effect.onExit((exit) =>
+            Exit.isFailure(exit)
+              ? Effect.gen(function* () {
+                  const failure = Cause.findFail(exit.cause);
+                  const error = Result.isSuccess(failure) ? failure.success : undefined;
+                  yield* Effect.logError("EventSub WebSocket connection failed", {
+                    accountId: id,
+                    stage: connectionStage,
+                    failure: Cause.pretty(exit.cause),
+                    error,
+                  });
+                  yield* SubscriptionRef.update(state, (current) => HashMap.remove(current, id));
+                })
+              : Effect.void,
           ),
         );
-      }),
+      }, operations.withPermit),
+      reconcile,
       disconnect,
     };
   });

@@ -36,33 +36,37 @@ export interface Response {
   readonly events: ReadonlyArray<DeliveredEvent>;
 }
 
-export class InitializationError extends Schema.TaggedErrorClass<InitializationError>()(
+export class InitializationError extends Schema.TaggedError<InitializationError>()(
   "HttpIngressInitializationError",
-  { handlerId: Schema.String, cause: Schema.Unknown },
+  { handlerId: HttpEndpoint.HandlerId, cause: Schema.Unknown },
 ) {}
 
-export class InvalidMetadata extends Schema.TaggedErrorClass<InvalidMetadata>()(
+export class InvalidMetadata extends Schema.TaggedError<InvalidMetadata>()(
   "HttpIngressInvalidMetadata",
-  { handlerId: Schema.String, cause: Schema.Unknown },
+  { handlerId: HttpEndpoint.HandlerId, cause: Schema.Unknown },
 ) {}
 
-export class InvalidConfiguration extends Schema.TaggedErrorClass<InvalidConfiguration>()(
+export class InvalidConfiguration extends Schema.TaggedError<InvalidConfiguration>()(
   "HttpIngressInvalidConfiguration",
-  { handlerId: Schema.String, cause: Schema.Unknown },
+  { handlerId: HttpEndpoint.HandlerId, cause: Schema.Unknown },
 ) {}
 
-export class EventEncodingError extends Schema.TaggedErrorClass<EventEncodingError>()(
+export class EventEncodingError extends Schema.TaggedError<EventEncodingError>()(
   "HttpIngressEventEncodingError",
-  { handlerId: Schema.String, cause: Schema.Unknown },
+  { handlerId: HttpEndpoint.HandlerId, cause: Schema.Unknown },
 ) {}
 
-export class ReconciliationError extends Schema.TaggedErrorClass<ReconciliationError>()(
+export class ReconciliationError extends Schema.TaggedError<ReconciliationError>()(
   "HttpIngressReconciliationError",
-  { handlerId: Schema.String, instanceKey: Schema.String, cause: Schema.Unknown },
+  {
+    handlerId: HttpEndpoint.HandlerId,
+    instanceKey: HttpEndpoint.InstanceKey,
+    cause: Schema.Unknown,
+  },
 ) {}
 
 interface Handler {
-  readonly id: string;
+  readonly id: HttpEndpoint.HandlerId;
   readonly method: string;
   readonly handle: (
     request: HttpRequest<unknown>,
@@ -98,26 +102,27 @@ export type AnyLive = Live<unknown, unknown>;
 
 export interface Requirement {
   readonly definition: AnyHttpDefinition;
-  readonly instanceKey: string;
-  readonly metadata: unknown;
-  readonly configuration: unknown;
-}
-
-export interface ManifestEntry {
-  readonly handlerId: string;
-  readonly pluginId: string;
-  readonly instanceKey: string;
+  readonly instanceKey: HttpEndpoint.InstanceKey;
+  readonly displayName: string;
   readonly metadata: unknown;
   readonly configuration: unknown;
 }
 
 export const ManifestEntry = Schema.Struct({
-  handlerId: Schema.String,
+  handlerId: HttpEndpoint.HandlerId,
   pluginId: Schema.String,
-  instanceKey: Schema.String,
+  instanceKey: HttpEndpoint.InstanceKey,
+  displayName: Schema.String,
   metadata: Schema.Unknown,
   configuration: Schema.Unknown,
 });
+export type ManifestEntry = typeof ManifestEntry.Type;
+
+export const ManifestEntryKey = Schema.String.pipe(Schema.brand("HttpIngressManifestEntryKey"));
+export type ManifestEntryKey = typeof ManifestEntryKey.Type;
+
+export const manifestEntryKey = (entry: ManifestEntry): ManifestEntryKey =>
+  ManifestEntryKey.make(JSON.stringify([entry.pluginId, entry.handlerId, entry.instanceKey]));
 
 export const Manifest = Schema.Array(ManifestEntry);
 export type Manifest = typeof Manifest.Type;
@@ -128,11 +133,13 @@ export interface HttpDefinition<
   Configuration,
 > extends HttpEndpoint.Handler<Metadata> {
   readonly pluginId: string;
+  readonly displayName: string;
   readonly method: string;
   readonly event: Schema.Codec<Event, unknown, never, never>;
   readonly configuration: Schema.Codec<Configuration, unknown, never, never>;
   readonly require: (options: {
     readonly instanceKey: string;
+    readonly displayName?: string;
     readonly metadata: Metadata;
     readonly configuration: Configuration;
   }) => Requirement;
@@ -163,6 +170,7 @@ export interface HttpDefinition<
 
 export interface AnyHttpDefinition extends HttpEndpoint.Handler<unknown> {
   readonly pluginId: string;
+  readonly displayName: string;
   readonly method: string;
   readonly configuration: Schema.Codec<unknown, unknown, never, never>;
 }
@@ -170,6 +178,7 @@ export interface AnyHttpDefinition extends HttpEndpoint.Handler<unknown> {
 export const make = <Metadata, Event extends { readonly _tag: string }, Configuration>(options: {
   readonly id: string;
   readonly pluginId: string;
+  readonly displayName: string;
   readonly method: string;
   readonly metadata: Schema.Codec<Metadata, unknown, never, never>;
   readonly event: Schema.Codec<Event, unknown, never, never>;
@@ -177,46 +186,43 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
   readonly mergeConfiguration?: (current: Configuration, next: Configuration) => Configuration;
   readonly accepts?: (configuration: Configuration, eventType: Event["_tag"]) => boolean;
 }): HttpDefinition<Metadata, Event, Configuration> => {
+  const handlerId = HttpEndpoint.HandlerId.make(options.id);
   const definition: HttpDefinition<Metadata, Event, Configuration> = {
-    id: options.id,
+    id: handlerId,
     pluginId: options.pluginId,
+    displayName: options.displayName,
     method: options.method,
     metadata: options.metadata,
     event: options.event,
     configuration: options.configuration,
-    require: ({ instanceKey, metadata, configuration }) => ({
+    require: ({ instanceKey, displayName = options.displayName, metadata, configuration }) => ({
       definition,
-      instanceKey,
+      instanceKey: HttpEndpoint.InstanceKey.make(instanceKey),
+      displayName,
       metadata,
       configuration,
     }),
     implement: (implementation) => {
       const make = implementation.pipe(
-        Effect.mapError((cause) => new InitializationError({ handlerId: options.id, cause })),
+        Effect.mapError((cause) => new InitializationError({ handlerId, cause })),
         Effect.map((initialize) =>
           initialize.pipe(
-            Effect.mapError((cause) => new InitializationError({ handlerId: options.id, cause })),
+            Effect.mapError((cause) => new InitializationError({ handlerId, cause })),
             Effect.map(
               (service): Handler => ({
-                id: options.id,
+                id: handlerId,
                 method: options.method,
                 handle: Effect.fnUntraced(function* (request) {
                   const metadata = yield* Schema.decodeUnknownEffect(options.metadata)(
                     request.endpoint.metadata,
-                  ).pipe(
-                    Effect.mapError(
-                      (cause) => new InvalidMetadata({ handlerId: options.id, cause }),
-                    ),
-                  );
+                  ).pipe(Effect.mapError((cause) => new InvalidMetadata({ handlerId, cause })));
                   const response = yield* service.handle({
                     ...request,
                     endpoint: { ...request.endpoint, metadata },
                     configuration: yield* Schema.decodeUnknownEffect(options.configuration)(
                       request.configuration,
                     ).pipe(
-                      Effect.mapError(
-                        (cause) => new InvalidConfiguration({ handlerId: options.id, cause }),
-                      ),
+                      Effect.mapError((cause) => new InvalidConfiguration({ handlerId, cause })),
                     ),
                   });
                   const events = yield* Effect.forEach(
@@ -238,9 +244,7 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                                   payload,
                                 },
                         ),
-                        Effect.mapError(
-                          (cause) => new EventEncodingError({ handlerId: options.id, cause }),
-                        ),
+                        Effect.mapError((cause) => new EventEncodingError({ handlerId, cause })),
                       ),
                   );
                   return { ...response, events };
@@ -255,6 +259,7 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                     );
                     const endpoint = yield* endpoints.ensure(definition, {
                       instanceKey: entry.instanceKey,
+                      displayName: entry.displayName,
                       metadata,
                     });
                     if (service.mount !== undefined)
@@ -266,7 +271,7 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                       Effect.catchCause((cause) =>
                         Effect.fail(
                           new ReconciliationError({
-                            handlerId: options.id,
+                            handlerId,
                             instanceKey: entry.instanceKey,
                             cause,
                           }),
@@ -290,7 +295,7 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                       Effect.catchCause((cause) =>
                         Effect.fail(
                           new ReconciliationError({
-                            handlerId: options.id,
+                            handlerId,
                             instanceKey: entry.instanceKey,
                             cause,
                           }),
@@ -325,8 +330,9 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                       Effect.catchCause((cause) =>
                         Effect.fail(
                           new ReconciliationError({
-                            handlerId: options.id,
-                            instanceKey: entries[0]?.instanceKey ?? "unknown",
+                            handlerId,
+                            instanceKey:
+                              entries[0]?.instanceKey ?? HttpEndpoint.InstanceKey.make("unknown"),
                             cause,
                           }),
                         ),
@@ -340,9 +346,7 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                         ? true
                         : options.accepts(configuration, event.eventType),
                     ),
-                    Effect.mapError(
-                      (cause) => new InvalidConfiguration({ handlerId: options.id, cause }),
-                    ),
+                    Effect.mapError((cause) => new InvalidConfiguration({ handlerId, cause })),
                   ),
               }),
             ),
@@ -372,6 +376,7 @@ export const manifest = (requirements: ReadonlyArray<Requirement>): Effect.Effec
           handlerId: requirement.definition.id,
           pluginId: requirement.definition.pluginId,
           instanceKey: requirement.instanceKey,
+          displayName: requirement.displayName,
           metadata,
           configuration,
         }),
@@ -402,6 +407,7 @@ export interface RegistryService {
   ) => Effect.Effect<boolean, InvalidConfiguration>;
 }
 
+/** Coordinates registered HTTP ingress handlers, requests, endpoints, and manifests. */
 export class Registry extends Context.Service<Registry, RegistryService>()(
   "macrograph/Plugin/HttpIngress/Registry",
 ) {}
@@ -418,7 +424,7 @@ export const makeRegistry = <RO, RI>(
           handlers.findIndex((candidate) => candidate.id === handler.id) !== index,
       );
       return yield* new InitializationError({
-        handlerId: duplicate?.id ?? "unknown",
+        handlerId: duplicate?.id ?? HttpEndpoint.HandlerId.make("unknown"),
         cause: "Duplicate HTTP ingress handler id",
       });
     }
@@ -426,7 +432,7 @@ export const makeRegistry = <RO, RI>(
     return Registry.of({
       definitions: lives.map((live) => live.definition),
       handle: (request) => {
-        const handler = byId.get(request.endpoint.handlerId);
+        const handler = byId.get(request.endpoint.schema.id);
         if (handler === undefined) return Effect.succeed({ status: 404, events: [] });
         if (request.method !== handler.method) return Effect.succeed({ status: 405, events: [] });
         return handler.handle(request);
@@ -458,20 +464,20 @@ export const makeRegistry = <RO, RI>(
         return handler.unmount(entry, endpoints);
       },
       mergeManifests: (manifests) => {
-        const grouped = new Map<string, Array<ManifestEntry>>();
+        const grouped = new Map<ManifestEntryKey, Array<ManifestEntry>>();
         for (const entry of manifests.flat()) {
-          const key = JSON.stringify([entry.pluginId, entry.handlerId, entry.instanceKey]);
+          const key = manifestEntryKey(entry);
           const entries = grouped.get(key);
           if (entries === undefined) grouped.set(key, [entry]);
           else entries.push(entry);
         }
         return Effect.forEach(grouped.values(), (entries) => {
-          const handler = byId.get(entries[0]?.handlerId ?? "");
+          const handler = byId.get(entries[0]?.handlerId ?? HttpEndpoint.HandlerId.make("unknown"));
           if (handler === undefined)
             return Effect.fail(
               new ReconciliationError({
-                handlerId: entries[0]?.handlerId ?? "unknown",
-                instanceKey: entries[0]?.instanceKey ?? "unknown",
+                handlerId: entries[0]?.handlerId ?? HttpEndpoint.HandlerId.make("unknown"),
+                instanceKey: entries[0]?.instanceKey ?? HttpEndpoint.InstanceKey.make("unknown"),
                 cause: "HTTP ingress handler is not registered",
               }),
             );

@@ -1,0 +1,1 @@
+ALTER TABLE "project_ingress_events" ADD COLUMN "span_id" text;

@@ -1,0 +1,32 @@
+{
+  "name": "@macrograph/plugin-http-client",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Plugin.ts",
+  "macrograph": { "standaloneDeployment": "./src/Deployment/Local.ts" },
+  "exports": {
+    ".": "./src/Plugin.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Deployment/Local": "./src/Deployment/Local.ts",
+    "./Engine": "./src/Engine.ts",
+    "./UrlPolicy": "./src/UrlPolicy.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/plugin": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@macrograph/core": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

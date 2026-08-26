@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 
 import type { AccountId, MissingCredential } from "./Definition.ts";
 
-import { EventSubSocket, SubscriptionEvent } from "./EventSub.ts";
+import { EventSubSocket, SUBSCRIPTIONS, SubscriptionEvent } from "./EventSub.ts";
 import { Helix } from "./Helix.ts";
 
 export type State = "disconnected" | "connecting" | "connected";
@@ -21,6 +21,9 @@ export interface Controller {
     accountId: AccountId,
     options?: { readonly endpoint: HttpEndpoint.Resolved<{ readonly accountId: AccountId }> },
   ) => Effect.Effect<void, EventSubSocket.ConnectionFailed | Helix.HelixError | MissingCredential>;
+  readonly reconcile?: (
+    accountId: AccountId,
+  ) => Effect.Effect<void, Helix.HelixError | MissingCredential>;
   readonly disconnect: (accountId: AccountId) => Effect.Effect<void>;
 }
 
@@ -48,8 +51,33 @@ export const helixError = <A, R>(
 
 export const definitionsFor = (subscriptions: ReadonlyArray<string>) =>
   subscriptions.flatMap((subscription) => {
-    const definition = SubscriptionEvent.Any.members.find(
-      (candidate) => candidate.type === subscription,
-    );
-    return definition === undefined ? [] : [definition];
+    const definition = SUBSCRIPTIONS.find(([type]) => type === subscription);
+    return definition === undefined
+      ? []
+      : [
+          {
+            type: definition[0],
+            version: definition[1],
+            condition: definition[2],
+          },
+        ];
   });
+
+export const listSubscriptions = Effect.fnUntraced(function* (
+  helix: HttpApiClient.ForApi<typeof Helix.Api.HelixApi>,
+) {
+  const subscriptions: Array<
+    Effect.Success<ReturnType<typeof helix.eventsub.listSubscriptions>>["data"][number]
+  > = [];
+  let after: string | undefined;
+  do {
+    const response = yield* helixError(
+      helix.eventsub.listSubscriptions({
+        query: after === undefined ? {} : { after },
+      }),
+    );
+    subscriptions.push(...response.data);
+    after = response.pagination?.cursor;
+  } while (after !== undefined && after.length > 0);
+  return subscriptions;
+});

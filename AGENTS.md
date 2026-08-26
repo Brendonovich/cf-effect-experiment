@@ -1,4 +1,4 @@
-# Macrograph
+# MacroGraph
 
 ## Effect API Reference
 
@@ -20,7 +20,7 @@ The Effect v4 monorepo is checked in as a git submodule at `lib/effect-smol` (ef
 - **`Effect.catchAll` does not exist in v4**. Use `Effect.catchCause` and filter via `Cause.findFail`. For sync error handling, prefer `Effect.try({ try, catch })`.
 - **`Effect.try` requires a `catch`** — the catch handler is not optional. Use `catch: (error) => error` for pass-through.
 - **`Effect.fnUntraced` returns a function**, not an Effect. Call it to get the Effect: `make()`. It also accepts piped handlers as a second arg: `Effect.fnUntraced(function*() { ... }, PersistenceError.refail)`.
-- **`Schema.TaggedClass`** (not `Schema.TaggedError`) for typed tagged classes. **`Schema.TaggedErrorClass`** for tagged error classes.
+- **`Schema.TaggedClass`** for typed tagged classes. **`Schema.TaggedError`** for tagged error classes.
 - **`Result` uses `success`/`failure` properties** (not `value`/`error` from v3). `Result.Success` has `.success`, `Result.Failure` has `.failure`.
 - **`Context.Service` class-based services**: each file exports `class Service extends Context.Service<Service, { ... }>()("key") {}` and `export * as X from "./X.js"` at the bottom.
 

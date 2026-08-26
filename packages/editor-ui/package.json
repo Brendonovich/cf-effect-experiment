@@ -1,0 +1,43 @@
+{
+  "name": "@macrograph/editor-ui",
+  "version": "0.0.1",
+  "type": "module",
+  "sideEffects": [
+    "./src/styles.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./events.stylex": "./src/events/events.stylex.ts",
+    "./events-markers.stylex": "./src/events/events-markers.stylex.ts",
+    "./tokens.stylex": "./src/tokens.stylex.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@effect/opentelemetry": "catalog:",
+    "@macrograph/core": "workspace:*",
+    "@macrograph/editor": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentui/keymap": "^0.5.8",
+    "@radix-ui/colors": "^3.0.0",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@macrograph/icons": "workspace:*",
+    "happy-dom": "^20.11.6",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

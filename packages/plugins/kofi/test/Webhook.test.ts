@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HttpIngress } from "@macrograph/plugin";
+import { HttpEndpoint, HttpIngress } from "@macrograph/plugin";
 import { Effect } from "effect";
 
 import { WebhookId } from "../src/Definition.ts";
@@ -25,10 +25,10 @@ const delivery = {
 
 const request = (verificationToken: string) => ({
   endpoint: {
-    id: "endpoint-1",
+    id: HttpEndpoint.Id.make("endpoint-1"),
     url: "https://example.com/ingress/project/endpoint-1",
-    handlerId: "kofi:payment",
-    instanceKey: "primary",
+    schema: { id: HttpEndpoint.HandlerId.make("kofi:payment"), displayName: "Webhook" },
+    instanceKey: HttpEndpoint.InstanceKey.make("primary"),
     metadata: { webhookId: "primary" },
   },
   configuration: { verificationToken },
@@ -47,13 +47,29 @@ describe("Ko-fi webhook", () => {
       });
       assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
         {
-          handlerId: "kofi:payment",
+          handlerId: HttpEndpoint.HandlerId.make("kofi:payment"),
           pluginId: "kofi",
-          instanceKey: "primary",
+          instanceKey: HttpEndpoint.InstanceKey.make("primary"),
+          displayName: "Webhook",
           metadata: { webhookId: "primary" },
           configuration: { verificationToken: "secret-token" },
         },
       ]);
+    }),
+  );
+
+  it.effect("uses the configured webhook name as its endpoint display name", () =>
+    Effect.gen(function* () {
+      const requirements = yield* deployment.httpIngress.requirements({
+        webhooks: {
+          [WebhookId.make("primary")]: {
+            name: "Supporter Donations",
+            verificationToken: "secret-token",
+          },
+        },
+      });
+      const manifest = yield* HttpIngress.manifest(requirements);
+      assert.strictEqual(manifest[0]?.displayName, "Supporter Donations");
     }),
   );
 
@@ -64,6 +80,7 @@ describe("Ko-fi webhook", () => {
       assert.strictEqual(response.status, 200);
       assert.strictEqual(response.events[0]?.eventType, "Donation");
       assert.strictEqual(response.events[0]?.eventId, "message-1");
+      assert.deepInclude(response.events[0]?.payload, { webhookId: "primary" });
     }),
   );
 

@@ -1,6 +1,6 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { EngineTest } from "@macrograph/plugin";
-import { Crypto, Deferred, Effect, Layer } from "effect";
+import { Crypto, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
 import { Socket } from "effect/unstable/socket";
 
 import type * as ObsEvent from "../src/Events.ts";
@@ -19,15 +19,17 @@ class MockWebSocket extends EventTarget {
 
   constructor(readonly url: string) {
     super();
-    queueMicrotask(() => {
-      this.message({
-        op: 0,
-        d: {
-          obsWebSocketVersion: "5.5.2",
-          rpcVersion: 1,
-          authentication: { challenge: "challenge", salt: "salt" },
-        },
-      });
+    if (!url.endsWith("/pending")) queueMicrotask(() => this.identify());
+  }
+
+  identify() {
+    this.message({
+      op: 0,
+      d: {
+        obsWebSocketVersion: "5.5.2",
+        rpcVersion: 1,
+        authentication: { challenge: "challenge", salt: "salt" },
+      },
     });
   }
 
@@ -42,7 +44,7 @@ class MockWebSocket extends EventTarget {
     }
 
     if (packet.op === 6) {
-      const failed = packet.d.requestType === "Fail";
+      const failed = packet.d.requestType === "Fail" || packet.d.requestType === "FailSecret";
       queueMicrotask(() =>
         this.message({
           op: 7,
@@ -50,7 +52,14 @@ class MockWebSocket extends EventTarget {
             requestType: packet.d.requestType,
             requestId: packet.d.requestId,
             requestStatus: failed
-              ? { result: false, code: 500, comment: "Request failed" }
+              ? {
+                  result: false,
+                  code: 500,
+                  comment:
+                    packet.d.requestType === "FailSecret"
+                      ? "secret at ws://user:secret@example.com"
+                      : "Request failed",
+                }
               : { result: true, code: 100 },
             ...(failed ? {} : { responseData: { obsVersion: "31.0.0" } }),
           },
@@ -71,6 +80,38 @@ class MockWebSocket extends EventTarget {
 }
 
 describe("OBSEngine", () => {
+  it("decodes passwords and storage written while passwords were external", () => {
+    const address = SocketAddress.make("ws://localhost:4455");
+    assert.deepStrictEqual(
+      Schema.decodeUnknownSync(OBSEngine.Storage)({
+        sockets: {
+          [address]: {
+            name: "Legacy OBS",
+            password: "legacy-secret",
+            connectOnStartup: true,
+          },
+        },
+      }),
+      {
+        sockets: {
+          [address]: {
+            name: "Legacy OBS",
+            password: "legacy-secret",
+            connectOnStartup: true,
+          },
+        },
+      },
+    );
+    assert.deepStrictEqual(
+      Schema.decodeUnknownSync(OBSEngine.Storage)({
+        sockets: { [address]: { name: "External password era", connectOnStartup: false } },
+      }),
+      {
+        sockets: { [address]: { name: "External password era", connectOnStartup: false } },
+      },
+    );
+  });
+
   it.effect("manages sockets, forwards requests, and emits events", () =>
     Effect.gen(function* () {
       const address = SocketAddress.make("ws://localhost:4455");
@@ -94,7 +135,14 @@ describe("OBSEngine", () => {
       const refreshClient = vi.fn();
       const refreshResource = vi.fn();
       const setStorage = vi.fn();
-      let storage: typeof OBSEngine.Storage.Type = { sockets: {} };
+      let storage: typeof OBSEngine.Storage.Type = {
+        sockets: {
+          [address]: {
+            name: "Existing Cloud OBS",
+            connectOnStartup: false,
+          },
+        },
+      };
 
       const dependencies = Layer.mergeAll(
         Layer.succeed(Crypto.Crypto)(crypto),
@@ -160,7 +208,10 @@ describe("OBSEngine", () => {
         });
         expect(refreshResource).toHaveBeenCalledWith(OBSSocket);
 
-        const response = yield* runtime.Call({ address, requestType: "GetVersion" });
+        const response = yield* runtime.Call({
+          address,
+          requestType: "GetVersion",
+        });
         assert.deepStrictEqual(response, { obsVersion: "31.0.0" });
         assert.deepStrictEqual(sockets[0]?.sent[1], {
           op: 6,
@@ -178,6 +229,29 @@ describe("OBSEngine", () => {
           assert.strictEqual(requestError.comment, "Request failed");
         }
 
+        const redactedError = yield* Effect.flip(
+          runtime.Call({ address, requestType: "FailSecret" }),
+        );
+        assert.strictEqual(redactedError._tag, "RequestFailed");
+        if (redactedError._tag === "RequestFailed") {
+          assert.notInclude(redactedError.comment ?? "", "secret");
+          assert.include(redactedError.comment ?? "", "[redacted]");
+        }
+
+        const invalidAddress = SocketAddress.make("ws://user:address-secret@localhost:4455");
+        const invalid = yield* Effect.flip(
+          client.AddSocket({
+            address: invalidAddress,
+            password: "password-secret",
+          }),
+        );
+        assert.strictEqual(invalid._tag, "ConnectionFailed");
+        if (invalid._tag === "ConnectionFailed") {
+          assert.notInclude(invalid.reason, "address-secret");
+          assert.notInclude(invalid.reason, "password-secret");
+        }
+        assert.strictEqual(sockets.length, 1);
+
         sockets[0]?.emit("CurrentProgramSceneChanged", {
           sceneName: "Live",
           sceneUuid: "scene-1",
@@ -194,21 +268,118 @@ describe("OBSEngine", () => {
             },
           ],
         );
+        sockets[0]?.emit("FutureOBSProtocolEvent", { secret: "ignored" });
+        yield* Effect.yieldNow;
+        assert.strictEqual(emitted.length, 1);
 
         assert.deepStrictEqual(yield* engine.client.state, {
-          sockets: [{ name: "Studio OBS", address, state: "connected" }],
+          sockets: [
+            {
+              name: "Studio OBS",
+              address,
+              connectOnStartup: true,
+              state: "connected",
+            },
+          ],
         });
 
         yield* client.DisconnectSocket({ address });
         assert.deepStrictEqual(yield* engine.client.state, {
-          sockets: [{ name: "Studio OBS", address, state: "disconnected" }],
+          sockets: [
+            {
+              name: "Studio OBS",
+              address,
+              connectOnStartup: true,
+              state: "disconnected",
+            },
+          ],
         });
 
-        yield* client.RemoveSocket({ address });
+        const editedAddress = SocketAddress.make("ws://localhost:4456");
+        yield* client.UpdateSocket({
+          currentAddress: address,
+          address: editedAddress,
+          name: "Edited OBS",
+          connectOnStartup: false,
+        });
+        assert.deepStrictEqual(yield* engine.client.state, {
+          sockets: [
+            {
+              name: "Edited OBS",
+              address: editedAddress,
+              connectOnStartup: false,
+              state: "disconnected",
+            },
+          ],
+        });
+        expect(setStorage).toHaveBeenLastCalledWith({
+          sockets: {
+            [editedAddress]: {
+              name: "Edited OBS",
+              password: "secret",
+              connectOnStartup: false,
+            },
+          },
+        });
+
+        yield* client.RemoveSocket({ address: editedAddress });
         assert.deepStrictEqual(yield* engine.client.state, { sockets: [] });
         expect(setStorage).toHaveBeenLastCalledWith({ sockets: {} });
         expect(refreshClient).toHaveBeenCalled();
       }).pipe(Effect.provide(deployment.layer.pipe(Layer.provide(dependencies))));
+
+      storage = {
+        sockets: {
+          [address]: {
+            name: "Reloaded OBS",
+            password: "secret",
+            connectOnStartup: true,
+          },
+        },
+      };
+      yield* Effect.gen(function* () {
+        const { client, engine } = yield* EngineTest.makeClients(OBSEngine);
+        while (sockets.length < 2) yield* Effect.yieldNow;
+        while ((yield* engine.client.state).sockets[0]?.state !== "connected") {
+          yield* Effect.yieldNow;
+        }
+        assert.deepStrictEqual(sockets[1]?.sent[0], {
+          op: 1,
+          d: { rpcVersion: 1, eventSubscriptions: 0x7fffffff, authentication },
+        });
+        assert.deepStrictEqual(yield* engine.client.state, {
+          sockets: [
+            {
+              address,
+              name: "Reloaded OBS",
+              connectOnStartup: true,
+              state: "connected",
+            },
+          ],
+        });
+        yield* client.RemoveSocket({ address });
+      }).pipe(Effect.provide(deployment.layer.pipe(Layer.provide(dependencies))));
+
+      const pendingAddress = SocketAddress.make("ws://localhost:4457/pending");
+      storage = {
+        sockets: {
+          [pendingAddress]: { connectOnStartup: false },
+        },
+      };
+      yield* Effect.gen(function* () {
+        const { client, engine } = yield* EngineTest.makeClients(OBSEngine);
+        const connecting = yield* client
+          .ConnectSocket({ address: pendingAddress })
+          .pipe(Effect.forkChild);
+        while (sockets.length < 3) yield* Effect.yieldNow;
+        assert.strictEqual((yield* engine.client.state).sockets[0]?.state, "connecting");
+        yield* client.RemoveSocket({ address: pendingAddress });
+        assert.isTrue(Result.isFailure(yield* Effect.result(Fiber.join(connecting))));
+        sockets[2]?.identify();
+        yield* Effect.yieldNow;
+        assert.deepStrictEqual(yield* engine.client.state, { sockets: [] });
+      }).pipe(Effect.provide(deployment.layer.pipe(Layer.provide(dependencies))));
     }),
   );
+
 });

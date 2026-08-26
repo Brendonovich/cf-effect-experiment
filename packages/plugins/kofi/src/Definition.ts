@@ -1,9 +1,14 @@
-import { Engine } from "@macrograph/plugin";
+import { Engine, Resource } from "@macrograph/plugin";
 import { Array, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 export const WebhookId = Schema.String.pipe(Schema.brand("KofiWebhookId"));
 export type WebhookId = typeof WebhookId.Type;
+
+export class KofiWebhook extends Resource.make<KofiWebhook, WebhookId>()("KofiWebhook", {
+  name: "Ko-fi Webhook",
+  description: "A configured Ko-fi webhook.",
+}) {}
 
 export const PaymentType = Schema.Literals([
   "Donation",
@@ -32,6 +37,7 @@ export const Shipping = Schema.Struct({
 
 export const Payment = Schema.Struct({
   _tag: PaymentType,
+  webhookId: WebhookId,
   message_id: Schema.String,
   timestamp: Schema.String,
   is_public: Schema.Boolean,
@@ -78,6 +84,7 @@ export class ClientRpcs extends RpcGroup.make(
 ) {}
 
 export class KofiEngine extends Engine.make({
+  resources: [KofiWebhook],
   events: Array.empty<Payment>(),
   storage: RuntimeStorage,
   initialStorage: { webhooks: {} },

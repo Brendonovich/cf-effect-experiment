@@ -2,6 +2,8 @@ packages:
   - "packages/*"
   - "packages/plugins/*"
   - "apps/*"
+  - "apps/cloudflare/frontend"
+  - "apps/server/client"
 allowBuilds:
   esbuild: true
   msgpackr-extract: true
@@ -9,10 +11,12 @@ allowBuilds:
   workerd: true
 
 catalog:
-  effect: 4.0.0-beta.101
-  "@effect/opentelemetry": 4.0.0-beta.101
-  "@effect/platform-browser": 4.0.0-beta.101
-  "@effect/platform-bun": 4.0.0-beta.101
-  "@effect/platform-node": 4.0.0-beta.101
-  "@effect/platform-node-shared": 4.0.0-beta.101
-  "@effect/vitest": 4.0.0-beta.101
+  "@stylexjs/stylex": 0.19.0
+  "@stylexjs/unplugin": 0.19.0
+  effect: 4.0.0-beta.107
+  "@effect/opentelemetry": 4.0.0-beta.107
+  "@effect/platform-browser": 4.0.0-beta.107
+  "@effect/platform-bun": 4.0.0-beta.107
+  "@effect/platform-node": 4.0.0-beta.107
+  "@effect/platform-node-shared": 4.0.0-beta.107
+  "@effect/vitest": 4.0.0-beta.107

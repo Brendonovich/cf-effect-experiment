@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["@macrograph/icons/types"],
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web"
+  },
+  "include": ["src", "test"],
+  "exclude": ["src/**/*.stories.ts", "src/**/*.stories.tsx", "src/**/storybook-fixtures.ts"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../editor" },
+    { "path": "../execution" },
+    { "path": "../plugin" }
+  ]
+}

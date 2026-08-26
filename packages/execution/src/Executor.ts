@@ -1,35 +1,72 @@
-import { Graph, Node, Project } from "@macrograph/core";
-import { Engine, Plugin, Registration } from "@macrograph/plugin";
-import { Effect, Ref, Schema } from "effect";
+import { Graph, Node, Project, ResourceConstant } from "@macrograph/core";
+import { DataType } from "@macrograph/plugin/DataType";
+import * as Engine from "@macrograph/plugin/Engine";
+import * as Plugin from "@macrograph/plugin/Plugin";
+import * as Registration from "@macrograph/plugin/Registration";
+import { Cause, Effect, Ref, Schema } from "effect";
 
-export class PluginNotRegistered extends Schema.TaggedErrorClass<PluginNotRegistered>()(
+const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
+type NodeOutputKey = typeof NodeOutputKey.Type;
+
+export class PluginNotRegistered extends Schema.TaggedError<PluginNotRegistered>()(
   "PluginNotRegistered",
   { pluginId: Schema.String },
 ) {}
 
-export class SchemaNotRegistered extends Schema.TaggedErrorClass<SchemaNotRegistered>()(
+export class SchemaNotRegistered extends Schema.TaggedError<SchemaNotRegistered>()(
   "SchemaNotRegistered",
   { pluginId: Schema.String, schemaId: Schema.String },
 ) {}
 
-export class InvalidConnection extends Schema.TaggedErrorClass<InvalidConnection>()(
+export class InvalidConnection extends Schema.TaggedError<InvalidConnection>()(
   "InvalidConnection",
   { connectionId: Schema.String, reason: Schema.String },
 ) {}
 
-export class MissingInput extends Schema.TaggedErrorClass<MissingInput>()("MissingInput", {
+export class MissingInput extends Schema.TaggedError<MissingInput>()("MissingInput", {
   nodeId: Schema.String,
   inputId: Schema.String,
 }) {}
 
-export class MissingOutput extends Schema.TaggedErrorClass<MissingOutput>()("MissingOutput", {
+export class MissingOutput extends Schema.TaggedError<MissingOutput>()("MissingOutput", {
   nodeId: Schema.String,
   outputId: Schema.String,
 }) {}
 
-export class ExecutionCycle extends Schema.TaggedErrorClass<ExecutionCycle>()("ExecutionCycle", {
+export class InvalidInputValue extends Schema.TaggedError<InvalidInputValue>()(
+  "InvalidInputValue",
+  { nodeId: Schema.String, inputId: Schema.String, reason: Schema.String },
+) {}
+
+export class InvalidOutputValue extends Schema.TaggedError<InvalidOutputValue>()(
+  "InvalidOutputValue",
+  { nodeId: Schema.String, outputId: Schema.String, reason: Schema.String },
+) {}
+
+export class ExecutionCycle extends Schema.TaggedError<ExecutionCycle>()("ExecutionCycle", {
   nodeId: Schema.String,
 }) {}
+
+export class ResourceResolutionError extends Schema.TaggedError<ResourceResolutionError>()(
+  "ResourceResolutionError",
+  { nodeId: Schema.String, property: Schema.String, reason: Schema.String },
+) {}
+
+export class EngineClientUnavailable extends Schema.TaggedError<EngineClientUnavailable>()(
+  "EngineClientUnavailable",
+  { pluginId: Schema.String },
+) {}
+
+export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()(
+  "NodeExecutionError",
+  { nodeId: Schema.String, cause: Schema.Unknown },
+) {}
+
+const isEngineClientUnavailable = (value: unknown): value is EngineClientUnavailable =>
+  typeof value === "object" &&
+  value !== null &&
+  "_tag" in value &&
+  value._tag === "EngineClientUnavailable";
 
 export type ExecutorError =
   | PluginNotRegistered
@@ -37,15 +74,22 @@ export type ExecutorError =
   | InvalidConnection
   | MissingInput
   | MissingOutput
+  | InvalidInputValue
+  | InvalidOutputValue
   | ExecutionCycle
+  | ResourceResolutionError
+  | EngineClientUnavailable
+  | NodeExecutionError
   | Node.NotFoundError;
 
 interface RegisteredPlugin {
   readonly schemas: ReadonlyMap<string, Registration.RegisteredSchema>;
+  readonly engineClient: unknown;
 }
 
 interface ExecutionState {
-  readonly outputs: Map<string, unknown>;
+  readonly outputs: Map<NodeOutputKey, unknown>;
+  readonly nodeIO: Map<string, Registration.RegisteredNodeIO>;
   readonly completedPureNodes: Set<string>;
   readonly runningPureNodes: Set<string>;
 }
@@ -63,10 +107,15 @@ export interface Service {
 }
 
 export interface NodeExecutionKey {
+  readonly projectId: string;
   readonly graphId: string;
   readonly eventNodeId: string;
   readonly nodeId: string;
   readonly kind: "event" | "exec";
+  readonly executionPath: string;
+  readonly executionTraceId: string;
+  readonly traceId: string;
+  readonly parentTraceId?: string;
 }
 
 export interface NodeOutput {
@@ -82,19 +131,25 @@ export interface NodeExecutionResult {
 export interface ExecutionDriver {
   readonly executeNode: (
     key: NodeExecutionKey,
-    effect: Effect.Effect<NodeExecutionResult>,
-  ) => Effect.Effect<NodeExecutionResult>;
+    effect: Effect.Effect<NodeExecutionResult, ExecutorError>,
+  ) => Effect.Effect<NodeExecutionResult, ExecutorError>;
 }
 
 export interface MakeOptions {
+  readonly projectId?: string;
   readonly executionDriver?: ExecutionDriver;
+  readonly engineClient?: (pluginId: string) => Effect.Effect<unknown>;
+  readonly resourceValues?: (
+    resource: ResourceConstant.ResourceRef,
+  ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
 }
 
 export const inlineExecutionDriver: ExecutionDriver = {
   executeNode: (_key, effect) => effect,
 };
 
-const outputKey = (nodeId: string, outputId: string) => `${nodeId}\0${outputId}`;
+const outputKey = (nodeId: string, outputId: string) =>
+  NodeOutputKey.make(`${nodeId}\0${outputId}`);
 
 export const make = Effect.fnUntraced(function* (
   initialProject: Project.Model,
@@ -103,6 +158,7 @@ export const make = Effect.fnUntraced(function* (
   const project = yield* Ref.make(initialProject);
   const plugins = yield* Ref.make<ReadonlyMap<string, RegisteredPlugin>>(new Map());
   const executionDriver = options?.executionDriver ?? inlineExecutionDriver;
+  const projectId = options?.projectId ?? "local";
 
   const registerPlugin: Service["plugin"] = Effect.fnUntraced(function* (...args) {
     const [definition, deployment] = args;
@@ -114,10 +170,23 @@ export const make = Effect.fnUntraced(function* (
     )
       return yield* Effect.die(`Deployment does not match plugin ${definition.id}`);
     const registered = yield* Registration.collect(definition.effect);
+    const engineClient =
+      definition.engine === undefined
+        ? undefined
+        : options?.engineClient === undefined
+          ? new Proxy(
+              {},
+              {
+                get: () => () =>
+                  Effect.fail(new EngineClientUnavailable({ pluginId: definition.id })),
+              },
+            )
+          : yield* options.engineClient(definition.id);
     yield* Ref.update(plugins, (current) => {
       const next = new Map(current);
       next.set(definition.id, {
         schemas: new Map(registered.map((schema) => [schema.id, schema])),
+        engineClient,
       });
       return next;
     });
@@ -145,13 +214,80 @@ export const make = Effect.fnUntraced(function* (
     if (!registeredPlugins.has(definition.id))
       return yield* new PluginNotRegistered({ pluginId: definition.id });
 
+    const resolveProperties = Effect.fnUntraced(function* (
+      node: Node.Model,
+      schema: Registration.RegisteredSchema,
+    ): Effect.fn.Return<Readonly<Record<string, unknown>>, ExecutorError> {
+      const resolved: Record<string, unknown> = { ...node.properties };
+      for (const property of schema.properties) {
+        if (!("resource" in property)) continue;
+        const constantId = node.properties[property.id];
+        if (typeof constantId !== "string")
+          return yield* new ResourceResolutionError({
+            nodeId: node.id,
+            property: property.id,
+            reason: "Property is not bound to a resource constant",
+          });
+        const constant = currentProject.constants[constantId];
+        if (constant === undefined)
+          return yield* new ResourceResolutionError({
+            nodeId: node.id,
+            property: property.id,
+            reason: `Resource constant ${constantId} does not exist`,
+          });
+        if (
+          constant.resource.package !== node.schema.package ||
+          constant.resource.resource !== property.resource
+        )
+          return yield* new ResourceResolutionError({
+            nodeId: node.id,
+            property: property.id,
+            reason: "Resource constant has an incompatible resource type",
+          });
+        if (constant.value === undefined)
+          return yield* new ResourceResolutionError({
+            nodeId: node.id,
+            property: property.id,
+            reason: "Resource constant has no selected value",
+          });
+        if (options?.resourceValues === undefined) {
+          resolved[property.id] = constant.value;
+        } else {
+          const values = yield* options.resourceValues(constant.resource).pipe(
+            Effect.catchCause(() =>
+              Effect.fail(
+                new ResourceResolutionError({
+                  nodeId: node.id,
+                  property: property.id,
+                  reason: "Resource values could not be loaded",
+                }),
+              ),
+            ),
+          );
+          const selected = values.find(
+            (candidate) => JSON.stringify(candidate.id) === JSON.stringify(constant.value),
+          );
+          if (selected === undefined)
+            return yield* new ResourceResolutionError({
+              nodeId: node.id,
+              property: property.id,
+              reason: "Selected resource value is no longer available",
+            });
+          resolved[property.id] = selected.id;
+        }
+      }
+      return resolved;
+    });
+
     const executeEventNode = Effect.fnUntraced(function* (
       graph: Graph.Model,
       eventNode: Node.Model,
       eventSchema: Registration.RegisteredSchema,
     ): Effect.fn.Return<void, ExecutorError> {
+      const executionTraceId = crypto.randomUUID();
       const state: ExecutionState = {
         outputs: new Map(),
+        nodeIO: new Map(),
         completedPureNodes: new Set(),
         runningPureNodes: new Set(),
       };
@@ -159,12 +295,29 @@ export const make = Effect.fnUntraced(function* (
       const runNode = Effect.fnUntraced(function* (
         node: Node.Model,
         schema: Registration.RegisteredSchema,
-      ): Effect.fn.Return<string | null, ExecutorError> {
+        executionPath: string,
+        parentTraceId?: string,
+      ): Effect.fn.Return<
+        { readonly executionOutputId: string | null; readonly traceId: string },
+        ExecutorError
+      > {
+        const traceId = crypto.randomUUID();
+        const registeredPlugin = registeredPlugins.get(node.schema.package);
+        if (registeredPlugin === undefined)
+          return yield* new PluginNotRegistered({ pluginId: node.schema.package });
+        if (
+          schema.properties.some((property) => "resource" in property) &&
+          registeredPlugin.engineClient === undefined
+        )
+          return yield* new EngineClientUnavailable({ pluginId: node.schema.package });
+        const resolvedProperties = yield* resolveProperties(node, schema);
+        const nodeIO = schema.generateIO(resolvedProperties);
+        state.nodeIO.set(node.id, nodeIO);
         const inputs = new Map<string, unknown>();
         yield* Effect.forEach(
-          schema.dataInputs,
+          nodeIO.dataInputs,
           (input) =>
-            resolveInput(node, input).pipe(
+            resolveInput(node, input, executionPath, traceId).pipe(
               Effect.tap((value) =>
                 Effect.sync(() => {
                   inputs.set(input.id, value);
@@ -174,51 +327,158 @@ export const make = Effect.fnUntraced(function* (
           { discard: true },
         );
 
+        const handleRunCause = (
+          cause: Cause.Cause<unknown>,
+        ): Effect.Effect<never, EngineClientUnavailable | NodeExecutionError> => {
+          const error = Cause.squash(cause);
+          return isEngineClientUnavailable(error)
+            ? Effect.fail(error)
+            : Effect.fail(new NodeExecutionError({ nodeId: node.id, cause }));
+        };
         const execute = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
           const selected = selectOutput(
-            schema,
-            yield* schema.run({
-              input: (input) => inputs.get(input.id),
-              output: (output, value) => {
-                outputs.push({ outputId: output.id, value });
-              },
-              properties: node.properties,
-              event,
-            }),
+            nodeIO,
+            yield* schema
+              .run({
+                input: (input) => inputs.get(input.id),
+                output: (output, value) => {
+                  outputs.push({ outputId: output.id, value });
+                },
+                properties: resolvedProperties,
+                event,
+                engine: registeredPlugin.engineClient,
+                execution: {
+                  projectId,
+                  graphId: graph.id,
+                  eventNodeId: eventNode.id,
+                  traceId: executionTraceId,
+                },
+                node: {
+                  nodeId: node.id,
+                  kind: schema.type,
+                  executionPath,
+                  traceId,
+                  ...(parentTraceId === undefined ? {} : { parentTraceId }),
+                  withSpan: (name, effect) =>
+                    effect.pipe(
+                      Effect.withSpan(name, {
+                        attributes: {
+                          "macrograph.project.id": projectId,
+                          "macrograph.graph.id": graph.id,
+                          "macrograph.node.id": node.id,
+                          "macrograph.execution.path": executionPath,
+                          "macrograph.trace.id": traceId,
+                        },
+                      }),
+                    ),
+                },
+              })
+              .pipe(Effect.catchCause(handleRunCause)),
           );
           return {
             outputs,
             executionOutputId: selected?.id ?? null,
           } satisfies NodeExecutionResult;
         });
+
+        const transformResult = Effect.fnUntraced(function* (
+          result: NodeExecutionResult,
+          transform: (
+            type: DataType.Any,
+            value: unknown,
+          ) => Effect.Effect<unknown, Schema.SchemaError>,
+        ) {
+          const outputs = yield* Effect.forEach(result.outputs, (output) => {
+            const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
+            if (
+              ports.length !== 1 ||
+              nodeIO.executionOutputs.some((port) => port.id === output.outputId)
+            )
+              return Effect.fail(
+                new InvalidOutputValue({
+                  nodeId: node.id,
+                  outputId: output.outputId,
+                  reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
+                }),
+              );
+            return transform(ports[0]!.type, output.value).pipe(
+              Effect.map((value) => ({ ...output, value })),
+              Effect.catchTag(
+                "SchemaError",
+                () =>
+                  new InvalidOutputValue({
+                    nodeId: node.id,
+                    outputId: output.outputId,
+                    reason: `Expected ${ports[0]!.type._tag}`,
+                  }),
+              ),
+            );
+          });
+          return { ...result, outputs };
+        });
+
         const result =
           schema.type === "pure"
             ? yield* execute
-            : yield* executionDriver.executeNode(
-                {
-                  graphId: graph.id,
-                  eventNodeId: eventNode.id,
-                  nodeId: node.id,
-                  kind: schema.type,
-                },
-                execute,
-              );
+            : yield* executionDriver
+                .executeNode(
+                  {
+                    projectId,
+                    graphId: graph.id,
+                    eventNodeId: eventNode.id,
+                    nodeId: node.id,
+                    kind: schema.type,
+                    executionPath,
+                    executionTraceId,
+                    traceId,
+                    ...(parentTraceId === undefined ? {} : { parentTraceId }),
+                  },
+                  execute.pipe(
+                    Effect.flatMap((result) =>
+                      transformResult(result, (type, value) =>
+                        Schema.encodeUnknownEffect(DataType.JsonValueSchema(type))(value),
+                      ),
+                    ),
+                  ),
+                )
+                .pipe(
+                  Effect.flatMap((result) =>
+                    transformResult(result, (type, value) =>
+                      Schema.decodeUnknownEffect(DataType.JsonValueSchema(type))(value),
+                    ),
+                  ),
+                );
 
-        for (const output of result.outputs)
+        for (const output of result.outputs) {
+          const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
+          if (
+            ports.length !== 1 ||
+            nodeIO.executionOutputs.some((port) => port.id === output.outputId) ||
+            !DataType.isValue(ports[0]!.type, output.value)
+          ) {
+            return yield* new InvalidOutputValue({
+              nodeId: node.id,
+              outputId: output.outputId,
+              reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
+            });
+          }
           state.outputs.set(outputKey(node.id, output.outputId), output.value);
-        return result.executionOutputId;
+        }
+        return { executionOutputId: result.executionOutputId, traceId };
       });
 
       const runPureNode = Effect.fnUntraced(function* (
         node: Node.Model,
         schema: Registration.RegisteredSchema,
+        executionPath: string,
+        parentTraceId: string,
       ): Effect.fn.Return<void, ExecutorError> {
         if (state.completedPureNodes.has(node.id)) return;
         if (state.runningPureNodes.has(node.id))
           return yield* new ExecutionCycle({ nodeId: node.id });
         state.runningPureNodes.add(node.id);
-        yield* runNode(node, schema);
+        yield* runNode(node, schema, executionPath, parentTraceId);
         state.runningPureNodes.delete(node.id);
         state.completedPureNodes.add(node.id);
       });
@@ -226,74 +486,182 @@ export const make = Effect.fnUntraced(function* (
       const resolveInput = Effect.fnUntraced(function* (
         node: Node.Model,
         input: Registration.DataInputRef,
+        executionPath: string,
+        parentTraceId: string,
       ): Effect.fn.Return<unknown, ExecutorError> {
-        const connection = graph.connections.find(
+        const connections = graph.connections.filter(
           (candidate) => candidate.inNodeId === node.id && candidate.inIoId === input.id,
         );
+        if (connections.length > 1)
+          return yield* new InvalidConnection({
+            connectionId: connections[1]!.id,
+            reason: `Input ${input.id} has multiple connections`,
+          });
+        const connection = connections[0];
         if (connection === undefined) {
-          if (Object.hasOwn(node.properties, input.id)) return node.properties[input.id];
-          if (input.defaultValue !== undefined) return input.defaultValue;
+          if (Object.hasOwn(node.inputDefaults, input.id)) {
+            return yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type))(
+              node.inputDefaults[input.id],
+            ).pipe(
+              Effect.catchTag(
+                "SchemaError",
+                () =>
+                  new InvalidInputValue({
+                    nodeId: node.id,
+                    inputId: input.id,
+                    reason: `Stored default does not match ${input.type._tag}`,
+                  }),
+              ),
+            );
+          }
+          if (input.defaultValue !== undefined) {
+            if (DataType.isValue(input.type, input.defaultValue)) return input.defaultValue;
+            return yield* new InvalidInputValue({
+              nodeId: node.id,
+              inputId: input.id,
+              reason: `Declaration default does not match ${input.type._tag}`,
+            });
+          }
           return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
         }
 
         const sourceNode = yield* Graph.getNode(graph, connection.outNodeId);
         const sourceSchema = yield* getSchema(registeredPlugins, sourceNode);
-        if (!sourceSchema.dataOutputs.some((output) => output.id === connection.outIoId))
+        if (sourceSchema.type === "pure")
+          yield* runPureNode(
+            sourceNode,
+            sourceSchema,
+            `${executionPath}/data:${connection.id}`,
+            parentTraceId,
+          );
+        const sourceIO =
+          state.nodeIO.get(sourceNode.id) ??
+          sourceSchema.generateIO(yield* resolveProperties(sourceNode, sourceSchema));
+        const outputs = sourceIO.dataOutputs.filter(
+          (candidate) => candidate.id === connection.outIoId,
+        );
+        const executionOutputs = sourceIO.executionOutputs.filter(
+          (candidate) => candidate.id === connection.outIoId,
+        );
+        if (outputs.length !== 1 || executionOutputs.length !== 0)
           return yield* new InvalidConnection({
             connectionId: connection.id,
             reason: `Output ${connection.outIoId} is not a data output`,
           });
-        if (sourceSchema.type === "pure") yield* runPureNode(sourceNode, sourceSchema);
-
+        const output = outputs[0]!;
+        if (!DataType.equals(output.type, input.type))
+          return yield* new InvalidConnection({
+            connectionId: connection.id,
+            reason: `Output ${connection.outIoId} is incompatible with input ${input.id}`,
+          });
         const key = outputKey(sourceNode.id, connection.outIoId);
         if (!state.outputs.has(key))
           return yield* new MissingOutput({
             nodeId: sourceNode.id,
             outputId: connection.outIoId,
           });
-        return state.outputs.get(key);
+        const value = state.outputs.get(key);
+        if (!DataType.isValue(input.type, value))
+          return yield* new InvalidInputValue({
+            nodeId: node.id,
+            inputId: input.id,
+            reason: `Connected value does not match ${input.type._tag}`,
+          });
+        return value;
       });
 
       const selectOutput = (
-        schema: Registration.RegisteredSchema,
+        io: Registration.RegisteredNodeIO,
         selected: void | Registration.ExecutionOutputRef,
       ) =>
         selected ??
-        schema.executionOutputs.find((output) => output.id === "exec") ??
-        (schema.executionOutputs.length === 1 ? schema.executionOutputs[0] : undefined);
+        io.executionOutputs.find((output) => output.id === "exec") ??
+        (io.executionOutputs.length === 1 ? io.executionOutputs[0] : undefined);
 
-      let currentNode = eventNode;
-      let currentSchema = eventSchema;
-      let selectedOutputId = yield* runNode(currentNode, currentSchema);
-      const executed = new Set<string>([eventNode.id]);
+      const followExecution = (
+        currentNode: Node.Model,
+        currentSchema: Registration.RegisteredSchema,
+        outputId: string,
+        sourceTraceId: string,
+        executionPath: string,
+        path: ReadonlySet<string>,
+      ): Effect.Effect<void, ExecutorError> =>
+        Effect.gen(function* () {
+          const connections = graph.connections.filter(
+            (candidate) => candidate.outNodeId === currentNode.id && candidate.outIoId === outputId,
+          );
+          if (connections.length === 0) return;
+          const currentIO =
+            state.nodeIO.get(currentNode.id) ??
+            currentSchema.generateIO(yield* resolveProperties(currentNode, currentSchema));
+          if (
+            currentIO.executionOutputs.filter((output) => output.id === outputId).length !== 1 ||
+            currentIO.dataOutputs.some((output) => output.id === outputId)
+          )
+            return yield* new InvalidConnection({
+              connectionId: connections[0]!.id,
+              reason: `Output ${outputId} is not an unambiguous execution output`,
+            });
 
-      while (selectedOutputId !== null) {
-        const outputId = selectedOutputId;
-        const connection = graph.connections.find(
-          (candidate) => candidate.outNodeId === currentNode.id && candidate.outIoId === outputId,
+          for (const connection of connections) {
+            const incoming = graph.connections.filter(
+              (candidate) =>
+                candidate.inNodeId === connection.inNodeId &&
+                candidate.inIoId === connection.inIoId,
+            );
+            if (incoming.length > 1)
+              return yield* new InvalidConnection({
+                connectionId: incoming[1]!.id,
+                reason: `Input ${connection.inIoId} has multiple connections`,
+              });
+
+            const nextNode = yield* Graph.getNode(graph, connection.inNodeId);
+            if (path.has(nextNode.id)) return yield* new ExecutionCycle({ nodeId: nextNode.id });
+            const nextSchema = yield* getSchema(registeredPlugins, nextNode);
+            if (nextSchema.type !== "exec")
+              return yield* new InvalidConnection({
+                connectionId: connection.id,
+                reason: `Execution flow cannot target a ${nextSchema.type} schema`,
+              });
+            const nextIO = nextSchema.generateIO(yield* resolveProperties(nextNode, nextSchema));
+            if (
+              nextIO.executionInputs.filter((input) => input.id === connection.inIoId).length !==
+                1 ||
+              nextIO.dataInputs.some((input) => input.id === connection.inIoId)
+            )
+              return yield* new InvalidConnection({
+                connectionId: connection.id,
+                reason: `Input ${connection.inIoId} is not an execution input`,
+              });
+
+            state.completedPureNodes.clear();
+            state.runningPureNodes.clear();
+            const nextExecutionPath = `${executionPath}/exec:${connection.id}`;
+            const result = yield* runNode(nextNode, nextSchema, nextExecutionPath, sourceTraceId);
+            if (result.executionOutputId !== null) {
+              yield* followExecution(
+                nextNode,
+                nextSchema,
+                result.executionOutputId,
+                result.traceId,
+                nextExecutionPath,
+                new Set([...path, nextNode.id]),
+              );
+            }
+          }
+        });
+
+      const executionPath = `event:${eventNode.id}`;
+      const eventResult = yield* runNode(eventNode, eventSchema, executionPath);
+      if (eventResult.executionOutputId !== null) {
+        yield* followExecution(
+          eventNode,
+          eventSchema,
+          eventResult.executionOutputId,
+          eventResult.traceId,
+          executionPath,
+          new Set([eventNode.id]),
         );
-        if (connection === undefined) break;
-
-        const nextNode = yield* Graph.getNode(graph, connection.inNodeId);
-        if (executed.has(nextNode.id)) return yield* new ExecutionCycle({ nodeId: nextNode.id });
-        const nextSchema = yield* getSchema(registeredPlugins, nextNode);
-        if (nextSchema.type !== "exec")
-          return yield* new InvalidConnection({
-            connectionId: connection.id,
-            reason: `Execution flow cannot target a ${nextSchema.type} schema`,
-          });
-        if (!nextSchema.executionInputs.some((input) => input.id === connection.inIoId))
-          return yield* new InvalidConnection({
-            connectionId: connection.id,
-            reason: `Input ${connection.inIoId} is not an execution input`,
-          });
-
-        state.completedPureNodes.clear();
-        state.runningPureNodes.clear();
-        executed.add(nextNode.id);
-        currentNode = nextNode;
-        currentSchema = nextSchema;
-        selectedOutputId = yield* runNode(currentNode, currentSchema);
       }
     });
 
@@ -306,7 +674,7 @@ export const make = Effect.fnUntraced(function* (
             Effect.gen(function* () {
               const schema = yield* getSchema(registeredPlugins, node);
               if (schema.type !== "event") return;
-              const matches = yield* schema.matches(event, node.properties);
+              const matches = yield* schema.matches(event, yield* resolveProperties(node, schema));
               if (matches) yield* executeEventNode(graph, node, schema);
             }),
           { concurrency: "unbounded", discard: true },

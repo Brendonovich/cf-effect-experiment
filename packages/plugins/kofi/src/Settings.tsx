@@ -1,17 +1,161 @@
+import { createStateMachine } from "@macrograph/editor-ui";
+import { colors } from "@macrograph/editor-ui/tokens.stylex";
+import { ClientSettings } from "@macrograph/plugin";
+import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
 import { For, Show, action, createSignal, type Component } from "solid-js";
 
-import type { ClientState, WebhookId } from "./Definition.ts";
+import { ClientRpcs, ClientState, type WebhookId } from "./Definition.ts";
+import KofiPlugin from "./Plugin.ts";
+
+const sm = "@media (min-width: 640px)";
+const styles = stylex.create({
+  root: { color: colors.gray12 },
+  webhookRow: {
+    alignItems: "center",
+    borderBottom: `1px solid ${colors.gray6}`,
+    columnGap: 8,
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
+    paddingBlock: 8,
+    rowGap: 2,
+  },
+  nameBox: { height: 24, marginLeft: -6, maxWidth: "100%", minWidth: 0, width: 224 },
+  focus: {
+    boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
+    outline: "none",
+  },
+  nameButton: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    border: 0,
+    borderRadius: 4,
+    color: colors.gray12,
+    fontSize: 12,
+    fontWeight: 500,
+    height: "100%",
+    overflow: "hidden",
+    paddingInline: 6,
+    textAlign: "left",
+    textOverflow: "ellipsis",
+    transitionProperty: "background-color",
+    whiteSpace: "nowrap",
+    width: "100%",
+  },
+  nameInput: {
+    backgroundColor: colors.gray1,
+    border: `1px solid ${colors.gray7}`,
+    borderRadius: 4,
+    color: colors.gray12,
+    fontSize: 12,
+    height: "100%",
+    minWidth: 0,
+    paddingInline: 6,
+    width: "100%",
+  },
+  remove: {
+    alignSelf: "center",
+    backgroundColor: { default: "transparent", ":hover": colors.red3, ":disabled": colors.red3 },
+    border: 0,
+    borderRadius: 4,
+    color: { default: colors.red10, ":disabled": colors.red9 },
+    fontSize: 12,
+    fontWeight: 500,
+    gridColumnStart: 2,
+    gridRow: "1 / span 2",
+    height: 28,
+    padding: "4px 8px",
+    transitionProperty: "background-color",
+  },
+  copyWrap: { minWidth: 0, position: "relative" },
+  copyButton: {
+    backgroundColor: "transparent",
+    border: 0,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+    display: "block",
+    fontFamily: "monospace",
+    fontSize: 12,
+    overflow: "hidden",
+    textAlign: "left",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    width: "100%",
+  },
+  tooltip: {
+    backgroundColor: colors.gray1,
+    border: `1px solid ${colors.gray6}`,
+    borderRadius: 3,
+    bottom: "100%",
+    color: colors.gray12,
+    fontSize: 11,
+    fontWeight: 500,
+    left: "50%",
+    marginBottom: 5,
+    opacity: 0,
+    padding: "2px 6px",
+    pointerEvents: "none",
+    position: "absolute",
+    transform: "translateX(-50%)",
+    transition: "opacity .15s",
+    zIndex: 10,
+  },
+  tooltipVisible: { opacity: 1 },
+  addSection: {
+    backgroundColor: colors.gray3,
+    borderRadius: 6,
+    marginBottom: 8,
+    padding: 12,
+  },
+  heading: { fontSize: 12, fontWeight: 600, margin: 0 },
+  addRow: {
+    alignItems: { default: "stretch", [sm]: "center" },
+    display: "flex",
+    flexDirection: { default: "column", [sm]: "row" },
+    gap: 8,
+    marginTop: 8,
+  },
+  input: {
+    backgroundColor: colors.gray2,
+    borderColor: { default: colors.gray6, ":focus": colors.gray8 },
+    borderRadius: 2,
+    borderStyle: "solid",
+    borderWidth: 1,
+    color: { default: colors.gray12, "::placeholder": colors.gray9 },
+    fontSize: 12,
+    minWidth: 0,
+    padding: "6px 8px",
+  },
+  nameNew: { width: { default: "auto", [sm]: 160 } },
+  token: { flex: 1, fontFamily: { default: "monospace", "::placeholder": "sans-serif" } },
+  addButton: {
+    alignSelf: "flex-end",
+    backgroundColor: {
+      default: colors.gray12,
+      ":hover": colors.gray11,
+      ":disabled": colors.gray10,
+    },
+    border: 0,
+    borderRadius: 4,
+    color: colors.gray1,
+    fontSize: 12,
+    fontWeight: 500,
+    height: 28,
+    padding: "4px 8px",
+    transitionProperty: "background-color",
+  },
+  status: { color: colors.gray11, fontSize: 12, fontStyle: "italic" },
+  invalid: { color: colors.red10, fontSize: 12 },
+});
 
 export interface SettingsEndpoint {
   readonly id: string;
   readonly url: string;
-  readonly handlerId: string;
+  readonly schema: { readonly id: string; readonly displayName: string };
   readonly instanceKey: string;
+  readonly displayName?: string;
 }
 
 export interface SettingsProps {
-  readonly state: typeof ClientState.Type;
+  readonly state: () => typeof ClientState.Type;
   readonly endpoints: ReadonlyArray<SettingsEndpoint>;
   readonly rpc: {
     readonly KofiCreateWebhook: (payload: {
@@ -29,24 +173,59 @@ export interface SettingsProps {
   readonly onChanged: () => Promise<void>;
 }
 
+type WebhookEditState = {
+  context: { readonly webhookId: WebhookId; name: string } | undefined;
+  mode: "idle" | "editing" | "saving" | "failed";
+};
+
 const Settings: Component<SettingsProps> = (props) => {
   const [name, setName] = createSignal("");
   const [verificationToken, setVerificationToken] = createSignal("");
   const [status, setStatus] = createSignal("");
   const [copied, setCopied] = createSignal<string>();
-  const [editingWebhook, setEditingWebhook] = createSignal<WebhookId>();
-  const [editedName, setEditedName] = createSignal("");
+  const [webhookEdit, webhookEditActions] = createStateMachine(
+    { context: undefined, mode: "idle" } as WebhookEditState,
+    {
+      start(state, webhookId: WebhookId, name: string) {
+        state.context = { webhookId, name };
+        state.mode = "editing";
+      },
+      change(state, webhookId: WebhookId, name: string) {
+        if (state.context?.webhookId !== webhookId || state.mode === "saving") return;
+        state.context.name = name;
+        state.mode = "editing";
+      },
+      save(state, webhookId: WebhookId) {
+        if (state.context?.webhookId === webhookId) state.mode = "saving";
+      },
+      failure(state, webhookId: WebhookId) {
+        if (state.context?.webhookId === webhookId && state.mode === "saving") {
+          state.mode = "failed";
+        }
+      },
+      success(state, webhookId: WebhookId) {
+        if (state.context?.webhookId !== webhookId || state.mode !== "saving") return;
+        state.context = undefined;
+        state.mode = "idle";
+      },
+      cancel(state) {
+        state.context = undefined;
+        state.mode = "idle";
+      },
+    },
+  );
+  const [activeTooltip, setActiveTooltip] = createSignal<string>();
 
   const endpointFor = (webhookId: WebhookId) =>
     props.endpoints.find(
-      (endpoint) => endpoint.handlerId === "kofi:payment" && endpoint.instanceKey === webhookId,
+      (endpoint) => endpoint.schema.id === "kofi:payment" && endpoint.instanceKey === webhookId,
     );
 
   const createWebhook = action(async function* () {
     const webhookName = name().trim();
     const token = verificationToken().trim();
     if (webhookName.length === 0 || token.length === 0) return;
-    setStatus("Creating webhook...");
+    setStatus("");
     yield;
     const result = await Effect.runPromise(
       props.rpc.KofiCreateWebhook({ name: webhookName, verificationToken: token }),
@@ -66,10 +245,15 @@ const Settings: Component<SettingsProps> = (props) => {
   });
 
   const renameWebhook = action(async function* (webhookId: WebhookId) {
-    const webhookName = editedName().trim();
-    setEditingWebhook(undefined);
-    if (webhookName.length === 0) return;
-    setStatus("Renaming webhook...");
+    const edit = webhookEdit;
+    if (edit.mode === "saving" || edit.context?.webhookId !== webhookId) return;
+    const webhookName = edit.context.name.trim();
+    if (webhookName.length === 0) {
+      webhookEditActions.cancel();
+      return;
+    }
+    webhookEditActions.save(webhookId);
+    setStatus("");
     yield;
     const result = await Effect.runPromise(
       props.rpc.KofiRenameWebhook({ webhookId, name: webhookName }),
@@ -79,15 +263,17 @@ const Settings: Component<SettingsProps> = (props) => {
     );
     yield;
     if (!result.success) {
+      webhookEditActions.failure(webhookId);
       setStatus(`Could not rename webhook: ${String(result.error)}`);
       return;
     }
+    webhookEditActions.success(webhookId);
     yield props.onChanged();
     setStatus("");
   });
 
   const removeWebhook = action(async function* (webhookId: WebhookId) {
-    setStatus("Removing webhook...");
+    setStatus("");
     yield;
     const result = await Effect.runPromise(props.rpc.KofiRemoveWebhook({ webhookId })).then(
       () => ({ success: true as const }),
@@ -139,91 +325,15 @@ const Settings: Component<SettingsProps> = (props) => {
   };
 
   return (
-    <section class="text-gray-12">
-      <For each={props.state.webhooks}>
-        {(webhook) => {
-          const endpoint = () => endpointFor(webhook.id);
-          return (
-            <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-gray-6 py-3 first:pt-0">
-              <div class="-ml-2 h-7 w-64 max-w-full min-w-0">
-                <Show
-                  when={editingWebhook() === webhook.id}
-                  fallback={
-                    <button
-                      type="button"
-                      class="focus-ring h-full w-full truncate rounded bg-transparent px-2 text-left text-sm font-medium text-gray-12 transition-colors hover:bg-gray-3"
-                      title="Rename webhook"
-                      onClick={() => {
-                        setEditedName(webhook.name);
-                        setEditingWebhook(webhook.id);
-                      }}
-                    >
-                      {webhook.name}
-                    </button>
-                  }
-                >
-                  <input
-                    ref={(input) =>
-                      queueMicrotask(() => {
-                        input.focus();
-                        input.select();
-                      })
-                    }
-                    type="text"
-                    aria-label="Webhook name"
-                    class="focus-ring h-full w-full min-w-0 rounded border border-gray-7 bg-gray-1 px-2 text-sm text-gray-12"
-                    value={editedName()}
-                    onInput={(event) => setEditedName(event.currentTarget.value)}
-                    onBlur={() => {
-                      if (editingWebhook() === webhook.id) void renameWebhook(webhook.id);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void renameWebhook(webhook.id);
-                      if (event.key === "Escape") setEditingWebhook(undefined);
-                    }}
-                  />
-                </Show>
-              </div>
-              <button
-                type="button"
-                class="focus-ring col-start-2 row-span-2 row-start-1 h-8 self-center rounded bg-transparent px-2.5 py-1 text-sm font-medium text-red-10 transition-colors enabled:hover:bg-red-3 disabled:bg-red-3 disabled:text-red-9"
-                onClick={() => void removeWebhook(webhook.id)}
-              >
-                Remove
-              </button>
-              <Show
-                when={endpoint()}
-                fallback={<div class="min-w-0 text-xs italic text-gray-11">Provisioning...</div>}
-              >
-                {(resolved) => (
-                  <div class="group/copy relative min-w-0">
-                    <button
-                      type="button"
-                      class="focus-ring block w-full truncate text-left font-mono text-xs text-gray-11 hover:text-gray-12"
-                      aria-label={`Copy webhook URL for ${webhook.name}`}
-                      onClick={() => void copyEndpoint(resolved())}
-                    >
-                      {resolved().url}
-                    </button>
-                    <span class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 translate-y-1 scale-95 rounded border border-gray-6 bg-gray-2 px-2 py-1 text-[11px] font-medium text-gray-12 opacity-0 shadow-xl transition group-hover/copy:translate-y-0 group-hover/copy:scale-100 group-hover/copy:opacity-100 group-focus-within/copy:translate-y-0 group-focus-within/copy:scale-100 group-focus-within/copy:opacity-100">
-                      {copied() === resolved().id ? "Copied" : "Copy URL"}
-                      <span class="absolute -bottom-1 left-1/2 size-2 -translate-x-1/2 rotate-45 border-b border-r border-gray-6 bg-gray-2" />
-                    </span>
-                  </div>
-                )}
-              </Show>
-            </div>
-          );
-        }}
-      </For>
-      <section class="py-3">
-        <h3 class="text-sm font-semibold">Add webhook</h3>
-        <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+    <section sx={styles.root}>
+      <section sx={styles.addSection}>
+        <h3 sx={styles.heading}>Add webhook</h3>
+        <div sx={styles.addRow}>
           <input
             type="text"
             aria-label="Webhook name"
             autocomplete="off"
-            class="focus-ring min-w-0 rounded-md border border-gray-6 bg-gray-1 px-3 py-2 text-xs text-gray-12 placeholder:text-gray-9 focus:border-gray-8 sm:w-48"
+            sx={[styles.focus, styles.input, styles.nameNew]}
             value={name()}
             onInput={(event) => setName(event.currentTarget.value)}
             placeholder="Name"
@@ -233,7 +343,7 @@ const Settings: Component<SettingsProps> = (props) => {
             type="password"
             aria-label="Ko-fi verification token"
             autocomplete="off"
-            class="focus-ring min-w-0 flex-1 rounded-md border border-gray-6 bg-gray-1 px-3 py-2 font-mono text-xs text-gray-12 placeholder:font-sans placeholder:text-gray-9 focus:border-gray-8"
+            sx={[styles.focus, styles.input, styles.token]}
             value={verificationToken()}
             onInput={(event) => setVerificationToken(event.currentTarget.value)}
             onPaste={(event) => {
@@ -254,7 +364,7 @@ const Settings: Component<SettingsProps> = (props) => {
           />
           <button
             type="button"
-            class="focus-ring h-8 self-end rounded bg-gray-12 px-2.5 py-1 text-sm font-medium text-gray-1 transition-colors hover:bg-gray-11 disabled:bg-gray-10"
+            sx={[styles.focus, styles.addButton]}
             disabled={name().trim().length === 0 || verificationToken().trim().length === 0}
             onClick={() => void createWebhook()}
           >
@@ -262,11 +372,117 @@ const Settings: Component<SettingsProps> = (props) => {
           </button>
         </div>
       </section>
+      <For each={props.state().webhooks}>
+        {(webhook) => {
+          const endpoint = () => endpointFor(webhook.id);
+          return (
+            <div sx={styles.webhookRow}>
+              <div sx={styles.nameBox}>
+                <Show
+                  when={webhookEdit.context?.webhookId === webhook.id}
+                  fallback={
+                    <button
+                      type="button"
+                      sx={[styles.focus, styles.nameButton]}
+                      title="Rename webhook"
+                      onClick={() => {
+                        webhookEditActions.start(
+                          webhook.id,
+                          endpoint()?.displayName ?? webhook.name,
+                        );
+                      }}
+                    >
+                      {endpoint()?.displayName ?? webhook.name}
+                    </button>
+                  }
+                >
+                  <input
+                    ref={(input) =>
+                      queueMicrotask(() => {
+                        input.focus();
+                        input.select();
+                      })
+                    }
+                    type="text"
+                    aria-label="Webhook name"
+                    sx={[styles.focus, styles.nameInput]}
+                    value={webhookEdit.context?.name ?? ""}
+                    readonly={webhookEdit.mode === "saving"}
+                    onInput={(event) => {
+                      webhookEditActions.change(webhook.id, event.currentTarget.value);
+                    }}
+                    onBlur={() => {
+                      if (webhookEdit.context?.webhookId === webhook.id) {
+                        void renameWebhook(webhook.id);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void renameWebhook(webhook.id);
+                      if (event.key === "Escape") webhookEditActions.cancel();
+                    }}
+                  />
+                </Show>
+              </div>
+              <button
+                type="button"
+                sx={[styles.focus, styles.remove]}
+                onClick={() => void removeWebhook(webhook.id)}
+              >
+                Remove
+              </button>
+              <Show when={endpoint()}>
+                {(resolved) => (
+                  <div
+                    sx={styles.copyWrap}
+                    onMouseEnter={() => setActiveTooltip(resolved().id)}
+                    onMouseLeave={() => setActiveTooltip(undefined)}
+                    onFocusIn={() => setActiveTooltip(resolved().id)}
+                    onFocusOut={() => setActiveTooltip(undefined)}
+                  >
+                    <button
+                      type="button"
+                      sx={[styles.focus, styles.copyButton]}
+                      aria-label={`Copy webhook URL for ${resolved().displayName ?? webhook.name}`}
+                      onClick={() => void copyEndpoint(resolved())}
+                    >
+                      {resolved().url}
+                    </button>
+                    <span
+                      sx={[
+                        styles.tooltip,
+                        activeTooltip() === resolved().id && styles.tooltipVisible,
+                      ]}
+                    >
+                      {copied() === resolved().id ? "Copied" : "Copy URL"}
+                    </span>
+                  </div>
+                )}
+              </Show>
+            </div>
+          );
+        }}
+      </For>
       <Show when={status().length > 0}>
-        <div class="text-xs italic text-gray-11">{status()}</div>
+        <div sx={styles.status}>{status()}</div>
       </Show>
     </section>
   );
 };
 
 export default Settings;
+
+export const settings = ClientSettings.make({
+  plugin: KofiPlugin,
+  state: ClientState,
+  initial: { webhooks: [] },
+  rpcs: ClientRpcs,
+  render: (state, context) => (
+    <Settings
+      state={state}
+      endpoints={context.endpoints}
+      rpc={context.rpc}
+      onChanged={context.onChanged}
+    />
+  ),
+  renderInvalid: () => <p sx={styles.invalid}>Plugin settings state is unavailable.</p>,
+});

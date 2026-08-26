@@ -1,0 +1,320 @@
+import type { EditorEvent } from "@macrograph/editor";
+
+import { IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
+import { Effect, type Schema } from "effect";
+import { createSignal } from "solid-js";
+
+import type { createEditorConnection } from "./session/createEditorConnection";
+import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
+import type { createEditorStore } from "./store";
+
+import { runFork, runPromise } from "../observability/browserTracing";
+import { portsCompatible, type PortEndpoint } from "./graph/connectionAuthoring";
+import {
+  graphNodeInputs,
+  graphNodeOutputs,
+  graphNodeWidth,
+  graphPortOffset,
+} from "./graph/graphPresentation";
+
+export function createEditorCommands(
+  editor: ReturnType<typeof createEditorStore>,
+  connection: Pick<ReturnType<typeof createEditorConnection>, "client" | "canEdit">,
+  workspace: Pick<
+    ReturnType<typeof createEditorWorkspace>,
+    | "selectedGraphId"
+    | "selectedGraph"
+    | "selectedNodeId"
+    | "setSelectedGraphId"
+    | "setSelectedNodeIds"
+  >,
+) {
+  const { client, canEdit } = connection;
+  const { selectedGraphId, selectedGraph, selectedNodeId, setSelectedGraphId, setSelectedNodeIds } =
+    workspace;
+  const applyMutation = <Event extends EditorEvent.EditorEvent, Error, Requirements>(
+    effect: Effect.Effect<Event, Error, Requirements>,
+  ) => effect.pipe(Effect.tap((event) => Effect.sync(() => editor.applyEvent(event))));
+  const [editingName, setEditingName] = createSignal<
+    { type: "graph"; id: string } | { type: "node"; id: string } | null
+  >(null);
+  const [positioningNodes, setPositioningNodes] = createSignal<
+    ReadonlyArray<{ graphId: string; nodeId: string }>
+  >([]);
+  const editingGraphNameId = () => {
+    const editing = editingName();
+    return editing?.type === "graph" ? editing.id : null;
+  };
+  const editingNodeNameId = () => {
+    const editing = editingName();
+    return editing?.type === "node" ? editing.id : null;
+  };
+  const createConstant = (resource: ResourceConstant.ResourceRef) => {
+    const c = client();
+    if (c && canEdit())
+      runFork(
+        applyMutation(c.CreateResourceConstant({ resource })).pipe(Effect.tapError(Effect.log)),
+      );
+  };
+  const renameConstant = (constantId: string, name: string) => {
+    const c = client();
+    if (c && canEdit())
+      runFork(
+        applyMutation(c.RenameResourceConstant({ constantId, name })).pipe(
+          Effect.tapError(Effect.log),
+        ),
+      );
+  };
+  const selectConstant = (constantId: string, value: Schema.Json) => {
+    const c = client();
+    if (c && canEdit())
+      runFork(
+        applyMutation(c.SelectResourceConstant({ constantId, value })).pipe(
+          Effect.tapError(Effect.log),
+        ),
+      );
+  };
+  const deleteConstant = (constantId: string) => {
+    const c = client();
+    if (c && canEdit())
+      runFork(
+        applyMutation(c.DeleteResourceConstant({ constantId })).pipe(Effect.tapError(Effect.log)),
+      );
+  };
+  const deleteNode = (nodeId: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.DeleteNode({ graphId, nodeId })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+    setSelectedNodeIds((ids) => ids.filter((id) => id !== nodeId));
+  };
+  const createGraph = () => {
+    const c = client();
+    if (!c || !canEdit()) return;
+    runFork(
+      applyMutation(c.CreateGraph({ graph: {} })).pipe(
+        Effect.tap((event) => Effect.sync(() => setSelectedGraphId(event.graph.id))),
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const createNode = (
+    schema: SchemaRef,
+    name: string,
+    position: { x: number; y: number },
+    source?: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
+  ) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    return runPromise(
+      applyMutation(c.CreateNode({ graphId, node: { name, schema, position } })).pipe(
+        Effect.flatMap((event) => {
+          if (source === undefined) return Effect.void;
+          const targetPorts =
+            source.direction === "output" ? graphNodeInputs(event.io) : graphNodeOutputs(event.io);
+          const targetPort = targetPorts.find((port) => portsCompatible(source.port, port));
+          if (targetPort === undefined)
+            return applyMutation(c.DeleteNode({ graphId, nodeId: event.node.id })).pipe(
+              Effect.asVoid,
+            );
+          const output =
+            source.direction === "output"
+              ? { nodeId: source.nodeId, port: source.port }
+              : { nodeId: event.node.id, port: targetPort };
+          const input =
+            source.direction === "input"
+              ? { nodeId: source.nodeId, port: source.port }
+              : { nodeId: event.node.id, port: targetPort };
+          const offset = graphPortOffset(
+            graphNodeWidth(event.io, event.node.name),
+            source.direction === "output" ? "input" : "output",
+            targetPorts.indexOf(targetPort),
+          );
+          const alignedPosition = { x: position.x - offset.x, y: position.y - offset.y };
+          const positioning = { graphId, nodeId: event.node.id };
+          setPositioningNodes((nodes) => [...nodes, positioning]);
+          editor.updateNodePosition(graphId, event.node.id, alignedPosition.x, alignedPosition.y);
+          return applyMutation(
+            c.SetNodePosition({
+              graphId,
+              nodeId: event.node.id,
+              ...alignedPosition,
+            }),
+          ).pipe(
+            Effect.andThen(() =>
+              applyMutation(
+                c.CreateConnection({
+                  graphId,
+                  connection: {
+                    outNodeId: output.nodeId,
+                    outIoId: IoId.make(output.port.id),
+                    inNodeId: input.nodeId,
+                    inIoId: IoId.make(input.port.id),
+                  },
+                }),
+              ),
+            ),
+            Effect.catchCause((cause) =>
+              applyMutation(c.DeleteNode({ graphId, nodeId: event.node.id })).pipe(
+                Effect.catchCause(() => Effect.void),
+                Effect.andThen(Effect.failCause(cause)),
+              ),
+            ),
+            Effect.asVoid,
+            Effect.ensuring(
+              Effect.sync(() => {
+                // Keep smoothing disabled through a paint, even when the local RPC finishes immediately.
+                requestAnimationFrame(() =>
+                  requestAnimationFrame(() =>
+                    setPositioningNodes((nodes) => nodes.filter((node) => node !== positioning)),
+                  ),
+                );
+              }),
+            ),
+          );
+        }),
+        Effect.catchCause(Effect.log),
+      ),
+    );
+  };
+  const setNodeFoldPins = (nodeId: string, foldPins: boolean) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.SetNodeFoldPins({ graphId, nodeId, foldPins })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const renameNode = (name: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    const nodeId = selectedNodeId();
+    if (!c || !graphId || !nodeId || name.trim().length === 0 || !canEdit()) return;
+    runFork(
+      applyMutation(c.SetNodeName({ graphId, nodeId, name: name.trim() })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const renameGraph = (name: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || name.trim().length === 0 || !canEdit()) return;
+    runFork(
+      applyMutation(c.SetGraphName({ graphId, name: name.trim() })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const setNodeProperty = (property: string, value: unknown) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    const nodeId = selectedNodeId();
+    if (!c || !graphId || !nodeId || !canEdit()) return;
+    runFork(
+      applyMutation(c.SetNodeProperty({ graphId, nodeId, property, value })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const clearNodeProperty = (property: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    const nodeId = selectedNodeId();
+    if (!c || !graphId || !nodeId || !canEdit()) return;
+    runFork(
+      applyMutation(c.ClearNodeProperty({ graphId, nodeId, property })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const setInputDefault = (nodeId: string, input: string, value: unknown) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.SetInputDefault({ graphId, nodeId, input, value })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const clearInputDefault = (nodeId: string, input: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.ClearInputDefault({ graphId, nodeId, input })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const getInputSuggestions = (nodeId: string, input: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId) return Promise.resolve([] as ReadonlyArray<string>);
+    return runPromise(
+      c
+        .GetInputSuggestions({ graphId, nodeId, input })
+        .pipe(Effect.catchCause(() => Effect.succeed([]))),
+    );
+  };
+  const disconnectIo = (direction: "input" | "output", nodeId: string, ioId: string) => {
+    const c = client();
+    const graph = selectedGraph();
+    const graphId = selectedGraphId();
+    if (!c || !graph || !graphId || !canEdit()) return;
+    const connections = graph.connections.filter((candidate) =>
+      direction === "input"
+        ? candidate.inNodeId === nodeId && candidate.inIoId === ioId
+        : candidate.outNodeId === nodeId && candidate.outIoId === ioId,
+    );
+    connections.forEach((connection) =>
+      runFork(
+        applyMutation(c.DeleteConnection({ graphId, connectionId: connection.id })).pipe(
+          Effect.tapError(Effect.log),
+          Effect.tapDefect(Effect.log),
+        ),
+      ),
+    );
+  };
+
+  return {
+    isNodePositioning: (nodeId: string) =>
+      positioningNodes().some((node) => node.graphId === selectedGraphId() && node.nodeId === nodeId),
+    setEditingName,
+    editingGraphNameId,
+    editingNodeNameId,
+    createConstant,
+    renameConstant,
+    selectConstant,
+    deleteConstant,
+    createGraph,
+    createNode,
+    deleteNode,
+    setNodeFoldPins,
+    renameNode,
+    renameGraph,
+    setNodeProperty,
+    clearNodeProperty,
+    setInputDefault,
+    clearInputDefault,
+    getInputSuggestions,
+    disconnectIo,
+  };
+}

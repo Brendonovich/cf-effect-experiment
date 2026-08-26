@@ -1,23 +1,28 @@
 {
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist/types",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "types": ["node", "@macrograph/icons/types"],
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "declaration": false,
-    "sourceMap": true,
-    "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true,
-    "skipLibCheck": true,
+    "types": ["node"],
     "jsx": "preserve",
-    "jsxImportSource": "@solidjs/web",
-    "noEmit": true
+    "jsxImportSource": "@solidjs/web"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/cloud-credentials" },
+    { "path": "../../packages/editor" },
+    { "path": "../../packages/editor-ui" },
+    { "path": "../../packages/execution" },
+    { "path": "../../packages/persistence" },
+    { "path": "../../packages/plugin" },
+    { "path": "../../packages/project-host" },
+    { "path": "../../packages/plugins/http-client" },
+    { "path": "../../packages/plugins/obs" },
+    { "path": "../../packages/plugins/twitch" },
+    { "path": "../../packages/plugins/utilities" },
+    { "path": "../../packages/plugins/websocket-client" }
+  ]
 }

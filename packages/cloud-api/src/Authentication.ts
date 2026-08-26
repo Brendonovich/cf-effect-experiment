@@ -1,9 +1,12 @@
 import { Context } from "effect";
 import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
 
+export const sessionCookieName = "macrograph_session";
+export const sessionSecurity = HttpApiSecurity.apiKey({ key: sessionCookieName, in: "cookie" });
+
 export class CurrentUser extends Context.Service<
   CurrentUser,
-  { readonly id: string; readonly sessionId: string }
+  { readonly id: string; readonly sessionId: string | undefined }
 >()("CurrentUser") {}
 
 export class Authentication extends HttpApiMiddleware.Service<
@@ -11,6 +14,5 @@ export class Authentication extends HttpApiMiddleware.Service<
   { provides: CurrentUser }
 >()("Authentication", {
   error: HttpApiError.Unauthorized,
-  requiredForClient: true,
-  security: { session: HttpApiSecurity.bearer },
+  security: { bearer: HttpApiSecurity.http({ scheme: "bearer" }) },
 }) {}

@@ -1,63 +1,75 @@
+import * as PlanetscaleLogicalDb from "@macrograph/planetscale-logical-db";
 import * as Alchemy from "alchemy";
+import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Drizzle from "alchemy/Drizzle";
-import * as Output from "alchemy/Output";
 import * as Planetscale from "alchemy/Planetscale";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
-import { AppDatabaseHyperdrive, RevisionSnapshots } from "./src/AppStorage.ts";
-import { DurableObjectMigrationBundle } from "./src/DurableObjectMigrationBundle.ts";
-import AppWorkerLayer, { AppWorker, WebAssetsDirectory } from "./src/Worker.ts";
+import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
+import { traceDatasetName } from "./src/Observability.ts";
+import {
+	DatabaseHyperdrive,
+	DeploymentSnapshotsBucket,
+} from "./src/Storage.ts";
+import CloudWorkerLayer, {
+	CloudWorker,
+	IngressPublicOrigin,
+	WebAssetsDirectory,
+} from "./src/worker/CloudWorker.ts";
+import { IngressWorker } from "./src/worker/IngressWorker.ts";
+import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 
 export default Alchemy.Stack(
-  "Macrograph",
-  {
-    providers: Layer.mergeAll(
-      Cloudflare.providers(),
-      Drizzle.providers(),
-      Planetscale.providers(),
-      DurableObjectMigrationBundle.providers(),
-    ),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const ctx = yield* Alchemy.AlchemyContext;
-    yield* AppDatabaseHyperdrive;
-    yield* RevisionSnapshots;
+	"MacroGraph",
+	{
+		providers: Layer.mergeAll(
+			Cloudflare.providers(),
+			Axiom.providers(),
+			Drizzle.providers(),
+			Planetscale.providers(),
+			PlanetscaleLogicalDb.providers(),
+			DurableObjectMigrationBundle.providers(),
+		),
+		state: Cloudflare.state(),
+	},
+	Effect.gen(function* () {
+		const ctx = yield* Alchemy.AlchemyContext;
+		yield* DatabaseHyperdrive;
+		yield* DeploymentSnapshotsBucket;
 
-    const playgroundDev = ctx.dev
-      ? yield* Command.Dev("WebAppDevServer", {
-          command: "bun dev-tunnel.ts",
-        })
-      : undefined;
+		const frontendBuild = !ctx.dev
+			? yield* Command.Build("WebAppBuild", {
+					command: "pnpm run build",
+					cwd: "frontend",
+					outdir: "dist",
+					memo: false,
+					env: {
+						...(process.env.AXIOM_ORG_ID === undefined
+							? {}
+							: { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
+						VITE_AXIOM_TRACE_DATASET: traceDatasetName,
+					},
+				})
+			: undefined;
 
-    const playgroundBuild = !ctx.dev
-      ? yield* Command.Build("WebAppBuild", {
-          command: "pnpm run build",
-          cwd: "../playground",
-          outdir: "dist",
-          memo: false,
-        })
-      : undefined;
-
-    const appWorker = yield* AppWorker.pipe(
-      Effect.provide(AppWorkerLayer),
-      Effect.provideService(WebAssetsDirectory, playgroundBuild?.outdir),
-    );
-    const playgroundUrl = playgroundDev
-      ? Output.map(playgroundDev.url, (url) => {
-          if (!url) return undefined;
-          const parsed = new URL(url);
-          parsed.hostname = "0.0.0.0";
-          return parsed.href;
-        })
-      : undefined;
-
-    return {
-      url: playgroundUrl ?? appWorker.url,
-      ...(!ctx.dev && { publicWorkerUrl: appWorker.url }),
-    };
-  }),
+		const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
+			const ingressWorker = yield* IngressWorker;
+			const cloudWorker = yield* CloudWorker.pipe(
+				Effect.provide(CloudWorkerLayer),
+				Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
+				Effect.provideService(IngressPublicOrigin, ingressWorker.url),
+			);
+			return { cloudWorker, ingressWorker };
+		}).pipe(Effect.provide(IngressWorkerLayer));
+		return {
+			url: ctx.dev ? "http://0.0.0.0:5175/" : cloudWorker.url,
+			...(!ctx.dev && {
+				publicWorkerUrl: cloudWorker.url,
+				publicIngressUrl: ingressWorker.url,
+			}),
+		};
+	}),
 );

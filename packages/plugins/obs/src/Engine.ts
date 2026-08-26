@@ -1,4 +1,15 @@
-import { Crypto, HashMap, Option, Scope, Stream, SubscriptionRef } from "effect";
+import {
+  Crypto,
+  Deferred,
+  Fiber,
+  HashMap,
+  Layer,
+  Option,
+  Scope,
+  Semaphore,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import * as Effect from "effect/Effect";
 import { Socket } from "effect/unstable/socket";
 
@@ -18,18 +29,82 @@ import { SocketAddress } from "./Types.ts";
 type SocketConfig = {
   readonly name?: string;
   readonly password?: string;
+  readonly connectOnStartup: boolean;
 };
-
 type SocketEntry = SocketConfig &
   (
     | { readonly state: "disconnected" }
-    | { readonly state: "connecting" }
+    | { readonly state: "error"; readonly error: string }
+    | {
+        readonly state: "connecting";
+        readonly connection: Fiber.Fiber<ObsWebSocket.Client, ConnectionFailed>;
+        readonly canceled: Deferred.Deferred<void>;
+      }
     | { readonly state: "connected"; readonly client: ObsWebSocket.Client }
   );
 
-export default OBSEngine.toLayer((mg) =>
-  Effect.gen(function* () {
-    const state = yield* SubscriptionRef.make(HashMap.empty<SocketAddress, SocketEntry>());
+const isSafeAddress = (address: string) => {
+  try {
+    const url = new URL(address);
+    return (
+      (url.protocol === "ws:" || url.protocol === "wss:") &&
+      url.username === "" &&
+      url.password === "" &&
+      address.length <= 2048
+    );
+  } catch {
+    return false;
+  }
+};
+
+const validateAddress = (address: SocketAddress): Effect.Effect<SocketAddress, ConnectionFailed> =>
+  isSafeAddress(address)
+    ? Effect.succeed(address)
+    : Effect.fail(
+        new ConnectionFailed({
+          reason: "The OBS WebSocket address must be a credential-free ws:// or wss:// URL",
+        }),
+      );
+
+const safeRequestComment = (comment: string | undefined, passwords: ReadonlyArray<string>) => {
+  if (comment === undefined) return undefined;
+  const withoutCredentials = comment.replace(
+    /([a-z][a-z\d+.-]*:\/\/)[^/?#\s]*@/gi,
+    "$1[redacted]@",
+  );
+  return passwords
+    .reduce(
+      (current, password) =>
+        password === "" ? current : current.replaceAll(password, "[redacted]"),
+      withoutCredentials,
+    )
+    .slice(0, 512);
+};
+
+export const make = Effect.fnUntraced(function* () {
+  const mg = yield* OBSEngine.EngineContext;
+  return yield* Effect.gen(function* () {
+    const stored = yield* mg.storage.get;
+    const entries = Object.entries(stored.sockets).flatMap(([address, config]) =>
+      isSafeAddress(address)
+        ? [
+            [
+              SocketAddress.make(address),
+              {
+                ...(config.name === undefined ? {} : { name: config.name }),
+                ...(config.password === undefined ? {} : { password: config.password }),
+                connectOnStartup: config.connectOnStartup,
+                state: "disconnected" as const,
+              },
+            ] as const,
+          ]
+        : [],
+    );
+    const state = yield* SubscriptionRef.make(
+      HashMap.fromIterable<SocketAddress, SocketEntry>(entries),
+    );
+    const settingsLock = yield* Semaphore.make(1);
+    const stateLock = yield* Semaphore.make(1);
     const socketContext = yield* Effect.context<
       Crypto.Crypto | Scope.Scope | Socket.WebSocketConstructor
     >();
@@ -38,55 +113,133 @@ export default OBSEngine.toLayer((mg) =>
       Effect.forkScoped,
     );
 
-    const save = Effect.gen(function* () {
-      const sockets = yield* SubscriptionRef.get(state);
-      yield* mg.storage.set({
-        sockets: Object.fromEntries(
-          [...sockets].map(([address, socket]) => [
-            address,
-            {
-              ...(socket.name === undefined ? {} : { name: socket.name }),
-              ...(socket.password === undefined ? {} : { password: socket.password }),
-              connectOnStartup: true,
-            },
-          ]),
-        ),
-      });
-    });
+    const save = (sockets: HashMap.HashMap<SocketAddress, SocketEntry>) =>
+      mg.storage
+        .set({
+          sockets: Object.fromEntries(
+            [...sockets].map(([address, socket]) => [
+              address,
+              {
+                ...(socket.name === undefined ? {} : { name: socket.name }),
+                ...(socket.password === undefined ? {} : { password: socket.password }),
+                connectOnStartup: socket.connectOnStartup,
+              },
+            ]),
+          ),
+        })
+        .pipe(Effect.andThen(SubscriptionRef.set(state, sockets)));
 
     const setEntry = (address: SocketAddress, entry: SocketEntry) =>
       SubscriptionRef.update(state, HashMap.set(address, entry));
 
     const disconnect = Effect.fnUntraced(function* (address: SocketAddress) {
-      const entry = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
-      if (Option.isNone(entry) || entry.value.state !== "connected") return;
+      const close = yield* Effect.gen(function* () {
+        const entry = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
+        if (
+          Option.isNone(entry) ||
+          (entry.value.state !== "connected" && entry.value.state !== "connecting")
+        )
+          return Effect.void;
 
-      yield* entry.value.client.disconnect;
-      yield* setEntry(address, {
-        ...(entry.value.name === undefined ? {} : { name: entry.value.name }),
-        ...(entry.value.password === undefined ? {} : { password: entry.value.password }),
-        state: "disconnected",
-      });
+        yield* setEntry(address, {
+          ...(entry.value.name === undefined ? {} : { name: entry.value.name }),
+          ...(entry.value.password === undefined ? {} : { password: entry.value.password }),
+          connectOnStartup: entry.value.connectOnStartup,
+          state: "disconnected",
+        });
+        return entry.value.state === "connected"
+          ? entry.value.client.disconnect
+          : Deferred.succeed(entry.value.canceled, undefined).pipe(
+              Effect.andThen(Fiber.interrupt(entry.value.connection)),
+            );
+      }).pipe(stateLock.withPermit);
+      yield* close;
     });
 
     const connect = Effect.fnUntraced(function* (address: SocketAddress) {
-      const current = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
-      if (Option.isNone(current)) return yield* new SocketNotFound({ address });
-      if (current.value.state !== "disconnected") return;
+      const started = yield* Effect.gen(function* () {
+        const current = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
+        if (Option.isNone(current)) return yield* new SocketNotFound({ address });
+        if (current.value.state === "connected" || current.value.state === "connecting")
+          return Option.none<{
+            readonly config: SocketConfig;
+            readonly connection: Fiber.Fiber<ObsWebSocket.Client, ConnectionFailed>;
+            readonly canceled: Deferred.Deferred<void>;
+          }>();
 
-      const config: SocketConfig = {
-        ...(current.value.name === undefined ? {} : { name: current.value.name }),
-        ...(current.value.password === undefined ? {} : { password: current.value.password }),
-      };
-      yield* setEntry(address, { ...config, state: "connecting" });
+        const config: SocketConfig = {
+          ...(current.value.name === undefined ? {} : { name: current.value.name }),
+          ...(current.value.password === undefined ? {} : { password: current.value.password }),
+          connectOnStartup: current.value.connectOnStartup,
+        };
+        const canceled = yield* Deferred.make<void>();
+        const connection = yield* ObsWebSocket.make(address, config.password).pipe(
+          Effect.provideContext(socketContext),
+          Effect.mapError(
+            () =>
+              new ConnectionFailed({
+                reason: "Could not connect to the OBS WebSocket",
+              }),
+          ),
+          Effect.forkScoped,
+        );
+        yield* setEntry(address, {
+          ...config,
+          state: "connecting",
+          connection,
+          canceled,
+        });
+        return Option.some({ config, connection, canceled });
+      }).pipe(stateLock.withPermit);
+      if (Option.isNone(started)) return;
+      const { config, connection, canceled } = started.value;
 
-      const client = yield* ObsWebSocket.make(address, config.password).pipe(
-        Effect.provideContext(socketContext),
-        Effect.mapError((cause) => new ConnectionFailed({ cause })),
-        Effect.tapError(() => setEntry(address, { ...config, state: "disconnected" })),
+      const client = yield* Effect.raceFirst(
+        Fiber.join(connection),
+        Deferred.await(canceled).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new ConnectionFailed({
+                reason: "The OBS WebSocket connection was canceled",
+              }),
+            ),
+          ),
+        ),
+      ).pipe(
+        Effect.tapError((error) =>
+          Effect.gen(function* () {
+            const latest = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
+            if (
+              Option.isSome(latest) &&
+              latest.value.state === "connecting" &&
+              latest.value.connection === connection
+            )
+              yield* setEntry(address, {
+                ...config,
+                state: "error",
+                error: error.reason,
+              });
+          }).pipe(stateLock.withPermit),
+        ),
       );
 
-      yield* setEntry(address, { ...config, state: "connected", client });
+      const installed = yield* Effect.gen(function* () {
+        const latest = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
+        if (
+          Option.isNone(latest) ||
+          latest.value.state !== "connecting" ||
+          latest.value.connection !== connection
+        )
+          return false;
+        yield* setEntry(address, { ...config, state: "connected", client });
+        return true;
+      }).pipe(stateLock.withPermit);
+      if (!installed) {
+        yield* client.disconnect;
+        return yield* new ConnectionFailed({
+          reason: "The OBS WebSocket connection was canceled",
+        });
+      }
 
       yield* client.events.pipe(
         Stream.runForEach((event) =>
@@ -113,22 +266,17 @@ export default OBSEngine.toLayer((mg) =>
       yield* Effect.yieldNow;
     });
 
-    const stored = yield* mg.storage.get;
+    if (entries.length !== Object.keys(stored.sockets).length)
+      yield* save(yield* SubscriptionRef.get(state));
     yield* Effect.forEach(
-      Object.entries(stored.sockets),
-      ([address, config]) =>
-        setEntry(SocketAddress.make(address), {
-          ...(config.name === undefined ? {} : { name: config.name }),
-          ...(config.password === undefined ? {} : { password: config.password }),
-          state: "disconnected",
-        }),
-      { discard: true },
-    );
-    yield* Effect.forEach(
-      Object.entries(stored.sockets),
+      entries,
       ([address, config]) =>
         config.connectOnStartup
-          ? connect(SocketAddress.make(address)).pipe(Effect.catch(() => Effect.void))
+          ? connect(address).pipe(
+              Effect.catch(() => Effect.void),
+              Effect.forkScoped,
+              Effect.asVoid,
+            )
           : Effect.void,
       { discard: true },
     );
@@ -149,6 +297,9 @@ export default OBSEngine.toLayer((mg) =>
           const entry = yield* SubscriptionRef.get(state).pipe(Effect.map(HashMap.get(address)));
           if (Option.isNone(entry) || entry.value.state !== "connected")
             return yield* new SocketNotFound({ address });
+          const passwords = [...(yield* SubscriptionRef.get(state))].flatMap(([, socket]) =>
+            socket.password === undefined ? [] : [socket.password],
+          );
 
           return yield* entry.value.client.call(requestType, requestData).pipe(
             Effect.mapError((error) =>
@@ -156,9 +307,11 @@ export default OBSEngine.toLayer((mg) =>
                 ? new RequestFailed({
                     requestType: error.requestType,
                     code: error.code,
-                    comment: error.comment,
+                    comment: safeRequestComment(error.comment, passwords),
                   })
-                : new ConnectionFailed({ cause: error }),
+                : new ConnectionFailed({
+                    reason: "The OBS WebSocket connection was lost",
+                  }),
             ),
           );
         }),
@@ -169,36 +322,83 @@ export default OBSEngine.toLayer((mg) =>
             sockets: [...sockets].map(([address, socket]) => ({
               ...(socket.name === undefined ? {} : { name: socket.name }),
               address,
+              connectOnStartup: socket.connectOnStartup,
               state: socket.state,
+              ...(socket.state === "error" ? { error: socket.error } : {}),
             })),
           })),
         ),
         rpcs: ClientRpcs.toLayer({
           AddSocket: Effect.fnUntraced(function* ({ address, name, password }) {
-            yield* disconnect(address);
-            yield* setEntry(address, {
-              ...(name === undefined ? {} : { name }),
-              ...(password === undefined ? {} : { password }),
-              state: "disconnected",
-            });
-            yield* save;
-            yield* mg.resource.refresh(OBSSocket);
+            yield* Effect.gen(function* () {
+              yield* validateAddress(address);
+              yield* disconnect(address);
+              const current = yield* SubscriptionRef.get(state);
+              yield* save(
+                HashMap.set(current, address, {
+                  ...(name === undefined ? {} : { name }),
+                  ...(password === undefined ? {} : { password }),
+                  connectOnStartup: true,
+                  state: "disconnected",
+                }),
+              );
+              yield* mg.resource.refresh(OBSSocket);
+            }).pipe(settingsLock.withPermit);
             yield* connect(address).pipe(
               Effect.mapError((error) =>
-                error instanceof SocketNotFound ? new ConnectionFailed({ cause: error }) : error,
+                error instanceof SocketNotFound
+                  ? new ConnectionFailed({
+                      reason: "The OBS socket no longer exists",
+                    })
+                  : error,
               ),
             );
           }),
+          UpdateSocket: Effect.fnUntraced(function* ({
+            currentAddress,
+            address,
+            name,
+            password,
+            connectOnStartup,
+          }) {
+            yield* Effect.gen(function* () {
+              yield* validateAddress(address);
+              const current = yield* SubscriptionRef.get(state).pipe(
+                Effect.map(HashMap.get(currentAddress)),
+              );
+              if (Option.isNone(current))
+                return yield* new SocketNotFound({ address: currentAddress });
+              if (address !== currentAddress) yield* disconnect(address);
+              yield* disconnect(currentAddress);
+              const latest = yield* SubscriptionRef.get(state);
+              yield* save(
+                HashMap.set(HashMap.remove(latest, currentAddress), address, {
+                  ...(name === undefined ? {} : { name }),
+                  ...((password ?? current.value.password) === undefined
+                    ? {}
+                    : { password: password ?? current.value.password }),
+                  connectOnStartup,
+                  state: "disconnected",
+                }),
+              );
+              yield* mg.resource.refresh(OBSSocket);
+            }).pipe(settingsLock.withPermit);
+            if (connectOnStartup) yield* connect(address);
+          }),
           RemoveSocket: Effect.fnUntraced(function* ({ address }) {
             yield* disconnect(address);
-            yield* SubscriptionRef.update(state, HashMap.remove(address));
-            yield* save;
+            yield* save(HashMap.remove(yield* SubscriptionRef.get(state), address));
             yield* mg.resource.refresh(OBSSocket);
-          }),
+          }, settingsLock.withPermit),
           ConnectSocket: ({ address }) => connect(address),
           DisconnectSocket: ({ address }) => disconnect(address),
         }),
       },
     };
-  }),
-);
+  });
+});
+
+export const layer = Layer.effect(OBSEngine)(make());
+export const liveLayer = layer;
+
+export default liveLayer;

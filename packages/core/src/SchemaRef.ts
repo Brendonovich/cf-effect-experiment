@@ -7,7 +7,7 @@ export const SchemaId = Schema.String.pipe(Schema.brand("SchemaId"));
 export type SchemaId = typeof SchemaId.Type;
 
 export const SchemaRef = Schema.Struct({
-  package: PackageId,
-  schema: SchemaId,
+  package: PackageId.annotate({ description: "Package ID returned by searchSchemas." }),
+  schema: SchemaId.annotate({ description: "Node schema ID within the selected package." }),
 });
 export type SchemaRef = typeof SchemaRef.Type;

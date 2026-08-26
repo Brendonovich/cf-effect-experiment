@@ -1,7 +1,7 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, describe, expect, it } from "@effect/vitest";
-import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { Effect, Layer } from "effect";
+import { GraphId, Node, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
+import { Effect, Layer, Schema } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
 import { MemoryFileSystem } from "./MemoryFileSystem";
@@ -17,6 +17,31 @@ const TestLayer = Layer.provideMerge(
 );
 
 describe("JsonPersistence", () => {
+  it.effect("decodes projects written before resource constants were introduced", () =>
+    Effect.gen(function* () {
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
+        name: "Legacy",
+        graphs: {},
+        engines: {},
+      });
+      expect(project.constants).toEqual({});
+    }),
+  );
+
+  it.effect("decodes nodes written before input defaults and folding were introduced", () =>
+    Effect.gen(function* () {
+      const node = yield* Schema.decodeUnknownEffect(Node.Model)({
+        id: "legacy",
+        name: "Legacy",
+        properties: {},
+        schema: { package: "pkg", schema: "schema" },
+        position: { x: 0, y: 0 },
+      });
+      expect(node.inputDefaults).toEqual({});
+      expect(node.foldPins).toBe(false);
+    }),
+  );
+
   it.effect("saveProject then loadProject", () =>
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;
@@ -31,6 +56,7 @@ describe("JsonPersistence", () => {
         name: "My Project",
         graphs: { "graph-1": graph },
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
+        constants: {},
       };
       yield* persistence.saveProject(project);
 
@@ -58,6 +84,7 @@ describe("JsonPersistence", () => {
         name: "Empty",
         graphs: {},
         engines: {},
+        constants: {},
       };
       yield* persistence.saveProject(project);
 
@@ -89,6 +116,7 @@ describe("JsonPersistence", () => {
         name: "P",
         graphs: { "graph-1": graph },
         engines: {},
+        constants: {},
       };
       yield* persistence.saveProject(project);
 
@@ -97,6 +125,8 @@ describe("JsonPersistence", () => {
         name: "original",
         position: { x: 0, y: 0 },
         properties: {},
+        inputDefaults: {},
+        foldPins: false,
         schema,
       };
       yield* persistence.saveNode("graph-1", node);
@@ -142,6 +172,8 @@ describe("JsonPersistence", () => {
         name: "Test Node",
         position: { x: 42, y: 99 },
         properties: { foo: "bar", count: 3 },
+        inputDefaults: { message: "hello" },
+        foldPins: true,
         schema: {
           package: PackageId.make("my-pkg"),
           schema: SchemaId.make("my-schema"),
@@ -157,6 +189,7 @@ describe("JsonPersistence", () => {
         name: "P",
         graphs: { "graph-1": graph },
         engines: {},
+        constants: {},
       };
       yield* persistence.saveProject(project);
 
@@ -168,6 +201,8 @@ describe("JsonPersistence", () => {
       expect(loadedNode.position.x).toBe(42);
       expect(loadedNode.position.y).toBe(99);
       expect(loadedNode.properties).toEqual({ foo: "bar", count: 3 });
+      expect(loadedNode.inputDefaults).toEqual({ message: "hello" });
+      expect(loadedNode.foldPins).toBe(true);
       expect(loadedNode.schema.package).toBe("my-pkg");
       expect(loadedNode.schema.schema).toBe("my-schema");
     }).pipe(Effect.provide(TestLayer)),

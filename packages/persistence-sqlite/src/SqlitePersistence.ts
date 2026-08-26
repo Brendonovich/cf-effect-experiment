@@ -12,7 +12,7 @@ import {
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { DrizzleDriver, type DbDriver } from "./DrizzleDriver.ts";
 import * as schema from "./schema.ts";
@@ -30,7 +30,7 @@ export const layer = Layer.effect(
         db.transaction((tx) => {
           tx.delete(schema.projectMeta).run();
           tx.insert(schema.projectMeta)
-            .values({ name: project.name, engines: project.engines })
+            .values({ name: project.name, engines: project.engines, constants: project.constants })
             .run();
 
           tx.delete(schema.connections).run();
@@ -46,6 +46,8 @@ export const layer = Layer.effect(
                   id: nodeId,
                   name: node.name,
                   properties: node.properties,
+                  inputDefaults: node.inputDefaults,
+                  foldPins: node.foldPins,
                   schemaPackage: node.schema.package,
                   schemaSchema: node.schema.schema,
                   positionX: node.position.x,
@@ -72,25 +74,19 @@ export const layer = Layer.effect(
       });
     });
 
-    const loadGraphModel = (db: DbDriver, graphRow: typeof schema.graphs.$inferSelect) => {
-      const nodeRows = db
-        .select()
-        .from(schema.nodes)
-        .where(eq(schema.nodes.graphId, graphRow.id))
-        .all();
-
-      const connectionRows = db
-        .select()
-        .from(schema.connections)
-        .where(eq(schema.connections.graphId, graphRow.id))
-        .all();
-
+    const loadGraphModel = (
+      graphRow: typeof schema.graphs.$inferSelect,
+      nodeRows: Array<typeof schema.nodes.$inferSelect>,
+      connectionRows: Array<typeof schema.connections.$inferSelect>,
+    ) => {
       const nodes: Record<string, Node.Model> = {};
       for (const nodeRow of nodeRows) {
         nodes[nodeRow.id] = {
           id: NodeId.make(nodeRow.id),
           name: nodeRow.name,
           properties: nodeRow.properties,
+          inputDefaults: nodeRow.inputDefaults,
+          foldPins: nodeRow.foldPins,
           schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
@@ -127,35 +123,69 @@ export const layer = Layer.effect(
         if (!meta) return null;
 
         const graphRows = db.select().from(schema.graphs).all();
+        const nodeRows = db.select().from(schema.nodes).all();
+        const connectionRows = db.select().from(schema.connections).all();
+
+        const nodesByGraph = new Map<string, Array<typeof schema.nodes.$inferSelect>>();
+        for (const nodeRow of nodeRows) {
+          let rows = nodesByGraph.get(nodeRow.graphId);
+          if (!rows) nodesByGraph.set(nodeRow.graphId, (rows = []));
+          rows.push(nodeRow);
+        }
+
+        const connectionsByGraph = new Map<string, Array<typeof schema.connections.$inferSelect>>();
+        for (const connectionRow of connectionRows) {
+          let rows = connectionsByGraph.get(connectionRow.graphId);
+          if (!rows) connectionsByGraph.set(connectionRow.graphId, (rows = []));
+          rows.push(connectionRow);
+        }
 
         const graphs: Record<string, Graph.Model> = {};
         for (const graphRow of graphRows) {
-          graphs[graphRow.id] = loadGraphModel(db, graphRow);
+          graphs[graphRow.id] = loadGraphModel(
+            graphRow,
+            nodesByGraph.get(graphRow.id) ?? [],
+            connectionsByGraph.get(graphRow.id) ?? [],
+          );
         }
 
-        return { name: meta.name, graphs, engines: meta.engines };
+        return { name: meta.name, graphs, engines: meta.engines, constants: meta.constants };
       });
 
       if (!result) {
         return yield* new Project.NotFoundError({});
       }
 
-      return {
+      return yield* Schema.decodeUnknownEffect(Project.Model)({
         name: result.name,
         graphs: result.graphs,
         engines: result.engines,
-      };
+        constants: result.constants,
+      }).pipe(PersistenceError.refail);
     });
 
     const loadGraph = Effect.fnUntraced(function* (graphId: string) {
       const result = yield* exec((db) => {
         const graphRow = db.select().from(schema.graphs).where(eq(schema.graphs.id, graphId)).get();
         if (!graphRow) return null;
-        return loadGraphModel(db, graphRow);
+
+        const nodeRows = db
+          .select()
+          .from(schema.nodes)
+          .where(eq(schema.nodes.graphId, graphRow.id))
+          .all();
+
+        const connectionRows = db
+          .select()
+          .from(schema.connections)
+          .where(eq(schema.connections.graphId, graphRow.id))
+          .all();
+
+        return loadGraphModel(graphRow, nodeRows, connectionRows);
       });
 
       if (!result) return yield* new Graph.NotFoundError({ id: graphId });
-      return result;
+      return yield* Schema.decodeUnknownEffect(Graph.Model)(result).pipe(PersistenceError.refail);
     });
 
     const loadNode = Effect.fnUntraced(function* (graphId: string, nodeId: string) {
@@ -166,6 +196,8 @@ export const layer = Layer.effect(
           id: NodeId.make(nodeRow.id),
           name: nodeRow.name,
           properties: nodeRow.properties,
+          inputDefaults: nodeRow.inputDefaults,
+          foldPins: nodeRow.foldPins,
           schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
@@ -178,7 +210,7 @@ export const layer = Layer.effect(
       });
 
       if (!result) return yield* new Node.NotFoundError({ id: nodeId });
-      return result;
+      return yield* Schema.decodeUnknownEffect(Node.Model)(result).pipe(PersistenceError.refail);
     });
 
     const saveGraph = Effect.fnUntraced(function* (graph: Graph.Model) {
@@ -195,6 +227,8 @@ export const layer = Layer.effect(
                 id: nodeId,
                 name: node.name,
                 properties: node.properties,
+                inputDefaults: node.inputDefaults,
+                foldPins: node.foldPins,
                 schemaPackage: node.schema.package,
                 schemaSchema: node.schema.schema,
                 positionX: node.position.x,
@@ -239,6 +273,8 @@ export const layer = Layer.effect(
               id: node.id,
               name: node.name,
               properties: node.properties,
+              inputDefaults: node.inputDefaults,
+              foldPins: node.foldPins,
               schemaPackage: node.schema.package,
               schemaSchema: node.schema.schema,
               positionX: node.position.x,

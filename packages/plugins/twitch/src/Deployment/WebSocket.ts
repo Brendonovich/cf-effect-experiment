@@ -1,4 +1,4 @@
-import { Engine } from "@macrograph/plugin";
+import * as Engine from "@macrograph/plugin/Engine";
 
 import { make as makeEngine } from "../Engine.ts";
 import TwitchPlugin from "../Plugin.ts";

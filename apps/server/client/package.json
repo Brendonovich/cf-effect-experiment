@@ -1,0 +1,40 @@
+{
+  "name": "@macrograph/server-client",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --outDir ../dist/client --emptyOutDir",
+    "test": "vitest run --environment node --passWithNoTests",
+    "preview": "vite preview",
+    "typecheck": "tsgo --build"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "catalog:",
+    "@macrograph/editor": "workspace:*",
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@macrograph/plugin-http-client": "workspace:*",
+    "@macrograph/plugin-obs": "workspace:*",
+    "@macrograph/plugin-twitch": "workspace:*",
+    "@macrograph/plugin-utilities": "workspace:*",
+    "@macrograph/plugin-websocket-client": "workspace:*",
+    "@macrograph/plugin-websocket-server": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@iconify/json": "2.2.196",
+    "@macrograph/icons": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@stylexjs/unplugin": "catalog:",
+    "@types/node": "^24",
+    "typescript": "^5.8",
+    "vite": "^8.0.7",
+    "vitest": "^4.1.0"
+  }
+}
