@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # The bundled JavaScript and browser assets are shared by all runtime architectures.
-FROM --platform=$BUILDPLATFORM node:24-alpine AS build
+# Solid's native compiler requires glibc; the runtime bundle does not.
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS build
 
 WORKDIR /workspace
 RUN corepack enable
