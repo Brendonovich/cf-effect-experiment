@@ -3,7 +3,7 @@ import type { Rpc } from "effect/unstable/rpc";
 
 import { Editor } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
-import { Engine, Resource } from "@macrograph/plugin";
+import { Engine, Resource, type Plugin } from "@macrograph/plugin";
 import { EngineHost, PluginMount } from "@macrograph/project-host";
 import { Context, Effect, Layer, Option, Ref, Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -85,6 +85,11 @@ export const rpcRoute = (
         }),
       );
     }),
+  );
+
+export const pluginLayer = (plugin: Plugin.Plugin<never>) =>
+  Layer.effectDiscard(
+    Effect.flatMap(ProjectExecution.Service, (executor) => PluginMount.register(executor, plugin)),
   );
 
 export const deploymentLayer = <

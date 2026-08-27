@@ -66,6 +66,12 @@ export const authorize = (
 export const isEventVisibleTo = (event: EditorEvent.EditorEvent, connectionId: string) =>
   event.actor.type === "SYSTEM" || event.actor.id !== connectionId;
 
+// Persisted engine state may contain credentials; public updates only invalidate client state.
+export const publicEvent = (event: EditorEvent.EditorEvent): EditorEvent.EditorEvent =>
+  event._tag === "EngineStateChanged"
+    ? { _tag: "PluginClientStateDirty", actor: event.actor, pluginId: event.pluginId }
+    : event;
+
 export const connectionMiddlewareLayer = Layer.effect(ConnectionMiddleware)(
   Effect.gen(function* () {
     const policy = yield* EditorAccess.Policy;
@@ -463,7 +469,12 @@ export const handlerLayer = EditorRpcs.toLayer(
     const credentials = yield* Engine.Credentials;
     return EditorRpcs.of({
       CreateGraph: (payload) => editor.graph.create(payload.graph),
-      GetProject: () => editor.project.get(),
+      GetProject: () =>
+        Effect.gen(function* () {
+          const identity = yield* EditorAccess.Connection;
+          const project = yield* editor.project.get();
+          return identity.canEdit ? project : { ...project, engines: {} };
+        }),
       DeleteGraph: (payload) =>
         editor.graph
           .delete({ graphID: payload.graphId })
@@ -618,10 +629,19 @@ export const handlerLayer = EditorRpcs.toLayer(
           const identity = yield* EditorAccess.Connection;
           const subscription = yield* pubsub.subscribe;
           return Stream.fromEffect(editor.project.snapshot()).pipe(
-            Stream.map((snapshot) => ({ _tag: "ProjectSnapshot" as const, snapshot })),
+            Stream.map((snapshot) => ({
+              _tag: "ProjectSnapshot" as const,
+              snapshot: identity.canEdit
+                ? snapshot
+                : {
+                    ...snapshot,
+                    project: { ...snapshot.project, engines: {} },
+                  },
+            })),
             Stream.concat(
               Stream.fromSubscription(subscription).pipe(
                 Stream.filter((event) => isEventVisibleTo(event, identity.connectionId)),
+                Stream.map((event) => (identity.canEdit ? event : publicEvent(event))),
               ),
             ),
           );

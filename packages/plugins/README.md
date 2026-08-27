@@ -1,0 +1,93 @@
+# Plugin ports
+
+The self-hosted server includes the runtime-compatible ports from the older
+MacroGraph `packages/packages` catalog, alongside the plugins already ported from
+`base-packages`. Configuration is project-scoped and applies to the running engine.
+
+Stateless plugins only export `Plugin.make({ id, effect })`; no engine definition,
+deployment, RPC group, or client state is required. Standalone discovery uses the
+package's `.` export when no `macrograph.standaloneDeployment` is specified, and
+registers it directly if it has no engine. Plugins with engines still need an
+explicit deployment for the host. Programmatic registration is `editor.plugin(plugin)`
+and `executor.plugin(plugin)`, or `PluginMount.register(executor, plugin)` for both.
+
+## Added plugins
+
+| Package        | Functionality                                                           | Runtime                            |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------- |
+| `discord`      | Bot message events, sending messages, user/member/role lookup, webhooks | Server                             |
+| `elevenlabs`   | Text-to-speech with an API key                                          | Server                             |
+| `fs`           | Non-recursive file and folder listing                                   | Server                             |
+| `goxlr`        | Mixer controls and status events                                        | Server with reachable GoXLR daemon |
+| `json`         | JSON parsing, querying, and typed extraction                            | Server and browser playground      |
+| `list`         | Explicitly typed list creation, editing, lookup, and joining            | Server and browser playground      |
+| `logic`        | Boolean operations, branching, waiting, and typed conditionals          | Server and browser playground      |
+| `math`         | Numeric operations and conversions                                      | Server and browser playground      |
+| `openai`       | Chat completion and image generation with an API key                    | Server                             |
+| `shell`        | Opt-in shell command execution                                          | Server                             |
+| `speakerbot`   | Speech and queue controls                                               | Server with reachable SpeakerBot   |
+| `streamdeck`   | Key down/up events from a WebSocket forwarder                           | Server                             |
+| `streamlabs`   | Donation and YouTube membership/superchat Socket API events             | Server                             |
+| `string`       | String operations and conversions                                       | Server and browser playground      |
+| `voicemod`     | Voice selection, voice changer, and hear-self controls                  | Server with reachable Voicemod     |
+| `vtube-studio` | Model, expression, and hotkey requests                                  | Server with reachable VTube Studio |
+
+See integration package READMEs for protocol requirements and node details. Local apps
+must be reachable **from the runtime host**, not just the editor's browser. In a
+container, `localhost` refers to the container. No new device-connected plugins
+are mounted in Cloudflare runtimes.
+
+## Configuration and security
+
+Integration credentials are configured through plugin settings and retained in
+server-side engine storage. Client state reports whether credentials are
+configured rather than returning the stored secrets. Project SQLite files and
+backups still contain these secrets and must be protected. Grant edit access only
+to trusted users; editors can configure plugins and run graphs.
+
+Read-only project RPC responses omit engine storage. Read-only event streams and
+raw WebSocket broadcasts send client-state invalidations instead of persisted
+engine state. Authorized editors retain full project access, including secrets,
+for existing project workflows.
+
+Filesystem nodes operate with the server's filesystem permissions. Shell execution
+is disabled unless the host explicitly sets `MACROGRAPH_ENABLE_SHELL=true`. It is
+not sandboxed and must never receive untrusted command text. Neither feature
+accesses files or processes on the editor user's computer.
+
+Discord message content requires the corresponding privileged intent to be
+enabled in the Discord developer portal. Streamlabs requires its Socket API token,
+not an OAuth access token. VTube Studio requires local user approval of the plugin.
+Voicemod uses a configured registration key rather than the legacy embedded key.
+
+## Adaptations
+
+These are current-runtime ports, not an automatic migration of persisted legacy
+graphs. Plugin/schema identifiers and pin shapes follow the current API.
+
+The current type system has scalar, list, and option pins, but no generic map,
+struct, or enum pins. Integration structures and JSON values therefore use JSON
+strings; list operations use an explicit element type instead of wildcard
+inference. Invalid inputs and provider failures fail execution rather than silently
+producing success.
+
+OpenAI chat completion is non-streaming because legacy streaming scope pins have
+no current equivalent. ElevenLabs returns encoded audio instead of writing a file
+through the old Tauri bridge. File attachments and arbitrary native file writes
+are outside this port.
+
+## Deferred catalog
+
+- Audio playback, browser keyboard input, global input emulation, and MIDI need
+  explicit browser/desktop capability bridges.
+- Localstorage needs a defined client-side storage scope rather than substituting
+  server project storage.
+- Variables and custom events need project/graph domain models and event registries.
+- Generic Map, wildcard collections, struct/enum builders, and scope-based loops
+  need type-system and execution-model extensions.
+- GitHub, Google, Patreon, and Spotify were OAuth settings shells with no graph
+  nodes in the reference; no placeholder integrations are added.
+- Existing HTTP, OBS, Twitch, and Utilities are not expanded to full parity with
+  the older catalog in this pass. The new Math, String, and Logic packages cover
+  runtime-compatible portions of the old utility catalog without changing
+  existing nodes.

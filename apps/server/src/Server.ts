@@ -78,7 +78,9 @@ const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,
   RuntimeActivity.Rpcs,
-  ...Deployments.map((deployment) => deployment.definition.ClientRpcs),
+  ...Deployments.flatMap((deployment) =>
+    "definition" in deployment ? [deployment.definition.ClientRpcs] : [],
+  ),
 ).middleware(EditorRpc.ConnectionMiddleware);
 
 const WsEndpoints = Layer.effectDiscard(
@@ -275,8 +277,13 @@ const StaticRoute = StaticRoutes.layer({
 
 const HttpRoutes = ApiRoutes.pipe(Layer.provideMerge(StaticRoute));
 
-const MountedPlugins = Deployments.map(PluginHost.deploymentLayer).reduce((layers, layer) =>
-  Layer.merge(layers, layer),
+const MountedPlugins = Layer.mergeAll(
+  Layer.empty,
+  ...Deployments.map((deployment) =>
+    "definition" in deployment
+      ? PluginHost.deploymentLayer(deployment)
+      : PluginHost.pluginLayer(deployment),
+  ),
 );
 
 const AppLayer = HttpRoutes.pipe(

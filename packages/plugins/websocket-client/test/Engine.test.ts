@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/plugin";
 import { Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { Socket } from "effect/unstable/socket";
 
 import {
@@ -156,6 +157,52 @@ const makeHarness = Effect.fnUntraced(function* (
 });
 
 describe("WebSocket client engine", () => {
+  it.effect(
+    "completes engine-owned setup after RPC cancellation and late open, with recovery",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* makeHarness([definition("primary")], { autoOpen: false });
+        yield* Effect.gen(function* () {
+          const { client, engine, runtime } = yield* EngineTest.makeClients(WebSocketClientEngine);
+          const id = ConnectionId.make("primary");
+          const caller = yield* client.WebSocketConnect({ id }).pipe(Effect.forkChild);
+          yield* Deferred.await(harness.created);
+          yield* Fiber.interrupt(caller);
+          harness.sockets[0]!.open();
+          while ((yield* engine.client.state).connections[0]?.status === "connecting")
+            yield* Effect.yieldNow;
+          assert.strictEqual((yield* engine.client.state).connections[0]?.status, "connected");
+          yield* runtime.WebSocketSendMessage({ connectionId: id, data: "after cancelled waiter" });
+          assert.deepStrictEqual(harness.sockets[0]!.sent, ["after cancelled waiter"]);
+          yield* client.WebSocketDisconnect({ id });
+          const recovery = yield* client.WebSocketConnect({ id }).pipe(Effect.forkChild);
+          while (harness.sockets.length < 2) yield* Effect.yieldNow;
+          harness.sockets[1]!.open();
+          yield* Fiber.join(recovery);
+          assert.isTrue(harness.sockets[0]!.closed);
+          assert.strictEqual((yield* engine.client.state).connections[0]?.status, "connected");
+        }).pipe(Effect.provide(harness.engineLayer));
+      }),
+  );
+  it.effect("times out engine-owned setup even after its RPC waiter is cancelled", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness([definition("primary")], { autoOpen: false });
+      yield* Effect.gen(function* () {
+        const { client, engine } = yield* EngineTest.makeClients(WebSocketClientEngine);
+        const caller = yield* client
+          .WebSocketConnect({ id: ConnectionId.make("primary") })
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(harness.created);
+        yield* Fiber.interrupt(caller);
+        yield* TestClock.adjust("11 seconds");
+        assert.isTrue(harness.sockets[0]!.closed);
+        assert.strictEqual((yield* engine.client.state).connections[0]?.status, "error");
+        harness.sockets[0]!.dispatchEvent(new Event("open"));
+        yield* Effect.yieldNow;
+        assert.strictEqual((yield* engine.client.state).connections[0]?.status, "error");
+      }).pipe(Effect.provide(harness.engineLayer));
+    }),
+  );
   it.effect(
     "persists definitions, exposes resources, and manages message lifecycle",
     () =>

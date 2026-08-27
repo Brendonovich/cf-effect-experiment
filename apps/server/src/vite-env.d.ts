@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 declare module "virtual:macrograph-plugin-deployments" {
-  import type { Engine } from "@macrograph/plugin";
+  import type { Engine, Plugin } from "@macrograph/plugin";
   import type { Resource } from "@macrograph/plugin";
   import type { Layer, Schema } from "effect";
   import type { Rpc } from "effect/unstable/rpc";
@@ -25,6 +25,6 @@ declare module "virtual:macrograph-plugin-deployments" {
       Engine.EngineContext<ResourceType, Event, Storage>
     >
   >;
-  const deployments: ReadonlyArray<Deployment>;
+  const deployments: ReadonlyArray<Deployment | Plugin.Plugin<never>>;
   export default deployments;
 }

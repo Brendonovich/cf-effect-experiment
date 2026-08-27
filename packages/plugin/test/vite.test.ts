@@ -1,7 +1,9 @@
 import { pluginDeployments, pluginSettings, stylexProps } from "@macrograph/plugin/vite";
+import { rejects } from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { assert, it } from "vitest";
 
 it("transforms intrinsic StyleX props while preserving component props", () => {
@@ -64,6 +66,62 @@ it("applies host allowlists to settings and standalone deployments", () => {
   ) as string | undefined;
   assert.match(deploymentsSource ?? "", /plugins\/obs\/src\/Deployment\/WebSocket\.ts/);
   assert.notMatch(deploymentsSource ?? "", /plugins\/kofi/);
+});
+
+it("discovers engine-less exports alongside deployments without mounting undeployed engines", async () => {
+  const root = mkdtempSync(join(tmpdir(), "macrograph-stateless-"));
+  try {
+    for (const [name, value, deployment] of [
+      ["pure", '{ id: "pure" }', false],
+      [
+        "engine",
+        '{ pluginId: "engine", definition: {}, plugin: { id: "engine", engine: {} } }',
+        true,
+      ],
+      ["undeployed", '{ id: "undeployed", engine: {} }', false],
+    ] as const) {
+      const fixture = join(root, "packages/plugins", name);
+      mkdirSync(fixture, { recursive: true });
+      writeFileSync(
+        join(fixture, "package.json"),
+        JSON.stringify({
+          name: `@fixture/${name}`,
+          exports: { ".": "./Plugin.mjs" },
+          ...(deployment ? { macrograph: { standaloneDeployment: "./Deployment.mjs" } } : {}),
+        }),
+      );
+      writeFileSync(
+        join(fixture, deployment ? "Deployment.mjs" : "Plugin.mjs"),
+        `export default ${value};`,
+      );
+    }
+    const discovery = pluginDeployments(root);
+    const source = discovery.load(
+      discovery.resolveId("virtual:macrograph-plugin-deployments") ?? "",
+    )!;
+    const code = source.replace(
+      /from ("[^"]+")/g,
+      (_match, path: string) => `from ${JSON.stringify(pathToFileURL(JSON.parse(path)).href)}`,
+    );
+    const module: { default: ReadonlyArray<{ id?: string; pluginId?: string }> } = await import(
+      `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
+    );
+    assert.deepStrictEqual(
+      module.default.map((value) => value.pluginId ?? value.id),
+      ["engine", "pure"],
+    );
+    assert.notMatch(source, /engine\/Plugin\.mjs/);
+    const duplicate = code.replace(
+      "const discovered = [",
+      'const discovered = [{ value: { id: "engine" }, source: "@fixture/duplicate" }, ',
+    );
+    await rejects(
+      import(`data:text/javascript;base64,${Buffer.from(duplicate).toString("base64")}`),
+      /Duplicate plugin id engine/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 it("discovers a fixture plugin without changing a UI registry", () => {

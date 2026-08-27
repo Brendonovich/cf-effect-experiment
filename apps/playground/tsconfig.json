@@ -23,6 +23,11 @@
     { "path": "../../packages/plugins/obs" },
     { "path": "../../packages/plugins/twitch" },
     { "path": "../../packages/plugins/utilities" },
+    { "path": "../../packages/plugins/json" },
+    { "path": "../../packages/plugins/list" },
+    { "path": "../../packages/plugins/logic" },
+    { "path": "../../packages/plugins/math" },
+    { "path": "../../packages/plugins/string" },
     { "path": "../../packages/plugins/websocket-client" }
   ]
 }

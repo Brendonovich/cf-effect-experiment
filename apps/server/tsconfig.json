@@ -21,6 +21,22 @@
     { "path": "../../packages/plugins/http-client" },
     { "path": "../../packages/plugins/utilities" },
     { "path": "../../packages/plugins/websocket-client" },
-    { "path": "../../packages/plugins/websocket-server" }
+    { "path": "../../packages/plugins/websocket-server" },
+    { "path": "../../packages/plugins/discord" },
+    { "path": "../../packages/plugins/elevenlabs" },
+    { "path": "../../packages/plugins/fs" },
+    { "path": "../../packages/plugins/goxlr" },
+    { "path": "../../packages/plugins/json" },
+    { "path": "../../packages/plugins/list" },
+    { "path": "../../packages/plugins/logic" },
+    { "path": "../../packages/plugins/math" },
+    { "path": "../../packages/plugins/openai" },
+    { "path": "../../packages/plugins/shell" },
+    { "path": "../../packages/plugins/speakerbot" },
+    { "path": "../../packages/plugins/streamdeck" },
+    { "path": "../../packages/plugins/streamlabs" },
+    { "path": "../../packages/plugins/string" },
+    { "path": "../../packages/plugins/voicemod" },
+    { "path": "../../packages/plugins/vtube-studio" }
   ]
 }

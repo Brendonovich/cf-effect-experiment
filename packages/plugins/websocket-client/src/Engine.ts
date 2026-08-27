@@ -163,10 +163,7 @@ export const make = Effect.fnUntraced(function* () {
     if (close !== undefined) yield* close;
   });
 
-  const connect = Effect.fnUntraced(function* (
-    id: ConnectionId,
-    rememberIntent = false,
-  ) {
+  const setupConnection = Effect.fnUntraced(function* (id: ConnectionId, rememberIntent = false) {
     const prepared = yield* Effect.gen(function* () {
       const current = yield* getEntry(id);
       if (Option.isNone(current)) return yield* new ConnectionNotFound({ id });
@@ -207,6 +204,7 @@ export const make = Effect.fnUntraced(function* () {
     const opened = yield* Deferred.make<void, ConnectionFailed>();
     const closed = yield* Deferred.make<void>();
     const finish = Deferred.succeed(closed, undefined).pipe(
+      Effect.andThen(Deferred.fail(opened, failed())),
       Effect.andThen(
         updateEntry(id, (entry) =>
           entry.generation !== generation
@@ -263,41 +261,47 @@ export const make = Effect.fnUntraced(function* () {
       Effect.andThen(Fiber.interrupt(fiber)),
       Effect.asVoid,
     );
-    const installed = yield* Effect.gen(function* () {
-      const current = yield* getEntry(id);
+    const installed = yield* SubscriptionRef.modify(state, (entries) => {
+      const current = entries.get(id);
       if (
-        Option.isNone(current) ||
-        current.value.generation !== generation ||
-        current.value.status !== "connecting"
+        current === undefined ||
+        current.generation !== generation ||
+        current.status !== "connecting"
       )
-        return false;
+        return [false, entries];
       const session: Session = {
         generation,
         write,
         closed: Deferred.await(closed),
         close,
       };
-      yield* updateEntry(id, (entry) => ({ ...entry, session }));
-      return true;
-    }).pipe(lock.withPermit);
+      return [true, new Map(entries).set(id, { ...current, session })];
+    });
     if (!installed) {
       yield* Fiber.interrupt(fiber);
       return yield* failed();
     }
     yield* Deferred.await(opened);
-    const connected = yield* Effect.gen(function* () {
-      const current = yield* getEntry(id);
+    const connected = yield* SubscriptionRef.modify(state, (entries) => {
+      const current = entries.get(id);
       if (
-        Option.isNone(current) ||
-        current.value.generation !== generation ||
-        current.value.status !== "connecting"
+        current === undefined ||
+        current.generation !== generation ||
+        current.status !== "connecting"
       )
-        return false;
-      yield* updateEntry(id, (entry) => ({ ...entry, status: "connected" }));
-      return true;
-    }).pipe(lock.withPermit);
+        return [false, entries];
+      return [true, new Map(entries).set(id, { ...current, status: "connected" })];
+    });
     if (!connected) return yield* failed();
   });
+
+  // Cancellation of an RPC waiter must not interrupt the engine-owned setup transition.
+  const connect = (id: ConnectionId, rememberIntent = false) =>
+    setupConnection(id, rememberIntent).pipe(
+      Effect.forkScoped,
+      Effect.provideContext(socketContext),
+      Effect.flatMap(Fiber.join),
+    );
 
   const stored = yield* mg.storage.get;
   for (const definition of stored.connections) {

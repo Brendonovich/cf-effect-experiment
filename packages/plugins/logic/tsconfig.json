@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "composite": true, "rootDir": ".", "outDir": "dist/types" },
+  "include": ["src", "test"],
+  "references": [
+    { "path": "../../plugin" },
+    { "path": "../../core" },
+    { "path": "../../execution" },
+    { "path": "../list" },
+    { "path": "../string" }
+  ]
+}

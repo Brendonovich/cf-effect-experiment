@@ -1,0 +1,31 @@
+{
+  "name": "@macrograph/plugin-fs",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Plugin.ts",
+  "exports": {
+    ".": "./src/Plugin.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Engine": "./src/Engine.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/plugin": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}

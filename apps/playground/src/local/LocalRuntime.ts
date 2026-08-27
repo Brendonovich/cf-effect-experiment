@@ -14,8 +14,13 @@ import {
 import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
 import HttpClientDeployment from "@macrograph/plugin-http-client/Deployment/Local";
+import JsonPlugin from "@macrograph/plugin-json";
+import ListPlugin from "@macrograph/plugin-list";
+import LogicPlugin from "@macrograph/plugin-logic";
+import MathPlugin from "@macrograph/plugin-math";
 import OBSDeployment from "@macrograph/plugin-obs/Deployment/WebSocket";
 import { settings as obsSettings } from "@macrograph/plugin-obs/Settings";
+import StringPlugin from "@macrograph/plugin-string";
 import TwitchDeployment from "@macrograph/plugin-twitch/Deployment/WebSocket";
 import { settings as twitchSettings } from "@macrograph/plugin-twitch/Settings";
 import UtilitiesDeployment from "@macrograph/plugin-utilities/Deployment";
@@ -25,6 +30,7 @@ import { settings as websocketSettings } from "@macrograph/plugin-websocket-clie
 import * as Engine from "@macrograph/plugin/Engine";
 import * as Resource from "@macrograph/plugin/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
+import { PluginMount } from "@macrograph/project-host/PluginMount";
 import { Context, Effect, Layer, Stream, type Scope } from "effect";
 import { RpcTest, type Rpc } from "effect/unstable/rpc";
 
@@ -144,6 +150,8 @@ export const makeLocalConnection = (
 
         const utilitiesContext = yield* mount(UtilitiesDeployment);
         yield* mount(HttpClientDeployment);
+        for (const plugin of [JsonPlugin, ListPlugin, LogicPlugin, MathPlugin, StringPlugin])
+          yield* PluginMount.register(executor, plugin);
         const obsContext = yield* mount(OBSDeployment);
         const twitchContext = yield* mount(TwitchDeployment);
         const websocketContext = yield* mount(WebSocketClientDeployment);

@@ -12,6 +12,22 @@ export const serverPlugins = new Set([
   "@macrograph/plugin-utilities",
   "@macrograph/plugin-websocket-client",
   "@macrograph/plugin-websocket-server",
+  "@macrograph/plugin-discord",
+  "@macrograph/plugin-elevenlabs",
+  "@macrograph/plugin-fs",
+  "@macrograph/plugin-goxlr",
+  "@macrograph/plugin-json",
+  "@macrograph/plugin-list",
+  "@macrograph/plugin-logic",
+  "@macrograph/plugin-math",
+  "@macrograph/plugin-openai",
+  "@macrograph/plugin-shell",
+  "@macrograph/plugin-speakerbot",
+  "@macrograph/plugin-streamdeck",
+  "@macrograph/plugin-streamlabs",
+  "@macrograph/plugin-string",
+  "@macrograph/plugin-voicemod",
+  "@macrograph/plugin-vtube-studio",
 ]);
 export default defineConfig((): UserConfig => {
   const backend = process.env.MACROGRAPH_DEV_SERVER ?? "http://localhost:3001";

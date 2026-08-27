@@ -5,6 +5,7 @@ import { Socket } from "effect/unstable/socket";
 
 import { makeDualServerProtocol } from "./DualProtocol.ts";
 import { EditorEvents } from "./EditorEvents.ts";
+import { publicEvent } from "./EditorRpc.ts";
 
 const encoder = new TextEncoder();
 
@@ -25,7 +26,9 @@ export const toDualHttpEffectWebsocket = <Rpcs extends Rpc.Any>(
     );
 
     yield* Stream.fromSubscription(yield* events.subscribe).pipe(
-      Stream.runForEach((event) => broadcastCustom(encoder.encode(JSON.stringify(event)))),
+      Stream.runForEach((event) =>
+        broadcastCustom(encoder.encode(JSON.stringify(publicEvent(event)))),
+      ),
       Effect.forkScoped,
     );
 

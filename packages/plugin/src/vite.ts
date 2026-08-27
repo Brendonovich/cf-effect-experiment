@@ -17,6 +17,7 @@ interface DiscoveryOptions {
   readonly workspaceRoot?: string;
   readonly exportName: string;
   readonly modulePath: (manifest: PluginPackage) => string | undefined;
+  readonly filter?: string;
   readonly include?: ReadonlySet<string>;
 }
 
@@ -113,7 +114,9 @@ const workspaceModules = (options: DiscoveryOptions) => {
           (module, index) => `{ value: value${index}, source: ${JSON.stringify(module.source)} }`,
         )
         .join(", ");
-      return `${imports}\nconst discovered = [${values}];\nconst ids = new Map();\nfor (const entry of discovered) {\n  const id = entry.value.pluginId ?? entry.value.id;\n  const previous = ids.get(id);\n  if (previous !== undefined) throw new Error(\`Duplicate plugin id \${id}: \${previous}, \${entry.source}\`);\n  ids.set(id, entry.source);\n}\nexport default discovered.map((entry) => entry.value);`;
+      const filter =
+        options.filter === undefined ? "" : `.filter(({ value }) => ${options.filter})`;
+      return `${imports}\nconst discovered = [${values}]${filter};\nconst ids = new Map();\nfor (const entry of discovered) {\n  const id = entry.value.pluginId ?? entry.value.id;\n  const previous = ids.get(id);\n  if (previous !== undefined) throw new Error(\`Duplicate plugin id \${id}: \${previous}, \${entry.source}\`);\n  ids.set(id, entry.source);\n}\nexport default discovered.map((entry) => entry.value);`;
     },
   } satisfies Plugin;
 };
@@ -193,12 +196,15 @@ export const pluginSettings = (workspaceRoot?: string, include?: ReadonlySet<str
     ...(include === undefined ? {} : { include }),
   });
 
+/** Discovers standalone engine deployments and engine-less plugin exports. */
 export const pluginDeployments = (workspaceRoot?: string, include?: ReadonlySet<string>) =>
   workspaceModules({
     name: "macrograph-plugin-deployments",
     virtualId: "virtual:macrograph-plugin-deployments",
     ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     exportName: "default",
-    modulePath: (manifest) => manifestPath(manifest, "standaloneDeployment"),
+    modulePath: (manifest) =>
+      manifestPath(manifest, "standaloneDeployment") ?? exportPath(manifest, "."),
+    filter: '"definition" in value || value.engine === undefined',
     ...(include === undefined ? {} : { include }),
   });

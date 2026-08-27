@@ -1,0 +1,35 @@
+{
+  "name": "@macrograph/plugin-discord",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Plugin.ts",
+  "exports": {
+    ".": "./src/Plugin.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Settings": "./src/Settings.tsx"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}
