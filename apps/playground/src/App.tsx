@@ -62,7 +62,6 @@ const styles = stylex.create({
     flexShrink: 0,
     columnGap: 8,
     minHeight: 44,
-    paddingBlock: 6,
     paddingInline: 12,
   },
   brand: { display: "flex", alignItems: "center", gap: 8, minHeight: 44 },

@@ -1,10 +1,5 @@
 import { Project } from "@macrograph/core";
 import * as Executor from "@macrograph/execution/Executor";
-import HttpClientPlugin from "@macrograph/plugin-http-client";
-import { makeRuntimeClient as makeHttpClientRuntime } from "@macrograph/plugin-http-client/Engine";
-import { secureLayer as secureHttpUrlPolicy } from "@macrograph/plugin-http-client/UrlPolicy";
-import TwitchPlugin from "@macrograph/plugin-twitch";
-import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/plugin-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
@@ -22,6 +17,7 @@ import { serviceSpanAnnotations } from "../Observability.ts";
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { DeploymentSnapshotsBucket } from "../Storage.ts";
 import * as ExecutorPlugins from "./ExecutorPlugins.ts";
+import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
 const WorkflowNodeStepName = Schema.String.pipe(
 	Schema.brand("WorkflowNodeStepName"),
@@ -258,30 +254,14 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 						);
 					},
 				};
-				const httpClientRuntime = yield* makeHttpClientRuntime().pipe(
-					Effect.provide(secureHttpUrlPolicy),
+				const engineClient = yield* WorkflowRuntime.make(project).pipe(
 					Effect.provide(FetchHttpClient.layer),
 				);
 				const executor = yield* ProjectExecutor.make(project, {
 					projectId: input.projectId,
 					executionDriver,
 					plugins: ExecutorPlugins.registry,
-					engineClient: (pluginId) =>
-						Effect.succeed(
-							pluginId === HttpClientPlugin.id
-								? httpClientRuntime
-								: pluginId === TwitchPlugin.id
-									? unavailableTwitchRuntime
-									: new Proxy(
-											{},
-											{
-												get: () => () =>
-													Effect.fail(
-														new Executor.EngineClientUnavailable({ pluginId }),
-													),
-											},
-										),
-						),
+					engineClient,
 				});
 				yield* ExecutorPlugins.registry
 					.handle(executor, input.pluginId, event)

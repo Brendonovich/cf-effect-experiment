@@ -106,12 +106,33 @@ importers:
       '@macrograph/plugin':
         specifier: workspace:*
         version: link:../../packages/plugin
+      '@macrograph/plugin-elevenlabs':
+        specifier: workspace:*
+        version: link:../../packages/plugins/elevenlabs
       '@macrograph/plugin-http-client':
         specifier: workspace:*
         version: link:../../packages/plugins/http-client
+      '@macrograph/plugin-json':
+        specifier: workspace:*
+        version: link:../../packages/plugins/json
       '@macrograph/plugin-kofi':
         specifier: workspace:*
         version: link:../../packages/plugins/kofi
+      '@macrograph/plugin-list':
+        specifier: workspace:*
+        version: link:../../packages/plugins/list
+      '@macrograph/plugin-logic':
+        specifier: workspace:*
+        version: link:../../packages/plugins/logic
+      '@macrograph/plugin-math':
+        specifier: workspace:*
+        version: link:../../packages/plugins/math
+      '@macrograph/plugin-openai':
+        specifier: workspace:*
+        version: link:../../packages/plugins/openai
+      '@macrograph/plugin-string':
+        specifier: workspace:*
+        version: link:../../packages/plugins/string
       '@macrograph/plugin-twitch':
         specifier: workspace:*
         version: link:../../packages/plugins/twitch
@@ -176,9 +197,15 @@ importers:
       '@macrograph/plugin':
         specifier: workspace:*
         version: link:../../../packages/plugin
+      '@macrograph/plugin-elevenlabs':
+        specifier: workspace:*
+        version: link:../../../packages/plugins/elevenlabs
       '@macrograph/plugin-kofi':
         specifier: workspace:*
         version: link:../../../packages/plugins/kofi
+      '@macrograph/plugin-openai':
+        specifier: workspace:*
+        version: link:../../../packages/plugins/openai
       '@macrograph/plugin-twitch':
         specifier: workspace:*
         version: link:../../../packages/plugins/twitch

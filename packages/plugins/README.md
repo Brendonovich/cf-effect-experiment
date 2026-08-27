@@ -16,19 +16,19 @@ and `executor.plugin(plugin)`, or `PluginMount.register(executor, plugin)` for b
 | Package        | Functionality                                                           | Runtime                            |
 | -------------- | ----------------------------------------------------------------------- | ---------------------------------- |
 | `discord`      | Bot message events, sending messages, user/member/role lookup, webhooks | Server                             |
-| `elevenlabs`   | Text-to-speech with an API key                                          | Server                             |
+| `elevenlabs`   | Text-to-speech with an API key                                          | Server and Cloudflare              |
 | `fs`           | Non-recursive file and folder listing                                   | Server                             |
 | `goxlr`        | Mixer controls and status events                                        | Server with reachable GoXLR daemon |
-| `json`         | JSON parsing, querying, and typed extraction                            | Server and browser playground      |
-| `list`         | Explicitly typed list creation, editing, lookup, and joining            | Server and browser playground      |
-| `logic`        | Boolean operations, branching, waiting, and typed conditionals          | Server and browser playground      |
-| `math`         | Numeric operations and conversions                                      | Server and browser playground      |
-| `openai`       | Chat completion and image generation with an API key                    | Server                             |
+| `json`         | JSON parsing, querying, and typed extraction                            | Server, browser, and Cloudflare    |
+| `list`         | Explicitly typed list creation, editing, lookup, and joining            | Server, browser, and Cloudflare    |
+| `logic`        | Boolean operations, branching, waiting, and typed conditionals          | Server, browser, and Cloudflare    |
+| `math`         | Numeric operations and conversions                                      | Server, browser, and Cloudflare    |
+| `openai`       | Chat completion and image generation with an API key                    | Server and Cloudflare              |
 | `shell`        | Opt-in shell command execution                                          | Server                             |
 | `speakerbot`   | Speech and queue controls                                               | Server with reachable SpeakerBot   |
 | `streamdeck`   | Key down/up events from a WebSocket forwarder                           | Server                             |
 | `streamlabs`   | Donation and YouTube membership/superchat Socket API events             | Server                             |
-| `string`       | String operations and conversions                                       | Server and browser playground      |
+| `string`       | String operations and conversions                                       | Server, browser, and Cloudflare    |
 | `voicemod`     | Voice selection, voice changer, and hear-self controls                  | Server with reachable Voicemod     |
 | `vtube-studio` | Model, expression, and hotkey requests                                  | Server with reachable VTube Studio |
 
@@ -36,6 +36,28 @@ See integration package READMEs for protocol requirements and node details. Loca
 must be reachable **from the runtime host**, not just the editor's browser. In a
 container, `localhost` refers to the container. No new device-connected plugins
 are mounted in Cloudflare runtimes.
+
+## Cloudflare
+
+The hosted editor and execution registry share the new plugin lists in
+`apps/cloudflare/src/plugins/CloudPlugins.ts`. Existing editor Durable Objects
+rebuild the in-memory catalog when updated Worker code initializes them; no
+project storage migration or reset is required. Reconnect the editor after
+deploying the Worker to fetch the updated catalog.
+
+OpenAI and ElevenLabs keys are configured in hosted plugin settings. Workflow
+execution uses the API keys in the project's deployed R2 snapshot, with read-only
+engine contexts and no browser credential-session dependency. Redeploy the project
+after changing its API keys or graph. Keys remain in project storage and deployment
+snapshots, not settings client state, so protect those storage locations.
+Clearing a key in editor settings does not erase earlier deployment snapshots;
+rotate or revoke the provider key if immediate revocation is needed.
+
+Cloudflare [limits non-stream Workflow step results to 1 MiB](https://developers.cloudflare.com/workflows/reference/limits/).
+Graph node results currently use non-stream values, so large image/audio base64
+outputs or chat histories can exceed that limit and fail execution. Large artifacts
+require a separate storage-backed output strategy; this port does not add one.
+Workflow step retries can repeat provider calls, including billable requests.
 
 ## Configuration and security
 

@@ -11,6 +11,13 @@
   },
   "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
+    { "path": "../../packages/plugins/elevenlabs" },
+    { "path": "../../packages/plugins/json" },
+    { "path": "../../packages/plugins/list" },
+    { "path": "../../packages/plugins/logic" },
+    { "path": "../../packages/plugins/math" },
+    { "path": "../../packages/plugins/openai" },
+    { "path": "../../packages/plugins/string" },
     {
       "path": "../../packages/cloud-credentials"
     },

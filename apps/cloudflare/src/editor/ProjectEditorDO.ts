@@ -48,6 +48,7 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
+import * as CloudPlugins from "../plugins/CloudPlugins.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
@@ -63,6 +64,7 @@ const HostedDeployments = [
   TwitchDeployment,
   UtilitiesDeployment,
   HttpClientDeployment,
+  ...CloudPlugins.apiDeployments,
 ] as const;
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,
@@ -381,6 +383,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         return EngineHost.layer(deployment, context);
       };
       const EngineClientHandlersLayer = Layer.mergeAll(
+        CloudPlugins.editorLayer,
         hostDeployment(KofiDeployment),
         hostDeployment({
           ...TwitchDeployment,

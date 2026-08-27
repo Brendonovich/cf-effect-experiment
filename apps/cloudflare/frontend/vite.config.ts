@@ -5,7 +5,12 @@ import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
 
-const cloudSettings = new Set(["@macrograph/plugin-kofi", "@macrograph/plugin-twitch"]);
+const cloudSettings = new Set([
+  "@macrograph/plugin-kofi",
+  "@macrograph/plugin-twitch",
+  "@macrograph/plugin-openai",
+  "@macrograph/plugin-elevenlabs",
+]);
 const workerUrl =
   process.env.VITE_WORKER_URL ??
   "https://cloudflare-mainworker-dev-brendonovich5egibymynq36yh4t.brendonovich.workers.dev";
