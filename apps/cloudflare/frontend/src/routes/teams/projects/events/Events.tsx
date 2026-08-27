@@ -64,15 +64,14 @@ const eventSource = (
   }
 };
 
-const axiomTraceUrl = (traceId: string, receivedAt: string): string | undefined => {
+const axiomTraceUrl = (traceId: string, from: number, to: number): string | undefined => {
   const organizationId = import.meta.env.VITE_AXIOM_ORG_ID;
   if (!organizationId) return undefined;
 
-  const timestamp = new Date(receivedAt).getTime();
   const url = new URL(`/${encodeURIComponent(organizationId)}/trace`, "https://app.axiom.co");
   url.searchParams.set("traceId", traceId);
-  url.searchParams.set("startTime", new Date(timestamp - 5 * 60 * 1000).toISOString());
-  url.searchParams.set("endTime", new Date(timestamp + 5 * 60 * 1000).toISOString());
+  url.searchParams.set("startTime", new Date(from - 5 * 60 * 1000).toISOString());
+  url.searchParams.set("endTime", new Date(to + 5 * 60 * 1000).toISOString());
   if (import.meta.env.VITE_AXIOM_TRACE_DATASET)
     url.searchParams.set("traceDataset", import.meta.env.VITE_AXIOM_TRACE_DATASET);
   return url.href;
@@ -475,10 +474,50 @@ export const Events: Component<EventsProps> = (props) => {
               });
               const traceUrl = createMemo(() => {
                 const selected = item();
-                const ingress = selected.kind === "ingress" ? selected.record : selected.ingress;
-                return ingress?.traceId == null
-                  ? undefined
-                  : axiomTraceUrl(ingress.traceId, ingress.receivedAt);
+                const anchor =
+                  (selected.record.traceContext?.traceId ?? selected.record.traceId) != null
+                    ? selected.record
+                    : selected.kind === "event" && selected.record.source !== "replay"
+                      ? selected.ingress
+                      : undefined;
+                const traceId = anchor?.traceContext?.traceId ?? anchor?.traceId;
+                if (anchor === undefined || traceId == null) return undefined;
+
+                const from = Date.parse(anchor.traceContext?.startedAt ?? anchor.receivedAt);
+                let to = Math.max(from, Date.parse(selected.record.receivedAt));
+                const relatedIngressIds = new Set<string>();
+                for (const ingress of ingressEvents()) {
+                  if ((ingress.traceContext?.traceId ?? ingress.traceId) !== traceId) continue;
+                  relatedIngressIds.add(ingress.id);
+                  to = Math.max(to, Date.parse(ingress.receivedAt));
+                }
+                const relatedEventIds = new Set<string>();
+                for (const event of events()) {
+                  const eventTraceId = event.traceContext?.traceId ?? event.traceId;
+                  if (
+                    eventTraceId !== traceId &&
+                    !(
+                      eventTraceId == null &&
+                      event.source !== "replay" &&
+                      event.ingressEventId !== null &&
+                      relatedIngressIds.has(event.ingressEventId)
+                    )
+                  )
+                    continue;
+                  relatedEventIds.add(event.id);
+                  to = Math.max(to, Date.parse(event.receivedAt));
+                }
+                for (const execution of executions()) {
+                  if (!relatedEventIds.has(execution.projectEventId)) continue;
+                  to = Math.max(
+                    to,
+                    Date.parse(execution.receivedAt),
+                    Date.parse(execution.startedAt ?? execution.receivedAt),
+                    Date.parse(execution.completedAt ?? execution.receivedAt),
+                    execution.status === "queued" || execution.status === "running" ? now() : 0,
+                  );
+                }
+                return axiomTraceUrl(traceId, from, to);
               });
               return (
                 <div sx={styles.detail}>

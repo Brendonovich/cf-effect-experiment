@@ -1,3 +1,5 @@
+import type { EventTraceContext } from "@macrograph/cloud-api";
+
 import {
   boolean,
   index,
@@ -180,6 +182,7 @@ export const projectIngressEvents = pgTable(
     eventId: text("event_id"),
     eventPayload: text("event_payload").notNull(),
     traceId: text("trace_id"),
+    traceContext: jsonb("trace_context").$type<EventTraceContext>(),
     previewOnly: boolean("preview_only").default(false).notNull(),
     previewGeneration: text("preview_generation"),
     receivedAt: text("received_at").notNull(),
@@ -204,6 +207,8 @@ export const projectEvents = pgTable(
     eventType: text("event_type").notNull(),
     providerEventId: text("provider_event_id"),
     eventPayload: text("event_payload").notNull(),
+    traceId: text("trace_id"),
+    traceContext: jsonb("trace_context").$type<EventTraceContext>(),
     receivedAt: text("received_at").notNull(),
   },
   (table) => [

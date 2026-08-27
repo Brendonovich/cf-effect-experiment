@@ -1,3 +1,5 @@
+import type { EventTraceContext } from "@macrograph/cloud-api";
+
 import { Project } from "@macrograph/core";
 import * as Executor from "@macrograph/execution/Executor";
 import { ProjectExecutor } from "@macrograph/project-host";
@@ -42,6 +44,7 @@ export interface GraphExecutionWorkflowInput {
 	readonly eventType: string;
 	readonly providerEventId?: string;
 	readonly event: string;
+	readonly eventTraceContext?: EventTraceContext;
 	readonly traceContext?: {
 		readonly traceId: string;
 		readonly spanId: string;
@@ -120,6 +123,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 		return Effect.fnUntraced(function* (input: GraphExecutionWorkflowInput) {
 			return yield* Effect.gen(function* () {
 				const workflowStep = yield* Cloudflare.Workflows.WorkflowStep;
+				const span = yield* Effect.currentSpan.pipe(Effect.orDie);
 				yield* Cloudflare.Workflows.task(
 					"runtime-execution-v1/queued",
 					Effect.gen(function* () {
@@ -148,6 +152,13 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 										eventType: input.eventType,
 										providerEventId: input.providerEventId ?? null,
 										eventPayload: input.event,
+										traceId: span.traceId,
+										traceContext: input.eventTraceContext ?? {
+											traceId: span.traceId,
+											spanId: input.traceContext?.spanId ?? span.spanId,
+											sampled: span.sampled,
+											startedAt: receivedAt,
+										},
 										receivedAt,
 									})
 									.onConflictDoNothing();

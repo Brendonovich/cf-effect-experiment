@@ -300,6 +300,13 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
         ingressEventCount: response.ingressEvents.length,
       });
       const traceId = ingressSpan.traceId;
+      const receivedAt = new Date().toISOString();
+      const eventTraceContext = {
+        traceId,
+        spanId: ingressSpan.spanId,
+        sampled: ingressSpan.sampled,
+        startedAt: receivedAt,
+      };
       const ingressRecorded = yield* Effect.forEach(
         response.ingressEvents,
         (event) => {
@@ -312,9 +319,10 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             eventId: event.eventId ?? null,
             eventPayload: event.payloadJson,
             traceId,
+            traceContext: eventTraceContext,
             previewOnly: event.previewOnly,
             previewGeneration: event.previewGeneration ?? null,
-            receivedAt: new Date().toISOString(),
+            receivedAt,
           });
         },
         { discard: true },
@@ -346,6 +354,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
                   eventType: event.eventType,
                   ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
                   event: event.payloadJson,
+                  eventTraceContext,
                   traceContext: {
                     traceId: dispatchSpan.traceId,
                     spanId: dispatchSpan.spanId,

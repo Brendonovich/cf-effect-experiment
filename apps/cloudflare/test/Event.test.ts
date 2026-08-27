@@ -5,7 +5,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { CurrentUser, ProjectNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Option, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -55,7 +55,7 @@ const databaseLayer = (
 const eventSql = (kind: "event" | "ingress") => {
   const table = kind === "event" ? "project_events" : "project_ingress_events";
   const ids = kind === "event" ? '"ingress_event_id", "provider_event_id"' : '"id", "event_id"';
-  return `select "plugin_id", "event_type", "event_payload", ${ids} from "${table}" where (("${table}"."project_id" = $1) and ("${table}"."id" = $2)) limit $3`;
+  return `select "plugin_id", "event_type", "event_payload", ${ids}, "trace_context" from "${table}" where (("${table}"."project_id" = $1) and ("${table}"."id" = $2)) limit $3`;
 };
 
 // Deployment column/table names still use the persisted revision terminology.
@@ -73,6 +73,12 @@ describe("Event.make replay", () => {
               // Noncanonical JSON and a payload over 256 KiB catch parsing/reencoding and truncation.
               const payload = `{\n "number": 1.00, "escaped": "\\u0041", "body": "${"x".repeat(300_000)}"\n}`;
               const dispatched: Array<Parameters<WorkerOperations["replayEvent"]>[0]> = [];
+              const originalTrace = {
+                traceId: "0123456789abcdef0123456789abcdef",
+                spanId: "0123456789abcdef",
+                sampled: providerEventId !== null,
+                startedAt: "2026-08-27T12:00:00.000Z",
+              };
               const authorized: Array<string> = [];
               let queries = 0;
               const event = yield* Event.make({
@@ -80,6 +86,10 @@ describe("Event.make replay", () => {
                   Effect.gen(function* () {
                     const span = yield* Effect.currentSpan;
                     assert.strictEqual(span.name, "Event.replay");
+                    assert.strictEqual(
+                      Option.getOrUndefined(span.parent)?.spanId,
+                      originalTrace.spanId,
+                    );
                     assert.deepStrictEqual(input.traceContext, {
                       traceId: span.traceId,
                       spanId: span.spanId,
@@ -100,8 +110,12 @@ describe("Event.make replay", () => {
                     const replayNumber = Math.floor(queries / 2) + 1;
                     assert.strictEqual(authorized.length, replayNumber);
                     if (queries++ % 2 === 0) {
-                      assert.strictEqual(sql, eventSql(kind));
-                      assert.deepStrictEqual(params, ["project", "captured-id", 1]);
+                      assert.strictEqual(sql, eventSql(replayNumber === 1 ? kind : "event"));
+                      assert.deepStrictEqual(params, [
+                        "project",
+                        replayNumber === 1 ? "captured-id" : dispatched[0]!.projectEventId,
+                        1,
+                      ]);
                       return [
                         [
                           "captured-plugin",
@@ -109,6 +123,7 @@ describe("Event.make replay", () => {
                           payload,
                           ingressEventId,
                           providerEventId,
+                          replayNumber === 1 ? originalTrace : dispatched[0]!.eventTraceContext,
                         ],
                       ];
                     }
@@ -121,8 +136,14 @@ describe("Event.make replay", () => {
               );
 
               const ids = new Set<string>();
+              const spanIds = new Set<string>();
               for (const replayNumber of [1, 2]) {
-                const result = yield* event.replay("project", "captured-id", kind);
+                const parentSpan = yield* Effect.currentSpan;
+                const result = yield* event.replay(
+                  "project",
+                  replayNumber === 1 ? "captured-id" : dispatched[0]!.projectEventId,
+                  replayNumber === 1 ? kind : "event",
+                );
                 const input = dispatched[replayNumber - 1];
                 assert.isDefined(input);
                 assert.deepStrictEqual(result, {
@@ -143,10 +164,18 @@ describe("Event.make replay", () => {
                   ...(ingressEventId === null ? {} : { ingressEventId }),
                   ...(providerEventId === null ? {} : { providerEventId }),
                   traceContext: input.traceContext,
+                  eventTraceContext: originalTrace,
                 });
                 assert.match(input.traceContext?.traceId ?? "", /^[0-9a-f]{32}$/);
+                assert.isDefined(input.traceContext);
+                assert.notStrictEqual(input.traceContext.traceId, parentSpan.traceId);
+                assert.strictEqual(input.traceContext.traceId, originalTrace.traceId);
+                assert.notStrictEqual(input.traceContext.spanId, originalTrace.spanId);
+                assert.isFalse(spanIds.has(input.traceContext.spanId));
+                spanIds.add(input.traceContext.spanId);
                 assert.match(input.traceContext?.spanId ?? "", /^[0-9a-f]{16}$/);
                 assert.isBoolean(input.traceContext?.sampled);
+                assert.strictEqual(input.traceContext.sampled, originalTrace.sampled);
                 for (const id of [result.executionId, result.projectEventId]) {
                   assert.match(
                     id,
@@ -160,10 +189,57 @@ describe("Event.make replay", () => {
               assert.strictEqual(queries, 4);
               assert.strictEqual(dispatched.length, 2);
               assert.deepStrictEqual(authorized, ["project", "project"]);
-            }).pipe(Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined })),
+            }).pipe(
+              Effect.withSpan("Replay request"),
+              Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined }),
+            ),
         );
       }
     }
+
+    it.effect(`${kind}: missing historical trace context starts a new replay trace`, () =>
+      Effect.gen(function* () {
+        const requestSpan = yield* Effect.currentSpan;
+        let dispatched = false;
+        const event = yield* Event.make({
+          replayEvent: (input) =>
+            Effect.gen(function* () {
+              const span = yield* Effect.currentSpan;
+              assert.isTrue(Option.isNone(span.parent));
+              assert.notStrictEqual(span.traceId, requestSpan.traceId);
+              assert.deepStrictEqual(input.traceContext, {
+                traceId: span.traceId,
+                spanId: span.spanId,
+                sampled: span.sampled,
+              });
+              assert.isDefined(input.eventTraceContext);
+              assert.deepStrictEqual(input.eventTraceContext, {
+                ...input.traceContext,
+                startedAt: input.eventTraceContext.startedAt,
+              });
+              assert.match(input.eventTraceContext.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+              dispatched = true;
+            }).pipe(Effect.orDie),
+        }).pipe(
+          Effect.provideService(EventPolicy.Service, {
+            canView: () => Effect.die("Replay must require edit permission"),
+            canEdit: () => Effect.void,
+          }),
+          Effect.provide(
+            databaseLayer((sql) => {
+              if (sql === eventSql(kind)) return [["plugin", "type", "{}", null, null, null]];
+              assert.strictEqual(sql, deploymentSql);
+              return [["deployment", deploymentObjectKey("project", "deployment")]];
+            }),
+          ),
+        );
+        yield* event.replay("project", "historical-event", kind);
+        assert.isTrue(dispatched);
+      }).pipe(
+        Effect.withSpan("Replay request"),
+        Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined }),
+      ),
+    );
 
     for (const missing of ["event", "deployment"] as const) {
       it.effect(`${kind}: missing ${missing} fails without dispatch`, () =>
@@ -189,7 +265,7 @@ describe("Event.make replay", () => {
                     "other-project-or-missing-event",
                     1,
                   ]);
-                  return missing === "event" ? [] : [["plugin", "type", "{}", null, null]];
+                  return missing === "event" ? [] : [["plugin", "type", "{}", null, null, null]];
                 }
                 assert.strictEqual(queries, 2);
                 assert.strictEqual(sql, deploymentSql);

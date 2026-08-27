@@ -4,6 +4,7 @@ import {
   EventNotFound,
   ProjectNotFound,
   type ProjectEventRecord,
+  type ProjectExecutionRecord,
   type ProjectIngressEventRecord,
 } from "@macrograph/cloud-api";
 import { render } from "@solidjs/web";
@@ -32,6 +33,8 @@ const event: ProjectEventRecord = {
   eventType: "test-event",
   providerEventId: null,
   eventPayload: { message: "hello" },
+  traceId: null,
+  traceContext: null,
   receivedAt: "2026-08-28T12:00:00.000Z",
 };
 const ingress: ProjectIngressEventRecord = {
@@ -43,6 +46,7 @@ const ingress: ProjectIngressEventRecord = {
   eventId: null,
   eventPayload: { message: "hello" },
   traceId: null,
+  traceContext: null,
   previewOnly: false,
   previewGeneration: null,
   receivedAt: event.receivedAt,
@@ -60,12 +64,18 @@ afterEach(() => {
   queryClient.clear();
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 const setup = async (
   options: {
     selected?: "event" | "ingress";
     canEdit?: boolean;
+    canViewTraces?: boolean;
+    event?: ProjectEventRecord;
+    events?: ReadonlyArray<ProjectEventRecord>;
+    executions?: ReadonlyArray<ProjectExecutionRecord>;
+    ingress?: ProjectIngressEventRecord;
     currentDeploymentId?: string | null;
   } = {},
 ) => {
@@ -74,7 +84,12 @@ const setup = async (
     replay: () => Effect.never,
   };
   vi.spyOn(api, "list").mockReturnValue(
-    Effect.succeed({ events: [event], ingressEvents: [ingress], ingresses: [], executions: [] }),
+    Effect.succeed({
+      events: options.events ?? [options.event ?? event],
+      ingressEvents: [options.ingress ?? ingress],
+      ingresses: [],
+      executions: options.executions ?? [],
+    }),
   );
   vi.spyOn(api, "replay").mockReturnValue(Effect.succeed(replayResult));
   const credentialsApi: CredentialsApiClient = {
@@ -93,7 +108,7 @@ const setup = async (
         <Events
           projectId="project"
           selectedEventId={selection()}
-          canViewTraces={false}
+          canViewTraces={options.canViewTraces ?? false}
           canEdit={options.canEdit ?? true}
           currentDeploymentId={
             options.currentDeploymentId === undefined
@@ -117,6 +132,168 @@ const setup = async (
     document.querySelector("h2")?.closest("header")?.querySelector("button") ?? null;
   return { api: vi.mocked(api), confirm, button, select, onSelectionChange };
 };
+
+it("links a replay to its own trace and time window rather than the original ingress", async () => {
+  vi.stubEnv("VITE_AXIOM_ORG_ID", "test-org");
+  vi.stubEnv("VITE_AXIOM_TRACE_DATASET", "macrograph-traces");
+  const { select } = await setup({
+    canViewTraces: true,
+    event: { ...event, ingressEventId: ingress.id, traceId: "replay-trace" },
+    ingress: { ...ingress, traceId: "original-trace", receivedAt: "2026-08-27T12:00:00.000Z" },
+  });
+  const traceLink = () => document.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+  const replayUrl = new URL(traceLink()!.href);
+  expect(replayUrl.pathname).toBe("/test-org/trace");
+  expect(replayUrl.searchParams.get("traceId")).toBe("replay-trace");
+  expect(replayUrl.searchParams.get("startTime")).toBe("2026-08-28T11:55:00.000Z");
+  expect(replayUrl.searchParams.get("endTime")).toBe("2026-08-28T12:05:00.000Z");
+  expect(replayUrl.searchParams.get("traceDataset")).toBe("macrograph-traces");
+
+  select("ingress");
+  flush();
+  const ingressUrl = new URL(traceLink()!.href);
+  expect(ingressUrl.searchParams.get("traceId")).toBe("original-trace");
+  expect(ingressUrl.searchParams.get("startTime")).toBe("2026-08-27T11:55:00.000Z");
+});
+
+it("keeps original and replay events separate but links their shared trace through later replays", async () => {
+  vi.stubEnv("VITE_AXIOM_ORG_ID", "test-org");
+  const traceContext = {
+    traceId: "shared-trace",
+    spanId: "original-span",
+    sampled: true,
+    startedAt: "2026-08-27T12:00:00.000Z",
+  };
+  const originalIngress = {
+    ...ingress,
+    traceId: traceContext.traceId,
+    traceContext,
+    receivedAt: traceContext.startedAt,
+  };
+  const originalEvent: ProjectEventRecord = {
+    ...event,
+    id: "original-event",
+    source: "ingress",
+    ingressEventId: ingress.id,
+    traceId: traceContext.traceId,
+    traceContext,
+    receivedAt: traceContext.startedAt,
+  };
+  const replayEvent = {
+    ...event,
+    ingressEventId: ingress.id,
+    traceId: traceContext.traceId,
+    traceContext,
+  };
+  const { select } = await setup({
+    canViewTraces: true,
+    events: [originalEvent, replayEvent],
+    ingress: originalIngress,
+  });
+  const traceLink = () => document.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+  const replayUrl = new URL(traceLink()!.href);
+  expect(replayUrl.searchParams.get("traceId")).toBe("shared-trace");
+  expect(replayUrl.searchParams.get("startTime")).toBe("2026-08-27T11:55:00.000Z");
+  expect(replayUrl.searchParams.get("endTime")).toBe("2026-08-28T12:05:00.000Z");
+
+  select("original-event");
+  flush();
+  expect(document.querySelector("h2")?.closest("header")?.textContent).toContain("original-event");
+  expect(traceLink()!.href).toBe(replayUrl.href);
+  select("ingress");
+  flush();
+  expect(traceLink()!.href).toBe(replayUrl.href);
+
+  queryClient.setQueryData(["events", "project"], {
+    events: [
+      originalEvent,
+      replayEvent,
+      { ...replayEvent, id: "later-replay", receivedAt: "2026-08-29T12:00:00.000Z" },
+      { ...event, id: "unrelated", traceId: "other-trace", receivedAt: "2026-08-30T12:00:00.000Z" },
+    ],
+    ingressEvents: [originalIngress],
+    ingresses: [],
+    executions: [],
+  });
+  await vi.waitFor(() => {
+    flush();
+    expect(new URL(traceLink()!.href).searchParams.get("endTime")).toBe("2026-08-29T12:05:00.000Z");
+  });
+  const updatedUrl = traceLink()!.href;
+  select("original-event");
+  flush();
+  expect(traceLink()!.href).toBe(updatedUrl);
+  select("event");
+  flush();
+  expect(traceLink()!.href).toBe(updatedUrl);
+});
+
+it("uses the persisted trace start when the original event is outside the query window", async () => {
+  vi.stubEnv("VITE_AXIOM_ORG_ID", "test-org");
+  await setup({
+    canViewTraces: true,
+    event: {
+      ...event,
+      traceId: "shared-trace",
+      traceContext: {
+        traceId: "shared-trace",
+        spanId: "original-span",
+        sampled: true,
+        startedAt: "2026-08-20T12:00:00.000Z",
+      },
+    },
+  });
+  const url = new URL(document.querySelector<HTMLAnchorElement>('a[target="_blank"]')!.href);
+  expect(url.searchParams.get("traceId")).toBe("shared-trace");
+  expect(url.searchParams.get("startTime")).toBe("2026-08-20T11:55:00.000Z");
+  expect(url.searchParams.get("endTime")).toBe("2026-08-28T12:05:00.000Z");
+});
+
+it.each(["complete", "queued", "running"] as const)(
+  "extends the original ingress trace window through a related %s execution",
+  async (status) => {
+    vi.stubEnv("VITE_AXIOM_ORG_ID", "test-org");
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-08-28T14:00:00.000Z"));
+    await setup({
+      selected: "ingress",
+      canViewTraces: true,
+      ingress: { ...ingress, traceId: "shared-trace" },
+      event: { ...event, traceId: "shared-trace", ingressEventId: ingress.id },
+      executions: [
+        {
+          id: "execution",
+          projectId: event.projectId,
+          projectEventId: event.id,
+          deploymentId: "deployment",
+          status,
+          receivedAt: event.receivedAt,
+          startedAt: status === "queued" ? null : "2026-08-28T12:01:00.000Z",
+          completedAt: status === "complete" ? "2026-08-28T13:00:00.000Z" : null,
+          error: null,
+        },
+      ],
+    });
+    const url = new URL(document.querySelector<HTMLAnchorElement>('a[target="_blank"]')!.href);
+    expect(url.searchParams.get("endTime")).toBe(
+      status === "complete" ? "2026-08-28T13:05:00.000Z" : "2026-08-28T14:05:00.000Z",
+    );
+  },
+);
+
+it.each(["replay", "ingress"] as const)(
+  "only falls back to the original ingress trace for historical non-replay events: %s",
+  async (source) => {
+    vi.stubEnv("VITE_AXIOM_ORG_ID", "test-org");
+    await setup({
+      canViewTraces: true,
+      event: { ...event, source, ingressEventId: ingress.id },
+      ingress: { ...ingress, traceId: "original-trace" },
+    });
+    const link = document.querySelector<HTMLAnchorElement>('a[target="_blank"]');
+    if (source === "replay") expect(link).toBeNull();
+    else expect(new URL(link!.href).searchParams.get("traceId")).toBe("original-trace");
+  },
+);
 
 it.each(["event", "ingress"] as const)(
   "replays %s once and keeps the original selection",

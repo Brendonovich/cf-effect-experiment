@@ -49,6 +49,14 @@ export const ProjectEventSource = Schema.Literals([
 ]);
 export type ProjectEventSource = typeof ProjectEventSource.Type;
 
+export const EventTraceContext = Schema.Struct({
+  traceId: Schema.String,
+  spanId: Schema.String,
+  sampled: Schema.Boolean,
+  startedAt: Schema.String,
+});
+export type EventTraceContext = typeof EventTraceContext.Type;
+
 export const ProjectEventRecord = Schema.Struct({
   id: Schema.String,
   projectId: Schema.String,
@@ -58,6 +66,8 @@ export const ProjectEventRecord = Schema.Struct({
   eventType: Schema.String,
   providerEventId: Schema.NullOr(Schema.String),
   eventPayload: Schema.Unknown,
+  traceId: Schema.NullOr(Schema.String),
+  traceContext: Schema.NullOr(EventTraceContext),
   receivedAt: Schema.String,
 });
 export type ProjectEventRecord = typeof ProjectEventRecord.Type;
@@ -84,6 +94,7 @@ export const ProjectIngressEventRecord = Schema.Struct({
   eventId: Schema.NullOr(Schema.String),
   eventPayload: Schema.Unknown,
   traceId: Schema.NullOr(Schema.String),
+  traceContext: Schema.NullOr(EventTraceContext),
   previewOnly: Schema.Boolean,
   previewGeneration: Schema.NullOr(Schema.String),
   receivedAt: Schema.String,

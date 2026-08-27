@@ -2,7 +2,7 @@ import { DeploymentNotFound, EventNotFound, ExecutionNotFound } from "@macrograp
 import { Policy } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/plugin";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Tracer } from "effect";
 
 import type { Service as WorkerOperations } from "../worker/CloudWorkerOperations.ts";
 
@@ -40,6 +40,7 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
                 kind === "event" ? projectEvents.ingressEventId : projectIngressEvents.id,
               providerEventId:
                 kind === "event" ? projectEvents.providerEventId : projectIngressEvents.eventId,
+              traceContext: table.traceContext,
             })
             .from(table)
             .where(and(eq(table.projectId, projectId), eq(table.id, eventId)))
@@ -65,24 +66,50 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
           // A new workflow ID reruns every step instead of resuming cached workflow results.
           const executionId = crypto.randomUUID();
           const projectEventId = crypto.randomUUID();
-          const span = yield* Effect.currentSpan.pipe(Effect.orDie);
-          yield* workerOperations.replayEvent({
-            executionId,
-            projectEventId,
-            projectId,
-            ...deployment,
-            source: "replay",
-            pluginId: event.pluginId,
-            eventType: event.eventType,
-            event: event.eventPayload,
-            ...(event.ingressEventId === null ? {} : { ingressEventId: event.ingressEventId }),
-            ...(event.providerEventId === null ? {} : { providerEventId: event.providerEventId }),
-            traceContext: { traceId: span.traceId, spanId: span.spanId, sampled: span.sampled },
-          });
+          yield* Effect.gen(function* () {
+            const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+            const traceContext = {
+              traceId: span.traceId,
+              spanId: span.spanId,
+              sampled: span.sampled,
+            };
+            yield* workerOperations.replayEvent({
+              executionId,
+              projectEventId,
+              projectId,
+              ...deployment,
+              source: "replay",
+              pluginId: event.pluginId,
+              eventType: event.eventType,
+              event: event.eventPayload,
+              ...(event.ingressEventId === null ? {} : { ingressEventId: event.ingressEventId }),
+              ...(event.providerEventId === null ? {} : { providerEventId: event.providerEventId }),
+              traceContext,
+              // Carry the original parent through replayed events, rather than chaining replays.
+              eventTraceContext: event.traceContext ?? {
+                ...traceContext,
+                startedAt: new Date().toISOString(),
+              },
+            });
+          }).pipe(
+            Effect.withSpan("Event.replay", {
+              kind: "producer",
+              ...(event.traceContext === null
+                ? { root: true }
+                : { parent: Tracer.externalSpan(event.traceContext) }),
+              attributes: {
+                "macrograph.project.id": projectId,
+                "macrograph.replay.event.id": eventId,
+                "macrograph.project.event.id": projectEventId,
+                "macrograph.execution.id": executionId,
+                "macrograph.deployment.id": deployment.deploymentId,
+              },
+            }),
+          );
           return { executionId, projectEventId, deploymentId: deployment.deploymentId };
         }).pipe(
           Policy.withPolicy(eventPolicy.canEdit(projectId)),
-          Effect.withSpan("Event.replay", {
+          Effect.withSpan("Event.replayRequest", {
             kind: "producer",
             attributes: {
               "macrograph.project.id": projectId,
