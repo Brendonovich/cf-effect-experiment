@@ -16,7 +16,7 @@ export interface SchemaRuntime {
 		properties: Readonly<Record<string, unknown>>,
 		inputDefaults: Readonly<Record<string, unknown>>,
 		input: string,
-	) => Effect.Effect<ReadonlyArray<string>>;
+	) => Effect.Effect<ReadonlyArray<string>, unknown>;
 }
 
 /** Manages loaded packages, schema runtimes, node IO, and input/property validation. */
@@ -342,7 +342,9 @@ export const defaultLayer = Layer.effect(
 			const suggestions =
 				resolver === undefined
 					? undefined
-					: yield* resolver(properties, decodedDefaults, input).pipe(
+					: yield* Effect.suspend(() =>
+							resolver(properties, decodedDefaults, input),
+						).pipe(
 							Effect.catchCause(
 								() =>
 									new Package.InvalidInputDefaultError({

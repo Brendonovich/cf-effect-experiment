@@ -40,7 +40,13 @@ export const ProjectDeploymentRecord = Schema.Struct({
 });
 export type ProjectDeploymentRecord = typeof ProjectDeploymentRecord.Type;
 
-export const ProjectEventSource = Schema.Literals(["ingress", "engine", "timer", "internal"]);
+export const ProjectEventSource = Schema.Literals([
+  "ingress",
+  "engine",
+  "timer",
+  "internal",
+  "replay",
+]);
 export type ProjectEventSource = typeof ProjectEventSource.Type;
 
 export const ProjectEventRecord = Schema.Struct({

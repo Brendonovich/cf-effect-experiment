@@ -7,19 +7,11 @@ import {
   ConnectionFailed,
   RequestFailed,
   RuntimeRpcs,
+  Voices,
   VoicemodEngine,
 } from "./Definition.ts";
 import * as Protocol from "./Protocol.ts";
 
-const Voices = Schema.Struct({
-  voices: Schema.Array(
-    Schema.Struct({
-      id: Schema.String,
-      friendlyName: Schema.String,
-      enabled: Schema.optional(Schema.Boolean),
-    }),
-  ),
-});
 const Registration = Schema.Struct({ status: Schema.Struct({ code: Schema.Number }) });
 
 export const layer = Layer.effect(VoicemodEngine)(
@@ -133,6 +125,21 @@ export const layer = Layer.effect(VoicemodEngine)(
         ? Effect.succeed(active.client)
         : Effect.fail(new ConnectionFailed({ reason: "Voicemod is disconnected." })),
     );
+    const getVoices = Effect.fnUntraced(function* (client: Protocol.Client) {
+      const response = yield* client.call("getVoices", {});
+      const { voices } = yield* Schema.decodeUnknownEffect(Schema.Struct({ voices: Voices }))(
+        response,
+      ).pipe(
+        Effect.mapError(
+          () =>
+            new RequestFailed({
+              action: "getVoices",
+              reason: "Voicemod returned an invalid voice list.",
+            }),
+        ),
+      );
+      return voices;
+    });
     const setState = Effect.fnUntraced(function* (query: string, toggle: string, desired: boolean) {
       const client = yield* getClient;
       const read = () =>
@@ -165,18 +172,10 @@ export const layer = Layer.effect(VoicemodEngine)(
     return {
       resources: Layer.empty,
       rpcs: RuntimeRpcs.toLayer({
+        GetVoices: () => getClient.pipe(Effect.flatMap(getVoices), lock.withPermit),
         SetVoice: Effect.fnUntraced(function* ({ voice }) {
           const client = yield* getClient;
-          const response = yield* client.call("getVoices", {});
-          const { voices } = yield* Schema.decodeUnknownEffect(Voices)(response).pipe(
-            Effect.mapError(
-              () =>
-                new RequestFailed({
-                  action: "getVoices",
-                  reason: "Voicemod returned an invalid voice list.",
-                }),
-            ),
-          );
+          const voices = yield* getVoices(client);
           const selected =
             voices.find((item) => item.id === voice) ??
             voices.find((item) => item.friendlyName === voice);

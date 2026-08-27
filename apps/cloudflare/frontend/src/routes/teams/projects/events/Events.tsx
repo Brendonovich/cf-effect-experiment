@@ -5,6 +5,7 @@ import type {
 } from "@macrograph/cloud-api";
 
 import {
+  Button,
   EventDetailHeader,
   EventExecutionRow,
   EventExecutions,
@@ -20,6 +21,7 @@ import KofiPlugin from "@macrograph/plugin-kofi";
 import TwitchPlugin from "@macrograph/plugin-twitch";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery } from "@tanstack/solid-query";
+import { Effect } from "effect";
 import { For, Show, createEffect, createMemo, createSignal, type Component } from "solid-js";
 
 import type { CredentialsApiClient, EventsApiClient } from "../../../../api";
@@ -30,6 +32,8 @@ interface EventsProps {
   readonly projectId: string;
   readonly selectedEventId: string | undefined;
   readonly canViewTraces: boolean;
+  readonly canEdit: boolean;
+  readonly currentDeploymentId: string | null | undefined;
   readonly api: EventsApiClient;
   readonly credentialsApi: CredentialsApiClient;
   readonly onSelectionChange: (eventId?: string) => void;
@@ -43,7 +47,9 @@ type TimelineItem =
       readonly ingress?: ProjectIngressEventRecord;
     };
 
-const eventSource = (event: ProjectEventRecord): "Ingress" | "Engine" | "Timer" | "Internal" => {
+const eventSource = (
+  event: ProjectEventRecord,
+): "Ingress" | "Engine" | "Timer" | "Internal" | "Replay" => {
   switch (event.source) {
     case "ingress":
       return "Ingress";
@@ -53,6 +59,8 @@ const eventSource = (event: ProjectEventRecord): "Ingress" | "Engine" | "Timer" 
       return "Timer";
     case "internal":
       return "Internal";
+    case "replay":
+      return "Replay";
   }
 };
 
@@ -75,6 +83,21 @@ export const Events: Component<EventsProps> = (props) => {
   const [selectedIngressId, setSelectedIngressId] = createSignal<string>();
   const [ingressSearch, setIngressSearch] = createSignal("");
   const [now, setNow] = createSignal(Date.now());
+  const [replaying, setReplaying] = createSignal(false);
+  // Signal writes are deferred, so guard duplicate requests synchronously.
+  let replayInFlight = false;
+  const [replayFeedback, setReplayFeedback] = createSignal<{
+    readonly projectId: string;
+    readonly eventId: string;
+    readonly error: boolean;
+    readonly message: string;
+  }>();
+  const selectedReplayFeedback = createMemo(() => {
+    const feedback = replayFeedback();
+    return feedback?.projectId === props.projectId && feedback.eventId === props.selectedEventId
+      ? feedback
+      : undefined;
+  });
   createEffect(
     () => true,
     () => {
@@ -190,6 +213,52 @@ export const Events: Component<EventsProps> = (props) => {
 
     const ingress = ingressEvents().find((record) => record.id === props.selectedEventId);
     return ingress === undefined ? undefined : { kind: "ingress", record: ingress };
+  };
+  const replay = async () => {
+    const item = selectedItem();
+    if (item === undefined || replayInFlight || !props.canEdit || props.currentDeploymentId == null)
+      return;
+    if (
+      !window.confirm(
+        `Replay "${item.record.eventType}"?\n\nThis creates a new event and runs all matching graphs in the latest current deployment, not unpublished edits or the event's original deployment.\n\nThis performs real actions and may repeat side effects. It is not a dry run.`,
+      )
+    )
+      return;
+
+    const projectId = props.projectId;
+    const eventId = item.record.id;
+    replayInFlight = true;
+    setReplaying(true);
+    setReplayFeedback(undefined);
+    const failure = (message: string) => Effect.succeed({ error: true, message });
+    try {
+      const result = await Effect.runPromise(
+        props.api.replay({ params: { projectId, eventId }, payload: { kind: item.kind } }).pipe(
+          Effect.map((result) => ({
+            error: false,
+            message: `Replay queued on deployment ${result.deploymentId}. A new event will appear in the timeline shortly; execution results may take longer.`,
+          })),
+          Effect.catchTags({
+            EventNotFound: () => failure("This event is no longer available to replay."),
+            DeploymentNotFound: () =>
+              failure("There is no current deployment. Deploy this project before replaying."),
+            ProjectNotFound: () =>
+              failure("The project is unavailable or you do not have permission to replay events."),
+            Unauthorized: () =>
+              failure("Your session has expired. Sign in again to replay events."),
+          }),
+          Effect.catchCause(() =>
+            failure(
+              "Could not confirm the replay. Check the timeline before trying again to avoid duplicate actions.",
+            ),
+          ),
+        ),
+      );
+      setReplayFeedback({ projectId, eventId, ...result });
+    } finally {
+      replayInFlight = false;
+      setReplaying(false);
+    }
   };
   const toggleIngress = (endpointId: string) => {
     setSelectedIngressId((selected) => (selected === endpointId ? undefined : endpointId));
@@ -419,6 +488,17 @@ export const Events: Component<EventsProps> = (props) => {
                     receivedAt={item().record.receivedAt}
                     now={now()}
                   >
+                    <Show when={props.canEdit}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={replaying() || props.currentDeploymentId == null}
+                        onClick={() => void replay()}
+                      >
+                        {replaying() ? "Replaying..." : "Replay"}
+                      </Button>
+                    </Show>
                     <Show when={props.canViewTraces && traceUrl()}>
                       {(href) => (
                         <a
@@ -433,6 +513,24 @@ export const Events: Component<EventsProps> = (props) => {
                       )}
                     </Show>
                   </EventDetailHeader>
+
+                  <Show when={props.canEdit && props.currentDeploymentId == null}>
+                    <p sx={styles.panelDescription}>Deploy this project to replay events.</p>
+                  </Show>
+                  <Show when={selectedReplayFeedback()}>
+                    {(feedback) => (
+                      <div
+                        sx={[
+                          styles.fields,
+                          styles.panelDescription,
+                          feedback().error && styles.runError,
+                        ]}
+                        role={feedback().error ? "alert" : "status"}
+                      >
+                        {feedback().message}
+                      </div>
+                    )}
+                  </Show>
 
                   <div sx={styles.detailBody}>
                     <EventPayload eventId={item().record.id} source={source()} payload={payload()}>

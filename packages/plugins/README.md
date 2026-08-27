@@ -87,6 +87,13 @@ Voicemod uses a configured registration key rather than the legacy embedded key.
 These are current-runtime ports, not an automatic migration of persisted legacy
 graphs. Plugin/schema identifiers and pin shapes follow the current API.
 
+String input autocomplete uses the `suggestions` Effect resolver, the counterpart
+of legacy `fetchSuggestions`. Resolvers receive current properties (with resource
+constants resolved), persisted input defaults, and the hosted engine's runtime RPC
+client. OBS, VTube Studio, and Voicemod query the live integration; ElevenLabs model
+IDs use the legacy static list. Suggestions refresh when an input is focused, and
+failed lookups leave it editable as free text.
+
 The current type system has scalar, list, and option pins, but no generic map,
 struct, or enum pins. Integration structures and JSON values therefore use JSON
 strings; list operations use an explicit element type instead of wildcard

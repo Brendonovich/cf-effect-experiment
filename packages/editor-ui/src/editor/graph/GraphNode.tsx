@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { For, Show, createSignal, type Component } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { TextInput } from "../../ui/TextInput";
 import { visiblePorts } from "./connectionAuthoring";
 import {
   graphNodeInputs,
@@ -341,6 +342,7 @@ const DataDefaultControl: Component<{
   node: Node.Model;
   port: Extract<GraphPort, { readonly kind: "data" }>;
   pluginDefault?: () => unknown;
+  suggestions: boolean;
   connected: boolean;
   onSet: (value: unknown) => void;
   onClear: () => void;
@@ -349,7 +351,6 @@ const DataDefaultControl: Component<{
   const persisted = () => Object.hasOwn(props.node.inputDefaults, props.port.id);
   const value = () =>
     persisted() ? props.node.inputDefaults[props.port.id] : props.pluginDefault?.();
-  const [suggestions, setSuggestions] = createSignal<ReadonlyArray<string>>([]);
   const formatValue = () => {
     const current = value();
     return typeof current === "string" || typeof current === "number" ? String(current) : "";
@@ -367,17 +368,12 @@ const DataDefaultControl: Component<{
   return (
     <div sx={styles.defaultControls} onPointerDown={(event) => event.stopPropagation()}>
       <Show when={!props.connected && props.port.type._tag === "String"}>
-        <input
-          sx={styles.defaultInput}
-          value={draft()}
-          list={`suggestions-${props.node.id}-${props.port.id}`}
-          onFocus={() => void props.onGetSuggestions().then(setSuggestions)}
-          onInput={(event) => setDraft(event.currentTarget.value)}
-          onChange={() => props.onSet(draft())}
+        <TextInput
+          value={formatValue()}
+          label={props.port.name || props.port.id}
+          onChange={props.onSet}
+          onGetSuggestions={props.suggestions ? props.onGetSuggestions : undefined}
         />
-        <datalist id={`suggestions-${props.node.id}-${props.port.id}`}>
-          <For each={suggestions()}>{(suggestion) => <option value={suggestion} />}</For>
-        </datalist>
       </Show>
       <Show
         when={
@@ -514,6 +510,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
                             port={port()}
                             connected={props.connectedInputIds.has(port().id)}
                             pluginDefault={() => metadata()?.defaultValue}
+                            suggestions={metadata()?.suggestions === true}
                             onSet={(value) => props.onSetInputDefault(port().id, value)}
                             onClear={() => props.onClearInputDefault(port().id)}
                             onGetSuggestions={() => props.onGetSuggestions(port().id)}

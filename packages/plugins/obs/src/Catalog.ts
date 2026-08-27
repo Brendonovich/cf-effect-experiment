@@ -1,4 +1,5 @@
 import { DataType } from "@macrograph/plugin/DataType";
+import type * as Engine from "@macrograph/plugin/Engine";
 import type * as Registration from "@macrograph/plugin/Registration";
 import { Effect } from "effect";
 
@@ -7,12 +8,19 @@ import { OBSEngine, OBSSocket } from "./Definition.ts";
 type Context = Registration.PluginContext<typeof OBSEngine>;
 
 type Kind = "string" | "int" | "float" | "bool" | "strings" | "json";
+type SuggestionRequest = {
+  readonly requestType: string;
+  readonly list: string;
+  readonly name?: string;
+  readonly dependency?: string;
+};
 type Field = {
   readonly id: string;
   readonly kind: Kind;
   readonly name?: string;
   readonly optional?: boolean;
   readonly defaultValue?: string | number | boolean;
+  readonly suggestions?: ReadonlyArray<SuggestionRequest>;
 };
 type Request = {
   readonly id: string;
@@ -26,10 +34,15 @@ type Event = {
   readonly outputs: ReadonlyArray<Field>;
 };
 
-const s = (id: string, name?: string): Field => ({
+const s = (
+  id: string,
+  name?: string,
+  suggestions?: ReadonlyArray<SuggestionRequest>,
+): Field => ({
   id,
   kind: "string",
   ...(name ? { name } : {}),
+  ...(suggestions === undefined ? {} : { suggestions }),
 });
 const i = (id: string, name?: string): Field => ({
   id,
@@ -288,11 +301,36 @@ const request = (
   outputs,
   ...(name === undefined ? {} : { name }),
 });
-const input = s("inputName", "Input Name");
-const source = s("sourceName", "Source Name");
-const scene = s("sceneName", "Scene Name");
+const sceneSuggestions = [
+  { requestType: "GetSceneList", list: "scenes", name: "sceneName" },
+];
+const inputSuggestions = [
+  { requestType: "GetInputList", list: "inputs", name: "inputName" },
+];
+const input = s("inputName", "Input Name", inputSuggestions);
+const source = s("sourceName", "Source Name", [
+  ...sceneSuggestions,
+  ...inputSuggestions,
+]);
+const scene = s("sceneName", "Scene Name", sceneSuggestions);
 const item = i("sceneItemId", "Scene Item ID");
-const filter = s("filterName", "Filter Name");
+const filter = s("filterName", "Filter Name", [
+  {
+    requestType: "GetSourceFilterList",
+    list: "filters",
+    name: "filterName",
+    dependency: "sourceName",
+  },
+]);
+const inputKind = s("inputKind", undefined, [
+  { requestType: "GetInputKindList", list: "inputKinds" },
+]);
+const filterKind = s("filterKind", undefined, [
+  { requestType: "GetSourceFilterKindList", list: "sourceFilterKinds" },
+]);
+const imageFormat = s("imageFormat", undefined, [
+  { requestType: "GetVersion", list: "supportedImageFormats" },
+]);
 const output = s("outputName", "Output Name");
 
 export const requests: ReadonlyArray<Request> = [
@@ -302,8 +340,8 @@ export const requests: ReadonlyArray<Request> = [
     "CreateInput",
     [
       scene,
-      input,
-      s("inputKind"),
+      s("inputName", "Input Name"),
+      inputKind,
       optional(j("inputSettings"), "{}"),
       optional(b("sceneItemEnabled"), true),
     ],
@@ -356,7 +394,11 @@ export const requests: ReadonlyArray<Request> = [
     [],
     [s("currentSceneCollectionName"), ss("sceneCollections")],
   ),
-  request("SetCurrentSceneCollection", [s("sceneCollectionName")]),
+  request("SetCurrentSceneCollection", [
+    s("sceneCollectionName", undefined, [
+      { requestType: "GetSceneCollectionList", list: "sceneCollections" },
+    ]),
+  ]),
   request("CreateSceneCollection", [s("sceneCollectionName")]),
   request("GetProfileList", [], [s("currentProfileName"), ss("profiles")]),
   request("SetCurrentProfile", [s("profileName")]),
@@ -464,7 +506,7 @@ export const requests: ReadonlyArray<Request> = [
   request("GetGroupList", [], [ss("groups")]),
   request("GetCurrentPreviewScene", [], [s("sceneName"), s("sceneUuid")]),
   request("SetCurrentPreviewScene", [scene]),
-  request("CreateScene", [scene], [s("sceneUuid")]),
+  request("CreateScene", [s("sceneName", "Scene Name")], [s("sceneUuid")]),
   request("RemoveScene", [scene]),
   request("SetSceneName", [scene, s("newSceneName")]),
   request(
@@ -480,10 +522,25 @@ export const requests: ReadonlyArray<Request> = [
     "Set Scene Transition Override",
   ),
   request("GetSceneItemList", [scene], [j("sceneItems")]),
-  request("GetGroupSceneItemList", [scene], [j("sceneItems")]),
+  request(
+    "GetGroupSceneItemList",
+    [s("sceneName", "Scene Name")],
+    [j("sceneItems")],
+  ),
   request(
     "GetSceneItemId",
-    [scene, source, optional(i("searchOffset"), 0)],
+    [
+      scene,
+      s("sourceName", "Source Name", [
+        {
+          requestType: "GetSceneItemList",
+          list: "sceneItems",
+          name: "sourceName",
+          dependency: "sceneName",
+        },
+      ]),
+      optional(i("searchOffset"), 0),
+    ],
     [item],
     "Get Scene Item ID",
   ),
@@ -496,7 +553,11 @@ export const requests: ReadonlyArray<Request> = [
   request("RemoveSceneItem", [scene, item]),
   request(
     "DuplicateSceneItem",
-    [scene, item, optional(s("destinationSceneName"), "")],
+    [
+      scene,
+      item,
+      optional(s("destinationSceneName", undefined, sceneSuggestions), ""),
+    ],
     [item],
   ),
   request("GetSceneItemTransform", [scene, item], [j("sceneItemTransform")]),
@@ -509,7 +570,7 @@ export const requests: ReadonlyArray<Request> = [
   request("SetSceneItemIndex", [scene, item, i("sceneItemIndex")]),
   request("GetSceneItemBlendMode", [scene, item], [s("sceneItemBlendMode")]),
   request("SetSceneItemBlendMode", [scene, item, s("sceneItemBlendMode")]),
-  request("GetInputList", [optional(s("inputKind"), "")], [j("inputs")]),
+  request("GetInputList", [optional(inputKind, "")], [j("inputs")]),
   request(
     "GetInputKindList",
     [optional(b("unversioned"), false)],
@@ -522,11 +583,7 @@ export const requests: ReadonlyArray<Request> = [
   ),
   request("RemoveInput", [input]),
   request("SetInputName", [input, s("newInputName")]),
-  request(
-    "GetInputDefaultSettings",
-    [s("inputKind")],
-    [j("defaultInputSettings")],
-  ),
+  request("GetInputDefaultSettings", [inputKind], [j("defaultInputSettings")]),
   request("GetInputSettings", [input], [j("inputSettings"), s("inputKind")]),
   request("SetInputSettings", [
     input,
@@ -568,7 +625,7 @@ export const requests: ReadonlyArray<Request> = [
     "GetSourceScreenshot",
     [
       source,
-      s("imageFormat"),
+      imageFormat,
       optional(i("imageWidth"), 0),
       optional(i("imageHeight"), 0),
       optional(i("imageCompressionQuality"), -1),
@@ -577,7 +634,7 @@ export const requests: ReadonlyArray<Request> = [
   ),
   request("SaveSourceScreenshot", [
     source,
-    s("imageFormat"),
+    imageFormat,
     s("imageFilePath"),
     optional(i("imageWidth"), 0),
     optional(i("imageHeight"), 0),
@@ -586,13 +643,13 @@ export const requests: ReadonlyArray<Request> = [
   request("GetSourceFilterList", [source], [j("filters")]),
   request(
     "GetSourceFilterDefaultSettings",
-    [s("filterKind")],
+    [filterKind],
     [j("defaultFilterSettings")],
   ),
   request("CreateSourceFilter", [
     source,
-    filter,
-    s("filterKind"),
+    s("filterName", "Filter Name"),
+    filterKind,
     optional(j("filterSettings"), "{}"),
   ]),
   request("RemoveSourceFilter", [source, filter]),
@@ -720,6 +777,61 @@ const record = (value: unknown): Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null
     ? Object.fromEntries(Object.entries(value))
     : {};
+const dataInput = (
+  io: Registration.IOContext<
+    Registration.PropertyValues<typeof socketProperty>,
+    Engine.RuntimeClientOf<typeof OBSEngine>
+  >,
+  field: Field,
+) => {
+  if (field.kind === "string" && field.suggestions !== undefined) {
+    const requests = field.suggestions;
+    return io.data.in(field.id, DataType.String, {
+      name: label(field),
+      ...(typeof field.defaultValue === "string"
+        ? { defaultValue: field.defaultValue }
+        : {}),
+      suggestions: ({ properties, inputDefaults, engine }) =>
+        Effect.gen(function* () {
+          const suggestions: Array<string> = [];
+          for (const request of requests) {
+            const dependency =
+              request.dependency === undefined
+                ? undefined
+                : inputDefaults[request.dependency];
+            if (
+              request.dependency !== undefined &&
+              (typeof dependency !== "string" || dependency.length === 0)
+            )
+              return [];
+            const response = yield* engine.Call({
+              address: properties.socket,
+              requestType: request.requestType,
+              ...(request.dependency === undefined
+                ? {}
+                : { requestData: { [request.dependency]: dependency } }),
+            });
+            const values = record(response)[request.list];
+            if (!Array.isArray(values)) continue;
+            for (const value of values) {
+              const name =
+                request.name === undefined
+                  ? value
+                  : record(value)[request.name];
+              if (typeof name === "string") suggestions.push(name);
+            }
+          }
+          return suggestions;
+        }),
+    });
+  }
+  return io.data.in(field.id, type(field.kind), {
+    name: label(field),
+    ...(field.defaultValue === undefined
+      ? {}
+      : { defaultValue: field.defaultValue }),
+  });
+};
 const inputValue = (field: Field, value: unknown) =>
   field.kind === "json" && typeof value === "string"
     ? Effect.try({ try: () => JSON.parse(value), catch: (cause) => cause })
@@ -774,12 +886,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
         properties: socketProperty,
         io: (io) => ({
           inputs: (definition.inputs ?? []).map((field) =>
-            io.data.in(field.id, type(field.kind), {
-              name: label(field),
-              ...(field.defaultValue === undefined
-                ? {}
-                : { defaultValue: field.defaultValue }),
-            }),
+            dataInput(io, field),
           ),
           scalarOutputs: scalarOutputs.map((field) =>
             io.data.out(field.id, type(field.kind), { name: label(field) }),
@@ -828,14 +935,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       description: `${definition.id.startsWith("Get") ? "Gets data from" : "Sends a request to"} OBS using ${words(definition.id)}.`,
       properties: socketProperty,
       io: (io) => ({
-        inputs: (definition.inputs ?? []).map((field) =>
-          io.data.in(field.id, type(field.kind), {
-            name: label(field),
-            ...(field.defaultValue === undefined
-              ? {}
-              : { defaultValue: field.defaultValue }),
-          }),
-        ),
+        inputs: (definition.inputs ?? []).map((field) => dataInput(io, field)),
         outputs: (definition.outputs ?? []).map((field) =>
           io.data.out(field.id, type(field.kind), { name: label(field) }),
         ),

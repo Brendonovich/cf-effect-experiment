@@ -104,6 +104,18 @@ describe("ElevenLabs catalog", () => {
         "eleven_multilingual_v2",
       );
       assert.strictEqual(schema.dataInputs.find(({ id }) => id === "body")!.defaultValue, "{}");
+      const suggestions = schema.dataInputs.find(({ id }) => id === "modelId")!.suggestions;
+      assert.isDefined(suggestions);
+      assert.deepStrictEqual(
+        yield* suggestions!({ properties: {}, inputDefaults: {}, engine: undefined }),
+        [
+          "eleven_turbo_v2_5",
+          "eleven_multilingual_v2",
+          "eleven_turbo_v2",
+          "eleven_multilingual_v1",
+          "eleven_monolingual_v1",
+        ],
+      );
       assert.deepStrictEqual(
         schema.dataOutputs.map(({ id, type }) => [id, type._tag]),
         [

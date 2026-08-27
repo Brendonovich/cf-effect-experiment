@@ -1,6 +1,6 @@
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Plugin from "@macrograph/plugin/Plugin";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import { RequestFailed, VTubeStudioEngine, VTubeStudioInstance } from "./Definition.ts";
 
@@ -46,7 +46,29 @@ export default Plugin.make({
       properties,
       description: "Loads a model by its modelID string from Available Models.",
       io: (io) => ({
-        model: io.data.in("model", DataType.String, { name: "Model ID", defaultValue: "" }),
+        model: io.data.in("model", DataType.String, {
+          name: "Model ID",
+          defaultValue: "",
+          suggestions: ({ properties, engine }) =>
+            engine
+              .Call({ url: properties.instance, requestType: "AvailableModels", data: {} })
+              .pipe(
+                Effect.flatMap((response) =>
+                  Schema.decodeUnknownEffect(
+                    Schema.Array(Schema.Struct({ modelID: Schema.String })),
+                  )(response.availableModels).pipe(
+                    Effect.mapError(
+                      () =>
+                        new RequestFailed({
+                          requestType: "AvailableModels",
+                          reason: "Invalid model list.",
+                        }),
+                    ),
+                  ),
+                ),
+                Effect.map((models) => models.map((model) => model.modelID)),
+              ),
+        }),
       }),
       run: ({ io, properties, engine }) =>
         engine
@@ -88,7 +110,33 @@ export default Plugin.make({
       properties,
       description: "Sets an expression file's active state to the supplied boolean.",
       io: (io) => ({
-        file: io.data.in("file", DataType.String, { name: "Expression File", defaultValue: "" }),
+        file: io.data.in("file", DataType.String, {
+          name: "Expression File",
+          defaultValue: "",
+          suggestions: ({ properties, engine }) =>
+            engine
+              .Call({
+                url: properties.instance,
+                requestType: "ExpressionState",
+                data: { details: false },
+              })
+              .pipe(
+                Effect.flatMap((response) =>
+                  Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ file: Schema.String })))(
+                    response.expressions,
+                  ).pipe(
+                    Effect.mapError(
+                      () =>
+                        new RequestFailed({
+                          requestType: "ExpressionState",
+                          reason: "Invalid expression list.",
+                        }),
+                    ),
+                  ),
+                ),
+                Effect.map((expressions) => expressions.map((expression) => expression.file)),
+              ),
+        }),
         active: io.data.in("active", DataType.Bool, { name: "Active", defaultValue: false }),
       }),
       run: ({ io, properties, engine }) =>
@@ -131,7 +179,29 @@ export default Plugin.make({
       properties,
       description: "Executes a hotkey using its hotkeyID string from Get Hotkey List.",
       io: (io) => ({
-        id: io.data.in("id", DataType.String, { name: "Hotkey ID", defaultValue: "" }),
+        id: io.data.in("id", DataType.String, {
+          name: "Hotkey ID",
+          defaultValue: "",
+          suggestions: ({ properties, engine }) =>
+            engine
+              .Call({ url: properties.instance, requestType: "HotkeysInCurrentModel", data: {} })
+              .pipe(
+                Effect.flatMap((response) =>
+                  Schema.decodeUnknownEffect(
+                    Schema.Array(Schema.Struct({ hotkeyID: Schema.String })),
+                  )(response.availableHotkeys).pipe(
+                    Effect.mapError(
+                      () =>
+                        new RequestFailed({
+                          requestType: "HotkeysInCurrentModel",
+                          reason: "Invalid hotkey list.",
+                        }),
+                    ),
+                  ),
+                ),
+                Effect.map((hotkeys) => hotkeys.map((hotkey) => hotkey.hotkeyID)),
+              ),
+        }),
       }),
       run: ({ io, properties, engine }) =>
         engine

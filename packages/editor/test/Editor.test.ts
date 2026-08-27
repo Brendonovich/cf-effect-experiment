@@ -15,6 +15,7 @@ import { DataType, Engine, Plugin, Resource } from "@macrograph/plugin";
 import UtilitiesPlugin from "@macrograph/plugin-utilities";
 import UtilitiesDeployment from "@macrograph/plugin-utilities/Deployment";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 import { Editor, EditorEvents, Packages } from "../src/index";
 
@@ -97,6 +98,11 @@ const SuggestionPlugin = Plugin.make({
         broken: io.data.in("broken", DataType.String, {
           suggestions: () => Effect.die("resolver failed"),
         }),
+        throws: io.data.in("throws", DataType.String, {
+          suggestions: () => {
+            throw new Error("resolver threw");
+          },
+        }),
       }),
       run: () => Effect.void,
     }),
@@ -106,7 +112,16 @@ class AccountResource extends Resource.make<AccountResource, string>()("account"
   name: "Account",
   description: "An authenticated account.",
 }) {}
-class ResourceEngine extends Engine.make({ resources: [AccountResource] }) {}
+class ResourceEngine extends Engine.make({
+  resources: [AccountResource],
+  rpcs: RpcGroup.make(
+    Rpc.make("GetSuggestions", {
+      payload: Schema.Struct({ account: Schema.String, query: Schema.String }),
+      success: Schema.Array(Schema.String),
+      error: Schema.String,
+    }),
+  ),
+}) {}
 const ResourcePlugin = Plugin.make({
   id: "resource-plugin",
   name: "Resources",
@@ -117,7 +132,15 @@ const ResourcePlugin = Plugin.make({
       name: "Action",
       properties: { account: { name: "Account", resource: AccountResource } },
       io: (io, properties) => ({
-        account: io.data.in(properties.account ?? "account", DataType.String),
+        account: io.data.in(properties.account ?? "account", DataType.String, {
+          suggestions: ({ properties, inputDefaults, engine }) => {
+            const query = inputDefaults[properties.account];
+            return engine.GetSuggestions({
+              account: properties.account,
+              query: typeof query === "string" ? query : "",
+            });
+          },
+        }),
       }),
       run: () => Effect.void,
     }),
@@ -326,11 +349,42 @@ it.layer(TestLayer)((it) => {
           },
         });
         assert.strictEqual(node.io.dataInputs[0]?.id, "account-1");
+        assert.isTrue(node.io.dataInputs[0]?.suggestions);
         yield* editor.node.setInputDefault({
           graphID: graph.graph.id,
           nodeID: node.node.id,
           input: "account-1",
           value: "saved",
+        });
+        const getSuggestions = editor.node.getInputSuggestions({
+          graphID: graph.graph.id,
+          nodeID: node.node.id,
+          input: "account-1",
+        });
+        expect(yield* Effect.flip(getSuggestions)).toMatchObject({
+          _tag: "InvalidInputDefaultError",
+          reason: "Suggestion resolver failed",
+        });
+        yield* editor.engine.hostRuntimeClient("resource-plugin", {
+          GetSuggestions: (request: { account: string; query: string }) => {
+            expect(request).toEqual({ account: "account-1", query: "saved" });
+            return editor.node
+              .setInputDefault({
+                graphID: graph.graph.id,
+                nodeID: node.node.id,
+                input: "account-1",
+                value: "saved",
+              })
+              .pipe(Effect.as(["live value"]));
+          },
+        });
+        expect(yield* getSuggestions).toEqual(["live value"]);
+        yield* editor.engine.hostRuntimeClient("resource-plugin", {
+          GetSuggestions: () => Effect.fail("disconnected"),
+        });
+        expect(yield* Effect.flip(getSuggestions)).toMatchObject({
+          _tag: "InvalidInputDefaultError",
+          reason: "Suggestion resolver failed",
         });
         const changed = yield* editor.constant.select(created.constant.id, "account-2");
         assert.strictEqual(
@@ -530,17 +584,19 @@ it.layer(TestLayer)((it) => {
             input: "query",
           }),
         ).toEqual(["default:typed"]);
-        const resolverFailure = yield* Effect.flip(
-          editor.node.getInputSuggestions({
-            graphID: graph.graph.id,
-            nodeID: node.node.id,
-            input: "broken",
-          }),
-        );
-        expect(resolverFailure).toMatchObject({
-          _tag: "InvalidInputDefaultError",
-          reason: "Suggestion resolver failed",
-        });
+        for (const input of ["broken", "throws"]) {
+          const resolverFailure = yield* Effect.flip(
+            editor.node.getInputSuggestions({
+              graphID: graph.graph.id,
+              nodeID: node.node.id,
+              input,
+            }),
+          );
+          expect(resolverFailure).toMatchObject({
+            _tag: "InvalidInputDefaultError",
+            reason: "Suggestion resolver failed",
+          });
+        }
         const clearDefault = yield* editor.node.clearInputDefault({
           graphID: graph.graph.id,
           nodeID: node.node.id,

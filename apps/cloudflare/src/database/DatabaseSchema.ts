@@ -165,7 +165,7 @@ export const projectIngressEndpoints = pgTable(
 );
 
 export type ProjectExecutionStatus = "queued" | "running" | "complete" | "errored";
-export type ProjectEventSource = "ingress" | "engine" | "timer" | "internal";
+export type ProjectEventSource = "ingress" | "engine" | "timer" | "internal" | "replay";
 
 export const projectIngressEvents = pgTable(
   "project_ingress_events",

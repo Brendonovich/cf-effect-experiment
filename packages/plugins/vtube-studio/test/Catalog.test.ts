@@ -2,7 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
 import { Effect } from "effect";
 
-import { ClientRpcs, VTubeStudioInstance } from "../src/Definition.ts";
+import {
+  ClientRpcs,
+  ConnectionFailed,
+  RequestFailed,
+  VTubeStudioInstance,
+} from "../src/Definition.ts";
 import plugin, { ids } from "../src/Plugin.ts";
 
 const execution = {
@@ -19,6 +24,105 @@ const node = {
   withSpan: <A, E, R>(_name: string, effect: Effect.Effect<A, E, R>) => effect,
 };
 describe("VTube Studio catalog", () => {
+  it.effect("suggests live pin values from the selected instance and propagates failures", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect(plugin.effect);
+      const cases = [
+        {
+          id: "LoadModel",
+          pin: "model",
+          requestType: "AvailableModels",
+          data: {},
+          list: "availableModels",
+          value: "modelID",
+          item: { modelID: "model-1", modelName: "Model One" },
+          expected: "model-1",
+          reason: "Invalid model list.",
+        },
+        {
+          id: "ToggleExpression",
+          pin: "file",
+          requestType: "ExpressionState",
+          data: { details: false },
+          list: "expressions",
+          value: "file",
+          item: { file: "smile.exp3.json", name: "Smile" },
+          expected: "smile.exp3.json",
+          reason: "Invalid expression list.",
+        },
+        {
+          id: "ExecuteHotkey",
+          pin: "id",
+          requestType: "HotkeysInCurrentModel",
+          data: {},
+          list: "availableHotkeys",
+          value: "hotkeyID",
+          item: { hotkeyID: "hotkey-1", name: "Smile" },
+          expected: "hotkey-1",
+          reason: "Invalid hotkey list.",
+        },
+      ];
+      for (const test of cases) {
+        const schema = schemas.find((schema) => schema.id === test.id);
+        assert.isDefined(schema);
+        const suggestions = schema
+          .generateIO({ instance: "ws://127.0.0.1:8001/" })
+          .dataInputs.find((input) => input.id === test.pin)?.suggestions;
+        assert.isDefined(suggestions);
+        const calls: unknown[] = [];
+        let response: Record<string, unknown> = { [test.list]: [test.item] };
+        const engine = {
+          Call: (payload: unknown) =>
+            Effect.sync(() => {
+              calls.push(payload);
+              return response;
+            }),
+        };
+        for (const instance of ["ws://127.0.0.1:8002/", "ws://127.0.0.1:8003/"]) {
+          assert.deepStrictEqual(
+            yield* suggestions({ properties: { instance }, inputDefaults: {}, engine }),
+            [test.expected],
+          );
+          assert.deepStrictEqual(calls.at(-1), {
+            url: instance,
+            requestType: test.requestType,
+            data: test.data,
+          });
+        }
+        const context = {
+          properties: { instance: "ws://127.0.0.1:8002/" },
+          inputDefaults: {},
+          engine,
+        };
+        response = { [test.list]: [] };
+        assert.deepStrictEqual(yield* suggestions(context), []);
+        for (const invalid of [
+          undefined,
+          null,
+          {},
+          [{ name: "Missing ID" }],
+          [{ [test.value]: 123 }],
+        ]) {
+          response = { [test.list]: invalid };
+          assert.deepStrictEqual(
+            yield* Effect.flip(suggestions(context)),
+            new RequestFailed({ requestType: test.requestType, reason: test.reason }),
+          );
+        }
+        for (const failure of [
+          new ConnectionFailed({ reason: "Disconnected" }),
+          new RequestFailed({ requestType: test.requestType, reason: "Rejected", code: 50 }),
+        ]) {
+          assert.strictEqual(
+            yield* Effect.flip(
+              suggestions({ ...context, engine: { Call: () => Effect.fail(failure) } }),
+            ),
+            failure,
+          );
+        }
+      }
+    }),
+  );
   it("namespaces its globally merged settings RPCs", () => {
     assert.deepStrictEqual(
       [...ClientRpcs.requests.keys()],

@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-import { searchMarker } from "./events-markers.stylex";
 import { colors } from "../tokens.stylex";
+import { searchMarker } from "./events-markers.stylex";
 
 const sm = "@media (min-width: 640px)";
 const md = "@media (min-width: 768px)";
@@ -383,6 +383,7 @@ export const styles = stylex.create({
   },
   detailHeader: {
     display: "flex",
+    flexWrap: "wrap",
     alignItems: "baseline",
     justifyContent: "space-between",
     gap: 12,

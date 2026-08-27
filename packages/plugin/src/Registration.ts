@@ -5,14 +5,18 @@ import type * as Engine from "./Engine.ts";
 import type { ExecutionContext, NodeExecutionContext } from "./ExecutionContext.ts";
 import type * as Resource from "./Resource.ts";
 
-export type SuggestionContext<Properties = Readonly<Record<string, unknown>>> = {
+export type SuggestionContext<
+  Properties = Readonly<Record<string, unknown>>,
+  EngineClient = unknown,
+> = {
   readonly properties: Properties;
   readonly inputDefaults: Readonly<Record<string, unknown>>;
+  readonly engine: EngineClient;
 };
 
-export type Suggestions<Properties = Readonly<Record<string, unknown>>> = (
-  context: SuggestionContext<Properties>,
-) => Effect.Effect<ReadonlyArray<string>>;
+export type Suggestions<Properties = Readonly<Record<string, unknown>>, EngineClient = unknown> = (
+  context: SuggestionContext<Properties, EngineClient>,
+) => Effect.Effect<ReadonlyArray<string>, unknown>;
 
 export class DataInputRef<Value = unknown> {
   readonly _tag = "DataInput" as const;
@@ -56,19 +60,19 @@ export class ExecutionOutputRef {
   ) {}
 }
 
-type InputOptions<Type extends DataType.Any, Properties> = {
+type InputOptions<Type extends DataType.Any, Properties, EngineClient> = {
   readonly name?: string;
   readonly defaultValue?: DataType.Value<Type>;
 } & (DataType.Value<Type> extends string
-  ? { readonly suggestions?: Suggestions<Properties> }
+  ? { readonly suggestions?: Suggestions<Properties, EngineClient> }
   : { readonly suggestions?: never });
 
-export interface IOContext<Properties = Readonly<Record<string, unknown>>> {
+export interface IOContext<Properties = Readonly<Record<string, unknown>>, EngineClient = unknown> {
   readonly data: {
     readonly in: <Type extends DataType.Any>(
       id: string,
       type: Type,
-      options?: InputOptions<Type, Properties>,
+      options?: InputOptions<Type, Properties, EngineClient>,
     ) => DataInputRef<DataType.Value<Type>>;
     readonly out: <Type extends DataType.Any>(
       id: string,
@@ -141,7 +145,7 @@ type CommonSchema<IO, Definition extends Engine.AnyDef, Properties extends Prope
   readonly description?: string;
   readonly properties?: Properties;
   readonly io: (
-    context: IOContext<RuntimeProperties<Properties>>,
+    context: IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
     properties: RuntimeProperties<Properties>,
   ) => IO;
   readonly run: (
@@ -294,7 +298,10 @@ const makeRegistered = <
   };
   const generate = (properties: Readonly<Record<string, unknown>>) => {
     const refs = collectRefs(
-      schema.io(ioContext as IOContext<RuntimeProperties<Properties>>, withDefaults(properties)),
+      schema.io(
+        ioContext as IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
+        withDefaults(properties),
+      ),
     );
     const executionInputs = refs.filter(
       (ref): ref is ExecutionInputRef => ref instanceof ExecutionInputRef,
@@ -350,7 +357,7 @@ const makeRegistered = <
         : () => Effect.succeed(false),
     run: (context) => {
       const io = schema.io(
-        ioContext as IOContext<RuntimeProperties<Properties>>,
+        ioContext as IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
         withDefaults(context.properties),
       );
       return schema.run({

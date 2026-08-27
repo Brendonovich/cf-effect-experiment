@@ -102,7 +102,11 @@ export const eventHandlers = HttpApiBuilder.group(
   "events",
   Effect.fnUntraced(function* (handlers) {
     const event = yield* Event.Service;
-    return handlers.handle("list", ({ params }) => event.list(params.projectId));
+    return handlers
+      .handle("list", ({ params }) => event.list(params.projectId))
+      .handle("replay", ({ params, payload }) =>
+        event.replay(params.projectId, params.eventId, payload.kind),
+      );
   }),
 );
 

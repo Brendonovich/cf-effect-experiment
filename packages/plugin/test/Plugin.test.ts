@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Array, Effect, Schema } from "effect";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { expectTypeOf } from "vitest";
 
 import { DataType, Engine, Plugin, Registration } from "../src/index.ts";
@@ -38,7 +39,15 @@ describe("Plugin.make", () => {
   it.effect("preserves engine and event inference when an engine is supplied", () =>
     Effect.gen(function* () {
       class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", {}) {}
-      class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
+      class TestEngine extends Engine.make({
+        events: Array.empty<Trigger>(),
+        rpcs: RpcGroup.make(
+          Rpc.make("GetValues", {
+            success: Schema.Array(Schema.String),
+            error: Schema.String,
+          }),
+        ),
+      }) {}
       const plugin = Plugin.make({
         id: "stateful",
         engine: TestEngine,
@@ -51,7 +60,14 @@ describe("Plugin.make", () => {
               expectTypeOf(event).toEqualTypeOf<Trigger>();
               return Effect.succeed(event._tag === "Trigger");
             },
-            io: () => ({}),
+            io: (io) => ({
+              value: io.data.in("value", DataType.String, {
+                suggestions: ({ engine }) => {
+                  expectTypeOf(engine).toEqualTypeOf<Engine.RuntimeClientOf<typeof TestEngine>>();
+                  return engine.GetValues();
+                },
+              }),
+            }),
             run: () => Effect.void,
           });
         }),

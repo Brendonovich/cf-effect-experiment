@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
 import { Effect } from "effect";
 
-import { ClientRpcs } from "../src/Definition.ts";
+import { ClientRpcs, ConnectionFailed, RequestFailed, Voices } from "../src/Definition.ts";
 import plugin, { ids } from "../src/Plugin.ts";
 
 const execution = {
@@ -19,6 +19,49 @@ const node = {
   withSpan: <A, E, R>(_name: string, effect: Effect.Effect<A, E, R>) => effect,
 };
 describe("Voicemod catalog", () => {
+  it.effect("suggests available voice IDs from every live query and propagates failures", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect(plugin.effect);
+      const suggestions = schemas
+        .find((schema) => schema.id === "SetVoice")
+        ?.dataInputs.find((input) => input.id === "voice")?.suggestions;
+      assert.isDefined(suggestions);
+      let voices: typeof Voices.Type = [
+        { id: "baby", friendlyName: "Baby", enabled: true },
+        { id: "other-baby", friendlyName: "Baby" },
+        { id: "disabled", friendlyName: "Disabled", enabled: false },
+      ];
+      let queries = 0;
+      const context = {
+        properties: {},
+        inputDefaults: {},
+        engine: {
+          GetVoices: () =>
+            Effect.sync(() => {
+              queries++;
+              return voices;
+            }),
+        },
+      };
+      assert.deepStrictEqual(yield* suggestions(context), ["baby", "other-baby"]);
+      voices = [{ id: "robot", friendlyName: "Robot" }];
+      assert.deepStrictEqual(yield* suggestions(context), ["robot"]);
+      voices = [];
+      assert.deepStrictEqual(yield* suggestions(context), []);
+      assert.strictEqual(queries, 3);
+      for (const failure of [
+        new ConnectionFailed({ reason: "Disconnected" }),
+        new RequestFailed({ action: "getVoices", reason: "Invalid voice list" }),
+      ]) {
+        assert.strictEqual(
+          yield* Effect.flip(
+            suggestions({ ...context, engine: { GetVoices: () => Effect.fail(failure) } }),
+          ),
+          failure,
+        );
+      }
+    }),
+  );
   it("namespaces its globally merged settings RPCs", () => {
     assert.deepStrictEqual(
       [...ClientRpcs.requests.keys()],

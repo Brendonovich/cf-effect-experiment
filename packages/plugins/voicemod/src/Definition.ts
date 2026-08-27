@@ -41,7 +41,15 @@ export class ClientRpcs extends RpcGroup.make(
   Rpc.make("VoicemodConnect", { error: Failure }),
   Rpc.make("VoicemodDisconnect"),
 ) {}
+export const Voices = S.Array(
+  S.Struct({
+    id: S.String,
+    friendlyName: S.String,
+    enabled: S.optional(S.Boolean),
+  }),
+);
 export class RuntimeRpcs extends RpcGroup.make(
+  Rpc.make("GetVoices", { success: Voices, error: Failure }),
   Rpc.make("SetVoice", { payload: S.Struct({ voice: S.String }), error: Failure }),
   Rpc.make("SetVoiceChangerState", { payload: S.Struct({ state: S.Boolean }), error: Failure }),
   Rpc.make("SetHearSelfState", { payload: S.Struct({ state: S.Boolean }), error: Failure }),

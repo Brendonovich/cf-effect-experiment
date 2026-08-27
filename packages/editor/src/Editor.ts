@@ -615,16 +615,20 @@ export const layer = Layer.effect(Service)(
     const nodeGetInputSuggestions = Effect.fn("Editor.node.getInputSuggestions")(function* (
       options: NodeInputOptions,
     ) {
-      const graph = yield* persistence.loadGraph(options.graphID);
-      const node = yield* Graph.getNode(graph, options.nodeID);
-      const properties = yield* resolveIOProperties(node.schema, node.properties);
+      const { node, properties } = yield* Effect.gen(function* () {
+        const graph = yield* persistence.loadGraph(options.graphID);
+        const node = yield* Graph.getNode(graph, options.nodeID);
+        const properties = yield* resolveIOProperties(node.schema, node.properties);
+        return { node, properties };
+      }).pipe(lock.withPermit);
+      // Live resolvers can update engine storage, which also acquires the editor lock.
       return yield* packages.getSuggestions(
         node.schema,
         properties,
         node.inputDefaults,
         options.input,
       );
-    }, lock.withPermit);
+    });
 
     const connectionCreate = Effect.fn("Editor.connection.create")(function* (options: {
       readonly graphID: string;
@@ -1029,12 +1033,17 @@ export const layer = Layer.effect(Service)(
                     })),
                   };
                 },
-                getSuggestions: (properties, inputDefaults, input) => {
-                  const port = schema
-                    .generateIO(properties)
-                    .dataInputs.find((candidate) => candidate.id === input);
-                  return port?.suggestions?.({ properties, inputDefaults }) ?? Effect.succeed([]);
-                },
+                getSuggestions: (properties, inputDefaults, input) =>
+                  Effect.gen(function* () {
+                    const port = schema
+                      .generateIO(properties)
+                      .dataInputs.find((candidate) => candidate.id === input);
+                    const engine = (yield* Ref.get(runtimeClients)).get(definition.id);
+                    return yield* (
+                      port?.suggestions?.({ properties, inputDefaults, engine }) ??
+                        Effect.succeed([])
+                    );
+                  }),
               },
             ]),
           ),

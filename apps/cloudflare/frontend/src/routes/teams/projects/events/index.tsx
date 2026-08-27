@@ -15,6 +15,10 @@ export const EventsRoute = (props: RouteSectionProps) => {
       credentialsApi={workspace.api.credentials}
       selectedEventId={props.params.eventId}
       canViewTraces={workspace.currentUserId() === "mkcpxx5dnzi5w6m"}
+      canEdit={
+        workspace.selectedTeam()?.role === "owner" || workspace.selectedTeam()?.role === "member"
+      }
+      currentDeploymentId={route.project()?.currentDeploymentId}
       onSelectionChange={route.openEvents}
     />
   );

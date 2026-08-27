@@ -111,7 +111,7 @@ export default Layer.unwrap(
 				const services = Layer.mergeAll(
 					Credential.layer,
 					EditorRpc.layer,
-					Event.layer,
+					Event.layer(workerOperations),
 				).pipe(
 					Layer.provideMerge(
 						Deployment.layer(workerOperations, deploymentsResource),

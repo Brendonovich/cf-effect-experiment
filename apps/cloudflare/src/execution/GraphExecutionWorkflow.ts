@@ -6,15 +6,17 @@ import { eq } from "drizzle-orm";
 import { Cause, Effect, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
+import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
+
 import * as Database from "../database/Database.ts";
 import {
+	type ProjectEventSource,
 	type ProjectExecutionRecord,
 	projectEvents,
 	projectExecutionNodes,
 	projectExecutions,
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
-import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { DeploymentSnapshotsBucket } from "../Storage.ts";
 import * as ExecutorPlugins from "./ExecutorPlugins.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
@@ -32,7 +34,7 @@ export interface GraphExecutionWorkflowInput {
 	readonly executionId: string;
 	readonly projectId: string;
 	readonly projectEventId: string;
-	readonly source: "ingress" | "engine" | "timer" | "internal";
+	readonly source: ProjectEventSource;
 	readonly ingressEventId?: string;
 	readonly deploymentId: string;
 	readonly r2Key: DeploymentObjectKey;

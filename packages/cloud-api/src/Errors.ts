@@ -25,3 +25,8 @@ export class ExecutionNotFound extends Schema.TaggedError<ExecutionNotFound>()(
   {},
   { httpApiStatus: 404 },
 ) {}
+export class EventNotFound extends Schema.TaggedError<EventNotFound>()(
+  "EventNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}

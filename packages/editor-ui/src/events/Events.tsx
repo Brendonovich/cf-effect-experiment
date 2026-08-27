@@ -6,7 +6,7 @@ import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import { searchMarker } from "./events-markers.stylex";
 import { styles } from "./events.stylex";
 
-export type EventSource = "Ingress" | "Engine" | "Timer" | "Internal";
+export type EventSource = "Ingress" | "Engine" | "Timer" | "Internal" | "Replay";
 
 const formatEventDate = (value: string | number) =>
   new Intl.DateTimeFormat(undefined, {
@@ -33,7 +33,7 @@ function SourceBadge(props: { readonly source: EventSource }) {
         props.source === "Ingress" && styles.ingressSource,
         props.source === "Engine" && styles.engineSource,
         props.source === "Timer" && styles.timerSource,
-        props.source === "Internal" && styles.internalSource,
+        (props.source === "Internal" || props.source === "Replay") && styles.internalSource,
       ]}
     >
       {props.source}

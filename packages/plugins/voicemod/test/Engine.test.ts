@@ -1,11 +1,12 @@
 import { assert, describe, it, vi } from "@effect/vitest";
-import { EngineTest } from "@macrograph/plugin";
+import { EngineTest, Registration } from "@macrograph/plugin";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { Socket } from "effect/unstable/socket";
 
-import { VoicemodEngine, initialStorage } from "../src/Definition.ts";
+import { RequestFailed, VoicemodEngine, initialStorage } from "../src/Definition.ts";
 import deployment from "../src/Deployment.ts";
+import plugin from "../src/Plugin.ts";
 import * as Protocol from "../src/Protocol.ts";
 
 type Packet = { id: string; action: string; payload: Record<string, unknown> };
@@ -19,6 +20,10 @@ class MockWebSocket extends EventTarget {
   currentVoice = "nofx";
   invalidState = false;
   registrationCode = 200;
+  voices: unknown = [
+    { id: "baby", friendlyName: "Baby", enabled: true },
+    { id: "disabled", friendlyName: "Disabled", enabled: false },
+  ];
   constructor(readonly url: string) {
     super();
   }
@@ -70,10 +75,7 @@ class MockWebSocket extends EventTarget {
               ? {
                   actionType: "getVoices",
                   actionObject: {
-                    voices: [
-                      { id: "baby", friendlyName: "Baby", enabled: true },
-                      { id: "disabled", friendlyName: "Disabled", enabled: false },
-                    ],
+                    voices: this.voices,
                   },
                 }
               : { actionType: "getCurrentVoice", actionObject: { voiceID: this.currentVoice } };
@@ -127,6 +129,89 @@ const setup = (
   };
 };
 describe("Voicemod engine", () => {
+  it.effect("GetVoices queries the live protocol and suggests IDs accepted by SetVoice", () =>
+    Effect.gen(function* () {
+      const test = setup();
+      const schemas = yield* Registration.collect(plugin.effect);
+      const suggestions = schemas.find((schema) => schema.id === "SetVoice")?.dataInputs[0]
+        ?.suggestions;
+      assert.isDefined(suggestions);
+      yield* Effect.gen(function* () {
+        const { client, runtime } = yield* EngineTest.makeClients(VoicemodEngine);
+        assert.strictEqual(
+          (yield* Effect.flip(runtime.GetVoices()))._tag,
+          "VoicemodConnectionFailed",
+        );
+        yield* client.VoicemodConnect();
+        const socket = test.sockets[0];
+        assert.isDefined(socket);
+        assert.deepStrictEqual(yield* runtime.GetVoices(), socket.voices);
+        assert.deepStrictEqual(socket.sent.at(-1), {
+          id: "macrograph-1",
+          action: "getVoices",
+          payload: {},
+        });
+        socket.voices = [
+          { id: "robot", friendlyName: "Robot" },
+          { id: "other-robot", friendlyName: "Robot", enabled: true },
+          { id: "disabled", friendlyName: "Robot", enabled: false },
+        ];
+        const values = yield* suggestions({ properties: {}, inputDefaults: {}, engine: runtime });
+        assert.deepStrictEqual(values, ["robot", "other-robot"]);
+        for (const voice of values) {
+          yield* runtime.SetVoice({ voice });
+          assert.strictEqual(socket.currentVoice, voice);
+        }
+        socket.voices = [];
+        assert.deepStrictEqual(yield* runtime.GetVoices(), []);
+        for (const invalid of [
+          null,
+          {},
+          [{ id: "invalid" }],
+          [{ id: 123, friendlyName: "Invalid" }],
+        ]) {
+          socket.voices = invalid;
+          assert.deepStrictEqual(
+            yield* Effect.flip(runtime.GetVoices()),
+            new RequestFailed({
+              action: "getVoices",
+              reason: "Voicemod returned an invalid voice list.",
+            }),
+          );
+        }
+        yield* client.VoicemodDisconnect();
+        assert.strictEqual(
+          (yield* Effect.flip(runtime.GetVoices()))._tag,
+          "VoicemodConnectionFailed",
+        );
+      }).pipe(Effect.provide(test.layer));
+    }),
+  );
+  it.effect("GetVoices fails on a lost connection or timeout", () =>
+    Effect.gen(function* () {
+      const test = setup();
+      yield* Effect.gen(function* () {
+        const { client, runtime } = yield* EngineTest.makeClients(VoicemodEngine);
+        for (const mode of ["close", "timeout"]) {
+          yield* client.VoicemodConnect();
+          const socket = test.sockets.at(-1);
+          assert.isDefined(socket);
+          socket.ignore = true;
+          const query = yield* runtime.GetVoices().pipe(Effect.forkChild);
+          while (socket.sent.length < 2) yield* Effect.yieldNow;
+          if (mode === "close") socket.dispatchEvent(new Event("close"));
+          else yield* TestClock.adjust("11 seconds");
+          const failure = yield* Effect.flip(Fiber.join(query));
+          assert.strictEqual(
+            failure._tag,
+            mode === "close" ? "VoicemodConnectionFailed" : "VoicemodRequestFailed",
+          );
+          if (failure._tag === "VoicemodRequestFailed")
+            assert.strictEqual(failure.action, "getVoices");
+        }
+      }).pipe(Effect.provide(test.layer));
+    }),
+  );
   it.effect(
     "consumes ID-less hear-self toggle notifications before consecutive verification queries",
     () =>

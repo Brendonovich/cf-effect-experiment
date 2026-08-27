@@ -16,7 +16,18 @@ export default Plugin.make({
       description:
         "Selects an available voice by ID or friendly name, querying the live voice list.",
       io: (io) => ({
-        voice: io.data.in("voice", DataType.String, { name: "Voice ID or Name", defaultValue: "" }),
+        voice: io.data.in("voice", DataType.String, {
+          name: "Voice ID or Name",
+          defaultValue: "",
+          suggestions: ({ engine }) =>
+            engine
+              .GetVoices()
+              .pipe(
+                Effect.map((voices) =>
+                  voices.filter((voice) => voice.enabled !== false).map((voice) => voice.id),
+                ),
+              ),
+        }),
       }),
       run: ({ io, engine }) => engine.SetVoice({ voice: io.voice }),
     });

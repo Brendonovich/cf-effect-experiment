@@ -9,6 +9,7 @@ export class Service extends Context.Service<
   Service,
   {
     readonly canView: (projectId: string) => Policy.Policy<ProjectNotFound, CurrentUser>;
+    readonly canEdit: (projectId: string) => Policy.Policy<ProjectNotFound, CurrentUser>;
   }
 >()("macrograph/cloudflare/EventPolicy") {}
 
@@ -17,6 +18,7 @@ export const layer = Layer.effect(Service)(
     const projectPolicy = yield* ProjectPolicy.Service;
     return {
       canView: projectPolicy.canView,
+      canEdit: projectPolicy.canEdit,
     };
   }),
 );

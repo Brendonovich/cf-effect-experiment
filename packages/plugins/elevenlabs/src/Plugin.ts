@@ -17,6 +17,14 @@ export default Plugin.make({
         modelId: io.data.in("modelId", DataType.String, {
           name: "Model ID",
           defaultValue: defaultModel,
+          suggestions: () =>
+            Effect.succeed([
+              "eleven_turbo_v2_5",
+              "eleven_multilingual_v2",
+              "eleven_turbo_v2",
+              "eleven_multilingual_v1",
+              "eleven_monolingual_v1",
+            ]),
         }),
         voiceId: io.data.in("voiceId", DataType.String, { name: "Voice ID" }),
         body: io.data.in("body", DataType.String, { name: "Options JSON", defaultValue: "{}" }),

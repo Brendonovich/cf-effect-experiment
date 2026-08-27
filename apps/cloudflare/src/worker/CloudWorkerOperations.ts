@@ -15,7 +15,9 @@ import {
   projectIngressEvents,
   projects,
 } from "../database/DatabaseSchema.ts";
-import GraphExecutionWorkflow from "../execution/GraphExecutionWorkflow.ts";
+import GraphExecutionWorkflow, {
+  type GraphExecutionWorkflowInput,
+} from "../execution/GraphExecutionWorkflow.ts";
 import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
 
 interface DesiredDeployment {
@@ -515,6 +517,10 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       reconcileDeployments,
       reconcileProjectDeployment,
       handleIngress,
+      replayEvent: (input: GraphExecutionWorkflowInput) =>
+        executionWorkflow
+          .create({ id: input.executionId, params: { ...input, source: "replay" } })
+          .pipe(Effect.asVoid, Effect.orDie),
       previewProject,
       stopPreview,
       listIngress,
