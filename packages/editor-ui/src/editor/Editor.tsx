@@ -509,6 +509,9 @@ function EditorContent(
                   onClose={() => controller.layout.setNavSection(null)}
                   onCreateGraph={controller.commands.createGraph}
                   onSelectGraph={controller.layout.setSelectedGraphId}
+                  canEditGraphs={controller.connection.canEdit()}
+                  onRenameGraph={controller.commands.renameGraphById}
+                  onDeleteGraph={controller.commands.deleteGraph}
                   onOpenPackage={controller.layout.openPackage}
                   onCreateConstant={controller.commands.createConstant}
                   onRenameConstant={controller.commands.renameConstant}

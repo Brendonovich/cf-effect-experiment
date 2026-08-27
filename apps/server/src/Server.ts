@@ -22,7 +22,6 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import { OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { mkdirSync } from "node:fs";
 import { createServer } from "node:http";
@@ -30,6 +29,7 @@ import Deployments from "virtual:macrograph-plugin-deployments";
 
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
+import { Observability } from "./Observability.ts";
 import { PluginHost } from "./PluginHost.ts";
 import { ProjectExecution } from "./ProjectExecution.ts";
 import { ServerConfig } from "./ServerConfig.ts";
@@ -327,15 +327,6 @@ const AppLayer = HttpRoutes.pipe(
   ),
 );
 
-const ObservabilityLayer =
-  config.otlpEndpoint === undefined
-    ? Layer.empty
-    : OtlpTracer.layer({
-        url: config.otlpEndpoint,
-        resource: { serviceName: "macrograph-server" },
-        exportInterval: "1 second",
-      }).pipe(Layer.provide(OtlpSerialization.layerJson), Layer.provide(FetchHttpClient.layer));
-
 const nodeServer = createServer();
 const sockets = new Set<Socket>();
 nodeServer.on("connection", (socket) => {
@@ -383,7 +374,7 @@ const Served = HttpRouter.serve(AppLayer, { disableLogger: true, middleware: pat
       gracefulShutdownTimeout: "10 seconds",
     }),
   ),
-  Layer.provide(ObservabilityLayer),
+  Layer.provide(Observability.layer(config)),
   Layer.provide(Layer.mergeAll(FetchHttpClient.layer, NodeSocket.layerWebSocketConstructor)),
 );
 

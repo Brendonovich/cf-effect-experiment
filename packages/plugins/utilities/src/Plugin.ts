@@ -74,8 +74,7 @@ const UtilitiesPlugin = Plugin.make({
       io: (io) => ({
         value: io.data.in("in", DataType.String, { name: "Input", defaultValue: "" }),
       }),
-      run: ({ io, node }) =>
-        node.withSpan("utilities.print", Effect.logInfo("Utilities Print", { value: io.value })),
+      run: ({ io }) => Effect.logInfo("Utilities Print", { value: io.value }),
     });
     yield* context.schema.register({
       id: "ConcatStrings",
@@ -152,9 +151,7 @@ const UtilitiesPlugin = Plugin.make({
           io.result(
             io.blocks
               .map((block) =>
-                block.type === "text"
-                  ? block.value
-                  : formatValue(values.get(block.name) ?? ""),
+                block.type === "text" ? block.value : formatValue(values.get(block.name) ?? ""),
               )
               .join(""),
           );

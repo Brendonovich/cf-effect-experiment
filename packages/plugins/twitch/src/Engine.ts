@@ -193,7 +193,10 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                 ? eventSub.disconnect(accountId).pipe(
                     Effect.andThen(connect(accountId)),
                     Effect.catch((error) =>
-                      Effect.logWarning("Failed to reconnect Twitch EventSub", { accountId, error }),
+                      Effect.logWarning("Failed to reconnect Twitch EventSub", {
+                        accountId,
+                        error,
+                      }),
                     ),
                   )
                 : Effect.void;
@@ -537,18 +540,21 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
               });
               const storage = yield* mg.storage.get;
               const account = storage.accounts[accountId];
-              const eventSubAccount = HashMap.get(yield* eventSub.state, accountId).pipe(
-                Option.getOrUndefined,
-              );
               if (
                 eventSub.transport === "websocket" &&
                 account?.enabled === true &&
-                eventSubAccount?.state === "connected" &&
                 eventSub.reconcile !== undefined
               ) {
+                // The controller queues reconciliation behind an in-progress connection.
                 yield* eventSub.reconcile(accountId).pipe(
-                  Effect.catch(() => Effect.log("Failed to reconcile EventSub subscriptions")),
-                  Effect.ignore,
+                  Effect.tapError((error) =>
+                    Effect.logWarning("Failed to reconcile EventSub subscriptions", {
+                      accountId,
+                      subscriptionType,
+                      enabled,
+                      error,
+                    }),
+                  ),
                 );
               }
             }),

@@ -6,6 +6,7 @@
 // biome-ignore lint: disable
 export {}
 declare global {
+  const IconBiPlus: typeof import('~icons/bi/plus.jsx').default
   const IconBiX: typeof import('~icons/bi/x.jsx').default
   const IconLucideChevronDown: typeof import('~icons/lucide/chevron-down.jsx').default
   const IconMdiDotsHorizontal: typeof import('~icons/mdi/dots-horizontal.jsx').default

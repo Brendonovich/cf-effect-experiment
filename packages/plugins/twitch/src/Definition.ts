@@ -12,10 +12,10 @@ export type AccountId = typeof AccountId.Type;
 
 export { SUBSCRIPTION_TYPES, SubscriptionEvent } from "./EventSub.ts";
 
-export class MissingCredential extends S.TaggedError<MissingCredential>()(
-  "MissingCredential",
-  { accountId: AccountId, reason: S.String },
-) {}
+export class MissingCredential extends S.TaggedError<MissingCredential>()("MissingCredential", {
+  accountId: AccountId,
+  reason: S.String,
+}) {}
 
 export class CredentialAuthorizationError extends S.TaggedError<CredentialAuthorizationError>()(
   "TwitchCredentialAuthorizationError",
@@ -72,6 +72,7 @@ export class ClientRpcs extends RpcGroup.make(
       subscriptionType: S.String,
       enabled: S.Boolean,
     }),
+    error: S.Union([Helix.HelixError, MissingCredential]),
   }),
 ) {}
 

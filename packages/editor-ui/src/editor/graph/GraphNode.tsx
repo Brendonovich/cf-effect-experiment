@@ -431,10 +431,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         "box-shadow":
           !props.selected && props.presenceColor ? `0 0 0 2px ${props.presenceColor}` : undefined,
       }}
-      onPointerDown={(event) => {
-        event.stopPropagation();
-        props.onSelect(props.node.id, event.shiftKey);
-      }}
+      onPointerDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -444,6 +441,10 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       <div
         sx={[styles.nodeHeader, headerStyle(props.schema?.type)]}
         title={props.schema?.description}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          props.onSelect(props.node.id, event.shiftKey);
+        }}
       >
         <div sx={styles.dragHandle} onPointerDown={(event) => props.onDragStart(event, props.node)}>
           {props.node.name}

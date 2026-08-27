@@ -207,12 +207,25 @@ export function createEditorCommands(
       ),
     );
   };
-  const renameGraph = (name: string) => {
+  const renameGraphById = (graphId: string, name: string) => {
     const c = client();
-    const graphId = selectedGraphId();
     if (!c || !graphId || name.trim().length === 0 || !canEdit()) return;
     runFork(
       applyMutation(c.SetGraphName({ graphId, name: name.trim() })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const renameGraph = (name: string) => {
+    const graphId = selectedGraphId();
+    if (graphId) renameGraphById(graphId, name);
+  };
+  const deleteGraph = (graphId: string) => {
+    const c = client();
+    if (!c || !canEdit()) return;
+    runFork(
+      applyMutation(c.DeleteGraph({ graphId })).pipe(
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
@@ -310,6 +323,8 @@ export function createEditorCommands(
     setNodeFoldPins,
     renameNode,
     renameGraph,
+    renameGraphById,
+    deleteGraph,
     setNodeProperty,
     clearNodeProperty,
     setInputDefault,

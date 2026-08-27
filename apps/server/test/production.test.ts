@@ -91,6 +91,7 @@ beforeAll(async () => {
       MACROGRAPH_CLOUD_BASE_URL: `http://127.0.0.1:${cloudAddress.port}`,
       MACROGRAPH_ADMIN_IDS: "",
       OTEL_EXPORTER_OTLP_ENDPOINT: "",
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -55,6 +55,42 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
   const publicOrigin = normalizePublicOrigin(
     env.MACROGRAPH_PUBLIC_ORIGIN ?? `http://localhost:${port}`,
   );
+  const tracesEndpoint = optionalEnv(env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT);
+  const collectorEndpoint = tracesEndpoint ?? optionalEnv(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  let otlpEndpoint: string | undefined;
+  if (collectorEndpoint !== undefined) {
+    const url = URL.parse(collectorEndpoint.trim());
+    if (
+      url === null ||
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== ""
+    )
+      throw new Error("OTLP endpoint must be an HTTP(S) URL without credentials or a fragment");
+    if (tracesEndpoint === undefined) {
+      const path = url.pathname.replace(/\/+$/, "");
+      // Preserve full trace URLs accepted by earlier server versions.
+      url.pathname = path.endsWith("/v1/traces") ? path : `${path}/v1/traces`;
+    }
+    otlpEndpoint = url.href;
+  }
+  const otlpHeaders = new Headers();
+  if (otlpEndpoint !== undefined) {
+    const headers =
+      optionalEnv(env.OTEL_EXPORTER_OTLP_TRACES_HEADERS) ??
+      optionalEnv(env.OTEL_EXPORTER_OTLP_HEADERS);
+    for (const entry of headers?.split(",") ?? []) {
+      const separator = entry.indexOf("=");
+      if (separator <= 0) throw new Error("OTLP headers must be comma-separated name=value pairs");
+      const value = entry.slice(separator + 1).trim();
+      const decoded = decodeURIComponent(value);
+      const name = entry.slice(0, separator).trim();
+      if (!/^[!#$%&'*+.^_`|~\da-z-]+$/i.test(name) || !/^[\t\x20-\x7e\x80-\xff]*$/.test(decoded))
+        throw new Error("OTLP headers must contain valid HTTP header names and values");
+      otlpHeaders.set(name, decoded);
+    }
+  }
   return {
     basePath,
     port,
@@ -78,7 +114,9 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
       env.MACROGRAPH_MIGRATIONS_DIR ?? fileURLToPath(new URL("./migrations", import.meta.url)),
     ),
     publicOrigin,
-    otlpEndpoint: optionalEnv(env.OTEL_EXPORTER_OTLP_ENDPOINT),
+    otlpEndpoint,
+    otlpHeaders: Object.fromEntries(otlpHeaders),
+    otlpServiceName: optionalEnv(env.OTEL_SERVICE_NAME)?.trim() ?? "macrograph-server",
     browserOtlpEndpoint: optionalEnv(env.MACROGRAPH_BROWSER_OTLP_ENDPOINT),
   };
 };

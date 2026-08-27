@@ -5,6 +5,7 @@ import { For, Show, createSignal, onSettled } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { rankedSearch } from "../catalog/search";
+import { searchMarker } from "../markers.stylex.ts";
 
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "scale(.95)" },
@@ -46,16 +47,36 @@ const styles = stylex.create({
     outline: "none",
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
-  input: {
+  search: {
+    alignItems: "center",
     backgroundColor: colors.gray2,
     borderBottomColor: colors.gray5,
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
-    borderTopLeftRadius: 4,
-    borderTopRightRadius: 4,
+    display: "flex",
+    flexShrink: 0,
+    height: 32,
+  },
+  searchIcon: {
+    color: {
+      default: colors.gray9,
+      [stylex.when.ancestor(":focus-within", searchMarker)]: colors.focus,
+    },
+    flexShrink: 0,
+    height: 12,
+    marginLeft: 8,
+    width: 12,
+  },
+  input: {
+    backgroundColor: "transparent",
     color: colors.gray12,
-    fontSize: 12,
-    padding: 6,
+    flex: 1,
+    fontSize: 13,
+    height: "100%",
+    minWidth: 0,
+    outline: "none",
+    paddingInline: 6,
+    "::placeholder": { color: colors.gray9 },
   },
   list: {
     flex: 1,
@@ -72,6 +93,7 @@ const styles = stylex.create({
     padding: 12,
     textAlign: "center",
   },
+  packageGroup: { marginTop: { default: 4, ":first-child": 0 } },
   packageName: {
     backgroundColor: colors.gray3,
     color: colors.gray11,
@@ -85,13 +107,17 @@ const styles = stylex.create({
   },
   option: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.gray5,
+      ":focus-visible": colors.gray5,
+    },
     borderRadius: 4,
     color: colors.gray12,
     display: "flex",
     flexDirection: "row",
     gap: 8,
-    paddingBlock: 2,
+    paddingBlock: 4,
     paddingInline: 4,
     textAlign: "left",
     width: "100%",
@@ -161,6 +187,8 @@ export function NodeCreationMenu(props: {
 
   return (
     <div
+      role="dialog"
+      aria-label="Create node"
       ref={(element) => {
         root = element;
         props.ref?.(element);
@@ -172,12 +200,16 @@ export function NodeCreationMenu(props: {
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <input
-        sx={[styles.focus, styles.input]}
-        placeholder="Search Nodes..."
-        value={search()}
-        onInput={(event) => setSearch(event.currentTarget.value)}
-      />
+      <div sx={[searchMarker, styles.search]}>
+        <IconTablerSearch aria-hidden="true" {...stylex.attrs(styles.searchIcon)} />
+        <input
+          sx={styles.input}
+          aria-label="Search nodes"
+          placeholder="Search nodes"
+          value={search()}
+          onInput={(event) => setSearch(event.currentTarget.value)}
+        />
+      </div>
       <div sx={styles.list} onWheel={(event) => event.stopPropagation()}>
         <Show
           when={packages().length > 0}
@@ -185,13 +217,18 @@ export function NodeCreationMenu(props: {
         >
           <For each={packages()}>
             {(pkg) => (
-              <section style={{ "margin-bottom": "8px" }}>
+              <section sx={styles.packageGroup}>
                 <div sx={styles.packageName}>{pkg.name}</div>
                 <For each={pkg.schemas}>
                   {(schema) => (
                     <button
                       type="button"
                       sx={[styles.focus, styles.option, styles.coarsePadding]}
+                      title={
+                        schema.description
+                          ? `${schema.name}\n${schema.description}`
+                          : schema.name
+                      }
                       onClick={() => {
                         props.onCreate({ package: pkg.id, schema: schema.id }, schema.name);
                         props.onClose();

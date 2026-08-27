@@ -8,6 +8,7 @@ import { colors } from "../../tokens.stylex.ts";
 import { Sidebar } from "../workspace/Layout";
 import { resourceMarker, searchMarker } from "../markers.stylex.ts";
 import { Select } from "../../ui/Select";
+import { GraphNavigationOption } from "./GraphNavigationOption";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
   to: { opacity: 1, transform: "translateY(0) scale(1)" },
@@ -84,19 +85,25 @@ const styles = stylex.create({
     "::placeholder": { color: colors.gray9 },
   },
   newButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    borderRadius: 4,
     color: { default: colors.gray11, ":hover": colors.gray12 },
+    display: "flex",
     flexShrink: 0,
-    fontSize: 12,
-    fontWeight: 500,
-    height: "100%",
-    paddingInline: 8,
+    height: 20,
+    justifyContent: "center",
+    marginBlock: "auto",
+    marginInline: 6,
+    padding: 2,
+    width: 20,
   },
+  plusIcon: { flexShrink: 0, height: 16, width: 16 },
   createRoot: { display: "flex", flexShrink: 0, height: "100%" },
   dialog: {
-    backgroundColor: colors.gray2,
+    backgroundColor: colors.gray3,
     borderColor: colors.gray6,
-    borderRadius: 2,
+    borderRadius: 4,
     borderStyle: "solid",
     borderWidth: 1,
     boxShadow: "0 20px 25px -5px rgb(0 0 0 / .3)",
@@ -121,32 +128,37 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
     display: "flex",
-    height: 28,
+    height: 32,
   },
-  dialogInput: { fontSize: 11 },
-  typeList: { maxHeight: 256, overflowY: "auto" },
-  emptyTypes: { color: colors.gray9, fontSize: 10, paddingBlock: 8, paddingInline: 8 },
+  dialogInput: { fontSize: 13 },
+  typeList: { maxHeight: 256, overflowY: "auto", paddingBottom: 4, paddingInline: 4 },
+  emptyTypes: { color: colors.gray9, fontSize: 12, paddingBlock: 8, paddingInline: 4 },
+  resourceGroup: { marginTop: { default: 4, ":first-child": 0 } },
   groupTitle: {
-    backgroundColor: colors.gray2,
-    color: colors.gray9,
-    fontSize: 9,
-    fontWeight: 600,
-    paddingBlock: 2,
-    paddingLeft: 6,
-    paddingRight: 8,
+    backgroundColor: colors.gray3,
+    color: colors.gray11,
+    fontSize: 11,
+    fontWeight: 500,
+    paddingBlock: 3,
+    paddingInline: 4,
     position: "sticky",
     top: 0,
     zIndex: 10,
   },
   typeOption: {
+    borderRadius: 4,
     display: "block",
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: 500,
     paddingBlock: 4,
-    paddingInline: 8,
+    paddingInline: 4,
     textAlign: "left",
     width: "100%",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.gray5,
+      ":focus-visible": colors.gray5,
+    },
   },
   scroll: { flex: 1, minHeight: 0, overflowY: "auto" },
   navOption: {
@@ -193,8 +205,8 @@ const styles = stylex.create({
     backgroundColor: colors.gray3,
     color: colors.gray11,
     display: "flex",
-    fontSize: 10,
-    fontWeight: 600,
+    fontSize: 11,
+    fontWeight: 500,
     gap: 4,
     marginBottom: 4,
     marginInline: -8,
@@ -222,7 +234,7 @@ const styles = stylex.create({
   nameButton: {
     borderRadius: 2,
     flex: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 500,
     height: 22,
     minWidth: 0,
@@ -244,7 +256,7 @@ const styles = stylex.create({
       ":focus-visible": `inset 0 0 0 1px ${colors.focus}`,
     },
     flex: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: 500,
     height: 22,
     minWidth: 0,
@@ -271,6 +283,7 @@ const styles = stylex.create({
     },
   },
   trash: { height: 14, width: 14 },
+  constantValueAppearance: { fontSize: 12 },
 });
 
 export type NavigationSection = "graphs" | "packages" | "constants";
@@ -289,6 +302,9 @@ export function NavigationSidebar(props: {
   onClose: () => void;
   onCreateGraph: () => void;
   onSelectGraph: (id: string) => void;
+  canEditGraphs: boolean;
+  onRenameGraph: (id: string, name: string) => void;
+  onDeleteGraph: (id: string) => void;
   onOpenPackage: (id: string) => void;
   onCreateConstant: (resource: ResourceConstant.ResourceRef) => void;
   onRenameConstant: (id: string, name: string) => void;
@@ -504,7 +520,7 @@ export function NavigationSidebar(props: {
                   ? "Search Graphs"
                   : props.section === "packages"
                     ? "Search Plugins"
-                    : "Resource Constants"
+                    : "Search Constants"
               }
               value={props.search}
               onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -514,9 +530,11 @@ export function NavigationSidebar(props: {
             <button
               type="button"
               sx={[styles.focus, styles.newButton]}
+              aria-label="New graph"
+              title="New graph"
               onClick={props.onCreateGraph}
             >
-              New
+              <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
             </button>
           </Show>
           <Show when={props.section === "constants"}>
@@ -525,16 +543,18 @@ export function NavigationSidebar(props: {
                 ref={createMenuTrigger}
                 type="button"
                 sx={[styles.focus, styles.newButton]}
+                aria-label="New constant"
+                title="New constant"
                 aria-haspopup="dialog"
                 aria-expanded={createMenuOpen() ? "true" : "false"}
                 onClick={() => constantWorkflowActions.togglePicker()}
               >
-                New
+                <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
               </button>
               <Show when={constantWorkflow.mode !== "hidden"}>
                 <div
                   role="dialog"
-                  aria-label="New constant type"
+                  aria-label="Choose resource for new constant"
                   sx={[
                     styles.dialog,
                     constantWorkflow.mode === "hiding" ? styles.hiding : styles.showing,
@@ -555,9 +575,9 @@ export function NavigationSidebar(props: {
                     />
                     <input
                       ref={(input) => queueMicrotask(() => input.focus())}
-                      aria-label="Search constant types"
+                      aria-label="Search resources"
                       sx={[styles.searchInput, styles.dialogInput]}
-                      placeholder="Search types"
+                      placeholder="Search resources"
                       value={constantWorkflow.context.search}
                       onInput={(event) => constantWorkflowActions.search(event.currentTarget.value)}
                     />
@@ -565,10 +585,10 @@ export function NavigationSidebar(props: {
                   <div sx={styles.typeList}>
                     <For
                       each={filteredResourceGroups()}
-                      fallback={<div sx={styles.emptyTypes}>No types found</div>}
+                      fallback={<div sx={styles.emptyTypes}>No resources found</div>}
                     >
                       {({ pkg, resources }) => (
-                        <div>
+                        <div sx={styles.resourceGroup}>
                           <div sx={styles.groupTitle}>{pkg.name}</div>
                           <For each={resources}>
                             {(resource) => (
@@ -618,16 +638,14 @@ export function NavigationSidebar(props: {
             }
           >
             {([id, graph]) => (
-              <button
-                sx={[
-                  styles.focus,
-                  styles.navOption,
-                  props.selectedPaneId === `graph:${id}` ? styles.selected : styles.unselected,
-                ]}
-                onClick={() => props.onSelectGraph(id)}
-              >
-                {graph.name}
-              </button>
+              <GraphNavigationOption
+                name={graph.name}
+                selected={props.selectedPaneId === `graph:${id}`}
+                canEdit={props.canEditGraphs}
+                onSelect={() => props.onSelectGraph(id)}
+                onRename={(name) => props.onRenameGraph(id, name)}
+                onDelete={() => props.onDeleteGraph(id)}
+              />
             )}
           </For>
         </Show>
@@ -758,6 +776,7 @@ export function NavigationSidebar(props: {
                                   </button>
                                 </div>
                                 <Select
+                                  appearance={styles.constantValueAppearance}
                                   options={values().map((value) => ({
                                     id: JSON.stringify(value.id),
                                     name: value.display,

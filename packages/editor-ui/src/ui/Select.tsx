@@ -91,6 +91,7 @@ const styles = stylex.create({
 });
 
 export function Select(props: {
+  appearance?: stylex.StyleXStyles;
   options: ReadonlyArray<{ readonly id: string; readonly name: string }>;
   value: string;
   valid: boolean;
@@ -204,7 +205,12 @@ export function Select(props: {
         ref={trigger}
         type="button"
         disabled={props.options.length === 0}
-        sx={[styles.focus, styles.trigger, props.valid ? styles.valid : styles.invalid]}
+        sx={[
+          styles.focus,
+          styles.trigger,
+          props.appearance,
+          props.valid ? styles.valid : styles.invalid,
+        ]}
         aria-haspopup="listbox"
         aria-expanded={isOpen() ? "true" : "false"}
         onClick={() => (isOpen() ? close() : open())}
@@ -241,7 +247,11 @@ export function Select(props: {
         <div
           ref={setMenu}
           role="listbox"
-          sx={[styles.menu, menuPresence.state() === "hiding" ? styles.hiding : styles.showing]}
+          sx={[
+            styles.menu,
+            props.appearance,
+            menuPresence.state() === "hiding" ? styles.hiding : styles.showing,
+          ]}
           style={position()}
         >
           <For each={props.options}>
@@ -252,6 +262,7 @@ export function Select(props: {
                 aria-selected={option.id === props.value ? "true" : "false"}
                 sx={[
                   styles.option,
+                  props.appearance,
                   menuState.context.highlightedIndex === index() ? styles.highlighted : null,
                 ]}
                 onPointerEnter={() => highlight(index())}

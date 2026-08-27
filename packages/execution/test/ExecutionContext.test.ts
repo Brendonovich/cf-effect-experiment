@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Engine, Plugin } from "@macrograph/plugin";
-import { Array, Effect, Ref, Schema } from "effect";
+import { Array, Effect, Fiber, Option, Ref, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
 
@@ -81,7 +81,12 @@ describe("schema execution context", () => {
             type: "event",
             event: () => Effect.succeed(true),
             io: () => ({}),
-            run: ({ execution, node }) => capture(execution, node),
+            run: ({ execution, node }) => {
+              const span = Fiber.getCurrent()?.currentSpan;
+              assert.strictEqual(span?._tag, "Span");
+              if (span?._tag === "Span") assert.strictEqual(span.name, "Schema.run context.event");
+              return capture(execution, node);
+            },
           });
           yield* registration.schema.register({
             id: "action",
@@ -159,10 +164,79 @@ describe("schema execution context", () => {
         executionDriver,
       });
       yield* executor.plugin(plugin, deployment);
-      yield* executor.handleEvent(plugin, new Trigger({}));
+      const spans: Array<Tracer.Span> = [];
+      yield* executor.handleEvent(plugin, new Trigger({})).pipe(
+        Effect.provideService(
+          Tracer.Tracer,
+          Tracer.make({
+            span: (options) => {
+              const span = new Tracer.NativeSpan(options);
+              spans.push(span);
+              return span;
+            },
+          }),
+        ),
+      );
+      assert.lengthOf(spans, 12);
+      const eventSpan = spans[0]!;
+      assert.strictEqual(eventSpan.name, "Executor.handleEvent");
+      const matchSpan = spans.find((span) => span.name === "Executor.matchEvent")!;
+      assert.strictEqual(Option.getOrUndefined(matchSpan.parent), eventSpan);
+      assert.strictEqual(matchSpan.attributes.get("macrograph.event.matched"), true);
+      const graphSpan = spans.find((span) => span.name === "Executor.executeEventNode")!;
+      assert.strictEqual(Option.getOrUndefined(graphSpan.parent), eventSpan);
+      assert.strictEqual(graphSpan.attributes.get("macrograph.project.id"), "project-123");
+      assert.strictEqual(graphSpan.attributes.get("macrograph.graph.id"), graphId);
+      const nodeSpans = spans.filter((span) => span.name === "Executor.runNode");
+      assert.lengthOf(nodeSpans, 3);
+      for (const span of nodeSpans) {
+        assert.strictEqual(Option.getOrUndefined(span.parent), graphSpan);
+        assert.strictEqual(span.attributes.get("macrograph.graph.id"), graphId);
+        assert.strictEqual(span.attributes.get("macrograph.event_node.id"), eventNodeId);
+        assert.strictEqual(span.attributes.get("macrograph.execution.output.id"), "exec");
+      }
+      const pluginSpans = spans.filter((span) => span.name === "context.capture");
+      const schemaSpans = spans.filter((span) => span.name.startsWith("Schema.run "));
+      assert.deepStrictEqual(
+        schemaSpans.map((span) => span.name),
+        ["Schema.run context.event", "Schema.run context.action", "Schema.run context.action"],
+      );
+      for (const [index, span] of schemaSpans.entries()) {
+        assert.strictEqual(Option.getOrUndefined(span.parent), nodeSpans[index]);
+        assert.strictEqual(
+          span.attributes.get("macrograph.node.id"),
+          nodeSpans[index]!.attributes.get("macrograph.node.id"),
+        );
+        assert.strictEqual(span.attributes.get("macrograph.plugin.id"), "context");
+        assert.strictEqual(
+          span.attributes.get("macrograph.schema.id"),
+          index === 0 ? "event" : "action",
+        );
+        assert.strictEqual(span.kind, "internal");
+      }
+      assert.lengthOf(pluginSpans, 3);
+      for (const [index, child] of pluginSpans.entries()) {
+        assert.strictEqual(child.traceId, eventSpan.traceId);
+        assert.strictEqual(Option.getOrUndefined(child.parent), schemaSpans[index]);
+      }
 
       const seen = yield* Ref.get(contexts);
       assert.strictEqual(seen.length, 3);
+      assert.strictEqual(
+        graphSpan.attributes.get("macrograph.execution.id"),
+        seen[0]?.executionTraceId,
+      );
+      for (const [index, span] of nodeSpans.entries()) {
+        assert.strictEqual(span.attributes.get("macrograph.trace.id"), seen[index]?.nodeTraceId);
+        assert.strictEqual(
+          span.attributes.get("macrograph.execution.path"),
+          seen[index]?.executionPath,
+        );
+        assert.strictEqual(
+          span.attributes.get("macrograph.trace.parent.id"),
+          seen[index]?.parentTraceId,
+        );
+      }
       assert.strictEqual(seen[0]?.projectId, "project-123");
       assert.strictEqual(seen[0]?.graphId, graphId);
       assert.strictEqual(seen[0]?.eventNodeId, eventNodeId);
@@ -175,10 +249,7 @@ describe("schema execution context", () => {
       assert.strictEqual(seen[1]?.executionTraceId, seen[0]?.executionTraceId);
       assert.strictEqual(seen[2]?.nodeId, actionNodeId);
       assert.strictEqual(seen[2]?.parentTraceId, seen[0]?.nodeTraceId);
-      assert.strictEqual(
-        seen[2]?.executionPath,
-        `event:${eventNodeId}/exec:context-exec-2`,
-      );
+      assert.strictEqual(seen[2]?.executionPath, `event:${eventNodeId}/exec:context-exec-2`);
       const driverKeys = yield* Ref.get(keys);
       assert.strictEqual(driverKeys[0]?.traceId, seen[0]?.nodeTraceId);
       assert.strictEqual(driverKeys[1]?.parentTraceId, seen[0]?.nodeTraceId);

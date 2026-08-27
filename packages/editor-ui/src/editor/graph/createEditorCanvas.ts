@@ -710,6 +710,10 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
 
   let cancelCanvasGesture: () => void = () => {};
   const onCanvasPointerDown = (event: PointerEvent) => {
+    // Canvas gestures prevent the browser's default focus clearing.
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement) focused.blur();
+
     if (event.pointerType === "touch") {
       onCanvasTouchDown(event);
       return;

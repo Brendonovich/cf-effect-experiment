@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { Effect, Logger, Schema } from "effect";
+import { Effect, Logger, Schema, Tracer } from "effect";
 
 import { TickEvent } from "../src/Definition.ts";
 import UtilitiesDeployment from "../src/Deployment.ts";
@@ -88,7 +88,11 @@ describe("Utilities execution", () => {
         },
       };
       const messages: Array<unknown> = [];
-      const logger = Logger.make<unknown, void>((options) => messages.push(options.message));
+      const printSpans: Array<Tracer.AnySpan | undefined> = [];
+      const logger = Logger.make<unknown, void>((options) => {
+        messages.push(options.message);
+        printSpans.push(options.fiber.currentSpan);
+      });
       const executor = yield* Executor.make(project);
       yield* executor.plugin(UtilitiesPlugin, UtilitiesDeployment);
 
@@ -122,6 +126,20 @@ describe("Utilities execution", () => {
         ["Utilities Print", { value: "also true" }],
         ["Utilities Print", { value: "false" }],
       ]);
+      assert.lengthOf(printSpans, 3);
+      for (const [index, span] of printSpans.entries()) {
+        assert.strictEqual(span?._tag, "Span");
+        if (span?._tag === "Span") {
+          assert.strictEqual(span.name, "Schema.run util.Print");
+          assert.strictEqual(span.attributes.get("macrograph.plugin.id"), "util");
+          assert.strictEqual(span.attributes.get("macrograph.schema.id"), "Print");
+          assert.strictEqual(
+            span.attributes.get("macrograph.node.id"),
+            [whenTrue.id, alsoTrue.id, whenFalse.id][index],
+          );
+          assert.strictEqual(span.status._tag, "Ended");
+        }
+      }
     }),
   );
 });

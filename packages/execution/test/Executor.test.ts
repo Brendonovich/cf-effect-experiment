@@ -10,7 +10,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { DataType, Engine, Plugin, Resource } from "@macrograph/plugin";
-import { Array, Effect, Option, Ref, Schema } from "effect";
+import { Array, Effect, Exit, Option, Ref, Schema, Tracer } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
 
 import { Executor } from "../src/index.ts";
@@ -327,18 +327,92 @@ describe("Executor", () => {
       const executor = yield* Executor.make(Project.empty(), { executionDriver });
       yield* executor.plugin(plugin, deployment);
       yield* executor.loadProject(project);
+      const spans: Array<Tracer.Span> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
 
-      yield* executor.handleEvent(plugin, new Pong());
+      yield* executor
+        .handleEvent(plugin, new Pong())
+        .pipe(Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(yield* Ref.get(executions), []);
+      assert.deepStrictEqual(
+        spans.map((span) => span.name),
+        ["Executor.handleEvent", "Executor.matchEvent"],
+      );
+      assert.strictEqual(spans[1]!.attributes.get("macrograph.event.matched"), false);
 
-      yield* executor.handleEvent(plugin, new Ping({ message: "received" }));
+      yield* executor
+        .handleEvent(plugin, new Ping({ message: "received" }))
+        .pipe(Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:plugin:stored"]);
       assert.strictEqual(yield* Ref.get(pureRuns), 1);
       assert.deepStrictEqual(yield* executor.project, project);
+      const nodeSpans = spans.filter((span) => span.name === "Executor.runNode");
+      assert.deepStrictEqual(
+        nodeSpans.map((span) => span.attributes.get("macrograph.schema.id")),
+        ["ping", "record", "uppercase"],
+      );
+      const actionSpan = nodeSpans[1]!;
+      const pureSpan = nodeSpans[2]!;
+      const schemaSpans = spans.filter((span) => span.name.startsWith("Schema.run "));
+      assert.deepStrictEqual(
+        schemaSpans.map((span) => span.name),
+        ["Schema.run test.ping", "Schema.run test.uppercase", "Schema.run test.record"],
+      );
+      assert.strictEqual(Option.getOrUndefined(schemaSpans[1]!.parent), pureSpan);
+      assert.strictEqual(Option.getOrUndefined(schemaSpans[2]!.parent), actionSpan);
+      const inputSpans = spans.filter((span) => span.name === "Executor.resolveInput");
+      assert.lengthOf(inputSpans, 8);
+      const upperInput = inputSpans.find(
+        (span) => span.attributes.get("macrograph.input.id") === "upper",
+      )!;
+      assert.strictEqual(Option.getOrUndefined(upperInput.parent), actionSpan);
+      assert.strictEqual(Option.getOrUndefined(pureSpan.parent), upperInput);
+      assert.strictEqual(pureSpan.attributes.get("macrograph.node.kind"), "pure");
+      assert.strictEqual(upperInput.attributes.get("macrograph.connection.id"), "upper");
+      assert.strictEqual(upperInput.attributes.get("macrograph.input.source"), "connection");
+      assert.strictEqual(
+        inputSpans
+          .find((span) => span.attributes.get("macrograph.input.id") === "suffix")!
+          .attributes.get("macrograph.input.source"),
+        "stored-default",
+      );
+      assert.strictEqual(
+        inputSpans
+          .find((span) => span.attributes.get("macrograph.input.id") === "fallback")!
+          .attributes.get("macrograph.input.source"),
+        "schema-default",
+      );
+      for (const span of spans) {
+        assert.strictEqual(span.status._tag, "Ended");
+        if (span.status._tag === "Ended") assert.isTrue(Exit.isSuccess(span.status.exit));
+      }
 
       const replayed = yield* Executor.make(project, { executionDriver });
       yield* replayed.plugin(plugin, deployment);
-      yield* replayed.handleEvent(plugin, new Ping({ message: "received" }));
+      const replayStart = spans.length;
+      yield* replayed
+        .handleEvent(plugin, new Ping({ message: "received" }))
+        .pipe(Effect.provideService(Tracer.Tracer, tracer));
+      assert.deepStrictEqual(
+        spans
+          .slice(replayStart)
+          .filter((span) => span.name === "Executor.runNode")
+          .map((span) => span.attributes.get("macrograph.schema.id")),
+        nodeSpans.map((span) => span.attributes.get("macrograph.schema.id")),
+      );
+      assert.deepStrictEqual(
+        spans
+          .slice(replayStart)
+          .filter((span) => span.name.startsWith("Schema.run "))
+          .map((span) => span.name),
+        ["Schema.run test.uppercase"],
+      );
       assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:plugin:stored"]);
       assert.strictEqual(yield* Ref.get(pureRuns), 2);
       assert.strictEqual(checkpoints.size, 2);

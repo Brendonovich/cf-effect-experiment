@@ -279,12 +279,22 @@ export const make = Effect.fnUntraced(function* (
       return resolved;
     });
 
-    const executeEventNode = Effect.fnUntraced(function* (
+    const executeEventNode = Effect.fn("Executor.executeEventNode")(function* (
       graph: Graph.Model,
       eventNode: Node.Model,
       eventSchema: Registration.RegisteredSchema,
     ): Effect.fn.Return<void, ExecutorError> {
       const executionTraceId = crypto.randomUUID();
+      const executionAttributes = {
+        "macrograph.project.id": projectId,
+        "macrograph.graph.id": graph.id,
+        "macrograph.event_node.id": eventNode.id,
+        "macrograph.execution.id": executionTraceId,
+      };
+      yield* Effect.annotateCurrentSpan({
+        ...executionAttributes,
+        "macrograph.graph.name": graph.name,
+      });
       const state: ExecutionState = {
         outputs: new Map(),
         nodeIO: new Map(),
@@ -292,7 +302,7 @@ export const make = Effect.fnUntraced(function* (
         runningPureNodes: new Set(),
       };
 
-      const runNode = Effect.fnUntraced(function* (
+      const runNode = Effect.fn("Executor.runNode")(function* (
         node: Node.Model,
         schema: Registration.RegisteredSchema,
         executionPath: string,
@@ -302,6 +312,18 @@ export const make = Effect.fnUntraced(function* (
         ExecutorError
       > {
         const traceId = crypto.randomUUID();
+        const nodeAttributes = {
+          ...executionAttributes,
+          "macrograph.trace.id": traceId,
+          "macrograph.node.id": node.id,
+          "macrograph.node.name": node.name,
+          "macrograph.node.kind": schema.type,
+          "macrograph.plugin.id": node.schema.package,
+          "macrograph.schema.id": node.schema.schema,
+          "macrograph.execution.path": executionPath,
+          ...(parentTraceId === undefined ? {} : { "macrograph.trace.parent.id": parentTraceId }),
+        };
+        yield* Effect.annotateCurrentSpan(nodeAttributes);
         const registeredPlugin = registeredPlugins.get(node.schema.package);
         if (registeredPlugin === undefined)
           return yield* new PluginNotRegistered({ pluginId: node.schema.package });
@@ -339,8 +361,8 @@ export const make = Effect.fnUntraced(function* (
           const outputs: Array<NodeOutput> = [];
           const selected = selectOutput(
             nodeIO,
-            yield* schema
-              .run({
+            yield* Effect.suspend(() =>
+              schema.run({
                 input: (input) => inputs.get(input.id),
                 output: (output, value) => {
                   outputs.push({ outputId: output.id, value });
@@ -363,18 +385,17 @@ export const make = Effect.fnUntraced(function* (
                   withSpan: (name, effect) =>
                     effect.pipe(
                       Effect.withSpan(name, {
-                        attributes: {
-                          "macrograph.project.id": projectId,
-                          "macrograph.graph.id": graph.id,
-                          "macrograph.node.id": node.id,
-                          "macrograph.execution.path": executionPath,
-                          "macrograph.trace.id": traceId,
-                        },
+                        attributes: nodeAttributes,
                       }),
                     ),
                 },
-              })
-              .pipe(Effect.catchCause(handleRunCause)),
+              }),
+            ).pipe(
+              Effect.withSpan(`Schema.run ${node.schema.package}.${node.schema.schema}`, {
+                attributes: nodeAttributes,
+              }),
+              Effect.catchCause(handleRunCause),
+            ),
           );
           return {
             outputs,
@@ -465,6 +486,10 @@ export const make = Effect.fnUntraced(function* (
           }
           state.outputs.set(outputKey(node.id, output.outputId), output.value);
         }
+        yield* Effect.annotateCurrentSpan(
+          "macrograph.execution.output.id",
+          result.executionOutputId,
+        );
         return { executionOutputId: result.executionOutputId, traceId };
       });
 
@@ -483,12 +508,20 @@ export const make = Effect.fnUntraced(function* (
         state.completedPureNodes.add(node.id);
       });
 
-      const resolveInput = Effect.fnUntraced(function* (
+      const resolveInput = Effect.fn("Executor.resolveInput")(function* (
         node: Node.Model,
         input: Registration.DataInputRef,
         executionPath: string,
         parentTraceId: string,
       ): Effect.fn.Return<unknown, ExecutorError> {
+        yield* Effect.annotateCurrentSpan({
+          ...executionAttributes,
+          "macrograph.node.id": node.id,
+          "macrograph.input.id": input.id,
+          "macrograph.input.type": input.type._tag,
+          "macrograph.execution.path": executionPath,
+          "macrograph.trace.parent.id": parentTraceId,
+        });
         const connections = graph.connections.filter(
           (candidate) => candidate.inNodeId === node.id && candidate.inIoId === input.id,
         );
@@ -499,6 +532,14 @@ export const make = Effect.fnUntraced(function* (
           });
         const connection = connections[0];
         if (connection === undefined) {
+          yield* Effect.annotateCurrentSpan(
+            "macrograph.input.source",
+            Object.hasOwn(node.inputDefaults, input.id)
+              ? "stored-default"
+              : input.defaultValue !== undefined
+                ? "schema-default"
+                : "missing",
+          );
           if (Object.hasOwn(node.inputDefaults, input.id)) {
             return yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type))(
               node.inputDefaults[input.id],
@@ -525,6 +566,12 @@ export const make = Effect.fnUntraced(function* (
           return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
         }
 
+        yield* Effect.annotateCurrentSpan({
+          "macrograph.input.source": "connection",
+          "macrograph.connection.id": connection.id,
+          "macrograph.source.node.id": connection.outNodeId,
+          "macrograph.source.output.id": connection.outIoId,
+        });
         const sourceNode = yield* Graph.getNode(graph, connection.outNodeId);
         const sourceSchema = yield* getSchema(registeredPlugins, sourceNode);
         if (sourceSchema.type === "pure")
@@ -674,7 +721,21 @@ export const make = Effect.fnUntraced(function* (
             Effect.gen(function* () {
               const schema = yield* getSchema(registeredPlugins, node);
               if (schema.type !== "event") return;
-              const matches = yield* schema.matches(event, yield* resolveProperties(node, schema));
+              const matches = yield* resolveProperties(node, schema).pipe(
+                Effect.flatMap((properties) => schema.matches(event, properties)),
+                Effect.tap((matched) =>
+                  Effect.annotateCurrentSpan("macrograph.event.matched", matched),
+                ),
+                Effect.withSpan("Executor.matchEvent", {
+                  attributes: {
+                    "macrograph.project.id": projectId,
+                    "macrograph.graph.id": graph.id,
+                    "macrograph.node.id": node.id,
+                    "macrograph.plugin.id": node.schema.package,
+                    "macrograph.schema.id": node.schema.schema,
+                  },
+                }),
+              );
               if (matches) yield* executeEventNode(graph, node, schema);
             }),
           { concurrency: "unbounded", discard: true },
@@ -687,7 +748,19 @@ export const make = Effect.fnUntraced(function* (
     project: Ref.get(project),
     loadProject: (nextProject) => Ref.set(project, nextProject),
     plugin: registerPlugin,
-    handleEvent,
+    handleEvent: (plugin, event) => {
+      const emittedEvent: { readonly _tag: string } = event;
+      return handleEvent(plugin, event).pipe(
+        Effect.withSpan("Executor.handleEvent", {
+          kind: "consumer",
+          attributes: {
+            "macrograph.project.id": projectId,
+            "macrograph.plugin.id": plugin.id,
+            "macrograph.event.type": emittedEvent._tag,
+          },
+        }),
+      );
+    },
   };
 });
 

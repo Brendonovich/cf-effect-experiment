@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 import { Graph, IoId, Node, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect } from "effect";
 import { createMemo, createRoot, createSignal, flush, untrack } from "solid-js";
@@ -47,6 +49,7 @@ beforeEach(() => {
 
 afterEach(() => {
   dispose();
+  document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
 
@@ -401,7 +404,7 @@ describe("editor concern hooks", () => {
     },
   );
 
-  it("cleans up active canvas gestures without relying on the keyboard hook", () => {
+  it.each(["mouse", "touch"])("blurs inputs and cleans up %s canvas gestures", (pointerType) => {
     const add = vi.spyOn(window, "addEventListener");
     const remove = vi.spyOn(window, "removeEventListener");
     const canvas = createRoot((cleanup) => {
@@ -424,15 +427,24 @@ describe("editor concern hooks", () => {
       });
     });
     flush();
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    const blur = vi.fn();
+    input.addEventListener("blur", blur);
+
     canvas.onCanvasPointerDown(
       Object.assign(new Event("pointerdown"), {
-        pointerType: "mouse",
+        pointerType,
         button: 0,
         clientX: 10,
         clientY: 20,
         shiftKey: false,
       }) as PointerEvent,
     );
+    expect(document.activeElement).not.toBe(input);
+    expect(blur).toHaveBeenCalledOnce();
     const listeners = add.mock.calls.filter(([type]) => type.startsWith("pointer"));
     expect(listeners.map(([type]) => type)).toEqual(["pointermove", "pointerup", "pointercancel"]);
     dispose();

@@ -13,8 +13,8 @@ import type {
 } from "./workspace";
 
 import { colors } from "../../tokens.stylex.ts";
-import { shortcutLabel } from "../shortcuts";
 import { tabMarker } from "../markers.stylex.ts";
+import { shortcutLabel } from "../shortcuts";
 
 const styles = stylex.create({
   focus: {
@@ -79,6 +79,7 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     paddingRight: { default: 12, "@media (pointer: coarse)": 36 },
   },
+  baselineTabText: { alignItems: "baseline", display: "flex" },
   tabName: { alignItems: "center", display: "flex", gap: 4 },
   selectedName: { color: colors.gray12 },
   unselectedName: {
@@ -117,7 +118,7 @@ const styles = stylex.create({
     padding: 2,
     width: 20,
   },
-  closeButton: { borderRadius: 4 },
+  closeButton: { borderRadius: 4, height: 16, margin: 2, padding: 1, width: 16 },
   smallIcon: { flexShrink: 0, height: 14, width: 14 },
   icon: { flexShrink: 0, height: 16, width: 16 },
   rotated: { rotate: "90deg" },
@@ -270,17 +271,21 @@ export function TabLayout(props: {
                       }}
                     >
                       <span
-                        sx={[
-                          styles.tabName,
-                          selected() ? styles.selectedName : styles.unselectedName,
-                        ]}
+                        sx={tab.description === "Plugin" ? styles.baselineTabText : styles.contents}
                       >
-                        {tab.icon}
-                        {tab.title}
+                        <span
+                          sx={[
+                            styles.tabName,
+                            selected() ? styles.selectedName : styles.unselectedName,
+                          ]}
+                        >
+                          {tab.icon}
+                          {tab.title}
+                        </span>
+                        <Show when={tab.description}>
+                          <span sx={styles.description}>{tab.description}</span>
+                        </Show>
                       </span>
-                      <Show when={tab.description}>
-                        <span sx={styles.description}>{tab.description}</span>
-                      </Show>
                     </button>
                     <div sx={styles.closeArea}>
                       <span

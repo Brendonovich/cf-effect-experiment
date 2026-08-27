@@ -26,6 +26,7 @@ beforeAll(async () => {
     MACROGRAPH_DATA_DIR: dataDirectory,
     MACROGRAPH_BASE_PATH: basePath,
     OTEL_EXPORTER_OTLP_ENDPOINT: "",
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
   })) {
     vi.stubEnv(key, value);
   }
