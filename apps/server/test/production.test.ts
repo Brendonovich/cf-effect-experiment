@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -10,6 +10,50 @@ let child: ChildProcess;
 let origin = "";
 let dataDirectory = "";
 const basePath = "/macrograph";
+let setupKey = "";
+let approved = false;
+const cloud = createServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  const path = request.url?.split("?")[0];
+  if (path === "/server/registration/start") {
+    response.end(
+      JSON.stringify({
+        id: "setup-registration",
+        userCode: "SETUP",
+        verification_uri: "https://www.macrograph.app/connect",
+        verification_uri_complete: "https://www.macrograph.app/connect?code=SETUP",
+      }),
+    );
+  } else if (path === "/server/registration" && request.method === "POST") {
+    response.statusCode = approved ? 200 : 400;
+    response.end(
+      JSON.stringify(
+        approved
+          ? { token: "cloud-registration-token" }
+          : { _tag: "ServerRegistrationError", code: "authorization_pending" },
+      ),
+    );
+  } else if (path === "/server/registration") {
+    response.end(JSON.stringify({ ownerId: "setup-owner" }));
+  } else if (path === "/user") {
+    const id = request.headers.authorization === "Bearer reader-token" ? "reader" : "setup-owner";
+    response.end(JSON.stringify({ id, email: `${id}@example.com` }));
+  } else if (path === "/login/oauth/access_token") {
+    response.end(
+      JSON.stringify({
+        userId: "reader",
+        access_token: "reader-token",
+        refresh_token: "refresh",
+        token_type: "Bearer",
+      }),
+    );
+  } else if (path === "/credentials") {
+    response.end("[]");
+  } else {
+    response.statusCode = 404;
+    response.end("{}");
+  }
+});
 
 const rawStatus = (path: string) =>
   new Promise<number>((resolveStatus, reject) => {
@@ -31,6 +75,10 @@ const rawStatus = (path: string) =>
 
 beforeAll(async () => {
   await readFile(join(appDirectory, "dist/esm/index.js"));
+  await new Promise<void>((resolve) => cloud.listen(0, "127.0.0.1", resolve));
+  const cloudAddress = cloud.address();
+  if (cloudAddress === null || typeof cloudAddress === "string")
+    throw new Error("No cloud address");
   dataDirectory = await mkdtemp(join(tmpdir(), "macrograph-production-"));
   child = spawn(process.execPath, ["dist/esm/index.js"], {
     cwd: appDirectory,
@@ -40,6 +88,8 @@ beforeAll(async () => {
       HOST: "127.0.0.1",
       MACROGRAPH_DATA_DIR: dataDirectory,
       MACROGRAPH_BASE_PATH: basePath,
+      MACROGRAPH_CLOUD_BASE_URL: `http://127.0.0.1:${cloudAddress.port}`,
+      MACROGRAPH_ADMIN_IDS: "",
       OTEL_EXPORTER_OTLP_ENDPOINT: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -52,7 +102,8 @@ beforeAll(async () => {
     child.stdout?.on("data", (chunk: Buffer) => {
       output += chunk.toString();
       const match = /MACROGRAPH_LISTENING (\d+)/.exec(output);
-      if (match?.[1] !== undefined) {
+      setupKey = /MACROGRAPH_SETUP_KEY ([\w-]+)/.exec(output)?.[1] ?? "";
+      if (match?.[1] !== undefined && setupKey !== "") {
         clearTimeout(timeout);
         resolvePort(Number(match[1]));
       }
@@ -70,6 +121,9 @@ afterAll(async () => {
     child?.once("exit", () => clearTimeout(timeout));
   });
   if (dataDirectory !== "") await rm(dataDirectory, { recursive: true, force: true });
+  await new Promise<void>((resolve, reject) =>
+    cloud.close((error) => (error ? reject(error) : resolve())),
+  );
 });
 
 describe("built self-hosted server", () => {
@@ -141,7 +195,38 @@ describe("built self-hosted server", () => {
     const response = await fetch(`${origin}${basePath}/auth/session`);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ user: null, canEdit: false });
+    expect(await response.json()).toEqual({ user: null, canEdit: false, setupRequired: true });
+  });
+
+  it("requires the private setup key for registration start and polling", async () => {
+    expect(setupKey).toMatch(/^[\w-]{43}$/);
+    for (const operation of ["start", "poll"]) {
+      const invalid = await fetch(`${origin}${basePath}/auth/setup/${operation}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: "incorrect" }),
+      });
+      expect(invalid.status).toBe(403);
+      expect(invalid.headers.get("cache-control")).toBe("no-store");
+      expect(await invalid.json()).toEqual({ error: "Invalid setup key" });
+
+      const missing = await fetch(`${origin}${basePath}/auth/setup/${operation}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(missing.status).toBe(400);
+    }
+  });
+
+  it("rejects inherited-property session tokens at the HTTP plugin gate", async () => {
+    for (const token of ["constructor", "toString", "__proto__"]) {
+      const response = await fetch(`${origin}${basePath}/plugin/twitch/rpc`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.status).toBe(403);
+    }
   });
 
   it("accepts an editor WebSocket connection", async () => {
@@ -181,9 +266,10 @@ describe("built self-hosted server", () => {
           websocket.send(frame);
         });
         websocket.addEventListener("message", (event) => {
-          void (event.data instanceof Blob
-            ? event.data.arrayBuffer().then((buffer) => new Uint8Array(buffer))
-            : Promise.resolve(new Uint8Array(event.data as ArrayBuffer))
+          void (
+            event.data instanceof Blob
+              ? event.data.arrayBuffer().then((buffer) => new Uint8Array(buffer))
+              : Promise.resolve(new Uint8Array(event.data as ArrayBuffer))
           ).then((bytes) => {
             if (bytes[0] !== 0) return;
             clearTimeout(timeout);
@@ -198,6 +284,61 @@ describe("built self-hosted server", () => {
     expect(message.id).toBe(1);
     expect(message.error).toBeDefined();
     websocket.close();
+  });
+
+  it("claims the server, connects credentials, and remembers only the approved admin session", async () => {
+    const setupRequest = (operation: string) =>
+      fetch(`${origin}${basePath}/auth/setup/${operation}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: setupKey }),
+      });
+    const started = await setupRequest("start");
+    expect(started.status).toBe(200);
+    expect(await started.json()).toMatchObject({ state: "pending" });
+    expect(await (await setupRequest("poll")).json()).toMatchObject({ state: "pending" });
+    approved = true;
+    const completed = await setupRequest("poll");
+    expect(completed.status).toBe(200);
+    expect(completed.headers.get("cache-control")).toBe("no-store");
+    const result = (await completed.json()) as { state: string; token: string };
+    expect(result.state).toBe("connected");
+    expect(result.token).toMatch(/^[\w-]{43}$/);
+    const session = await fetch(`${origin}${basePath}/auth/session`, {
+      headers: { authorization: `Bearer ${result.token}` },
+    });
+    expect(await session.json()).toEqual({
+      user: { userId: "setup-owner", email: "setup-owner@example.com" },
+      canEdit: true,
+      setupRequired: false,
+    });
+    expect(
+      JSON.parse(await readFile(join(dataDirectory, "macrograph-owner.json"), "utf8")),
+    ).toEqual({ ownerId: "setup-owner" });
+    expect(
+      JSON.parse(await readFile(join(dataDirectory, "macrograph-auth.json"), "utf8")),
+    ).toMatchObject({
+      state: "connected",
+      userId: "setup-owner",
+      token: "cloud-registration-token",
+    });
+    expect((await setupRequest("start")).status).toBe(403);
+    expect((await setupRequest("poll")).status).toBe(403);
+
+    const reader = await fetch(`${origin}${basePath}/auth/poll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceCode: "reader-device" }),
+    });
+    const readerSession = (await reader.json()) as { token: string };
+    const readerStatus = await fetch(`${origin}${basePath}/auth/session`, {
+      headers: { authorization: `Bearer ${readerSession.token}` },
+    });
+    expect(await readerStatus.json()).toEqual({
+      user: { userId: "reader", email: "reader@example.com" },
+      canEdit: false,
+      setupRequired: false,
+    });
   });
 
   it("stops idempotently with an active WebSocket", async () => {

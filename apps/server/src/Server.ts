@@ -33,6 +33,7 @@ import { ClientSessions } from "./ClientSessions.ts";
 import { PluginHost } from "./PluginHost.ts";
 import { ProjectExecution } from "./ProjectExecution.ts";
 import { ServerConfig } from "./ServerConfig.ts";
+import { ServerSetup } from "./ServerSetup.ts";
 import { StaticRoutes } from "./StaticRoutes.ts";
 
 const config = ServerConfig.makeServerConfig(process.env);
@@ -54,10 +55,13 @@ const cloudCredentials = CloudCredentials.make({
   },
 });
 const clientSessions = ClientSessions.make(makeAtomicFileStore(config.clientAuthPath));
-const serverOwnerId = cloudCredentials.auth.status.pipe(
-  Effect.map((status) => (status.state === "connected" ? status.identity.id : undefined)),
-  Effect.catch(() => Effect.succeed(undefined)),
-);
+const setup = ServerSetup.make({
+  store: makeAtomicFileStore(config.ownerPath),
+  legacyAuthStore: authFile,
+  auth: cloudCredentials.auth,
+  sessions: clientSessions,
+});
+const serverOwnerId = setup.ownerId;
 const accessPolicy = clientSessions.policy(serverOwnerId, config.adminIds);
 const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {
@@ -116,6 +120,7 @@ const ClientAuthRoutes = Layer.effectDiscard(
       const [session, ownerId] = yield* Effect.all([clientSessions.resolve(token), serverOwnerId]);
       return {
         user: session ?? null,
+        setupRequired: ownerId === undefined,
         canEdit:
           session !== undefined &&
           (session.userId === ownerId || config.adminIds.has(session.userId)),
@@ -132,15 +137,50 @@ const ClientAuthRoutes = Layer.effectDiscard(
         });
       }),
     );
+    for (const operation of ["start", "poll"] as const) {
+      yield* router.add(
+        "POST",
+        `/auth/setup/${operation}`,
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const body = yield* request.json.pipe(Effect.catch(() => Effect.succeed(undefined)));
+          if (
+            typeof body !== "object" ||
+            body === null ||
+            !("key" in body) ||
+            typeof body.key !== "string"
+          )
+            return HttpServerResponse.jsonUnsafe({ error: "Invalid request" }, { status: 400 });
+          return HttpServerResponse.jsonUnsafe(yield* setup[operation](body.key), {
+            headers: { "cache-control": "no-store" },
+          });
+        }).pipe(
+          Effect.catch((error) =>
+            Effect.succeed(
+              HttpServerResponse.jsonUnsafe(
+                { error: error.reason },
+                {
+                  status: error._tag === "SetupError" ? 403 : 400,
+                  headers: { "cache-control": "no-store" },
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     yield* router.add(
       "POST",
       "/auth/start",
       cloudCredentials.clientAuth.start.pipe(
         Effect.map((authorization) =>
-          HttpServerResponse.jsonUnsafe({
-            deviceCode: authorization.device_code,
-            verificationUrl: authorization.verification_uri_complete,
-          }),
+          HttpServerResponse.jsonUnsafe(
+            {
+              deviceCode: authorization.device_code,
+              verificationUrl: authorization.verification_uri_complete,
+            },
+            { headers: { "cache-control": "no-store" } },
+          ),
         ),
         Effect.catch((error) =>
           Effect.succeed(HttpServerResponse.jsonUnsafe({ error: error.reason }, { status: 409 })),
@@ -165,7 +205,12 @@ const ClientAuthRoutes = Layer.effectDiscard(
           .pipe(Effect.mapError((error) => error.reason));
         if (result.state === "pending") return HttpServerResponse.jsonUnsafe(result);
         const token = yield* clientSessions.create({ userId: result.userId, email: result.email });
-        return HttpServerResponse.jsonUnsafe({ ...result, token });
+        return HttpServerResponse.jsonUnsafe(
+          { ...result, token },
+          {
+            headers: { "cache-control": "no-store" },
+          },
+        );
       }).pipe(
         Effect.catch((reason) =>
           Effect.succeed(HttpServerResponse.jsonUnsafe({ error: reason }, { status: 400 })),
@@ -243,13 +288,41 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provide(RpcSerialization.layerJsonRpc()),
   Layer.provide(ProjectExecutionLayer),
   Layer.provide(RuntimeActivity.layer),
-  Layer.provide(Layer.succeed(Engine.Credentials, cloudCredentials.credentials)),
+  Layer.provide(
+    Layer.succeed(Engine.Credentials, {
+      ...cloudCredentials.credentials,
+      auth: {
+        ...cloudCredentials.auth,
+        // The setup approval URL is a capability, not public credential status.
+        status: serverOwnerId.pipe(
+          Effect.flatMap((ownerId) =>
+            ownerId === undefined
+              ? Effect.succeed({ state: "disconnected" as const })
+              : cloudCredentials.auth.status,
+          ),
+        ),
+      },
+    }),
+  ),
   Layer.provide(PluginHost.layer),
   Layer.provide(SqlitePersistence.layer),
   Layer.provide(
     Layer.mergeAll(
       DrizzleDriver.layerNodeSqlite(config.databasePath, config.migrationsDirectory),
       NodeServices.layer,
+    ),
+  ),
+  Layer.provide(
+    Layer.effectDiscard(
+      Effect.gen(function* () {
+        const key = yield* setup.setupKey;
+        if (key !== undefined) {
+          yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
+          yield* Effect.logInfo(
+            "Open the server in your browser and enter the setup key to configure its administrator.",
+          );
+        }
+      }),
     ),
   ),
 );

@@ -63,7 +63,7 @@ it("serves the client and backend through one Vite server", async () => {
   const health = await fetch(`${origin}${basePath}/health/ready`);
   expect(await health.json()).toMatchObject({ status: "ok", ready: true });
   const session = await fetch(`${origin}${basePath}/auth/session`);
-  expect(await session.json()).toEqual({ user: null, canEdit: false });
+  expect(await session.json()).toEqual({ user: null, canEdit: false, setupRequired: true });
 });
 
 it.each([

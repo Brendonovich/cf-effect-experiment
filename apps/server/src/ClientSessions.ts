@@ -43,7 +43,11 @@ export const make = (store: AtomicFileStore): ClientSessions => {
 
   const resolve = (token: string | undefined) =>
     lock.withPermit(
-      load.pipe(Effect.map((current) => (token === undefined ? undefined : current[token]))),
+      load.pipe(
+        Effect.map((current) =>
+          token !== undefined && Object.hasOwn(current, token) ? current[token] : undefined,
+        ),
+      ),
     );
 
   return {
@@ -60,7 +64,7 @@ export const make = (store: AtomicFileStore): ClientSessions => {
       lock.withPermit(
         Effect.gen(function* () {
           const current = yield* load;
-          if (current[token] === undefined) return;
+          if (!Object.hasOwn(current, token)) return;
           const next = { ...current };
           delete next[token];
           yield* save(next);
@@ -87,7 +91,7 @@ export const make = (store: AtomicFileStore): ClientSessions => {
               projectId: "local",
               canEdit,
               canManageCredentials:
-                owner === undefined ? session === undefined : session?.userId === owner,
+                session !== undefined && owner !== undefined && session.userId === owner,
             };
           }),
       }),

@@ -36,6 +36,26 @@ is a compatibility alias for readiness.
 
 ## Configuration
 
+### First-time setup
+
+On an unconfigured server, startup prints `MACROGRAPH_SETUP_KEY <key>`. Open the server in
+your browser, enter that key on the setup page, and approve the MacroGraph sign-in and server
+registration. For Docker, find the key with `docker logs macrograph`.
+
+The approving account becomes the server administrator and supplies its cloud-managed credentials.
+The browser is signed in automatically and remembers its session. Other visitors cannot claim the
+server without the key, and signing in as another account does not grant edit access unless its
+user ID is included in `MACROGRAPH_ADMIN_IDS`.
+
+The key is invalidated after setup and changes if an unconfigured server restarts. Treat logs as
+sensitive, and use HTTPS when accessing the server remotely. Ownership is persisted separately in
+`MACROGRAPH_DATA_DIR/macrograph-owner.json`, with the same file protections as authorization data.
+Cloud authorization expiry or disconnection does not reopen setup or remove the administrator.
+Existing registered installations retain their owner automatically when upgrading. Keep the owner
+file along with the authorization files when backing up or moving the server.
+
+### Environment
+
 - `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.
 - `MACROGRAPH_DATA_DIR`: persistent SQLite directory, default current directory; mount `/data` in the image.
 - `MACROGRAPH_CLOUD_BASE_URL`: MacroGraph credential service base, default exactly
@@ -91,7 +111,7 @@ MacroGraph authorization is stored separately from project data in
 `MACROGRAPH_DATA_DIR/macrograph-auth.json`, which is atomically replaced with mode `0600` in a
 mode `0700` directory. Opaque signed-in browser sessions are stored with the same protections in
 `MACROGRAPH_DATA_DIR/macrograph-client-auth.json`. Anonymous browsers have read-only editor access;
-the server registration owner and configured admins may modify the project. Plugin configuration,
+only the signed-in server owner and configured admins may modify the project. Plugin configuration,
 including OBS passwords, is stored in the ordinary project SQLite engine storage.
 
 For a path prefix, build with `--build-arg MACROGRAPH_BASE_PATH=/macrograph` and run with the same

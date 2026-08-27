@@ -63,6 +63,7 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     databasePath: resolve(dataDirectory, "project.db"),
     cloudAuthPath: resolve(dataDirectory, "macrograph-auth.json"),
     clientAuthPath: resolve(dataDirectory, "macrograph-client-auth.json"),
+    ownerPath: resolve(dataDirectory, "macrograph-owner.json"),
     cloudBaseUrl: optionalEnv(env.MACROGRAPH_CLOUD_BASE_URL) ?? "https://www.macrograph.app/api",
     adminIds: new Set(
       (optionalEnv(env.MACROGRAPH_ADMIN_IDS) ?? "")
