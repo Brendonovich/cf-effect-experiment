@@ -85,7 +85,9 @@ describe("Policy", () => {
         Effect.void.pipe(Policy.withPolicy(teamPolicy.canManage("team"))),
       );
       const roleDenial = yield* Effect.flip(
-        Effect.void.pipe(Policy.withPolicy(teamPolicy.canSetMemberRole("team", "target", "admin"))),
+        Effect.void.pipe(
+          Policy.withPolicy(teamPolicy.canSetMemberRole("team", "target", "member")),
+        ),
       );
       const credentialDenial = yield* Effect.flip(
         Effect.void.pipe(Policy.withPolicy(credentialPolicy.canManage("project"))),
@@ -107,6 +109,7 @@ describe("Policy", () => {
           }),
           Layer.succeed(TeamPolicy.Service, {
             canView: () => Effect.void,
+            canEdit: () => new HttpApiError.Forbidden(),
             canManage: () => new HttpApiError.Forbidden(),
             canSetMemberRole: () => new HttpApiError.Forbidden(),
             canRemoveMember: () => new HttpApiError.Forbidden(),
@@ -130,7 +133,7 @@ describe("Policy", () => {
         Policy.withPolicy(teamPolicy.canManage("team")),
       );
       const setRole = Effect.succeed("role").pipe(
-        Policy.withPolicy(teamPolicy.canSetMemberRole("team", "target", "admin")),
+        Policy.withPolicy(teamPolicy.canSetMemberRole("team", "target", "member")),
       );
       const removeMember = Effect.succeed("removed").pipe(
         Policy.withPolicy(teamPolicy.canRemoveMember("team", "target")),
@@ -179,6 +182,7 @@ describe("Policy", () => {
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(TeamPolicy.Service, {
+            canEdit: () => Effect.void,
             canView: (teamId) =>
               Policy.policy(() =>
                 Effect.map(CurrentUser, (user) => user.id === "alice" && teamId === "team"),
@@ -197,7 +201,7 @@ describe("Policy", () => {
                     user.id === "alice" &&
                     teamId === "team" &&
                     targetUserId === "target" &&
-                    nextRole === "admin",
+                    nextRole === "member",
                 ),
               ).pipe(Effect.mapError(() => new HttpApiError.Forbidden())),
             canRemoveMember: (teamId, targetUserId) =>

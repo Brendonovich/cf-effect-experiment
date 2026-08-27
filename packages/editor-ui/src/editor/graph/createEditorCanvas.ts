@@ -1,4 +1,4 @@
-import type { EditorEvent } from "@macrograph/editor";
+import type { EditorEvent, Presence } from "@macrograph/editor";
 
 import { IoId, type Graph, type Node } from "@macrograph/core";
 import { Effect } from "effect";
@@ -28,6 +28,7 @@ export interface EditorCanvasOptions {
   readonly editor: ReturnType<typeof createEditorStore>;
   readonly client: () => EditorRpcClient | null;
   readonly canEdit: () => boolean;
+  readonly publishPointer: (cursor: Presence.Cursor | null, final?: boolean) => void;
   readonly selectedGraphId: () => string | null;
   readonly selectedGraph: () => Graph.Model | null;
   readonly nodes: () => ReadonlyArray<Node.Model>;
@@ -48,6 +49,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     editor,
     client,
     canEdit,
+    publishPointer,
     selectedGraphId,
     selectedGraph,
     nodes,
@@ -411,9 +413,27 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     }
   };
 
+  const publishDragPointer = (event: PointerEvent, final = false) => {
+    if (event.pointerType === "touch") return;
+    const bounds = graphCanvas?.getBoundingClientRect();
+    const outside =
+      bounds !== undefined &&
+      (event.clientX < bounds.left ||
+        event.clientX >= bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY >= bounds.bottom);
+    publishPointer(
+      outside || event.type === "pointercancel"
+        ? null
+        : canvasPosition(event.clientX, event.clientY),
+      final,
+    );
+  };
+
   const onDragMove = (e: PointerEvent) => {
     const currentDrag = getDragState();
     if (!currentDrag || currentDrag.pointerId !== e.pointerId) return;
+    publishDragPointer(e);
     const dx = (e.clientX - currentDrag.startClientX) / canvasScale();
     const dy = (e.clientY - currentDrag.startClientY) / canvasScale();
     const positions = currentDrag.items.map((item) => ({
@@ -438,6 +458,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
   const onDragEnd = (e: PointerEvent) => {
     const currentDrag = getDragState();
     if (!currentDrag || currentDrag.pointerId !== e.pointerId) return;
+    publishDragPointer(e, true);
     const ds = currentDrag;
     setDragState(null);
     window.removeEventListener("pointermove", onDragMove);

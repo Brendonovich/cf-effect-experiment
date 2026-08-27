@@ -392,6 +392,7 @@ function EditorContent(
     editor: controller.editor,
     client: controller.connection.client,
     canEdit: controller.connection.canEdit,
+    publishPointer: controller.presence.publishPointer,
     selectedGraphId: controller.layout.selectedGraphId,
     selectedGraph: controller.layout.selectedGraph,
     nodes: controller.layout.nodes,
@@ -569,6 +570,8 @@ function EditorContent(
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
                         }}
                         onPointerMove={(event) => {
+                          // The window drag listener owns cursor updates during a node drag.
+                          if (canvas.isDragging()) return;
                           canvas.setGraphCanvas(event.currentTarget);
                           if (
                             event.pointerType === "touch" ||

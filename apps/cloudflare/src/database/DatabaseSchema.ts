@@ -11,12 +11,13 @@ import {
 
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 
-export type TeamRole = "owner" | "admin" | "member";
+export type TeamRole = "owner" | "member" | "viewer";
 export type TeamKind = "personal" | "shared";
 export type ProjectAccess = "team" | "restricted";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
+  email: text("email").unique(),
   createdAt: text("created_at").notNull(),
 });
 

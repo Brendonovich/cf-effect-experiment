@@ -54,10 +54,47 @@ export const make = Effect.gen(function* () {
       return uniqueUserIds;
     });
 
+  const setMember = (teamId: string, userId: string, role: Exclude<TeamRole, "owner">) =>
+    Effect.gen(function* () {
+      const existingUsers = yield* database
+        .select({ id: users.id, email: users.email })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+        .pipe(Effect.orDie);
+      const user = existingUsers[0];
+      if (user === undefined) return yield* new UserNotFound();
+      const target = yield* getMembership(teamId, userId);
+      const createdAt = target?.createdAt ?? new Date().toISOString();
+      yield* database
+        .insert(teamMemberships)
+        .values({ teamId, userId, role, createdAt })
+        .onConflictDoUpdate({
+          target: [teamMemberships.teamId, teamMemberships.userId],
+          set: { role },
+        })
+        .pipe(Effect.orDie);
+      const teamProjects = yield* database
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.teamId, teamId))
+        .pipe(Effect.orDie);
+      yield* Effect.forEach(
+        teamProjects,
+        (project) => projectEditors.getByName(project.id).disconnectUser(userId),
+        { discard: true },
+      );
+      return { member: { userId, email: user.email, role, createdAt } };
+    }).pipe(
+      Policy.withPolicy(teamPolicy.canSetMemberRole(teamId, userId, role)),
+      Policy.withPolicy(teamPolicy.canManage(teamId)),
+    );
+
   return {
     getMembership,
     requireMembership,
     validateMembers,
+    setMember,
     list: () =>
       Effect.gen(function* () {
         const user = yield* CurrentUser;
@@ -110,49 +147,29 @@ export const make = Effect.gen(function* () {
         const members = yield* database
           .select({
             userId: teamMemberships.userId,
+            email: users.email,
             role: teamMemberships.role,
             createdAt: teamMemberships.createdAt,
           })
           .from(teamMemberships)
+          .innerJoin(users, eq(users.id, teamMemberships.userId))
           .where(eq(teamMemberships.teamId, teamId))
           .orderBy(teamMemberships.createdAt)
           .pipe(Effect.orDie);
         return { members };
       }).pipe(Policy.withPolicy(teamPolicy.canView(teamId))),
-    setMember: (teamId: string, userId: string, role: Exclude<TeamRole, "owner">) =>
+    addMember: (teamId: string, email: string, role: Exclude<TeamRole, "owner">) =>
       Effect.gen(function* () {
         const existingUsers = yield* database
           .select({ id: users.id })
           .from(users)
-          .where(eq(users.id, userId))
+          .where(eq(users.email, email.trim().toLowerCase()))
           .limit(1)
           .pipe(Effect.orDie);
-        if (existingUsers[0] === undefined) return yield* new UserNotFound();
-        const target = yield* getMembership(teamId, userId);
-        const createdAt = target?.createdAt ?? new Date().toISOString();
-        yield* database
-          .insert(teamMemberships)
-          .values({ teamId, userId, role, createdAt })
-          .onConflictDoUpdate({
-            target: [teamMemberships.teamId, teamMemberships.userId],
-            set: { role },
-          })
-          .pipe(Effect.orDie);
-        const teamProjects = yield* database
-          .select({ id: projects.id })
-          .from(projects)
-          .where(eq(projects.teamId, teamId))
-          .pipe(Effect.orDie);
-        yield* Effect.forEach(
-          teamProjects,
-          (project) => projectEditors.getByName(project.id).disconnectUser(userId),
-          { discard: true },
-        );
-        return { member: { userId, role, createdAt } };
-      }).pipe(
-        Policy.withPolicy(teamPolicy.canSetMemberRole(teamId, userId, role)),
-        Policy.withPolicy(teamPolicy.canManage(teamId)),
-      ),
+        const user = existingUsers[0];
+        if (user === undefined) return yield* new UserNotFound();
+        return yield* setMember(teamId, user.id, role);
+      }).pipe(Policy.withPolicy(teamPolicy.canManage(teamId))),
     removeMember: (teamId: string, userId: string) =>
       Effect.gen(function* () {
         const teamProjects = yield* database

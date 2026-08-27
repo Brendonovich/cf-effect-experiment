@@ -188,6 +188,7 @@ describe("editor concern hooks", () => {
   it.each(["pointerup", "pointercancel", "escape", "dispose"])(
     "tracks locally dragged nodes reactively until %s",
     (end) => {
+      const publishPointer = vi.fn();
       const { canvas, editor, nodes, dragging, setSelectedNodeIds } = createRoot((cleanup) => {
         dispose = cleanup;
         const editor = createEditorStore();
@@ -217,16 +218,20 @@ describe("editor concern hooks", () => {
           editor,
           client: () => null,
           canEdit: () => true,
+          publishPointer,
           selectedGraphId: () => "main",
           selectedGraph: () => editor.store.project!.graphs.main!,
           nodes: () => nodes,
           selectedNodeIds,
           setSelectedNodeIds,
-          canvasScale: () => 1,
+          canvasScale: () => 2,
           setCanvasScale: () => {},
-          canvasOrigin: () => ({ x: 0, y: 0 }),
+          canvasOrigin: () => ({ x: 100, y: 200 }),
           setCanvasOrigin: () => {},
         });
+        canvas.setGraphCanvas({
+          getBoundingClientRect: () => ({ left: -10, top: -20, right: 100, bottom: 100 }),
+        } as HTMLDivElement);
         const dragging = createMemo(() => nodes.map((node) => canvas.isNodeDragging(node.id)));
         return { canvas, editor, nodes, dragging, setSelectedNodeIds };
       });
@@ -245,16 +250,34 @@ describe("editor concern hooks", () => {
       window.dispatchEvent(Object.assign(new Event("pointermove"), { ...pointer, clientX: 30 }));
       flush();
       expect(untrack(dragging)).toEqual([true, true, false]);
-      expect(editor.store.project?.graphs.main?.nodes.first?.position).toEqual({ x: 20, y: 0 });
-      expect(editor.store.project?.graphs.main?.nodes.second?.position).toEqual({ x: 20, y: 0 });
+      expect(editor.store.project?.graphs.main?.nodes.first?.position).toEqual({ x: 10, y: 0 });
+      expect(editor.store.project?.graphs.main?.nodes.second?.position).toEqual({ x: 10, y: 0 });
+      expect(publishPointer).toHaveBeenLastCalledWith({ x: 120, y: 220 }, false);
 
+      window.dispatchEvent(Object.assign(new Event("pointermove"), { ...pointer, pointerId: 2 }));
       window.dispatchEvent(Object.assign(new Event("pointerup"), { ...pointer, pointerId: 2 }));
       expect(canvas.isDragging()).toBe(true);
+      expect(publishPointer).toHaveBeenCalledTimes(1);
+      window.dispatchEvent(
+        Object.assign(new Event("pointermove"), { ...pointer, pointerType: "touch" }),
+      );
+      expect(publishPointer).toHaveBeenCalledTimes(1);
+      window.dispatchEvent(Object.assign(new Event("pointermove"), { ...pointer, clientX: 150 }));
+      expect(publishPointer).toHaveBeenLastCalledWith(null, false);
+      window.dispatchEvent(Object.assign(new Event("pointermove"), pointer));
+      expect(publishPointer).toHaveBeenLastCalledWith({ x: 110, y: 220 }, false);
       if (end === "escape") canvas.cancelNodeDrag();
       else if (end === "dispose") dispose();
       else window.dispatchEvent(Object.assign(new Event(end), pointer));
       flush();
       expect(canvas.isDragging()).toBe(false);
+      if (end === "pointerup")
+        expect(publishPointer).toHaveBeenLastCalledWith({ x: 110, y: 220 }, true);
+      else if (end === "pointercancel")
+        expect(publishPointer).toHaveBeenLastCalledWith(null, true);
+      const calls = publishPointer.mock.calls.length;
+      window.dispatchEvent(Object.assign(new Event("pointermove"), pointer));
+      expect(publishPointer).toHaveBeenCalledTimes(calls);
       for (const node of nodes) expect(canvas.isNodeDragging(node.id)).toBe(false);
       if (end !== "dispose") expect(untrack(dragging)).toEqual([false, false, false]);
     },
@@ -283,6 +306,7 @@ describe("editor concern hooks", () => {
           editor,
           client: () => ({}) as EditorRpcClient,
           canEdit: () => true,
+          publishPointer: () => {},
           selectedGraphId: () => "main",
           selectedGraph: () => editor.store.project!.graphs.main!,
           nodes: () => [],
@@ -387,6 +411,7 @@ describe("editor concern hooks", () => {
         editor,
         client: () => null,
         canEdit: () => false,
+        publishPointer: () => {},
         selectedGraphId: () => null,
         selectedGraph: () => null,
         nodes: () => [],

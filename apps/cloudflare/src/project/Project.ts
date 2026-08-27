@@ -70,7 +70,7 @@ export const make = (
             .where(
               or(
                 eq(projects.access, "team"),
-                inArray(teamMemberships.role, ["owner", "admin"]),
+                eq(teamMemberships.role, "owner"),
                 eq(projectMembers.userId, user.id),
               ),
             )
@@ -174,7 +174,7 @@ export const make = (
           return result;
         }).pipe(
           Policy.withPolicy(
-            payload.teamId === undefined ? Effect.void : teamPolicy.canView(payload.teamId),
+            payload.teamId === undefined ? Effect.void : teamPolicy.canEdit(payload.teamId),
           ),
         ),
       get: ({ projectId }: { readonly projectId: string }) =>

@@ -20,7 +20,11 @@ export class HelixError extends S.TaggedError<HelixError>()("HelixError", {
   rateLimit: S.optional(S.Number),
   rateLimitRemaining: S.optional(S.Number),
   rateLimitReset: S.optional(S.Number),
-}) {}
+}) {
+  override get message() {
+    return this.reason;
+  }
+}
 
 const headerNumber = (value: string | undefined) => {
   if (value === undefined) return undefined;
@@ -32,16 +36,27 @@ export const fromHttpClientError = Effect.fnUntraced(function* (
   error: HttpClientError.HttpClientError,
 ) {
   const response = error.response;
+  // OAuth validation also uses this mapper; keep its response body private.
+  const body =
+    response === undefined || !error.request.url.startsWith("https://api.twitch.tv/helix/")
+      ? Option.none()
+      : yield* response.json.pipe(
+          Effect.flatMap(S.decodeUnknownEffect(S.Struct({ message: S.String }))),
+          Effect.option,
+        );
+  const message =
+    Option.isSome(body) && body.value.message.trim().length > 0 ? body.value.message : undefined;
   const rateLimit = headerNumber(response?.headers["ratelimit-limit"]);
   const rateLimitRemaining = headerNumber(response?.headers["ratelimit-remaining"]);
   const rateLimitReset = headerNumber(response?.headers["ratelimit-reset"]);
   return yield* new HelixError({
     reason:
-      response?.status === 401
+      message ??
+      (response?.status === 401
         ? "Twitch rejected the credential; reconnect the selected account"
         : response?.status === 403
           ? "The selected Twitch account lacks a required scope or channel role"
-          : "Twitch request could not be completed",
+          : "Twitch request could not be completed"),
     ...(response === undefined ? {} : { status: response.status }),
     ...(rateLimit === undefined ? {} : { rateLimit }),
     ...(rateLimitRemaining === undefined ? {} : { rateLimitRemaining }),

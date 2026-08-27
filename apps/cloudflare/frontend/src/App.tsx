@@ -14,7 +14,6 @@ import {
   For,
   Show,
   Loading,
-  action,
   createContext,
   createEffect,
   createMemo,
@@ -29,19 +28,14 @@ import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
 
 import type { ApiClient } from "./api";
 
-import { makeApiClient, runApi } from "./api";
+import { publicWorkerOrigin, runApi } from "./api";
+import { useAuth } from "./Auth";
 import { createPresence } from "./createPresence";
 import { CreateProjectDialog } from "./CreateProjectForm";
 import { CreateTeamDialog } from "./CreateTeamForm";
 import { makeEditorConnection } from "./editorConnection";
 import { TeamSettings } from "./TeamSettings";
 
-const publicWorkerOrigin = () =>
-  new URL(
-    import.meta.env.VITE_PUBLIC_WORKER_ORIGIN ?? import.meta.env.VITE_WORKER_URL ?? location.origin,
-  ).origin;
-
-const sleep = (duration: number) => new Promise((resolve) => setTimeout(resolve, duration));
 interface WorkspaceContextValue {
   readonly api: ApiClient;
   readonly teams: () => ReadonlyArray<TeamRecord>;
@@ -62,7 +56,9 @@ export const useWorkspace = () => {
   return useContext(WorkspaceContext);
 };
 
-export function App(props: RouteSectionProps) {
+export function App(
+  props: RouteSectionProps & { readonly user: Extract<SessionStatus, { state: "connected" }> },
+) {
   const navigate = useNavigate();
   const matches = useRouteMatches();
   const routeParams = useParams<{
@@ -71,13 +67,9 @@ export function App(props: RouteSectionProps) {
     deploymentId?: string;
     eventId?: string;
   }>();
-  const wasLoggedIn = localStorage.getItem("macrograph:loggedIn") === "true";
-  const initialUserId = wasLoggedIn
-    ? (localStorage.getItem("macrograph:userId") ?? undefined)
-    : undefined;
-  const [authenticated, setAuthenticated] = createSignal(wasLoggedIn);
-  const [currentUserId, setCurrentUserId] = createSignal(initialUserId);
-  const api = makeApiClient(publicWorkerOrigin());
+  const auth = useAuth();
+  const currentUserId = () => props.user.userId;
+  const api = auth.api;
   const [workspaceSwitcherState, setWorkspaceSwitcherState] = createSignal<
     "closed" | "team" | "project"
   >("closed");
@@ -123,6 +115,7 @@ export function App(props: RouteSectionProps) {
       view: workspaceView(),
     }),
     (route) => {
+      if (route.view === "settings") setTeamMembersRequested(true);
       if (route.projectId === undefined) {
         setEditorProjectId(undefined);
         return;
@@ -137,41 +130,11 @@ export function App(props: RouteSectionProps) {
   const editorVisible = () =>
     workspaceView() === "editor" && editorProjectId() === params().projectId;
 
-  const cloudAuth = createMemo<SessionStatus | { state: "failed" } | undefined>(async function* () {
-    let state = await runApi(api.session.get());
-    if (state === undefined) {
-      yield { state: "failed" };
-      return;
-    }
-    if (state.state === "disconnected") {
-      state = await runApi(api.session.start());
-    } else if (state.state === "pending") {
-      state = await runApi(api.session.poll());
-    }
-    if (state === undefined) {
-      yield { state: "failed" };
-      return;
-    }
-    yield state;
-    while (state.state === "pending") {
-      await sleep(2000);
-      const next = await runApi(api.session.poll());
-      if (next === undefined) {
-        yield { state: "failed" };
-        return;
-      }
-      state = next;
-      yield state;
-    }
-  });
-
   const teams = createMemo(async () => {
-    if (!authenticated()) return [];
     return (await runApi(api.teams.list()))?.teams ?? [];
   });
 
   const projects = createMemo(async () => {
-    if (!authenticated()) return [];
     return (await runApi(api.projects.list()))?.projects ?? [];
   });
 
@@ -190,55 +153,13 @@ export function App(props: RouteSectionProps) {
 
   const selectedTeamId = () => params().teamId ?? selectedTeam()?.id;
 
-  const teamMembers = createMemo(async () => {
-    if (!teamMembersRequested() && workspaceView() !== "settings") return [];
+  const teamMembers = createMemo(() => {
+    if (!teamMembersRequested()) return [];
     const teamId = selectedTeamId();
-    if (!authenticated() || teamId === undefined) return [];
-    return (await runApi(api.teams.listMembers({ params: { teamId } })))?.members ?? [];
-  });
-
-  const connectedUserEmail = createMemo(() => {
-    const auth = cloudAuth();
-    return auth?.state === "connected" ? auth.email : "";
-  });
-  const [cloudAuthView, setCloudAuthView] = createSignal<
-    | SessionStatus
-    | { state: "failed" }
-    | { state: "pending"; verificationUrl: undefined }
-    | { state: "connected"; userId: string | undefined }
-  >(
-    wasLoggedIn
-      ? { state: "connected", userId: initialUserId }
-      : { state: "pending", verificationUrl: undefined },
-  );
-  const verificationUrl = () => {
-    const auth = cloudAuthView();
-    return auth.state === "pending" ? auth.verificationUrl : undefined;
-  };
-
-  createEffect(cloudAuth, (auth) => {
-    if (auth !== undefined) setCloudAuthView(auth);
-    if (auth?.state === "connected") {
-      setAuthenticated(true);
-      setCurrentUserId(auth.userId);
-      localStorage.setItem("macrograph:loggedIn", "true");
-      localStorage.setItem("macrograph:userId", auth.userId);
-    } else if (auth?.state === "pending" || auth?.state === "disconnected") {
-      setAuthenticated(false);
-      setCurrentUserId(undefined);
-      localStorage.setItem("macrograph:loggedIn", "false");
-      localStorage.removeItem("macrograph:userId");
-    } else if (auth?.state === "failed") {
-      setAuthenticated(false);
-      setCurrentUserId(undefined);
-    }
-  });
-
-  const disconnectCloud = action(async function* () {
-    yield runApi(api.session.disconnect());
-    localStorage.removeItem("macrograph:userId");
-    localStorage.setItem("macrograph:loggedIn", "false");
-    window.location.assign("/");
+    if (teamId === undefined) return [];
+    return runApi(api.teams.listMembers({ params: { teamId } })).then(
+      (body) => body?.members ?? [],
+    );
   });
 
   const visibleProjects = () => projects().filter((project) => project.teamId === selectedTeamId());
@@ -299,54 +220,6 @@ export function App(props: RouteSectionProps) {
   return (
     <WorkspaceContext value={workspace}>
       <div sx={styles.root}>
-        <Show when={cloudAuthView().state !== "connected"}>
-          <div sx={styles.login}>
-            <div sx={styles.loginContent}>
-              <img src={macrographLogo} alt="MacroGraph" sx={styles.loginLogo} />
-              <Show
-                when={cloudAuthView().state !== "failed"}
-                fallback={
-                  <>
-                    <h1 sx={styles.loginTitle}>Failed to connect to MacroGraph Cloud</h1>
-                    <p sx={styles.loginDescription}>
-                      MacroGraph could not reach the cloud service. Check your connection and try
-                      again.
-                    </p>
-                    <button
-                      type="button"
-                      sx={styles.loginButton}
-                      onClick={() => refresh(cloudAuth)}
-                    >
-                      Try again
-                    </button>
-                  </>
-                }
-              >
-                <h1 sx={styles.loginTitle}>Connect to MacroGraph Cloud</h1>
-                <p sx={styles.loginDescription}>
-                  Sign in in a new tab, then return here. Keep this tab open while MacroGraph
-                  completes the connection.
-                </p>
-                <a
-                  href={verificationUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-disabled={verificationUrl() === undefined ? "true" : "false"}
-                  onClick={(event) => {
-                    if (verificationUrl() === undefined) event.preventDefault();
-                  }}
-                  sx={styles.loginButton}
-                >
-                  Continue to sign in
-                </a>
-                <div sx={styles.waiting}>
-                  <span sx={styles.waitingDot} />
-                  Waiting for authorization
-                </div>
-              </Show>
-            </div>
-          </div>
-        </Show>
         <header sx={styles.header}>
           <div ref={workspaceSwitcher} sx={styles.workspaceSwitcher}>
             <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
@@ -507,24 +380,31 @@ export function App(props: RouteSectionProps) {
                                 </For>
                               </Loading>
                             </div>
-                            <div sx={styles.menuFooter}>
-                              <button
-                                type="button"
-                                sx={[styles.menuItem, styles.newItem]}
-                                onClick={() => {
-                                  setWorkspaceSwitcherState("closed");
-                                  setTeamMembersRequested(true);
-                                  createProjectDialog.showModal();
-                                }}
-                              >
-                                <span sx={styles.addIconBox}>
-                                  <IconMaterialSymbolsAddRounded
-                                    {...stylex.attrs(styles.addIcon)}
-                                  />
-                                </span>
-                                New project
-                              </button>
-                            </div>
+                            <Show
+                              when={
+                                selectedTeam()?.role === "owner" ||
+                                selectedTeam()?.role === "member"
+                              }
+                            >
+                              <div sx={styles.menuFooter}>
+                                <button
+                                  type="button"
+                                  sx={[styles.menuItem, styles.newItem]}
+                                  onClick={() => {
+                                    setWorkspaceSwitcherState("closed");
+                                    setTeamMembersRequested(true);
+                                    createProjectDialog.showModal();
+                                  }}
+                                >
+                                  <span sx={styles.addIconBox}>
+                                    <IconMaterialSymbolsAddRounded
+                                      {...stylex.attrs(styles.addIcon)}
+                                    />
+                                  </span>
+                                  New project
+                                </button>
+                              </div>
+                            </Show>
                           </div>
                         </Show>
                       </div>
@@ -548,6 +428,7 @@ export function App(props: RouteSectionProps) {
                   <CreateProjectDialog
                     api={api.projects}
                     teamId={selectedTeamId()}
+                    teamRole={selectedTeam()?.role}
                     members={teamMembers()}
                     dialogRef={(dialog) => (createProjectDialog = dialog)}
                     onCreated={(project) => {
@@ -581,7 +462,7 @@ export function App(props: RouteSectionProps) {
           </Show>
           <div sx={styles.account}>
             <Loading fallback={null}>
-              <AccountMenu email={connectedUserEmail()} onSignOut={() => void disconnectCloud()} />
+              <AccountMenu email={props.user.email} onSignOut={() => void auth.signOut()} />
             </Loading>
           </div>
         </header>
@@ -593,7 +474,11 @@ export function App(props: RouteSectionProps) {
               </div>
             )}
           </Show>
-          <Show when={!editorVisible()}>{props.children}</Show>
+          <Loading
+            fallback={<LoadingState label="Loading project" style={styles.contentLoading} />}
+          >
+            <Show when={!editorVisible()}>{props.children}</Show>
+          </Loading>
         </main>
       </div>
     </WorkspaceContext>
@@ -621,49 +506,6 @@ const styles = stylex.create({
     color: colors.gray12,
     fontSize: 14,
     colorScheme: "dark",
-  },
-  login: {
-    position: "absolute",
-    inset: 0,
-    zIndex: 50,
-    display: "grid",
-    placeItems: "center",
-    backgroundColor: colors.gray1,
-    paddingInline: 24,
-  },
-  loginContent: { width: "100%", maxWidth: 384, textAlign: "center" },
-  loginLogo: { marginInline: "auto", marginBottom: 28, width: 96, height: 96, borderRadius: 16 },
-  loginTitle: { fontSize: 20, fontWeight: 600, letterSpacing: "-.025em" },
-  loginDescription: { marginTop: 8, fontSize: 14, lineHeight: "24px", color: colors.gray10 },
-  loginButton: {
-    marginTop: 24,
-    display: "inline-flex",
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 6,
-    backgroundColor: { default: colors.gray12, ":hover": colors.gray11 },
-    paddingInline: 20,
-    fontSize: 14,
-    fontWeight: 600,
-    color: colors.gray1,
-    transition: "150ms",
-  },
-  waiting: {
-    marginTop: 20,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontSize: 12,
-    color: colors.gray9,
-  },
-  waitingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 9999,
-    backgroundColor: "#60a5fa",
-    animation: `${pulse} 2s infinite`,
   },
   header: {
     position: "relative",
@@ -862,5 +704,6 @@ const styles = stylex.create({
     backgroundColor: colors.gray2,
   },
   editor: { height: "100%", minHeight: 0 },
+  contentLoading: { height: "100%" },
   hidden: { display: "none" },
 });

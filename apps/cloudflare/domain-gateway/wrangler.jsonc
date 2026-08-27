@@ -1,0 +1,12 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "macrograph-cloud",
+  "pages_build_output_dir": "../.alchemy/domain-gateway",
+  "compatibility_date": "2026-08-27",
+  "services": [
+    {
+      "binding": "CLOUD_WORKER",
+      "service": "macrograph-cloudworker-production-m32pwzigivmpg2as",
+    },
+  ],
+}

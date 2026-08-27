@@ -18,6 +18,10 @@ export const sessionHandlers = HttpApiBuilder.group(
     return handlers
       .handle("get", ({ request }) => authentication.sessionStatus(request))
       .handle("start", ({ request }) => authentication.startSession(request))
+      .handle("startWebsite", ({ request }) => authentication.startWebsiteSession(request))
+      .handle("pollWebsite", ({ payload, request }) =>
+        authentication.pollWebsiteSession(payload.registrationId, request),
+      )
       .handle("poll", ({ request }) => authentication.pollSession(request))
       .handle("disconnect", ({ request }) => authentication.disconnectSession(request))
       .handle("issueApiKey", ({ payload, request }) =>
@@ -38,6 +42,9 @@ export const teamHandlers = HttpApiBuilder.group(
       .handle("list", () => team.list())
       .handle("create", ({ payload }) => team.create(payload.name))
       .handle("listMembers", ({ params }) => team.listMembers(params.teamId))
+      .handle("addMember", ({ params, payload }) =>
+        team.addMember(params.teamId, payload.email, payload.role),
+      )
       .handle("setMember", ({ params, payload }) =>
         team.setMember(params.teamId, params.userId, payload.role),
       )

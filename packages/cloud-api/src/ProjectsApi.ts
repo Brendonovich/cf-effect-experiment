@@ -54,7 +54,7 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
   HttpApiEndpoint.post("create", "/api/projects", {
     payload: CreateProjectRequest,
     success: Schema.Struct({ project: ProjectRecord }).pipe(HttpApiSchema.status("Created")),
-    error: [TeamNotFound, HttpApiError.BadRequest],
+    error: [TeamNotFound, HttpApiError.BadRequest, HttpApiError.Forbidden],
   })
     .annotate(OpenApi.Description, "Create a project, optionally assigning it to a team.")
     .middleware(Authentication),

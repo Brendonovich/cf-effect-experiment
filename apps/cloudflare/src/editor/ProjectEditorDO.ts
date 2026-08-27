@@ -33,7 +33,7 @@ import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
-import { HashMap, Layer, Option, Queue, Redacted, Schema, Scope, SubscriptionRef } from "effect";
+import { HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
 import {
@@ -235,12 +235,14 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
 
       const reconcileEditorIngressRaw = Effect.fnUntraced(function* (
         engines: Readonly<Record<string, unknown>>,
+        remount: boolean,
       ) {
         if (activeProjectId === undefined) return [];
         const projectId = activeProjectId;
         const origin = publicOrigin;
         const engineState = JSON.stringify(engines);
         if (
+          !remount &&
           reconciledEditorIngress?.projectId === projectId &&
           reconciledEditorIngress.publicOrigin === origin &&
           reconciledEditorIngress.engines === engineState
@@ -252,6 +254,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           publicOrigin: origin,
           previewId: "editor",
           engines,
+          remount,
         });
         reconciledEditorIngress = {
           projectId,
@@ -261,8 +264,8 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         };
         return endpoints;
       });
-      const reconcileEditorIngress = (engines: Readonly<Record<string, unknown>>) =>
-        reconcileEditorIngressRaw(engines).pipe(Effect.provide(runtimeContext), Effect.orDie);
+      const reconcileEditorIngress = (engines: Readonly<Record<string, unknown>>, remount = false) =>
+        reconcileEditorIngressRaw(engines, remount).pipe(Effect.provide(runtimeContext), Effect.orDie);
 
       const endpointHostLayer = Layer.succeed(
         HttpEndpoint.Host,
@@ -307,12 +310,6 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       const editorTwitchLayer = makeTwitchEngine((context) =>
         Effect.gen(function* () {
           const endpointHost = yield* HttpEndpoint.Host;
-          const state = yield* SubscriptionRef.make(
-            HashMap.empty<
-              AccountId,
-              { readonly state: "disconnected" | "connecting" | "connected" }
-            >(),
-          );
           const endpointFor = (accountId: AccountId) =>
             endpointHost.get(EventSubEndpoint, accountId).pipe(
               Effect.catch(() =>
@@ -325,9 +322,8 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           return {
             transport: "webhook" as const,
             state: Effect.gen(function* () {
-              let current = yield* SubscriptionRef.get(state);
+              let current = HashMap.empty<AccountId, { readonly state: "connected" }>();
               for (const accountId of yield* context.getAccountIds) {
-                if (HashMap.has(current, accountId)) continue;
                 const endpoint = yield* endpointFor(accountId);
                 if (Option.isSome(endpoint)) {
                   current = HashMap.set(current, accountId, { state: "connected" });
@@ -335,21 +331,15 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               }
               return current;
             }),
-            connect: Effect.fnUntraced(function* (accountId: AccountId) {
-              const endpoint = yield* endpointFor(accountId);
-              yield* SubscriptionRef.update(state, (current) =>
-                HashMap.set(current, accountId, {
-                  state: Option.isSome(endpoint) ? "connected" : "disconnected",
-                }),
+            connect: Effect.fnUntraced(function* () {
+              const project = yield* persistence.loadProject().pipe(Effect.orDie);
+              // Retry provider setup even when saved settings and endpoint IDs are unchanged.
+              yield* reconcileEditorIngress(project.engines, true).pipe(
+                Effect.flatMap(editor.engine.setEndpoints),
               );
               yield* context.refresh;
             }),
-            disconnect: Effect.fnUntraced(function* (accountId: AccountId) {
-              yield* SubscriptionRef.update(state, (current) =>
-                HashMap.set(current, accountId, { state: "disconnected" }),
-              );
-              yield* context.refresh;
-            }),
+            disconnect: () => context.refresh,
           };
         }),
       ).pipe(Layer.provide(Layer.mergeAll(endpointHostLayer, FetchHttpClient.layer)));
@@ -435,7 +425,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
                 const projectId = headers["x-macrograph-project-id"];
                 if (
                   role === undefined ||
-                  (role !== "owner" && role !== "admin" && role !== "member") ||
+                  (role !== "owner" && role !== "member" && role !== "viewer") ||
                   projectId === undefined ||
                   activeProjectId === undefined ||
                   projectId !== activeProjectId
@@ -621,6 +611,10 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           }
           yield* reconcileEditorIngress(project.engines).pipe(
             Effect.flatMap(editor.engine.setEndpoints),
+            // A provider failure must not prevent opening the editor to repair its settings.
+            Effect.catchCause((cause) =>
+              Effect.logError("Failed to reconcile editor ingress", cause),
+            ),
           );
           if (credentialsSessionChanged) {
             yield* durableState
@@ -887,14 +881,15 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
             role,
             userId,
             canManageCredentials:
-              projectCreatedBy === userId && (role === "owner" || role === "admin"),
+              projectCreatedBy === userId && (role === "owner" || role === "member"),
           },
     );
 
     return response;
   });
 
-  yield* RpcServer.make(group).pipe(
+  // A failed provider setup must not terminate unrelated requests or the project event stream.
+  yield* RpcServer.make(group, { disableFatalDefects: true }).pipe(
     Effect.provideService(RpcServer.Protocol, protocol),
     Effect.forkDetach,
   );

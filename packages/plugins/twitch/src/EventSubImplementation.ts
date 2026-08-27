@@ -24,7 +24,7 @@ export interface Controller {
   readonly reconcile?: (
     accountId: AccountId,
   ) => Effect.Effect<void, Helix.HelixError | MissingCredential>;
-  readonly disconnect: (accountId: AccountId) => Effect.Effect<void>;
+  readonly disconnect: (accountId: AccountId) => Effect.Effect<void, Helix.HelixError>;
 }
 
 export interface Context {

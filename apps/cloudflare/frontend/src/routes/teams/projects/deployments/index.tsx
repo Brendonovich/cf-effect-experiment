@@ -17,7 +17,7 @@ export const DeploymentsRoute = (props: RouteSectionProps) => {
       deploymentId={props.params.deploymentId}
       graphId={props.params.graphId}
       canDeploy={
-        workspace.selectedTeam()?.role === "owner" || workspace.selectedTeam()?.role === "admin"
+        workspace.selectedTeam()?.role === "owner" || workspace.selectedTeam()?.role === "member"
       }
       onDeploy={workspace.reloadProjects}
       selectionHref={route.deploymentPath}

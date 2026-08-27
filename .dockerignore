@@ -3,5 +3,13 @@
 **/node_modules
 **/dist
 **/.vite
-**/*.db
-lib/effect-smol/.git
+**/.env
+**/.env.*
+**/.alchemy
+**/.wrangler
+**/*.db*
+**/*.sqlite*
+**/macrograph-auth.json
+**/macrograph-client-auth.json
+**/*.tsbuildinfo
+lib/effect-smol

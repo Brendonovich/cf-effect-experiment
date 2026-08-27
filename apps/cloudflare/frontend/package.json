@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "vitest run --environment node",
+    "test": "vp test run",
     "preview": "vite preview",
     "typecheck": "tsgo --build"
   },
@@ -31,6 +31,7 @@
     "@solidjs/vite-plugin": "3.0.0-next.31",
     "@stylexjs/unplugin": "catalog:",
     "@types/node": "^24",
+    "jsdom": "^27.0.0",
     "typescript": "^5.8",
     "vite": "^8.0.7",
     "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"

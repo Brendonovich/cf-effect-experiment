@@ -1,0 +1,30 @@
+diff --git a/dist/index.js b/dist/index.js
+index 68dea2b5b419402b511b50777df394c5e0b00b19..e32c44ae3397d481de6ce0a5cc479a07b5ec2ed4 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1556,8 +1556,9 @@ function Routes(props) {
+   return memo(outlet);
+ }
+ const createOutlet = child => {
++  const route = createMemo(child, { lazy: true });
+   return () => {
+-    const c = child();
++    const c = route();
+     if (c) {
+       return createComponent$1(RouteContextObj, {
+         value: c,
+diff --git a/dist/routers/components.jsx b/dist/routers/components.jsx
+index 2e4b01cc2f09a6d7de9ee929ffd630c4d70af4d0..f98b979b4feefc6ec7d7ca8d90805be591e74907 100644
+--- a/dist/routers/components.jsx
++++ b/dist/routers/components.jsx
+@@ -104,8 +104,9 @@ export function Routes(props) {
+     return <>{outlet()}</>;
+ }
+ const createOutlet = (child) => {
++    const route = createMemo(child, { lazy: true });
+     return () => {
+-        const c = child();
++        const c = route();
+         if (c) {
+             return <RouteContextObj value={c}>{c.outlet()}</RouteContextObj>;
+         }

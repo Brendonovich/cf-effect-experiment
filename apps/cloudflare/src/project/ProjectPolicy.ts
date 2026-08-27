@@ -61,7 +61,15 @@ export const layer = Layer.effect(Service)(
       canEdit: (projectId: string) =>
         Policy.policy(() =>
           resolve(projectId).pipe(
-            Effect.map((authorization) => canMutateProject(authorization.role)),
+            Effect.map(
+              (authorization) =>
+                canMutateProject(authorization.role) &&
+                canAccessProject(
+                  authorization.role,
+                  authorization.project.access,
+                  authorization.hasGrant,
+                ),
+            ),
           ),
         ).pipe(Effect.mapError(() => new ProjectNotFound())),
       canManage: (projectId: string) =>

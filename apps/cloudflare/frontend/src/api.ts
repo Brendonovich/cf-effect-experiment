@@ -4,7 +4,14 @@ import { Effect } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 
-export const makeApiClient = (publicWorkerOrigin: string) => {
+import { signInUrl } from "./authRedirect";
+
+export const publicWorkerOrigin = () =>
+  new URL(
+    import.meta.env.VITE_PUBLIC_WORKER_ORIGIN ?? import.meta.env.VITE_WORKER_URL ?? location.origin,
+  ).origin;
+
+export const makeApiClient = (publicWorkerOrigin: string, isSigningOut: () => boolean) => {
   const transformClient = (client: HttpClient.HttpClient) =>
     client.pipe(
       HttpClient.mapRequest(
@@ -12,6 +19,25 @@ export const makeApiClient = (publicWorkerOrigin: string) => {
       ),
       HttpClient.transformResponse(
         Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+      ),
+      HttpClient.tap((response) =>
+        Effect.sync(() => {
+          if (
+            response.status === 401 &&
+            // Let coordinated logout finish its website request before navigating away.
+            !isSigningOut() &&
+            location.pathname.replace(/\/+$/, "").toLowerCase() !==
+              `${import.meta.env.BASE_URL}sign-in`.toLowerCase()
+          ) {
+            // Restart authentication without retaining any workspace state from the expired session.
+            window.location.replace(
+              signInUrl(
+                `${location.pathname}${location.search}${location.hash}`,
+                import.meta.env.BASE_URL,
+              ),
+            );
+          }
+        }),
       ),
     );
 

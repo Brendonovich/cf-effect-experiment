@@ -182,6 +182,7 @@ const socketStateLabel = (state: SocketState) =>
 			: "Disconnected";
 
 const Settings: Component<SettingsProps> = (props) => {
+	const [error, setError] = createSignal<string>();
 	const [collapsedAccounts, setCollapsedAccounts] = createSignal<
 		ReadonlyArray<AccountId>
 	>(untrack(() => props.state().accounts.map((account) => account.id)));
@@ -190,11 +191,24 @@ const Settings: Component<SettingsProps> = (props) => {
 		effect: Effect.Effect<void, unknown>,
 		optimistic?: () => void,
 	) {
+		setError(undefined);
 		optimistic?.();
 		yield;
 		const success = await Effect.runPromise(effect).then(
 			() => true,
-			() => false,
+			(error: unknown) => {
+				setError(
+					typeof error === "object" &&
+						error !== null &&
+						"reason" in error &&
+						typeof error.reason === "string"
+						? error.reason
+						: error instanceof Error && error.message.length > 0
+							? error.message
+							: "Twitch EventSub action failed. Please retry.",
+				);
+				return false;
+			},
 		);
 		yield;
 		if (!success) return;
@@ -237,6 +251,11 @@ const Settings: Component<SettingsProps> = (props) => {
 
 	return (
 		<section sx={styles.root}>
+			<Show when={error()}>
+				<div role="alert" sx={styles.invalid}>
+					{error()}
+				</div>
+			</Show>
 			<div>
 				<For
 					each={props.state().accounts}
@@ -319,7 +338,7 @@ const Settings: Component<SettingsProps> = (props) => {
 									onClick={() => {
 										const connected = state() === "connected";
 										toggleConnection(account(), connected, () => {
-											setState(connected ? "disconnected" : "connecting");
+											if (!connected) setState("connecting");
 											affects(state);
 											affects(account);
 										});

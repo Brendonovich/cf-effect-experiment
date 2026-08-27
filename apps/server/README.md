@@ -57,9 +57,31 @@ CSP must preserve those sources. Do not put collector credentials in the browser
 
 ## Container
 
+The `Server image` GitHub Actions workflow publishes
+`ghcr.io/brendonovich/macrograph-server:beta` on pushes to `main` (or a manual run on `main`).
+It includes `linux/amd64` and `linux/arm64` images, and also publishes `sha-<short-commit>` tags
+for pinning deployments. Pull requests build both architectures without publishing.
+The old server's `main`, `latest`, and release tags are left untouched.
+
+Because this reuses the old server's GHCR package, grant this repository write access under
+the package's **Settings > Manage Actions access** before the first publish. The workflow
+authenticates with `GITHUB_TOKEN`; no registry secret is needed.
+
 ```sh
-docker build -f apps/server/Dockerfile -t macrograph .
-docker run --rm -p 3001:3001 -v macrograph-data:/data macrograph
+docker run -d --name macrograph --restart unless-stopped \
+  -p 3001:3001 -v macrograph-beta-data:/data \
+  ghcr.io/brendonovich/macrograph-server:beta
+```
+
+Open `http://localhost:3001`. Use a separate data volume from the old server; this image is not
+an in-place migration of its persisted data. To update, pull the image and recreate the container
+with the same volume.
+
+To build locally, run from the repository root:
+
+```sh
+docker build -f apps/server/Dockerfile -t macrograph:beta .
+docker run --rm -p 3001:3001 -v macrograph-beta-data:/data macrograph:beta
 ```
 
 The image runs as UID/GID `1000:1000`. Ensure a bind-mounted data directory is writable by that

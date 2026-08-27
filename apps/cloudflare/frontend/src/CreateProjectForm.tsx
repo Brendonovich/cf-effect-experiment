@@ -1,9 +1,9 @@
-import type { ProjectRecord, TeamMember } from "@macrograph/cloud-api";
+import type { ProjectRecord, TeamMember, TeamRecord } from "@macrograph/cloud-api";
 
-import { createStateMachine } from "@macrograph/editor-ui";
+import { createStateMachine, LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { For, Show, action, type Component } from "solid-js";
+import { For, Loading, Show, action, type Component } from "solid-js";
 
 import type { ProjectsApiClient } from "./api";
 
@@ -12,6 +12,7 @@ import { runApi } from "./api";
 interface CreateProjectDialogProps {
   readonly api: ProjectsApiClient;
   readonly teamId: string | undefined;
+  readonly teamRole: TeamRecord["role"] | undefined;
   readonly members: ReadonlyArray<TeamMember>;
   readonly onCreated: (project: ProjectRecord) => void;
   readonly dialogRef: (dialog: HTMLDialogElement) => void;
@@ -47,11 +48,13 @@ export const CreateProjectDialog: Component<CreateProjectDialogProps> = (props) 
     },
   );
   let dialog!: HTMLDialogElement;
+  const canCreate = () =>
+    props.teamId === undefined || props.teamRole === "owner" || props.teamRole === "member";
 
   const createProject = action(async function* (event: SubmitEvent) {
     event.preventDefault();
     const name = state.context.name.trim();
-    if (name.length === 0) return;
+    if (name.length === 0 || !canCreate()) return;
     const body = await runApi(
       props.api.create({
         payload: {
@@ -129,26 +132,30 @@ export const CreateProjectDialog: Component<CreateProjectDialogProps> = (props) 
         </div>
         <Show when={state.mode === "restricted"}>
           <div sx={styles.members}>
-            <For each={props.members}>
-              {(member) => (
-                <label sx={styles.member}>
-                  <input
-                    type="checkbox"
-                    checked={state.context.userIds.includes(member.userId)}
-                    onChange={() => actions.toggleUser(member.userId)}
-                  />
-                  <span sx={styles.memberId}>{member.userId}</span>
-                  <span sx={styles.role}>{member.role}</span>
-                </label>
-              )}
-            </For>
+            <Loading fallback={<LoadingState label="Loading team members" />}>
+              <For each={props.members}>
+                {(member) => (
+                  <label sx={styles.member}>
+                    <input
+                      type="checkbox"
+                      checked={state.context.userIds.includes(member.userId)}
+                      onChange={() => actions.toggleUser(member.userId)}
+                    />
+                    <span sx={styles.memberId}>{member.userId}</span>
+                    <span sx={styles.role}>{member.role}</span>
+                  </label>
+                )}
+              </For>
+            </Loading>
           </div>
         </Show>
         <div sx={styles.actions}>
           <button type="button" sx={styles.cancel} onClick={() => dialog.close()}>
             Cancel
           </button>
-          <button sx={styles.submit}>Create project</button>
+          <button sx={styles.submit} disabled={!canCreate()}>
+            Create project
+          </button>
         </div>
       </form>
     </dialog>

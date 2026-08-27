@@ -4,6 +4,7 @@ import {
   FetchHttpClient,
   HttpClient,
   HttpClientError,
+  HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
 
@@ -98,12 +99,80 @@ describe("Twitch Helix errors", () => {
           ),
       );
       assert.strictEqual(error._tag, "HelixError");
-      assert.include(error.reason, "required scope or channel role");
+      assert.strictEqual(error.reason, "Missing scope moderator:manage:banned_users");
+      assert.strictEqual(error.message, error.reason);
       assert.notInclude(error.reason, "credential-secret");
       assert.notInclude(error.reason, "response-secret");
+      assert.strictEqual(error.status, 403);
       assert.strictEqual(error.rateLimit, 800);
       assert.strictEqual(error.rateLimitRemaining, 42);
       assert.strictEqual(error.rateLimitReset, 123456);
+    }),
+  );
+
+  it.effect("retains status fallbacks for malformed or missing Twitch error messages", () =>
+    Effect.gen(function* () {
+      const request = HttpClientRequest.get("https://api.twitch.tv/helix/users");
+      for (const [status, reason] of [
+        [401, "Twitch rejected the credential; reconnect the selected account"],
+        [403, "The selected Twitch account lacks a required scope or channel role"],
+        [503, "Twitch request could not be completed"],
+      ] as const) {
+        for (const body of ["not JSON", "", "null", "{}", '{"message":42}', '{"message":"  "}']) {
+          const response = HttpClientResponse.fromWeb(request, new Response(body, { status }));
+          const error = yield* Effect.flip(
+            Helix.fromHttpClientError(
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.StatusCodeError({ request, response }),
+              }),
+            ),
+          );
+          assert.strictEqual(error.reason, reason);
+          assert.strictEqual(error.status, status);
+        }
+      }
+    }),
+  );
+
+  it.effect("retains the generic fallback for transport errors without a response", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        Helix.fromHttpClientError(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({
+              request: HttpClientRequest.get("https://api.twitch.tv/helix/users"),
+            }),
+          }),
+        ),
+      );
+      assert.strictEqual(error.reason, "Twitch request could not be completed");
+      assert.isUndefined(error.status);
+      assert.isUndefined(error.rateLimit);
+      assert.isUndefined(error.rateLimitRemaining);
+      assert.isUndefined(error.rateLimitReset);
+    }),
+  );
+
+  it.effect("keeps OAuth validation response messages private", () =>
+    Effect.gen(function* () {
+      const request = HttpClientRequest.get("https://id.twitch.tv/oauth2/validate");
+      const response = HttpClientResponse.fromWeb(
+        request,
+        new Response(JSON.stringify({ message: "response-secret" }), { status: 401 }),
+      );
+      const error = yield* Effect.flip(
+        Helix.fromHttpClientError(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.StatusCodeError({ request, response }),
+          }),
+        ),
+      );
+      assert.strictEqual(
+        error.reason,
+        "Twitch rejected the credential; reconnect the selected account",
+      );
+      assert.strictEqual(error.message, error.reason);
+      assert.strictEqual(error.status, 401);
     }),
   );
 

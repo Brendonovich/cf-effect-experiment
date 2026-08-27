@@ -99,6 +99,7 @@ const setup = () => {
       () => {},
     );
     const canvas = createEditorCanvas({
+      publishPointer: () => {},
       ...layout,
       editor,
       client: () => null,

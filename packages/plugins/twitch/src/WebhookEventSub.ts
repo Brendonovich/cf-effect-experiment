@@ -340,6 +340,17 @@ export const make: Make<AppHelix.AppCredentials | HttpClient.HttpClient | HttpEn
                     subscriptionType: definition.type,
                   }),
                 ),
+                Effect.mapError(
+                  (error) =>
+                    new Helix.HelixError({
+                      ...error,
+                      reason: `Failed to create Twitch EventSub webhook subscription ${definition.type}: ${error.reason}${
+                        error.status === 403
+                          ? "; reauthorize the account with the required scopes for this Twitch application's Client ID and verify its channel roles"
+                          : ""
+                      }`,
+                    }),
+                ),
               ),
             { discard: true },
           );
@@ -368,7 +379,11 @@ export const make: Make<AppHelix.AppCredentials | HttpClient.HttpClient | HttpEn
           accountId,
         });
         yield* Effect.gen(function* () {
-          const endpoint = yield* endpoints.get(EventSubEndpoint, accountId);
+          const endpoint = yield* endpoints.get(EventSubEndpoint, accountId).pipe(
+            Effect.mapError(
+              () => new Helix.HelixError({ reason: "Failed to resolve EventSub webhook endpoint" }),
+            ),
+          );
           if (Option.isNone(endpoint)) {
             yield* Effect.logInfo("No EventSub webhook endpoint to disconnect", { accountId });
             return;
@@ -389,7 +404,11 @@ export const make: Make<AppHelix.AppCredentials | HttpClient.HttpClient | HttpEn
               ),
             { discard: true },
           );
-        }).pipe(Effect.catch(() => Effect.log("Failed to disconnect EventSub webhook")));
+        }).pipe(
+          Effect.tapError((error) =>
+            Effect.logError("Failed to disconnect EventSub webhook", { accountId, error }),
+          ),
+        );
         yield* SubscriptionRef.update(state, (current) =>
           HashMap.set(current, accountId, { state: "disconnected" }),
         );

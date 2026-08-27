@@ -51,6 +51,7 @@ export interface PreviewRequest {
   readonly publicOrigin: string;
   readonly previewId: string;
   readonly engines: Readonly<Record<string, unknown>>;
+  readonly remount?: boolean;
 }
 
 export interface StopPreviewRequest {
@@ -88,6 +89,7 @@ const AppliedDeployment = Schema.Struct({
 type AppliedDeployment = typeof AppliedDeployment.Type;
 const PreviewDeployment = Schema.Struct({
   generation: Schema.optionalKey(Schema.String),
+  reconciliationPending: Schema.optionalKey(Schema.Boolean),
   previewIds: Schema.Array(Schema.String),
   manifest: HttpIngress.Manifest,
   endpoints: Schema.Array(MountedEndpoint),
@@ -111,7 +113,7 @@ const isWorkflowBinding = (value: unknown): value is WorkflowBinding =>
   "create" in value &&
   typeof value.create === "function";
 
-const projectIngressImplementation = Effect.gen(function* () {
+export const projectIngressImplementation = Effect.gen(function* () {
   const durableState = yield* Cloudflare.DurableObjectState;
   const workerEnvironment = yield* Cloudflare.WorkerEnvironment;
   let publicOrigin = "http://localhost:1338";
@@ -425,6 +427,7 @@ const projectIngressImplementation = Effect.gen(function* () {
       const manifest = yield* ingressRuntime.resolveManifest(request.engines).pipe(Effect.orDie);
       const next: PreviewDeployment = {
         generation: crypto.randomUUID(),
+        reconciliationPending: true,
         previewIds: [
           ...new Set([
             ...Option.match(previous, {
@@ -435,30 +438,35 @@ const projectIngressImplementation = Effect.gen(function* () {
           ]),
         ],
         manifest,
-        endpoints: [],
+        endpoints: Option.match(previous, {
+          onNone: () => [],
+          onSome: (value) =>
+            value.endpoints.filter((endpoint) => entryFor(manifest, endpoint) !== undefined),
+        }),
       };
-      yield* durableState.storage.put(previewDeploymentKey, next);
+      // Track both old and attempted resources until every mount and cleanup has succeeded.
+      yield* durableState.storage.put(previewDeploymentKey, {
+        ...next,
+        manifest: yield* ingressRuntime.mergeManifests([
+          Option.match(previous, { onNone: () => [], onSome: (value) => value.manifest }),
+          manifest,
+        ]).pipe(Effect.orDie),
+      } satisfies PreviewDeployment);
       const desiredProvider = yield* providerManifest(production, Option.some(next)).pipe(
         Effect.orDie,
       );
       const endpoints = yield* ingressRuntime
         .reconcile(previousProvider, desiredProvider, {
-          remount: originChanged(request.publicOrigin, production, previous),
+          remount:
+            request.remount === true ||
+            (Option.isSome(previous) && previous.value.reconciliationPending === true) ||
+            originChanged(request.publicOrigin, production, previous),
         })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logError("Failed to reconcile editor preview ingress", cause).pipe(
-              Effect.as<ReadonlyArray<HttpEndpoint.Routed>>(
-                Option.match(previous, {
-                  onNone: () => [],
-                  onSome: (value) => value.endpoints,
-                }),
-              ),
-            ),
-          ),
-        );
+        // Keep failed manifests for partial-subscription cleanup, but never reuse a failed mount.
+        .pipe(Effect.orDie);
       const active: PreviewDeployment = {
         ...next,
+        reconciliationPending: false,
         endpoints: endpoints.filter((endpoint) => entryFor(manifest, endpoint) !== undefined),
       };
       yield* durableState.storage.put(previewDeploymentKey, active);

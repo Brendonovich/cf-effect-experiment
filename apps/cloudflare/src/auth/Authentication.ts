@@ -6,7 +6,7 @@ import {
 } from "@macrograph/cloud-api";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
@@ -18,6 +18,15 @@ export const make = Effect.gen(function* () {
   const database = yield* Database.Service;
   const cloudAuths = yield* CloudAuthDO;
   const cloudAuth = (sessionId: string) => cloudAuths.getByName(sessionId);
+
+  const saveUser = (status: { readonly userId: string; readonly email: string }) => {
+    const email = status.email.trim().toLowerCase();
+    return database
+      .insert(users)
+      .values({ id: status.userId, email, createdAt: new Date().toISOString() })
+      .onConflictDoUpdate({ target: users.id, set: { email } })
+      .pipe(Effect.orDie);
+  };
 
   const authenticatedSession = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
@@ -83,6 +92,17 @@ export const make = Effect.gen(function* () {
       secure: new URL(requestOrigin(request)).protocol === "https:",
     });
 
+  const requireWebsiteOrigin = Effect.fnUntraced(function* (
+    request: HttpServerRequest.HttpServerRequest,
+  ) {
+    const origin = "https://cloud.macrograph.app";
+    if (requestOrigin(request) !== origin || request.headers.origin !== origin)
+      return yield* new HttpApiError.Forbidden();
+    yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+      Effect.succeed(HttpServerResponse.setHeader(response, "cache-control", "no-store")),
+    );
+  });
+
   return {
     cloudAuth,
     issueApiKey,
@@ -101,7 +121,30 @@ export const make = Effect.gen(function* () {
           .where(eq(users.id, status.userId))
           .limit(1)
           .pipe(Effect.orDie);
-        return existingUsers[0] === undefined ? { state: "disconnected" as const } : status;
+        if (existingUsers[0] === undefined) return { state: "disconnected" as const };
+        yield* saveUser(status);
+        return status;
+      }),
+    startWebsiteSession: (request: HttpServerRequest.HttpServerRequest) =>
+      Effect.gen(function* () {
+        yield* requireWebsiteOrigin(request);
+
+        // Each tab gets a fresh attempt; never authorize a session supplied through a cookie.
+        const sessionId = crypto.randomUUID();
+        const status = yield* cloudAuth(sessionId).start();
+        if (status.state !== "pending")
+          return yield* Effect.die("A new website session must require authorization");
+        return { registrationId: sessionId, verificationUrl: status.verificationUrl };
+      }),
+    pollWebsiteSession: (sessionId: string, request: HttpServerRequest.HttpServerRequest) =>
+      Effect.gen(function* () {
+        yield* requireWebsiteOrigin(request);
+        const status = yield* cloudAuth(sessionId).poll();
+        if (status.state === "connected") {
+          yield* saveUser(status);
+          yield* setSessionCookie(request, sessionId);
+        }
+        return status;
       }),
     startSession: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
@@ -110,12 +153,7 @@ export const make = Effect.gen(function* () {
         const sessionId = existingSessionId ?? crypto.randomUUID();
         if (existingSessionId === undefined) yield* setSessionCookie(request, sessionId);
         const status = yield* cloudAuth(sessionId).start();
-        if (status.state === "connected")
-          yield* database
-            .insert(users)
-            .values({ id: status.userId, createdAt: new Date().toISOString() })
-            .onConflictDoNothing()
-            .pipe(Effect.orDie);
+        if (status.state === "connected") yield* saveUser(status);
         return status;
       }),
     pollSession: (request: HttpServerRequest.HttpServerRequest) =>
@@ -123,12 +161,7 @@ export const make = Effect.gen(function* () {
         const sessionId = request.cookies[sessionCookieName];
         if (!sessionId || !hasTrustedOrigin(request)) return { state: "disconnected" as const };
         const status = yield* cloudAuth(sessionId).poll();
-        if (status.state === "connected")
-          yield* database
-            .insert(users)
-            .values({ id: status.userId, createdAt: new Date().toISOString() })
-            .onConflictDoNothing()
-            .pipe(Effect.orDie);
+        if (status.state === "connected") yield* saveUser(status);
         return status;
       }),
     disconnectSession: (request: HttpServerRequest.HttpServerRequest) =>

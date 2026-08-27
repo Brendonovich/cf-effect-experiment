@@ -2,7 +2,7 @@ import { LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { For, Loading, createMemo, createSignal, resolve } from "solid-js";
+import { For, Loading, Show, createMemo, createSignal, resolve } from "solid-js";
 
 import { runApi } from "../api";
 import { useWorkspace } from "../App";
@@ -87,23 +87,26 @@ export const WorkspaceHomeRoute = () => {
                           <div sx={styles.noProjects}>
                             <div sx={styles.noProjectsRow}>
                               <span>No projects yet.</span>
-                              <button
-                                type="button"
-                                sx={styles.newProject}
-                                onClick={() => {
-                                  setCreatingProject(true);
-                                  void resolve(teamMembers).then(() =>
-                                    createProjectDialog.showModal(),
-                                  );
-                                }}
-                              >
-                                New project
-                              </button>
+                              <Show when={team.role === "owner" || team.role === "member"}>
+                                <button
+                                  type="button"
+                                  sx={styles.newProject}
+                                  onClick={() => {
+                                    setCreatingProject(true);
+                                    void resolve(teamMembers).then(() =>
+                                      createProjectDialog.showModal(),
+                                    );
+                                  }}
+                                >
+                                  New project
+                                </button>
+                              </Show>
                             </div>
                             <Loading fallback={null}>
                               <CreateProjectDialog
                                 api={workspace.api.projects}
                                 teamId={team.id}
+                                teamRole={team.role}
                                 members={teamMembers()}
                                 dialogRef={(dialog) => (createProjectDialog = dialog)}
                                 onClose={() => setCreatingProject(false)}
@@ -157,6 +160,7 @@ export const WorkspaceHomeRoute = () => {
         <CreateProjectDialog
           api={workspace.api.projects}
           teamId={undefined}
+          teamRole={undefined}
           members={[]}
           dialogRef={(dialog) => (createPersonalProjectDialog = dialog)}
           onCreated={(project) => {

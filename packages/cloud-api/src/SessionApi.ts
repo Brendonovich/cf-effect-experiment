@@ -12,12 +12,27 @@ export const SessionStatus = Schema.Union([
 ]);
 export type SessionStatus = typeof SessionStatus.Type;
 
+export const WebsiteSession = Schema.Struct({
+  registrationId: Schema.String.check(Schema.isUUID(4)),
+  verificationUrl: Schema.String,
+});
+export type WebsiteSession = typeof WebsiteSession.Type;
+
 export class SessionApiGroup extends HttpApiGroup.make("session").add(
   HttpApiEndpoint.get("get", "/api/cloud-auth", {
     success: SessionStatus,
   }),
   HttpApiEndpoint.post("start", "/api/cloud-auth/start", {
     success: SessionStatus,
+  }),
+  HttpApiEndpoint.post("startWebsite", "/api/cloud-auth/website", {
+    success: WebsiteSession,
+    error: HttpApiError.Forbidden,
+  }),
+  HttpApiEndpoint.post("pollWebsite", "/api/cloud-auth/website/poll", {
+    payload: Schema.Struct({ registrationId: WebsiteSession.fields.registrationId }),
+    success: SessionStatus,
+    error: HttpApiError.Forbidden,
   }),
   HttpApiEndpoint.post("poll", "/api/cloud-auth/poll", {
     success: SessionStatus,

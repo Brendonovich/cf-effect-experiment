@@ -48,7 +48,10 @@ export const layer = Layer.effect(Service)(
             if (row === undefined) return yield* new ProjectNotFound();
             return canManageProjectCredentials(row.role, row.createdBy, user.id);
           }),
-        ).pipe(Effect.catchTag("PolicyDenied", () => new HttpApiError.Forbidden())),
+        ).pipe(
+          Policy.withPolicy(projectPolicy.canView(projectId)),
+          Effect.catchTag("PolicyDenied", () => new HttpApiError.Forbidden()),
+        ),
     };
   }),
 );

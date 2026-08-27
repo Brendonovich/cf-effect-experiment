@@ -41,6 +41,7 @@ export interface PreviewProjectRequest {
   readonly publicOrigin: string;
   readonly previewId: string;
   readonly engines: Readonly<Record<string, unknown>>;
+  readonly remount?: boolean;
 }
 
 export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>

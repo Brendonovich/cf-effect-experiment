@@ -1,8 +1,9 @@
 import type { TeamMember, TeamRecord } from "@macrograph/cloud-api";
 
+import { LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { For, Show, action, createSignal, type Component } from "solid-js";
+import { For, Loading, Show, action, createSignal, type Component } from "solid-js";
 
 import type { TeamsApiClient } from "./api";
 
@@ -17,41 +18,42 @@ interface TeamSettingsProps {
 }
 
 const AddTeamMemberForm: Component<{
-  readonly onAdd: (userId: string, role: "admin" | "member") => Promise<boolean>;
-  readonly canAssignAdmin: boolean;
+  readonly onAdd: (email: string, role: "member" | "viewer") => Promise<boolean>;
 }> = (props) => {
-  const [newMemberId, setNewMemberId] = createSignal("");
-  const [newMemberRole, setNewMemberRole] = createSignal<"admin" | "member">("member");
+  const [newMemberEmail, setNewMemberEmail] = createSignal("");
+  const [newMemberRole, setNewMemberRole] = createSignal<"member" | "viewer">("member");
   const [addError, setAddError] = createSignal<string>();
 
   const addTeamMember = action(async function* (event: SubmitEvent) {
     event.preventDefault();
-    const userId = newMemberId().trim();
-    if (userId.length === 0) return;
-    const added = await props.onAdd(userId, newMemberRole());
+    const email = newMemberEmail().trim();
+    if (email.length === 0) return;
+    const added = await props.onAdd(email, newMemberRole());
     yield;
     if (added) {
-      setNewMemberId("");
+      setNewMemberEmail("");
       setAddError(undefined);
     } else {
-      setAddError("User not found. They must sign in first.");
+      setAddError("Could not add member. Check the email and ask them to sign in first.");
     }
   });
 
   return (
     <form sx={styles.addForm} onSubmit={addTeamMember}>
-      <label sx={styles.srOnly} for="new-member-id">
-        MacroGraph user ID
+      <label sx={styles.srOnly} for="new-member-email">
+        Email address
       </label>
       <input
-        id="new-member-id"
+        id="new-member-email"
+        type="email"
+        required
         sx={[styles.input, styles.memberInput]}
-        value={newMemberId()}
+        value={newMemberEmail()}
         onInput={(event) => {
-          setNewMemberId(event.currentTarget.value);
+          setNewMemberEmail(event.currentTarget.value);
           setAddError(undefined);
         }}
-        placeholder="MacroGraph user ID"
+        placeholder="Email address"
       />
       <label sx={styles.srOnly} for="new-member-role">
         Role
@@ -61,12 +63,10 @@ const AddTeamMemberForm: Component<{
           id="new-member-role"
           sx={[styles.input, styles.addSelect]}
           value={newMemberRole()}
-          onChange={(event) => setNewMemberRole(event.currentTarget.value as "admin" | "member")}
+          onChange={(event) => setNewMemberRole(event.currentTarget.value as "member" | "viewer")}
         >
           <option value="member">Member</option>
-          <Show when={props.canAssignAdmin}>
-            <option value="admin">Admin</option>
-          </Show>
+          <option value="viewer">Viewer</option>
         </select>
         <IconLucideChevronDown {...stylex.attrs(styles.chevron)} />
       </div>
@@ -84,13 +84,22 @@ const AddTeamMemberForm: Component<{
 
 export const TeamSettings: Component<TeamSettingsProps> = (props) => {
   let dialog!: HTMLDialogElement;
-  const canManage = () => props.team?.role === "owner" || props.team?.role === "admin";
-  const canManageMember = (member: TeamMember) =>
-    member.role !== "owner" &&
-    (props.team?.role === "owner" || (props.team?.role === "admin" && member.role === "member"));
+  const canManage = () => props.team?.role === "owner";
+  const canManageMember = (member: TeamMember) => member.role !== "owner" && canManage();
   const roleLabel = (role: TeamMember["role"]) => role.slice(0, 1).toUpperCase() + role.slice(1);
 
-  const setTeamMember = action(async function* (userId: string, role: "admin" | "member") {
+  const addTeamMember = action(async function* (email: string, role: "member" | "viewer") {
+    const teamId = props.team?.id;
+    if (teamId === undefined) return false;
+    const result = await runApi(
+      props.api.addMember({ params: { teamId }, payload: { email, role } }),
+    );
+    yield;
+    if (result !== undefined) props.onMembersChanged();
+    return result !== undefined;
+  });
+
+  const setTeamMember = action(async function* (userId: string, role: "member" | "viewer") {
     const teamId = props.team?.id;
     if (teamId === undefined) return false;
     const result = await runApi(
@@ -160,71 +169,72 @@ export const TeamSettings: Component<TeamSettingsProps> = (props) => {
               <div style={{ "margin-bottom": "12px" }}>
                 <h3 sx={styles.sectionTitle}>Add a team member</h3>
                 <p sx={styles.sectionDescription}>
-                  Add someone using the user ID from their MacroGraph account.
+                  Add someone using the email address from their MacroGraph account.
                 </p>
               </div>
-              <AddTeamMemberForm
-                onAdd={setTeamMember}
-                canAssignAdmin={props.team?.role === "owner"}
-              />
+              <AddTeamMemberForm onAdd={addTeamMember} />
             </section>
           </Show>
-          <section sx={styles.section}>
-            <div sx={styles.membersHeading}>
-              <div>
-                <h3 sx={styles.sectionTitle}>Members</h3>
-                <p sx={styles.membersDescription}>
-                  People with access to this team and its projects.
-                </p>
+          <Loading fallback={<LoadingState label="Loading team members" />}>
+            <section sx={styles.section}>
+              <div sx={styles.membersHeading}>
+                <div>
+                  <h3 sx={styles.sectionTitle}>Members</h3>
+                  <p sx={styles.membersDescription}>
+                    Members can edit projects. Viewers have read-only access.
+                  </p>
+                </div>
+                <span sx={styles.badge}>{props.members.length}</span>
               </div>
-              <span sx={styles.badge}>{props.members.length}</span>
-            </div>
-            <div sx={styles.memberList}>
-              <For each={props.members} fallback={<p sx={styles.empty}>No members found</p>}>
-                {(member) => (
-                  <div sx={styles.memberRow}>
-                    <span sx={styles.memberAvatar}>{member.userId.slice(0, 2).toUpperCase()}</span>
-                    <div sx={styles.grow}>
-                      <span sx={styles.memberId}>{member.userId}</span>
-                    </div>
-                    <Show
-                      when={canManageMember(member)}
-                      fallback={<span sx={styles.roleBadge}>{roleLabel(member.role)}</span>}
-                    >
-                      <div sx={styles.relative}>
-                        <select
-                          aria-label={`Role for ${member.userId}`}
-                          sx={[styles.input, styles.roleSelect]}
-                          value={member.role}
-                          onChange={(event) =>
-                            void setTeamMember(
-                              member.userId,
-                              event.currentTarget.value as "admin" | "member",
-                            )
-                          }
-                        >
-                          <option value="member">Member</option>
-                          <Show when={props.team?.role === "owner"}>
-                            <option value="admin">Admin</option>
-                          </Show>
-                        </select>
-                        <IconLucideChevronDown {...stylex.attrs(styles.roleChevron)} />
+              <div sx={styles.memberList}>
+                <For each={props.members} fallback={<p sx={styles.empty}>No members found</p>}>
+                  {(member) => (
+                    <div sx={styles.memberRow}>
+                      <span sx={styles.memberAvatar}>
+                        {member.email?.slice(0, 2).toUpperCase() ?? "?"}
+                      </span>
+                      <div sx={styles.grow}>
+                        <span sx={styles.memberEmail} title={member.email ?? undefined}>
+                          {member.email ?? "Email unavailable"}
+                        </span>
                       </div>
-                      <button
-                        type="button"
-                        sx={styles.remove}
-                        onClick={() => void removeTeamMember(member.userId)}
-                        aria-label={`Remove ${member.userId}`}
-                        title="Remove member"
+                      <Show
+                        when={canManageMember(member)}
+                        fallback={<span sx={styles.roleBadge}>{roleLabel(member.role)}</span>}
                       >
-                        <IconBiX {...stylex.attrs(styles.smallIcon)} />
-                      </button>
-                    </Show>
-                  </div>
-                )}
-              </For>
-            </div>
-          </section>
+                        <div sx={styles.relative}>
+                          <select
+                            aria-label={`Role for ${member.email ?? "member"}`}
+                            sx={[styles.input, styles.roleSelect]}
+                            value={member.role}
+                            onChange={(event) =>
+                              void setTeamMember(
+                                member.userId,
+                                event.currentTarget.value as "member" | "viewer",
+                              )
+                            }
+                          >
+                            <option value="member">Member</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                          <IconLucideChevronDown {...stylex.attrs(styles.roleChevron)} />
+                        </div>
+                        <button
+                          type="button"
+                          sx={styles.remove}
+                          onClick={() => void removeTeamMember(member.userId)}
+                          aria-label={`Remove ${member.email ?? "member"}`}
+                          title="Remove member"
+                        >
+                          <IconBiX {...stylex.attrs(styles.smallIcon)} />
+                        </button>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </section>
+          </Loading>
         </div>
       </dialog>
     </>
@@ -419,7 +429,7 @@ const styles = stylex.create({
     color: colors.gray11,
   },
   grow: { minWidth: 0, flex: 1 },
-  memberId: {
+  memberEmail: {
     display: "block",
     overflow: "hidden",
     textOverflow: "ellipsis",

@@ -25,9 +25,18 @@ export class TeamsApiGroup extends HttpApiGroup.make("teams").add(
     success: Schema.Struct({ members: Schema.Array(TeamMember) }),
     error: TeamNotFound,
   }).middleware(Authentication),
+  HttpApiEndpoint.post("addMember", "/api/teams/:teamId/members", {
+    params: { teamId: Schema.String },
+    payload: Schema.Struct({
+      email: Schema.Trim.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
+      role: Schema.Literals(["member", "viewer"]),
+    }),
+    success: Schema.Struct({ member: TeamMember }),
+    error: [TeamNotFound, UserNotFound, HttpApiError.Forbidden],
+  }).middleware(Authentication),
   HttpApiEndpoint.put("setMember", "/api/teams/:teamId/members/:userId", {
     params: { teamId: Schema.String, userId: Schema.String },
-    payload: Schema.Struct({ role: Schema.Literals(["admin", "member"]) }),
+    payload: Schema.Struct({ role: Schema.Literals(["member", "viewer"]) }),
     success: Schema.Struct({ member: TeamMember }),
     error: [TeamNotFound, UserNotFound, HttpApiError.Forbidden],
   }).middleware(Authentication),

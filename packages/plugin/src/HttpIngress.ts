@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Option, Schema } from "effect";
 
 import * as HttpEndpoint from "./HttpEndpoint.ts";
 
@@ -63,7 +63,21 @@ export class ReconciliationError extends Schema.TaggedError<ReconciliationError>
     instanceKey: HttpEndpoint.InstanceKey,
     cause: Schema.Unknown,
   },
-) {}
+) {
+  override get message() {
+    const error = Cause.isCause(this.cause) ? Cause.squash(this.cause) : this.cause;
+    const reason =
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string"
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Provider setup failed";
+    return `Failed to configure ${this.handlerId}/${this.instanceKey}: ${reason}`;
+  }
+}
 
 interface Handler {
   readonly id: HttpEndpoint.HandlerId;

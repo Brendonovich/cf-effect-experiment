@@ -23,12 +23,13 @@ export const ProjectSettingsRoute = () => {
   const queryClient = useQueryClient();
   const [deleteState, setDeleteState] = createSignal<"idle" | "deleting" | "error">("idle");
   const [refreshingCredentials, setRefreshingCredentials] = createSignal(false);
-  const canManage = () => {
+  const canManage = () => workspace.selectedTeam()?.role === "owner";
+  const canManageCredentials = () => {
     const role = workspace.selectedTeam()?.role;
-    return role === "owner" || role === "admin";
+    return (
+      (role === "owner" || role === "member") && project()?.createdBy === workspace.currentUserId()
+    );
   };
-  const canManageCredentials = () =>
-    canManage() && project()?.createdBy === workspace.currentUserId();
   const projectAccessKey = () => ["project-access", projectId()] as const;
   const projectAccessQuery = createQuery(() => ({
     queryKey: projectAccessKey(),
@@ -190,9 +191,7 @@ export const ProjectSettingsRoute = () => {
           >
             <Show
               when={canManage()}
-              fallback={
-                <p sx={styles.message}>Only team owners and admins can change project access.</p>
-              }
+              fallback={<p sx={styles.message}>Only team owners can change project access.</p>}
             >
               <div sx={styles.accessBody}>
                 <Show
@@ -247,7 +246,9 @@ export const ProjectSettingsRoute = () => {
                                   checked={optimisticAccess.context.userIds.includes(member.userId)}
                                   onChange={() => actions.toggleUser(member.userId)}
                                 />
-                                <span sx={styles.memberId}>{member.userId}</span>
+                                <span sx={styles.memberId} title={member.email ?? undefined}>
+                                  {member.email ?? "Email unavailable"}
+                                </span>
                                 <span sx={styles.memberRole}>{member.role}</span>
                               </label>
                             )}
@@ -280,7 +281,7 @@ export const ProjectSettingsRoute = () => {
               title={
                 canManageCredentials()
                   ? "Reload credentials from the provider"
-                  : "Only the project creator can refresh credentials"
+                  : "Only the project creator with an owner or member role can refresh credentials"
               }
               onClick={() => void refetchCredentials()}
             >

@@ -64,6 +64,7 @@ export class ClientRpcs extends RpcGroup.make(
   }),
   Rpc.make("DisconnectEventSub", {
     payload: S.Struct({ accountId: AccountId }),
+    error: Helix.HelixError,
   }),
   Rpc.make("ToggleEventSubSubscription", {
     payload: S.Struct({

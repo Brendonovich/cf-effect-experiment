@@ -93,11 +93,11 @@ describe("collaboration", () => {
       yield* EditorRpc.authorize(identity("reader", "project", false), "GetProject");
       yield* EditorRpc.authorize(identity("reader", "project", false), "UpdatePresence");
       yield* EditorRpc.authorize(identity("owner", "project"), "CreateNode");
-      yield* EditorRpc.authorize(identity("admin", "project"), "SetEngineState");
+      yield* EditorRpc.authorize(identity("member", "project"), "SetEngineState");
       assert.isTrue(
         Exit.isFailure(
           yield* Effect.exit(
-            EditorRpc.authorize(identity("admin", "project", true, false), "RefetchCredentials"),
+            EditorRpc.authorize(identity("member", "project", true, false), "RefetchCredentials"),
           ),
         ),
       );

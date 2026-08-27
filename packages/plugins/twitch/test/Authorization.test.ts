@@ -7,7 +7,7 @@ import { Deferred, Effect, HashMap, Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 
-import type { Make } from "../src/EventSubImplementation.ts";
+import type { Context, Make } from "../src/EventSubImplementation.ts";
 
 import { AccountId, TwitchEngine } from "../src/Definition.ts";
 import { make } from "../src/Engine.ts";
@@ -29,12 +29,25 @@ type ValidationResponse = "transport" | { status?: number; body?: unknown; rawBo
 const setup = Effect.fnUntraced(function* (
   responses: ReadonlyArray<ValidationResponse> = [{}],
   clientId?: string,
+  options: { credentialAvailable?: boolean; transport?: "websocket" | "webhook" } = {},
 ) {
   const requests: Array<HttpClientRequest.HttpClientRequest> = [];
   const timeline: Array<string> = [];
   const subscriber = yield* Deferred.make<() => Effect.Effect<void>>();
+  const eventSubContext = yield* Deferred.make<Context>();
   let validationAttempts = 0;
-  let storage: typeof TwitchEngine.Storage.Type = { accounts: {} };
+  let credentialAvailable = options.credentialAvailable ?? true;
+  const initialStorage: typeof TwitchEngine.Storage.Type = {
+    accounts:
+      options.transport === "webhook"
+        ? { [accountId]: { enabled: false, subscriptions: ["channel.follow"] } }
+        : {},
+  };
+  let storage = initialStorage;
+  const writeStorage = vi.fn((value: typeof TwitchEngine.Storage.Type) => {
+    storage = value;
+    timeline.push("storage");
+  });
   let credential: Credential = {
     id: accountId,
     provider: "twitch",
@@ -102,35 +115,31 @@ const setup = Effect.fnUntraced(function* (
     }),
   );
   const connect = vi.fn((_id: AccountId) => timeline.push("connect"));
-  const fakeMakeEventSub: Make = () =>
-    Effect.succeed({
-      transport: "websocket",
-      state: Effect.succeed(HashMap.empty()),
-      connect: (id) =>
-        Effect.sync(() => {
-          connect(id);
-        }),
-      disconnect: () => Effect.void,
-    });
+  const fakeMakeEventSub: Make = (context) =>
+    Deferred.succeed(eventSubContext, context).pipe(
+      Effect.as({
+        transport: options.transport ?? "websocket",
+        state: Effect.succeed(HashMap.empty()),
+        connect: (id) =>
+          Effect.sync(() => {
+            connect(id);
+          }),
+        disconnect: () => Effect.void,
+      }),
+    );
   const dependencies = Layer.mergeAll(
     Layer.succeed(HttpClient.HttpClient)(httpClient),
     Layer.succeed(TwitchEngine.EngineContext)({
       storage: {
         get: Effect.sync(() => storage),
-        set: (value) =>
-          Effect.sync(() => {
-            storage = value;
-          }),
-        update: (f) =>
-          Effect.sync(() => {
-            storage = f(storage);
-          }),
+        set: (value) => Effect.sync(() => writeStorage(value)),
+        update: (f) => Effect.sync(() => writeStorage(f(storage))),
       },
       resource: { refresh: () => Effect.void },
       client: { refresh: Effect.void },
       emit: () => Effect.void,
       credentials: {
-        get: Effect.sync(() => [credential]),
+        get: Effect.sync(() => (credentialAvailable ? [credential] : [])),
         refresh: (provider, id) =>
           Effect.sync(() => refresh(provider, id)).pipe(
             Effect.tap(() => Effect.flatMap(Deferred.await(subscriber), (callback) => callback())),
@@ -147,6 +156,15 @@ const setup = Effect.fnUntraced(function* (
     timeline,
     refresh,
     connect,
+    writeStorage,
+    initialStorage,
+    storage: () => storage,
+    provideCredential: Effect.sync(() => {
+      credentialAvailable = true;
+    }),
+    getHelix: Effect.flatMap(Deferred.await(eventSubContext), (context) =>
+      context.getHelix(accountId),
+    ),
     validations: () => requests.filter((request) => request.url === validateUrl),
     actions: () => requests.filter((request) => request.url !== validateUrl),
     notify: Effect.flatMap(Deferred.await(subscriber), (callback) => callback()),
@@ -177,6 +195,46 @@ const cacheCases: ReadonlyArray<{
 ];
 
 describe("Twitch best-effort token validation", () => {
+  for (const transport of ["websocket", "webhook"] as const) {
+    it.effect(
+      `does not enable or provision ${transport} without credentials and retries immediately`,
+      () =>
+        Effect.gen(function* () {
+          const test = yield* setup([{}], undefined, { transport, credentialAvailable: false });
+          for (const action of [test.connectEventSub, test.sendChat]) {
+            const error = yield* Effect.flip(action);
+            assert.strictEqual(error._tag, "MissingCredential");
+          }
+          assert.deepStrictEqual(test.storage(), test.initialStorage);
+          expect(test.writeStorage).not.toHaveBeenCalled();
+          expect(test.connect).not.toHaveBeenCalled();
+          assert.isEmpty(test.requests);
+
+          yield* test.provideCredential;
+          yield* test.connectEventSub;
+          yield* test.sendChat;
+          assert.strictEqual(test.storage().accounts[accountId]?.enabled, true);
+          expect(test.writeStorage).toHaveBeenCalledTimes(1);
+          expect(test.connect).toHaveBeenCalledExactlyOnceWith(accountId);
+          assert.deepStrictEqual(test.timeline, [validateUrl, "storage", "connect", chatUrl]);
+        }),
+    );
+  }
+
+  it.effect(
+    "retries a missing Helix credential without waiting for a notification or cache expiry",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* setup([{}], undefined, { credentialAvailable: false });
+        const error = yield* Effect.flip(test.getHelix);
+        assert.strictEqual(error._tag, "MissingCredential");
+        yield* test.provideCredential;
+        yield* test.getHelix;
+        yield* test.sendChat;
+        assert.lengthOf(test.actions(), 1);
+      }),
+  );
+
   it.effect("sends only CORS-safe headers at the transport boundary", () =>
     Effect.gen(function* () {
       const test = yield* setup();
@@ -217,7 +275,7 @@ describe("Twitch best-effort token validation", () => {
         const test = yield* setup([response], clientId);
         yield* test.connectEventSub;
         yield* test.sendChat;
-        assert.deepStrictEqual(test.timeline, [validateUrl, "connect", chatUrl]);
+        assert.deepStrictEqual(test.timeline, [validateUrl, "storage", "connect", chatUrl]);
         expect(test.connect).toHaveBeenCalledExactlyOnceWith(accountId);
         expect(test.refresh).not.toHaveBeenCalled();
       }),
@@ -249,6 +307,7 @@ describe("Twitch best-effort token validation", () => {
           assert.strictEqual(error._tag, "TwitchCredentialAuthorizationError");
         }
         assert.isEmpty(test.actions());
+        expect(test.writeStorage).not.toHaveBeenCalled();
         expect(test.connect).not.toHaveBeenCalled();
         expect(test.refresh).not.toHaveBeenCalled();
       }),
@@ -325,6 +384,7 @@ describe("Twitch best-effort token validation", () => {
           assert.lengthOf(test.validations(), repeated401 ? 2 : 1);
           expect(test.refresh).toHaveBeenCalledTimes(repeated401 ? 1 : 0);
           assert.isEmpty(test.actions());
+          expect(test.writeStorage).not.toHaveBeenCalled();
           expect(test.connect).not.toHaveBeenCalled();
         }),
       );

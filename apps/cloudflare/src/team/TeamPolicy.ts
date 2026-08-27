@@ -6,12 +6,20 @@ import { HttpApiError } from "effect/unstable/httpapi";
 
 import * as Database from "../database/Database.ts";
 import { teamMemberships, type TeamRole } from "../database/DatabaseSchema.ts";
-import { canAdministerTeam, canRemoveMember, canSetMemberRole } from "./TeamAccess.ts";
+import {
+  canAdministerTeam,
+  canMutateProject,
+  canRemoveMember,
+  canSetMemberRole,
+} from "./TeamAccess.ts";
 
 export class Service extends Context.Service<
   Service,
   {
     readonly canView: (teamId: string) => Policy.Policy<TeamNotFound, CurrentUser>;
+    readonly canEdit: (
+      teamId: string,
+    ) => Policy.Policy<TeamNotFound | HttpApiError.Forbidden, CurrentUser>;
     readonly canManage: (
       teamId: string,
     ) => Policy.Policy<TeamNotFound | HttpApiError.Forbidden, CurrentUser>;
@@ -47,6 +55,10 @@ export const layer = Layer.effect(Service)(
 
     return {
       canView: (teamId: string) => resolveActor(teamId).pipe(Effect.asVoid),
+      canEdit: (teamId: string) =>
+        Policy.policy(() =>
+          resolveActor(teamId).pipe(Effect.map((actor) => canMutateProject(actor.role))),
+        ).pipe(Effect.catchTag("PolicyDenied", () => new HttpApiError.Forbidden())),
       canManage: (teamId: string) =>
         Policy.policy(() =>
           resolveActor(teamId).pipe(Effect.map((actor) => canAdministerTeam(actor.role))),

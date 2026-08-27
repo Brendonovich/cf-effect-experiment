@@ -1,4 +1,4 @@
-import { Cache, HashMap, Layer, Option, Redacted } from "effect";
+import { Cache, Exit, HashMap, Layer, Option, Redacted } from "effect";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import {
@@ -39,11 +39,8 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
           Effect.map(Option.fromNullishOr),
         );
 
-      const helixClients = yield* Cache.make({
-        timeToLive: "5 minutes",
-        requireServicesAt: "construction",
-        capacity: Number.MAX_SAFE_INTEGER,
-        lookup: Effect.fnUntraced(function* (accountId: AccountId) {
+      const helixClients = yield* Cache.makeWith(
+        Effect.fnUntraced(function* (accountId: AccountId) {
           const credential = yield* getCredential(accountId);
           if (Option.isNone(credential))
             return yield* new MissingCredential({
@@ -60,7 +57,12 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
             credential.value.clientId ?? Helix.DEFAULT_CLIENT_ID,
           );
         }),
-      });
+        {
+          timeToLive: (exit) => (Exit.isSuccess(exit) ? "5 minutes" : 0),
+          requireServicesAt: "construction",
+          capacity: Number.MAX_SAFE_INTEGER,
+        },
+      );
 
       const httpClient = yield* HttpClient.HttpClient;
       const TokenValidation = S.Struct({
@@ -69,11 +71,8 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
         scopes: S.Array(S.String),
       });
       const refreshingAccounts = new Set<AccountId>();
-      const authorizations = yield* Cache.make({
-        timeToLive: "5 minutes",
-        requireServicesAt: "construction",
-        capacity: Number.MAX_SAFE_INTEGER,
-        lookup: Effect.fnUntraced(function* (accountId: AccountId) {
+      const authorizations = yield* Cache.makeWith(
+        Effect.fnUntraced(function* (accountId: AccountId) {
           const credential = yield* getCredential(accountId);
           if (Option.isNone(credential))
             return yield* new MissingCredential({
@@ -135,7 +134,12 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
             });
           return Option.some(new Set(validation.value.scopes));
         }),
-      });
+        {
+          timeToLive: (exit) => (Exit.isSuccess(exit) ? "5 minutes" : 0),
+          requireServicesAt: "construction",
+          capacity: Number.MAX_SAFE_INTEGER,
+        },
+      );
 
       const eventSub = yield* makeEventSub({
         getAccountIds: mg.storage.get.pipe(
@@ -186,7 +190,12 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
             ([id, account]) => {
               const accountId = AccountId.make(id);
               return account.enabled && !refreshing.has(accountId)
-                ? eventSub.disconnect(accountId).pipe(Effect.andThen(connect(accountId)))
+                ? eventSub.disconnect(accountId).pipe(
+                    Effect.andThen(connect(accountId)),
+                    Effect.catch((error) =>
+                      Effect.logWarning("Failed to reconnect Twitch EventSub", { accountId, error }),
+                    ),
+                  )
                 : Effect.void;
             },
             { discard: true },
@@ -467,6 +476,7 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                   return yield* new Helix.HelixError({
                     reason: "Select at least one EventSub topic before creating a webhook",
                   });
+                yield* Cache.get(authorizations, accountId);
                 if (storage.accounts[accountId]?.enabled !== true)
                   yield* mg.storage.update((current) => ({
                     accounts: {
@@ -477,13 +487,14 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                       },
                     },
                   }));
-                yield* connectEventSub(accountId).pipe(
-                  Effect.tap(() => Effect.logInfo("EventSub connect RPC completed")),
-                  Effect.tapError((error) =>
-                    Effect.logError("EventSub connect RPC failed", { error }),
-                  ),
-                );
-              }).pipe(Effect.annotateLogs({ accountId, eventSubTransport: eventSub.transport })),
+                yield* eventSub.connect(accountId);
+                yield* Effect.logInfo("EventSub connect RPC completed");
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logError("EventSub connect RPC failed", { error }),
+                ),
+                Effect.annotateLogs({ accountId, eventSubTransport: eventSub.transport }),
+              ),
             DisconnectEventSub: ({ accountId }) =>
               Effect.gen(function* () {
                 yield* Effect.logInfo("EventSub disconnect RPC received");

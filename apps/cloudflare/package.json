@@ -7,6 +7,7 @@
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "dev": "mprocs --names Alchemy,Frontend \"pnpm alchemy dev\" \"bun dev-tunnel.ts\"",
     "deploy": "pnpm alchemy deploy",
+    "deploy:domain": "bun build src/worker/DomainGateway.ts --target browser --outfile .alchemy/domain-gateway/_worker.js && wrangler pages deploy --cwd domain-gateway --branch main",
     "test": "vp test run"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "mprocs": "^0.9.6",
     "rolldown": "^1.0.1",
     "vite": "^8.0.7",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"
+    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21",
+    "wrangler": "4.126.0"
   }
 }

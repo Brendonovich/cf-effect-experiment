@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-alpine AS build
+# The bundled JavaScript and browser assets are shared by all runtime architectures.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 
 WORKDIR /workspace
 RUN corepack enable
