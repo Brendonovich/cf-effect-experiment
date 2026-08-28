@@ -9,9 +9,8 @@ import {
   SpeechOptions,
 } from "./Definition.ts";
 
-export const layer = Layer.effect(ElevenLabsEngine)(
+export const layer = ElevenLabsEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* ElevenLabsEngine.EngineContext;
     const client = HttpClient.withScope(yield* HttpClient.HttpClient);
 
     return ElevenLabsEngine.of({

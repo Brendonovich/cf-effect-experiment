@@ -6,16 +6,16 @@ import { Effect, Layer } from "effect";
 import { ClientRpcs, StreamDeckEngine, StreamDeckServer } from "./Definition.ts";
 import { makeReceiver } from "./Protocol.ts";
 
-export const layer = Layer.effect(StreamDeckEngine)(
+export const layer = StreamDeckEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const context = yield* StreamDeckEngine.EngineContext;
     const adapter = yield* Adapter;
-    const base = yield* make(adapter).pipe(
-      Effect.provideService(WebSocket.WebSocketServerEngine.EngineContext, {
-        ...context,
-        resource: { refresh: () => context.resource.refresh(StreamDeckServer) },
-        emit: makeReceiver(context.emit),
-      }),
+    const base = yield* make(
+      {
+        ...mg,
+        resource: { refresh: () => mg.resource.refresh(StreamDeckServer) },
+        emit: makeReceiver(mg.emit),
+      },
+      adapter,
     );
     const add = yield* WebSocket.ClientRpcs.accessHandler("WebSocketServerAdd").pipe(
       Effect.provide(base.client.rpcs),

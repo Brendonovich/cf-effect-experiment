@@ -127,8 +127,8 @@ describe("JSON plugin", () => {
   it.effect("registers a JSON text catalog and generates concretely typed conversion IO", () =>
     Effect.gen(function* () {
       const registered = yield* schemas;
-      assert.lengthOf(registered, 13);
-      assert.strictEqual(new Set(registered.map((item) => item.id)).size, 13);
+      assert.lengthOf(registered, 19);
+      assert.strictEqual(new Set(registered.map((item) => item.id)).size, 19);
       assert.isTrue(registered.every((item) => !!item.description));
       for (const type of [DataType.String, DataType.Int, DataType.Float, DataType.Bool]) {
         for (const list of [false, true]) {
@@ -149,7 +149,16 @@ describe("JSON plugin", () => {
           DataType.Option(DataType.List(type)),
         );
       }
-      assert.throws(() => schema(registered, "ToJSON").generateIO({ type: "Map" }), TypeError);
+      for (const id of ["ToJSON", "FromJSON", "JSONGetScalarList"]) {
+        const item = schema(registered, id);
+        assert.deepStrictEqual(
+          item.generateIO({ type: "Map" }),
+          item.generateIO({ type: "String" }),
+        );
+        const result = yield* Effect.result(run(item, {}, { type: "Map" }));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, TypeError);
+      }
     }),
   );
   it.effect("validates and normalizes JSON without silently accepting overflow", () =>
@@ -161,10 +170,19 @@ describe("JSON plugin", () => {
           '{"a":[1,true,null]}',
         );
         assert.strictEqual((yield* run(schema(registered, id))).get("out"), "null");
-        for (const input of ["", "undefined", "{", "NaN", "[1,]", "1e400", '{"nested":[1e400]}'])
-          assert.isTrue(
-            Result.isFailure(yield* Effect.result(run(schema(registered, id), { in: input }))),
-          );
+        for (const input of ["", "undefined", "{", "NaN", "[1,]"]) {
+          const result = yield* Effect.result(run(schema(registered, id), { in: input }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, SyntaxError);
+        }
+        for (const input of ["1e400", '{"nested":[1e400]}']) {
+          const result = yield* Effect.result(run(schema(registered, id), { in: input }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) {
+            assert.instanceOf(result.failure, RangeError);
+            assert.strictEqual(result.failure.message, "JSON numbers must be finite");
+          }
+        }
       }
     }),
   );
@@ -264,10 +282,11 @@ describe("JSON plugin", () => {
           (yield* run(query, { in: "null" }, { query: path })).get("out"),
           Option.some("null"),
         );
-      for (const path of ["a", "/bad~2escape", "/bad~"])
-        assert.isTrue(
-          Result.isFailure(yield* Effect.result(run(query, { in: input }, { query: path }))),
-        );
+      for (const path of ["a", "/bad~2escape", "/bad~"]) {
+        const result = yield* Effect.result(run(query, { in: input }, { query: path }));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, SyntaxError);
+      }
     }),
   );
   it.effect("extracts nested JSON lists and exposes map contents without a map data type", () =>
@@ -305,6 +324,100 @@ describe("JSON plugin", () => {
         ),
         Option.none(),
       );
+    }),
+  );
+  it.effect("creates objects with dynamic JSON entries and last-write-wins keys", () =>
+    Effect.gen(function* () {
+      const create = schema(yield* schemas, "JSONCreateObject");
+      assert.strictEqual((yield* run(create, {}, { number: 0 })).get("out"), "{}");
+      assert.lengthOf(create.generateIO({ number: 3 }).dataInputs, 6);
+      const result = yield* run(
+        create,
+        {
+          "key-0": "__proto__",
+          "value-0": '{"safe":true}',
+          "key-1": "a",
+          "value-1": "false",
+          "key-2": "a",
+          "value-2": "null",
+        },
+        { number: 3 },
+      );
+      assert.strictEqual(result.get("out"), '{"__proto__":{"safe":true},"a":null}');
+      for (const number of [-1, 1.5, 1025, Infinity, NaN]) {
+        assert.lengthOf(create.generateIO({ number }).dataInputs, 0);
+        const result = yield* Effect.result(run(create, {}, { number }));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+      }
+      for (const value of ["{", "1e400", '{"a":[1e400]}'])
+        assert.isTrue(Result.isFailure(yield* Effect.result(run(create, { "value-0": value }))));
+    }),
+  );
+  it.effect("edits own keys immutably and distinguishes missing keys from null", () =>
+    Effect.gen(function* () {
+      const registered = yield* schemas;
+      const source = '{"a":null,"b":[1,false],"__proto__":{"safe":true}}';
+      const set = schema(registered, "JSONSetProperty");
+      const remove = schema(registered, "JSONRemoveProperty");
+      const has = schema(registered, "JSONHasProperty");
+      for (const [key, expected] of [
+        ["a", "null"],
+        ["b", "[1,false]"],
+        ["__proto__", '{"safe":true}'],
+      ] as const) {
+        const result = yield* run(set, { in: source, key, value: '"new"' });
+        assert.deepStrictEqual(result.get("previous"), Option.some(expected));
+        assert.deepStrictEqual(
+          (yield* run(schema(registered, "JSONGetProperty"), { in: result.get("out"), key })).get(
+            "out",
+          ),
+          Option.some('"new"'),
+        );
+        const removed = yield* run(remove, { in: source, key });
+        assert.deepStrictEqual(removed.get("removed"), Option.some(expected));
+        assert.strictEqual((yield* run(has, { in: removed.get("out"), key })).get("out"), false);
+        assert.strictEqual((yield* run(has, { in: source, key })).get("out"), true);
+      }
+      for (const key of ["missing", "constructor", "toString"]) {
+        assert.strictEqual((yield* run(has, { in: source, key })).get("out"), false);
+        const removed = yield* run(remove, { in: source, key });
+        assert.deepStrictEqual(removed.get("removed"), Option.none());
+        assert.strictEqual(removed.get("out"), source);
+        assert.deepStrictEqual(
+          (yield* run(set, { in: source, key, value: "0" })).get("previous"),
+          Option.none(),
+        );
+      }
+      assert.strictEqual(
+        (yield* run(set, { in: "{}", key: "__proto__", value: "null" })).get("out"),
+        '{"__proto__":null}',
+      );
+      assert.strictEqual(
+        (yield* run(schema(registered, "JSONGetObjectSize"), { in: source })).get("out"),
+        3,
+      );
+      assert.deepStrictEqual(
+        (yield* run(schema(registered, "JSONGetObjectValues"), { in: source })).get("out"),
+        ["null", "[1,false]", '{"safe":true}'],
+      );
+      for (const id of [
+        "JSONSetProperty",
+        "JSONRemoveProperty",
+        "JSONHasProperty",
+        "JSONGetObjectSize",
+        "JSONGetObjectValues",
+      ])
+        for (const input of ["null", "[]", "1", '"text"', "false", "{", '{"a":1e400}']) {
+          const result = yield* Effect.result(run(schema(registered, id), { in: input }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result))
+            assert.instanceOf(
+              result.failure,
+              input === "{" ? SyntaxError : input === '{"a":1e400}' ? RangeError : TypeError,
+            );
+        }
+      assert.isTrue(Result.isFailure(yield* Effect.result(run(set, { value: "1e400" }))));
     }),
   );
 });

@@ -1,0 +1,13 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist/types",
+    "lib": ["ES2024", "DOM"],
+    "jsx": "preserve",
+    "jsxImportSource": "@solidjs/web"
+  },
+  "include": ["src", "test"],
+  "references": [{ "path": "../../plugin" }, { "path": "../../editor-ui" }]
+}

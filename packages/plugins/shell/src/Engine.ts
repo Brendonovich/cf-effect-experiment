@@ -45,7 +45,7 @@ export const make = Effect.fnUntraced(function* (enabled = false) {
   });
 });
 
-export const layer = Layer.effect(ShellEngine)(
+export const layer = ShellEngine.toLayer(() =>
   Effect.gen(function* () {
     const enabled = yield* Config.boolean("MACROGRAPH_ENABLE_SHELL").pipe(
       Config.withDefault(false),

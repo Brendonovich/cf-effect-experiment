@@ -3,7 +3,7 @@ import { Effect, Fiber, Layer, Ref, Semaphore } from "effect";
 import { ClientRpcs, TickEvent, UtilitiesEngine } from "./Definition.ts";
 
 export const make = (options?: { readonly startTicker?: boolean }) =>
-  UtilitiesEngine.toLayer((context) =>
+  UtilitiesEngine.toLayer((mg) =>
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const lock = yield* Semaphore.make(1);
@@ -15,16 +15,16 @@ export const make = (options?: { readonly startTicker?: boolean }) =>
         ticker = yield* Effect.gen(function* () {
           yield* Effect.sleep("1 second");
           const current = yield* Ref.updateAndGet(tick, (value) => value + 1);
-          yield* context.emit(new TickEvent({ tick: current }));
+          yield* mg.emit(new TickEvent({ tick: current }));
         }).pipe(Effect.forever, Effect.forkIn(scope));
-        yield* context.client.refresh;
+        yield* mg.client.refresh;
       }).pipe(lock.withPermit, Effect.uninterruptible);
 
       const stop = Effect.gen(function* () {
         if (ticker === undefined) return;
         yield* Fiber.interrupt(ticker);
         ticker = undefined;
-        yield* context.client.refresh;
+        yield* mg.client.refresh;
       }).pipe(lock.withPermit, Effect.uninterruptible);
 
       if (options?.startTicker !== false) yield* start;

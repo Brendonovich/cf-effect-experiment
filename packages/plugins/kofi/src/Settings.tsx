@@ -295,25 +295,29 @@ const Settings: Component<SettingsProps> = (props) => {
       input.style.position = "fixed";
       input.style.opacity = "0";
       document.body.append(input);
-      let copied = false;
       try {
         input.select();
-        copied = document.execCommand("copy");
+        return document.execCommand("copy");
       } finally {
         input.remove();
       }
-      if (!copied) throw new Error("Copy command was rejected");
     };
 
     try {
+      let didCopy = false;
       if (window.isSecureContext && navigator.clipboard !== undefined) {
         try {
           await navigator.clipboard.writeText(endpoint.url);
+          didCopy = true;
         } catch {
-          copyWithSelection();
+          didCopy = copyWithSelection();
         }
       } else {
-        copyWithSelection();
+        didCopy = copyWithSelection();
+      }
+      if (!didCopy) {
+        setStatus("Could not copy the ingest URL");
+        return;
       }
       setCopied(endpoint.id);
       setStatus("");

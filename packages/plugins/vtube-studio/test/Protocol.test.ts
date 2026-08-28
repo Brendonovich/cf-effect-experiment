@@ -14,6 +14,29 @@ vi.mock("effect/unstable/socket", async (importOriginal) => {
 });
 
 describe("VTube Studio transport boundaries", () => {
+  it.effect("validates local URLs with typed failures and canonicalizes localhost", () =>
+    Effect.gen(function* () {
+      assert.strictEqual(
+        yield* Protocol.validateUrl("ws://localhost:8001/"),
+        "ws://127.0.0.1:8001/",
+      );
+      assert.strictEqual(yield* Protocol.validateUrl("wss://[::1]/"), "wss://[::1]/");
+      for (const address of [
+        "not a URL",
+        "http://localhost/",
+        "ws://example.com/",
+        "ws://user:secret@localhost/",
+        "ws://localhost/?secret",
+        "ws://localhost/#secret",
+        `ws://localhost/${"x".repeat(2048)}`,
+      ]) {
+        const error = yield* Effect.flip(Protocol.validateUrl(address));
+        assert.strictEqual(error._tag, "VTubeStudioConnectionFailed");
+        assert.notInclude(JSON.stringify(error), "secret");
+      }
+    }),
+  );
+
   it.effect("shutdown interrupts a blocked writer without waiting for the request timeout", () =>
     Effect.gen(function* () {
       const shutdown = yield* Deferred.make<void>();

@@ -1,7 +1,9 @@
-import { DataType } from "@macrograph/plugin/DataType";
 import type * as Registration from "@macrograph/plugin/Registration";
-import { Effect, Option } from "effect";
 
+import { DataType } from "@macrograph/plugin/DataType";
+import { Effect, Option, Schema } from "effect";
+
+import { actions } from "./Actions.ts";
 import { TwitchAccount, TwitchEngine, TwitchEventSub } from "./Definition.ts";
 
 type Context = Registration.PluginContext<typeof TwitchEngine>;
@@ -390,7 +392,7 @@ export const events: ReadonlyArray<Event> = [
   ]),
 ];
 
-export const actionIds = [
+export const existingActionIds = [
   "SendChatMessage",
   "GetChatSettings",
   "UpdateChatSettings",
@@ -405,6 +407,7 @@ export const actionIds = [
   "GetUsers",
   "GetFollowers",
 ] as const;
+export const actionIds = [...existingActionIds, ...actions.map(({ id }) => id)];
 export const ids = [...events.map(({ id }) => id), ...actionIds];
 export const count = ids.length;
 
@@ -501,6 +504,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
       message: io.data.in("message", DataType.String, { name: "Message" }),
+      replyId: io.data.in("replyId", DataType.Option(DataType.String), {
+        name: "Reply Message ID",
+      }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -509,6 +515,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           broadcaster_id: io.broadcasterId,
           sender_id: properties.account,
           message: io.message,
+          ...(Option.isSome(io.replyId) && io.replyId.value !== ""
+            ? { reply_parent_message_id: io.replyId.value }
+            : {}),
         })).data[0];
         if (result?.is_sent !== true)
           return yield* Effect.fail(
@@ -554,7 +563,13 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       followerMode: io.data.in("followerMode", DataType.Option(DataType.Bool), {
         name: "Follower Mode",
       }),
+      followerDuration: io.data.in("followerDuration", DataType.Option(DataType.Int), {
+        name: "Follower Duration (minutes)",
+      }),
       slowMode: io.data.in("slowMode", DataType.Option(DataType.Bool), { name: "Slow Mode" }),
+      slowDuration: io.data.in("slowDuration", DataType.Option(DataType.Int), {
+        name: "Slow Wait Time (seconds)",
+      }),
       subscriberMode: io.data.in("subscriberMode", DataType.Option(DataType.Bool), {
         name: "Subscriber Mode",
       }),
@@ -565,6 +580,29 @@ export const register = Effect.fnUntraced(function* (context: Context) {
         const followerMode = option(io.followerMode);
         const slowMode = option(io.slowMode);
         const subscriberMode = option(io.subscriberMode);
+        const followerDuration = option(io.followerDuration);
+        const slowDuration = option(io.slowDuration);
+        if (
+          followerMode === true &&
+          followerDuration !== undefined &&
+          (!Number.isSafeInteger(followerDuration) ||
+            followerDuration < 0 ||
+            followerDuration > 129600)
+        )
+          return yield* Effect.fail(new Error("Follower duration must be 0-129600 minutes"));
+        if (
+          slowMode === true &&
+          slowDuration !== undefined &&
+          (!Number.isSafeInteger(slowDuration) || slowDuration < 3 || slowDuration > 120)
+        )
+          return yield* Effect.fail(new Error("Slow wait time must be 3-120 seconds"));
+        if (
+          (followerDuration !== undefined && followerMode === undefined) ||
+          (slowDuration !== undefined && slowMode === undefined)
+        )
+          return yield* Effect.fail(
+            new Error("Select the corresponding mode when setting its duration"),
+          );
         if (
           emoteMode === undefined &&
           followerMode === undefined &&
@@ -578,7 +616,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           moderator_id: io.moderatorId,
           emote_mode: emoteMode,
           follower_mode: followerMode,
+          follower_mode_duration: followerMode === true ? followerDuration : undefined,
           slow_mode: slowMode,
+          slow_mode_wait_time: slowMode === true ? slowDuration : undefined,
           subscriber_mode: subscriberMode,
         });
       }),
@@ -857,4 +897,76 @@ export const register = Effect.fnUntraced(function* (context: Context) {
         );
       }),
   });
+  for (const action of actions) {
+    yield* context.schema.register({
+      id: action.id,
+      name: action.name,
+      description: `${action.name} using authenticated Twitch ${action.id === "ValidateToken" ? "OAuth validation" : "Helix"}.${action.scopes.length ? ` Requires ${action.scopes.join(" or ")}.` : ""}`,
+      properties: accountProperty,
+      io: (io) => ({
+        inputs: action.inputs.map((field) => {
+          const type =
+            field.kind === "int"
+              ? DataType.Int
+              : field.kind === "bool"
+                ? DataType.Bool
+                : DataType.String;
+          return io.data.in(field.id, field.optional ? DataType.Option(type) : type, {
+            name: field.id
+              .replace(/([a-z])([A-Z])/g, "$1 $2")
+              .replace(/^./, (value) => value.toUpperCase()),
+          });
+        }),
+        responseJson: io.data.out("responseJson", DataType.String, { name: "Response JSON" }),
+        outputs: (action.outputs ?? []).map((field) => {
+          const type =
+            field.kind === "int"
+              ? DataType.Int
+              : field.kind === "bool" || field.kind === "exists"
+                ? DataType.Bool
+                : DataType.String;
+          return io.data.out(field.id, field.optional ? DataType.Option(type) : type);
+        }),
+      }),
+      run: ({ io, properties, engine }) =>
+        Effect.gen(function* () {
+          const inputs: Record<string, Schema.Json> = {};
+          for (const [index, field] of action.inputs.entries()) {
+            const raw = io.inputs[index];
+            const value = Option.isOption(raw) ? Option.getOrUndefined(raw) : raw;
+            if (value === undefined) continue;
+            if (
+              typeof value !== "string" &&
+              typeof value !== "number" &&
+              typeof value !== "boolean"
+            )
+              return yield* Effect.fail(new Error(`Invalid ${field.id}`));
+            inputs[field.id] = value;
+          }
+          const result = yield* engine.ExecuteAction({
+            account_id: properties.account,
+            action: action.id,
+            inputs,
+          });
+          io.responseJson(JSON.stringify(result.response));
+          for (const [index, field] of (action.outputs ?? []).entries()) {
+            const raw = result.outputs[field.id];
+            const value =
+              field.kind === "json" && raw !== null && raw !== undefined
+                ? JSON.stringify(raw)
+                : raw;
+            const write = io.outputs[index];
+            if (!write) continue;
+            if (field.optional && (value === null || value === undefined)) write(Option.none());
+            else if (
+              typeof value === "string" ||
+              typeof value === "number" ||
+              typeof value === "boolean"
+            )
+              write(field.optional ? Option.some(value) : value);
+            else return yield* Effect.fail(new Error(`Missing Twitch output: ${field.id}`));
+          }
+        }),
+    });
+  }
 });

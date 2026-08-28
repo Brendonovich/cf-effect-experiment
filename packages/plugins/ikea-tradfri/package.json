@@ -1,0 +1,38 @@
+{
+  "name": "@macrograph/plugin-ikea-tradfri",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Plugin.ts",
+  "exports": {
+    ".": "./src/Plugin.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Settings": "./src/Settings.tsx"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/plugin": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "coap-packet": "^1.1.1",
+    "effect": "catalog:",
+    "effect-node-dtls": "workspace:*",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "^22",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}

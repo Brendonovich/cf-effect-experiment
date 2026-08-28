@@ -29,30 +29,29 @@ export const validateMessage = (message: string) =>
     : Effect.fail(new DiscordFailure({ reason: "invalid-message" }));
 
 // Canonicalize onto the fixed API origin; never forward credentials through redirects.
-export const webhookUrl = (input: string) =>
-  Effect.try({
-    try: () => {
-      const url = new URL(input);
-      const match = /^\/api\/(?:v10\/)?webhooks\/(\d{1,20})\/([A-Za-z0-9_-]{1,256})$/.exec(
-        url.pathname,
-      );
-      if (
-        url.protocol !== "https:" ||
-        !["discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com"].includes(
-          url.hostname,
-        ) ||
-        url.port ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash ||
-        !match
-      )
-        throw new Error("Invalid webhook");
-      return `${API_ORIGIN}/webhooks/${match[1]}/${match[2]}`;
-    },
+export const webhookUrl = Effect.fnUntraced(function* (input: string) {
+  const url = yield* Effect.try({
+    try: () => new URL(input),
     catch: () => new DiscordFailure({ reason: "invalid-webhook" }),
   });
+  const match = /^\/api\/(?:v10\/)?webhooks\/(\d{1,20})\/([A-Za-z0-9_-]{1,256})$/.exec(
+    url.pathname,
+  );
+  if (
+    url.protocol !== "https:" ||
+    !["discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com"].includes(
+      url.hostname,
+    ) ||
+    url.port ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !match
+  )
+    return yield* new DiscordFailure({ reason: "invalid-webhook" });
+  return `${API_ORIGIN}/webhooks/${match[1]}/${match[2]}`;
+});
 
 export const checkStatus = (response: Response) => {
   if (response.ok) return Effect.succeed(response);

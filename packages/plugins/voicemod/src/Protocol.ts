@@ -24,30 +24,27 @@ export interface Client {
   ) => Effect.Effect<void, Failure>;
   readonly closed: Effect.Effect<void>;
 }
-export const validateUrl = (address: string) =>
-  Effect.try({
-    try: () => {
-      const url = new URL(address);
-      if (
-        !(
-          ["ws:", "wss:"].includes(url.protocol) &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
-          !url.username &&
-          !url.password &&
-          !url.hash &&
-          !url.search &&
-          address.length <= 2048
-        )
-      )
-        throw new Error();
-      if (url.hostname === "localhost") url.hostname = "127.0.0.1";
-      return url.toString();
-    },
-    catch: () =>
-      new ConnectionFailed({
-        reason: "Use a credential-free local WebSocket URL with localhost, 127.0.0.1 or [::1].",
-      }),
+export const validateUrl = Effect.fnUntraced(function* (address: string) {
+  const failure = new ConnectionFailed({
+    reason: "Use a credential-free local WebSocket URL with localhost, 127.0.0.1 or [::1].",
   });
+  const url = yield* Effect.try({
+    try: () => new URL(address),
+    catch: () => failure,
+  });
+  if (
+    !["ws:", "wss:"].includes(url.protocol) ||
+    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    url.search ||
+    address.length > 2048
+  )
+    return yield* failure;
+  if (url.hostname === "localhost") url.hostname = "127.0.0.1";
+  return url.toString();
+});
 
 export const make = Effect.fnUntraced(function* (
   address: string,

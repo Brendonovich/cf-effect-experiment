@@ -20,6 +20,7 @@
     "@macrograph/plugin": "workspace:*",
     "@solidjs/web": "2.0.0-rc.1",
     "@stylexjs/stylex": "catalog:",
+    "dayjs": "^1.11.13",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.1"
   },

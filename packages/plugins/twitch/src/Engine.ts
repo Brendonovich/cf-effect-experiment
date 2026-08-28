@@ -11,6 +11,7 @@ import { HttpApiClient } from "effect/unstable/httpapi";
 
 import type { Make as MakeEventSub } from "./EventSubImplementation.ts";
 
+import * as Actions from "./Actions.ts";
 import {
   AccountId,
   ClientRpcs,
@@ -311,6 +312,53 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
           ),
         ),
         rpcs: RuntimeRpcs.toLayer({
+          ExecuteAction: Effect.fnUntraced(function* (payload) {
+            const prepared = yield* Actions.prepare(
+              payload.action,
+              payload.inputs,
+              payload.account_id,
+            );
+            if (typeof prepared.subject === "string")
+              yield* requireSubject(payload.account_id, prepared.subject, "broadcaster");
+            const scopes = yield* Cache.get(authorizations, payload.account_id);
+            if (
+              prepared.action.scopes.length > 0 &&
+              Option.isSome(scopes) &&
+              !prepared.action.scopes.some((scope) => scopes.value.has(scope))
+            )
+              return yield* new CredentialAuthorizationError({
+                accountId: payload.account_id,
+                reason: `Reconnect the selected Twitch account and grant one of: ${prepared.action.scopes.join(", ")}`,
+                requiredScopes: prepared.action.scopes,
+              });
+            const helix = yield* Cache.get(helixClients, payload.account_id);
+            const response = yield* helix
+              .request(prepared.action.method, prepared.action.path, prepared.query, prepared.body)
+              .pipe(
+                Effect.catchTag("HttpClientError", Helix.fromHttpClientError),
+                Effect.catchTag(
+                  "SchemaError",
+                  () => new Helix.HelixError({ reason: "Twitch returned invalid JSON" }),
+                ),
+              );
+            const outputs = yield* Actions.mapResponse(payload.action, payload.inputs, response);
+            if (payload.action === "ValidateToken" && S.is(TokenValidation)(response)) {
+              yield* requireSubject(payload.account_id, response.user_id, "selected account");
+              const credential = yield* getCredential(payload.account_id);
+              if (Option.isNone(credential))
+                return yield* new MissingCredential({
+                  accountId: payload.account_id,
+                  reason: "The selected Twitch credential is no longer available",
+                });
+              if (response.client_id !== (credential.value.clientId ?? Helix.DEFAULT_CLIENT_ID))
+                return yield* new CredentialAuthorizationError({
+                  accountId: payload.account_id,
+                  reason: "The selected credential was issued to a different Twitch application",
+                  requiredScopes: [],
+                });
+            }
+            return { response, outputs };
+          }),
           SendChatMessage: (payload) =>
             requireSubject(payload.account_id, payload.sender_id, "chat sender").pipe(
               Effect.andThen(
@@ -348,7 +396,14 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
                       ...(payload.follower_mode === undefined
                         ? {}
                         : { follower_mode: payload.follower_mode }),
+                      ...(payload.follower_mode !== true ||
+                      payload.follower_mode_duration === undefined
+                        ? {}
+                        : { follower_mode_duration: payload.follower_mode_duration }),
                       ...(payload.slow_mode === undefined ? {} : { slow_mode: payload.slow_mode }),
+                      ...(payload.slow_mode !== true || payload.slow_mode_wait_time === undefined
+                        ? {}
+                        : { slow_mode_wait_time: payload.slow_mode_wait_time }),
                       ...(payload.subscriber_mode === undefined
                         ? {}
                         : { subscriber_mode: payload.subscriber_mode }),
@@ -571,6 +626,7 @@ const unavailable = (_payload?: unknown) =>
   Effect.fail(new TwitchExecutionUnavailable({ reason: unavailableReason }));
 
 export const unavailableRuntimeClient = {
+  ExecuteAction: unavailable,
   SendChatMessage: unavailable,
   GetChatSettings: unavailable,
   UpdateChatSettings: unavailable,

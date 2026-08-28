@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, Scope, Semaphore, SubscriptionRef } from "effect";
+import { Effect, Exit, Scope, Semaphore, SubscriptionRef } from "effect";
 import { Socket } from "effect/unstable/socket";
 
 import {
@@ -12,9 +12,8 @@ import {
 } from "./Definition.ts";
 import * as Protocol from "./Protocol.ts";
 
-export const layer = Layer.effect(VTubeStudioEngine)(
+export const layer = VTubeStudioEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* VTubeStudioEngine.EngineContext;
     let config = yield* mg.storage.get;
     const parentScope = yield* Effect.scope;
     const socketContext = yield* Effect.context<Socket.WebSocketConstructor>();

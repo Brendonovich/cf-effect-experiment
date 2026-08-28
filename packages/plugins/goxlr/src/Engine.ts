@@ -53,16 +53,15 @@ type Entry = {
   readonly session?: Session;
 };
 
-export const layer = Layer.effect(GoXLREngine)(
+export const layer = GoXLREngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const context = yield* GoXLREngine.EngineContext;
     const policy = yield* UrlPolicy;
     const socketContext = yield* Effect.context<Scope.Scope | Socket.WebSocketConstructor>();
     const state = yield* SubscriptionRef.make<ReadonlyMap<WebSocket.ConnectionId, Entry>>(
       new Map(),
     );
     const lock = yield* Semaphore.make(1);
-    yield* Stream.runForEach(SubscriptionRef.changes(state), () => context.client.refresh).pipe(
+    yield* Stream.runForEach(SubscriptionRef.changes(state), () => mg.client.refresh).pipe(
       Effect.forkScoped,
     );
 
@@ -75,7 +74,7 @@ export const layer = Layer.effect(GoXLREngine)(
       SubscriptionRef.update(state, (entries) => new Map(entries).set(id, entry));
     const save = SubscriptionRef.get(state).pipe(
       Effect.flatMap((entries) =>
-        context.storage.set({
+        mg.storage.set({
           connections: [...entries.values()].map(({ definition }) => definition),
         }),
       ),
@@ -197,7 +196,7 @@ export const layer = Layer.effect(GoXLREngine)(
             const mixer = session.mixerIds[0];
             if (mixer)
               for (const event of patchEvents(id, mixer, response.data.Patch))
-                yield* context.emit(event);
+                yield* mg.emit(event);
           }
         });
         const failed = new GoXLRFailure({ reason: "GoXLR connection closed or failed" });
@@ -264,7 +263,7 @@ export const layer = Layer.effect(GoXLREngine)(
         Effect.flatMap(Fiber.join),
       );
 
-    for (const definition of (yield* context.storage.get).connections) {
+    for (const definition of (yield* mg.storage.get).connections) {
       const checked = yield* Effect.result(validate(definition));
       yield* put(
         definition.id,
@@ -372,7 +371,7 @@ export const layer = Layer.effect(GoXLREngine)(
               const definition = yield* validate({ ...input, id, connectOnStartup: false });
               yield* put(id, { definition, status: "disconnected" });
               yield* save;
-              yield* context.resource.refresh(GoXLRConnection);
+              yield* mg.resource.refresh(GoXLRConnection);
               return id;
             }).pipe(lock.withPermit),
           GoXLRWebSocketUpdateConnection: (input) =>
@@ -382,7 +381,7 @@ export const layer = Layer.effect(GoXLREngine)(
               yield* put(input.id, { definition, status: "disconnected" });
               if (current.session) yield* current.session.close;
               yield* save;
-              yield* context.resource.refresh(GoXLRConnection);
+              yield* mg.resource.refresh(GoXLRConnection);
             }).pipe(lock.withPermit),
           GoXLRWebSocketRemoveConnection: ({ id }) =>
             Effect.gen(function* () {
@@ -394,7 +393,7 @@ export const layer = Layer.effect(GoXLREngine)(
               });
               if (current.session) yield* current.session.close;
               yield* save;
-              yield* context.resource.refresh(GoXLRConnection);
+              yield* mg.resource.refresh(GoXLRConnection);
             }).pipe(lock.withPermit),
           GoXLRWebSocketConnect: ({ id }) => connect(id, true),
           GoXLRWebSocketDisconnect: ({ id }) =>

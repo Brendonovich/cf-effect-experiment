@@ -14,10 +14,34 @@ export class RequestFailure extends Schema.TaggedError<RequestFailure>()(
   },
 ) {}
 
+export const TextRequest = Schema.Struct({
+  method: RequestMethod,
+  url: Schema.String,
+  body: Schema.optionalKey(Schema.String),
+  headers: Schema.optionalKey(Schema.String),
+});
+
+export const TextResponse = Schema.Struct({
+  status: Schema.Int,
+  body: Schema.String,
+  contentType: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+});
+
+export class UrlComponentFailure extends Schema.TaggedError<UrlComponentFailure>()(
+  "HttpUrlComponentFailure",
+  { operation: Schema.Literals(["encode", "decode"]), reason: Schema.String },
+) {}
+
 export class RuntimeRpcs extends RpcGroup.make(
   Rpc.make("HttpClientRequest", {
     payload: Schema.Struct({ method: RequestMethod, url: Schema.String }),
     success: Schema.Int,
+    error: RequestFailure,
+  }),
+  Rpc.make("HttpClientRequestText", {
+    payload: TextRequest,
+    success: TextResponse,
     error: RequestFailure,
   }),
 ) {}

@@ -1,9 +1,9 @@
+import type { Engine } from "@macrograph/plugin";
 import {
   Crypto,
   Deferred,
   Fiber,
   HashMap,
-  Layer,
   Option,
   Scope,
   Semaphore,
@@ -12,6 +12,8 @@ import {
 } from "effect";
 import * as Effect from "effect/Effect";
 import { Socket } from "effect/unstable/socket";
+
+import type { HighVolumeEvent } from "./Protocol.ts";
 
 import {
   ClientRpcs,
@@ -30,6 +32,7 @@ type SocketConfig = {
   readonly name?: string;
   readonly password?: string;
   readonly connectOnStartup: boolean;
+  readonly highVolumeEvents?: ReadonlyArray<HighVolumeEvent>;
 };
 type SocketEntry = SocketConfig &
   (
@@ -81,8 +84,7 @@ const safeRequestComment = (comment: string | undefined, passwords: ReadonlyArra
     .slice(0, 512);
 };
 
-export const make = Effect.fnUntraced(function* () {
-  const mg = yield* OBSEngine.EngineContext;
+export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof OBSEngine>) {
   return yield* Effect.gen(function* () {
     const stored = yield* mg.storage.get;
     const entries = Object.entries(stored.sockets).flatMap(([address, config]) =>
@@ -94,6 +96,9 @@ export const make = Effect.fnUntraced(function* () {
                 ...(config.name === undefined ? {} : { name: config.name }),
                 ...(config.password === undefined ? {} : { password: config.password }),
                 connectOnStartup: config.connectOnStartup,
+                ...(config.highVolumeEvents === undefined
+                  ? {}
+                  : { highVolumeEvents: config.highVolumeEvents }),
                 state: "disconnected" as const,
               },
             ] as const,
@@ -123,6 +128,9 @@ export const make = Effect.fnUntraced(function* () {
                 ...(socket.name === undefined ? {} : { name: socket.name }),
                 ...(socket.password === undefined ? {} : { password: socket.password }),
                 connectOnStartup: socket.connectOnStartup,
+                ...(socket.highVolumeEvents === undefined
+                  ? {}
+                  : { highVolumeEvents: socket.highVolumeEvents }),
               },
             ]),
           ),
@@ -145,6 +153,9 @@ export const make = Effect.fnUntraced(function* () {
           ...(entry.value.name === undefined ? {} : { name: entry.value.name }),
           ...(entry.value.password === undefined ? {} : { password: entry.value.password }),
           connectOnStartup: entry.value.connectOnStartup,
+          ...(entry.value.highVolumeEvents === undefined
+            ? {}
+            : { highVolumeEvents: entry.value.highVolumeEvents }),
           state: "disconnected",
         });
         return entry.value.state === "connected"
@@ -171,9 +182,17 @@ export const make = Effect.fnUntraced(function* () {
           ...(current.value.name === undefined ? {} : { name: current.value.name }),
           ...(current.value.password === undefined ? {} : { password: current.value.password }),
           connectOnStartup: current.value.connectOnStartup,
+          ...(current.value.highVolumeEvents === undefined
+            ? {}
+            : { highVolumeEvents: current.value.highVolumeEvents }),
         };
         const canceled = yield* Deferred.make<void>();
-        const connection = yield* ObsWebSocket.make(address, config.password).pipe(
+        const connection = yield* ObsWebSocket.make(address, config.password, {
+          ...(config.highVolumeEvents === undefined
+            ? {}
+            : { highVolumeEvents: config.highVolumeEvents }),
+          onOpen: mg.emit(new ObsEvent.ConnectionOpened({ address })),
+        }).pipe(
           Effect.provideContext(socketContext),
           Effect.mapError(
             () =>
@@ -323,13 +342,16 @@ export const make = Effect.fnUntraced(function* () {
               ...(socket.name === undefined ? {} : { name: socket.name }),
               address,
               connectOnStartup: socket.connectOnStartup,
+              ...(socket.highVolumeEvents === undefined
+                ? {}
+                : { highVolumeEvents: socket.highVolumeEvents }),
               state: socket.state,
               ...(socket.state === "error" ? { error: socket.error } : {}),
             })),
           })),
         ),
         rpcs: ClientRpcs.toLayer({
-          AddSocket: Effect.fnUntraced(function* ({ address, name, password }) {
+          AddSocket: Effect.fnUntraced(function* ({ address, name, password, highVolumeEvents }) {
             yield* Effect.gen(function* () {
               yield* validateAddress(address);
               yield* disconnect(address);
@@ -339,6 +361,7 @@ export const make = Effect.fnUntraced(function* () {
                   ...(name === undefined ? {} : { name }),
                   ...(password === undefined ? {} : { password }),
                   connectOnStartup: true,
+                  ...(highVolumeEvents === undefined ? {} : { highVolumeEvents }),
                   state: "disconnected",
                 }),
               );
@@ -360,6 +383,7 @@ export const make = Effect.fnUntraced(function* () {
             name,
             password,
             connectOnStartup,
+            highVolumeEvents,
           }) {
             yield* Effect.gen(function* () {
               yield* validateAddress(address);
@@ -378,6 +402,9 @@ export const make = Effect.fnUntraced(function* () {
                     ? {}
                     : { password: password ?? current.value.password }),
                   connectOnStartup,
+                  ...((highVolumeEvents ?? current.value.highVolumeEvents) === undefined
+                    ? {}
+                    : { highVolumeEvents: highVolumeEvents ?? current.value.highVolumeEvents }),
                   state: "disconnected",
                 }),
               );
@@ -398,7 +425,7 @@ export const make = Effect.fnUntraced(function* () {
   });
 });
 
-export const layer = Layer.effect(OBSEngine)(make());
+export const layer = OBSEngine.toLayer((mg) => make(mg));
 export const liveLayer = layer;
 
 export default liveLayer;

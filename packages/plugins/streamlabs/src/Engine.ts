@@ -4,9 +4,8 @@ import { ClientRpcs, type ClientState, StreamlabsEngine, StreamlabsFailure } fro
 import { decodeEvent } from "./Events.ts";
 import { SocketFactory, socketLayer } from "./Transport.ts";
 
-export const layer = Layer.effect(StreamlabsEngine)(
+export const layer = StreamlabsEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* StreamlabsEngine.EngineContext;
     const factory = yield* SocketFactory;
     const lock = yield* Semaphore.make(1);
     const callbacks = yield* Queue.dropping<Effect.Effect<void>>(1024);

@@ -27,12 +27,22 @@ export class OBSSocket extends Resource.make<OBSSocket, SocketAddress>()("OBSWeb
   name: "OBS WebSocket",
 }) {}
 
+export const HighVolumeEvents = S.Array(
+  S.Literals([
+    "InputVolumeMeters",
+    "InputActiveStateChanged",
+    "InputShowStateChanged",
+    "SceneItemTransformChanged",
+  ]),
+);
+
 export class ClientRpcs extends RpcGroup.make(
   Rpc.make("AddSocket", {
     payload: S.Struct({
       address: SocketAddress,
       password: S.optional(S.String),
       name: S.optional(S.String),
+      highVolumeEvents: S.optional(HighVolumeEvents),
     }),
     error: ConnectionFailed,
   }),
@@ -43,6 +53,7 @@ export class ClientRpcs extends RpcGroup.make(
       password: S.optional(S.String),
       name: S.optional(S.String),
       connectOnStartup: S.Boolean,
+      highVolumeEvents: S.optional(HighVolumeEvents),
     }),
     error: S.Union([ConnectionFailed, SocketNotFound]),
   }),
@@ -73,6 +84,7 @@ export const RuntimeStorage = Schema.Struct({
       name: Schema.optional(Schema.String),
       password: Schema.optional(Schema.String),
       connectOnStartup: Schema.Boolean,
+      highVolumeEvents: Schema.optional(HighVolumeEvents),
     }),
   ),
 });
@@ -83,6 +95,7 @@ export const ClientState = Schema.Struct({
       name: Schema.optional(Schema.String),
       address: SocketAddress,
       connectOnStartup: Schema.Boolean,
+      highVolumeEvents: Schema.optional(HighVolumeEvents),
       state: S.Union([
         S.Literal("disconnected"),
         S.Literal("connecting"),

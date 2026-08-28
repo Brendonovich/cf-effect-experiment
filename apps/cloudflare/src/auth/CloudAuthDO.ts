@@ -7,6 +7,7 @@ import { type Engine } from "@macrograph/plugin";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Redacted } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 
 const stateKey = "macrograph-auth-v2";
 
@@ -73,9 +74,9 @@ export default class CloudAuthDO extends Cloudflare.DurableObject<CloudAuthDO>()
 					Effect.catchCause(() => Effect.fail(storageFailure())),
 				),
 			};
-			const client: CredentialClient = CloudCredentials.make({
+			const client: CredentialClient = (yield* CloudCredentials.make({
 				store,
-			}).credentials;
+			}).pipe(Effect.provide(FetchHttpClient.layer))).credentials;
 			const toStatus = (
 				status: Effect.Success<typeof client.auth.status>,
 			): Status =>

@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { vi } from "vitest";
 
 import { MACROGRAPH_AUTH_SESSION_KEY, makeBrowserCredentialProvider } from "./BrowserCredentials";
@@ -89,25 +90,34 @@ describe("local browser runtime", () => {
             expiresAt: 60_000,
           }),
         );
-        const credentials = makeBrowserCredentialProvider({
+        const credentials = yield* makeBrowserCredentialProvider({
           storage,
           now: () => 1_000,
-          fetch: vi.fn<typeof globalThis.fetch>(async () =>
-            Response.json([
-              {
-                provider: "twitch",
-                id: "twitch-1",
-                displayName: "Streamer",
-                token: {
-                  access_token: "twitch-access",
-                  expires_in: 3600,
-                  token_type: "bearer",
-                  issuedAt: 1,
-                },
-              },
-            ]),
+        }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) =>
+              Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json([
+                    {
+                      provider: "twitch",
+                      id: "twitch-1",
+                      displayName: "Streamer",
+                      token: {
+                        access_token: "twitch-access",
+                        expires_in: 3600,
+                        token_type: "bearer",
+                        issuedAt: 1,
+                      },
+                    },
+                  ]),
+                ),
+              ),
+            ),
           ),
-        });
+        );
         const connection = yield* makeLocalConnection(makeLocalProjectStore(storage), credentials);
         const catalog = yield* connection.client.GetCredentialCatalog();
         assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
@@ -312,7 +322,7 @@ describe("local browser runtime", () => {
             op: 1,
             d: {
               rpcVersion: 1,
-              eventSubscriptions: 0x7fffffff,
+              eventSubscriptions: 0x7ff,
               authentication,
             },
           });

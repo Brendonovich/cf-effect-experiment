@@ -1,8 +1,14 @@
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Plugin from "@macrograph/plugin/Plugin";
+import dayjs from "dayjs";
+import duration from "dayjs/plugin/duration.js";
+import utc from "dayjs/plugin/utc.js";
 import { Effect, Inspectable } from "effect";
 
 import { UtilitiesEngine } from "./Definition.ts";
+
+dayjs.extend(duration);
+dayjs.extend(utc);
 
 export type FormatBlock =
   | { readonly type: "text"; readonly value: string }
@@ -70,11 +76,26 @@ const UtilitiesPlugin = Plugin.make({
     yield* context.schema.register({
       id: "Print",
       name: "Print",
-      description: "Writes a string to the configured Effect logger.",
+      description:
+        "Writes a string to the configured Effect logger at log (info), warn, or error severity.",
+      properties: {
+        type: { name: "Type", type: DataType.String, defaultValue: "log" },
+      },
       io: (io) => ({
         value: io.data.in("in", DataType.String, { name: "Input", defaultValue: "" }),
       }),
-      run: ({ io }) => Effect.logInfo("Utilities Print", { value: io.value }),
+      run: ({ io, properties }) => {
+        switch (properties.type) {
+          case "log":
+            return Effect.logInfo("Utilities Print", { value: io.value });
+          case "warn":
+            return Effect.logWarning("Utilities Print", { value: io.value });
+          case "error":
+            return Effect.logError("Utilities Print", { value: io.value });
+          default:
+            return Effect.fail(new TypeError("Type must be log, warn, or error"));
+        }
+      },
     });
     yield* context.schema.register({
       id: "ConcatStrings",
@@ -155,6 +176,46 @@ const UtilitiesPlugin = Plugin.make({
               )
               .join(""),
           );
+        }),
+    });
+    yield* context.schema.register({
+      id: "FormatTime",
+      name: "Format Time",
+      description:
+        "Formats epoch milliseconds in UTC with English Day.js tokens, or formats a duration in milliseconds. Invalid timestamps and non-safe-integer inputs fail.",
+      type: "pure",
+      properties: {
+        string: { name: "Format", type: DataType.String, defaultValue: "" },
+        duration: { name: "Duration", type: DataType.Bool, defaultValue: false },
+      },
+      io: (io) => ({
+        input: io.data.in("timeIn", DataType.Int, { name: "Time (ms)", defaultValue: 0 }),
+        output: io.data.out("timeOut", DataType.String),
+      }),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          if (!Number.isSafeInteger(io.input))
+            return yield* Effect.fail(
+              new RangeError("Time must be a safe integer in milliseconds"),
+            );
+          if (properties.duration) {
+            yield* Effect.try({
+              try: () => io.output(dayjs.duration(io.input).format(properties.string)),
+              catch: (error) => error,
+            });
+          } else {
+            const time = yield* Effect.try({
+              try: () => dayjs.utc(io.input).locale("en"),
+              catch: (error) => error,
+            });
+            const valid = yield* Effect.try({ try: () => time.isValid(), catch: (error) => error });
+            if (!valid)
+              return yield* Effect.fail(new RangeError("Time is outside the supported date range"));
+            yield* Effect.try({
+              try: () => io.output(time.format(properties.string)),
+              catch: (error) => error,
+            });
+          }
         }),
     });
     yield* context.schema.register({

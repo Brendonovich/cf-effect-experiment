@@ -1,6 +1,7 @@
 import * as Credential from "@macrograph/plugin/Credential";
 import * as Engine from "@macrograph/plugin/Engine";
 import { Effect, Redacted, Schema, Scope, Semaphore } from "effect";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 
 export const DEFAULT_BASE_URL = "https://www.macrograph.app/api";
 export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -97,7 +98,6 @@ const CloudCredentialList = Schema.Array(CloudCredential);
 export interface Options {
   readonly store: SessionStore;
   readonly baseUrl?: string;
-  readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
   readonly clientId?: string;
 }
@@ -183,9 +183,11 @@ const toSummary = (credential: typeof CloudCredential.Type): Credential.Summary 
   ]) as Readonly<Record<string, Schema.Json>>,
 });
 
-export const make = (options: Options): Service => {
+export const make = Effect.fnUntraced(function* (
+  options: Options,
+): Effect.fn.Return<Service, never, HttpClient.HttpClient> {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const http = HttpClient.withScope(yield* HttpClient.HttpClient);
   const now = options.now ?? Date.now;
   const lock = Semaphore.makeUnsafe(1);
   const subscribers = new Set<() => Effect.Effect<void>>();
@@ -232,52 +234,56 @@ export const make = (options: Options): Service => {
   const request = <A, I>(
     path: string,
     schema: Schema.Codec<A, I>,
-    init?: RequestInit,
+    init?: { readonly method?: "POST"; readonly body?: string },
     token?: string,
     acceptedErrorStatus?: number,
   ) =>
-    Effect.tryPromise({
-      try: async () => {
-        const response = await fetchImplementation(`${baseUrl}${path}`, {
-          ...init,
-          headers: {
-            ...(init?.body === undefined ? {} : { "content-type": "application/json" }),
-            ...(token === undefined
-              ? {}
-              : {
-                  authorization: `Bearer ${token}`,
-                  "client-id": options.clientId ?? "macrograph-server",
-                }),
-            ...init?.headers,
-          },
-        });
-        if (response.status === 401)
-          throw new CloudCredentialError({
-            code: "authorization-expired",
-            reason: "MacroGraph authorization expired; reconnect the account",
-          });
-        if (!response.ok && response.status !== acceptedErrorStatus)
-          throw new CloudCredentialError({
-            code: "request-failed",
-            reason: "MacroGraph could not complete the credential request",
-          });
-        try {
-          return Schema.decodeUnknownSync(schema)(await response.json());
-        } catch {
-          throw new CloudCredentialError({
-            code: "invalid-response",
-            reason: "MacroGraph returned an invalid credential response",
-          });
-        }
-      },
-      catch: (error) =>
-        error instanceof CloudCredentialError
-          ? error
-          : new CloudCredentialError({
+    Effect.gen(function* () {
+      let outgoing = HttpClientRequest.make(init?.method ?? "GET")(`${baseUrl}${path}`, {
+        headers: {
+          ...(token === undefined
+            ? {}
+            : {
+                authorization: `Bearer ${token}`,
+                "client-id": options.clientId ?? "macrograph-server",
+              }),
+        },
+      });
+      if (init?.body !== undefined)
+        outgoing = HttpClientRequest.bodyText(outgoing, init.body, "application/json");
+      const response = yield* http.execute(outgoing).pipe(
+        Effect.mapError(
+          () =>
+            new CloudCredentialError({
               code: "request-failed",
               reason: "MacroGraph could not complete the credential request",
             }),
-    });
+        ),
+      );
+      if (response.status === 401)
+        return yield* new CloudCredentialError({
+          code: "authorization-expired",
+          reason: "MacroGraph authorization expired; reconnect the account",
+        });
+      if (
+        (response.status < 200 || response.status >= 300) &&
+        response.status !== acceptedErrorStatus
+      )
+        return yield* new CloudCredentialError({
+          code: "request-failed",
+          reason: "MacroGraph could not complete the credential request",
+        });
+      return yield* response.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(schema)),
+        Effect.mapError(
+          () =>
+            new CloudCredentialError({
+              code: "invalid-response",
+              reason: "MacroGraph returned an invalid credential response",
+            }),
+        ),
+      );
+    }).pipe(Effect.scoped);
   const fetchCredentials = Effect.gen(function* () {
     const session = yield* activeSession;
     if (session === undefined)
@@ -552,6 +558,6 @@ export const make = (options: Options): Service => {
     clientAuth: { start: startClientAuth, poll: pollClientAuth },
     credentials: { get, refresh, subscribe, catalog, refetch, auth },
   };
-};
+});
 
 export * as CloudCredentials from "./index.ts";

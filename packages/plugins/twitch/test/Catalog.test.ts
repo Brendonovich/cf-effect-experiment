@@ -2,7 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
 import { Effect, Option } from "effect";
 
-import { actionIds, count, events, ids } from "../src/Catalog.ts";
+import { actions } from "../src/Actions.ts";
+import { actionIds, existingActionIds, count, events, ids } from "../src/Catalog.ts";
 import { AccountId, TwitchAccount, TwitchEventSub } from "../src/Definition.ts";
 import { SubscriptionEvent } from "../src/EventSub.ts";
 import TwitchPlugin from "../src/Plugin.ts";
@@ -91,11 +92,15 @@ describe("Twitch catalog", () => {
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(TwitchPlugin.effect);
       assert.strictEqual(events.length, 49);
-      assert.strictEqual(count, 62);
-      assert.strictEqual(new Set(ids).size, 62);
+      assert.strictEqual(count, 92);
+      assert.strictEqual(new Set(ids).size, 92);
+      assert.strictEqual(actionIds.length, 43);
       assert.deepStrictEqual(
         schemas.map(({ id, name, type }) => [id, name, type]),
-        expected.map((item) => [...item]),
+        [
+          ...expected.map((item) => [...item]),
+          ...actions.map(({ id, name }) => [id, name, "exec"]),
+        ],
       );
       assert.isTrue(schemas.every(({ description }) => description !== undefined));
       assert.isTrue(
@@ -233,7 +238,12 @@ describe("Twitch catalog", () => {
       assert.isDefined(schema);
       const calls: Array<unknown> = [];
       yield* schema.run({
-        input: (ref) => (ref.id === "broadcasterId" ? "channel-1" : "hello"),
+        input: (ref) =>
+          ref.id === "replyId"
+            ? Option.some("parent-1")
+            : ref.id === "broadcasterId"
+              ? "channel-1"
+              : "hello",
         output: () => undefined,
         properties: { account: AccountId.make("account-1") },
         event: undefined,
@@ -252,6 +262,7 @@ describe("Twitch catalog", () => {
           broadcaster_id: "channel-1",
           sender_id: "account-1",
           message: "hello",
+          reply_parent_message_id: "parent-1",
         },
       ]);
       assert.deepStrictEqual(
@@ -265,7 +276,7 @@ describe("Twitch catalog", () => {
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(TwitchPlugin.effect);
       const calls: Array<string> = [];
-      const response = (id: (typeof actionIds)[number]) => {
+      const response = (id: (typeof existingActionIds)[number]) => {
         switch (id) {
           case "GetChatSettings":
           case "UpdateChatSettings":
@@ -333,7 +344,7 @@ describe("Twitch catalog", () => {
         }
       };
       const engine = Object.fromEntries(
-        actionIds.map((id) => [
+        existingActionIds.map((id) => [
           id,
           () =>
             Effect.sync(() => {
@@ -343,7 +354,7 @@ describe("Twitch catalog", () => {
         ]),
       );
 
-      for (const id of actionIds) {
+      for (const id of existingActionIds) {
         const schema = schemas.find((candidate) => candidate.id === id);
         assert.isDefined(schema);
         yield* schema.run({
@@ -375,7 +386,7 @@ describe("Twitch catalog", () => {
           ["exec"],
         );
       }
-      assert.deepStrictEqual(calls, [...actionIds]);
+      assert.deepStrictEqual(calls, [...existingActionIds]);
     }),
   );
 });

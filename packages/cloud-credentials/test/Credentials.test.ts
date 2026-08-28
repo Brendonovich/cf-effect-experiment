@@ -1,4 +1,12 @@
-import { Effect, Redacted } from "effect";
+import { assert, it as effectIt } from "@effect/vitest";
+import { Deferred, Effect, Fiber, Redacted } from "effect";
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import { describe, expect, it, vi } from "vitest";
 
 import { CloudCredentials, SessionStoreError } from "../src/index.ts";
@@ -16,12 +24,10 @@ class MemoryStore implements CloudCredentials.SessionStore {
 }
 
 const json = (value: unknown, status = 200) =>
-  Promise.resolve(
-    new Response(JSON.stringify(value), {
-      status,
-      headers: { "content-type": "application/json" },
-    }),
-  );
+  new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 
 describe("MacroGraph cloud credentials", () => {
   it("registers, caches, refreshes, redacts, notifies, and expires authorization", async () => {
@@ -31,8 +37,8 @@ describe("MacroGraph cloud credentials", () => {
     let token = "twitch-access-1";
     let credentialGets = 0;
     let devicePolls = 0;
-    const fetch = vi.fn<typeof globalThis.fetch>((input, init) => {
-      const url = String(input);
+    const respond = vi.fn<(request: HttpClientRequest.HttpClientRequest) => Response>((request) => {
+      const url = request.url;
       if (url.endsWith("/login/device/code"))
         return json({
           device_code: "device-1",
@@ -56,7 +62,13 @@ describe("MacroGraph cloud credentials", () => {
           verification_uri: "https://www.macrograph.app/connect",
           verification_uri_complete: "https://www.macrograph.app/connect?code=ABCD",
         });
-      if (url.endsWith("/server/registration") && init?.method === "POST") {
+      if (url.endsWith("/server/registration") && request.method === "POST") {
+        expect(request.headers["content-type"]).toBe("application/json");
+        expect(request.body._tag).toBe("Uint8Array");
+        if (request.body._tag === "Uint8Array")
+          expect(JSON.parse(new TextDecoder().decode(request.body.body))).toEqual({
+            id: "registration-1",
+          });
         poll++;
         return poll === 1
           ? json({ _tag: "ServerRegistrationError", code: "authorization_pending" }, 400)
@@ -88,7 +100,16 @@ describe("MacroGraph cloud credentials", () => {
         issuedAt: 1,
       },
     });
-    const service = CloudCredentials.make({ store, fetch, now: () => now });
+    const service = Effect.runSync(
+      CloudCredentials.make({ store, now: () => now }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.sync(() => HttpClientResponse.fromWeb(request, respond(request))),
+          ),
+        ),
+      ),
+    );
     expect(CloudCredentials.normalizeBaseUrl("https://macrograph.app/api/")).toBe(
       CloudCredentials.DEFAULT_BASE_URL,
     );
@@ -111,12 +132,10 @@ describe("MacroGraph cloud credentials", () => {
       userId: "user-1",
       email: "user@example.com",
     });
-    const deviceStart = fetch.mock.calls.find(([input]) =>
-      String(input).endsWith("/login/device/code"),
+    const deviceStart = respond.mock.calls.find(([request]) =>
+      request.url.endsWith("/login/device/code"),
     );
-    expect(new Headers(deviceStart?.[1]?.headers).get("authorization")).toBe(
-      "Bearer macrograph-session-secret",
-    );
+    expect(deviceStart?.[0].headers.authorization).toBe("Bearer macrograph-session-secret");
 
     let notifications = 0;
     await Effect.runPromise(
@@ -141,13 +160,12 @@ describe("MacroGraph cloud credentials", () => {
     );
     expect(credentialGets).toBe(3);
     expect(notifications).toBe(2);
-    for (const [input, init] of fetch.mock.calls.filter(([input]) =>
-      String(input).includes("/credentials"),
+    for (const [request] of respond.mock.calls.filter(([request]) =>
+      request.url.includes("/credentials"),
     )) {
-      expect(String(input)).not.toContain("macrograph-session-secret");
-      expect(new Headers(init?.headers).get("authorization")).toBe(
-        "Bearer macrograph-session-secret",
-      );
+      expect(request.url).not.toContain("macrograph-session-secret");
+      expect(request.headers["client-id"]).toBe("macrograph-server");
+      expect(request.headers.authorization).toBe("Bearer macrograph-session-secret");
     }
 
     now += CloudCredentials.SESSION_LIFETIME_MS + 1;
@@ -164,17 +182,26 @@ describe("MacroGraph cloud credentials", () => {
       write: () => Effect.fail(new SessionStoreError({ reason: "disk full" })),
       clear: Effect.void,
     };
-    const service = CloudCredentials.make({
-      store,
-      fetch: vi.fn<typeof globalThis.fetch>(() =>
-        json({
-          id: "registration-1",
-          userCode: "ABCD",
-          verification_uri: "https://www.macrograph.app/connect",
-          verification_uri_complete: "https://www.macrograph.app/connect?code=ABCD",
-        }),
+    const service = Effect.runSync(
+      CloudCredentials.make({ store }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                json({
+                  id: "registration-1",
+                  userCode: "ABCD",
+                  verification_uri: "https://www.macrograph.app/connect",
+                  verification_uri_complete: "https://www.macrograph.app/connect?code=ABCD",
+                }),
+              ),
+            ),
+          ),
+        ),
       ),
-    });
+    );
     await expect(Effect.runPromise(service.auth.start)).rejects.toMatchObject({
       reason: "disk full",
     });
@@ -192,12 +219,172 @@ describe("MacroGraph cloud credentials", () => {
       write: () => Effect.void,
       clear: Effect.void,
     };
-    const service = CloudCredentials.make({ store, fetch: vi.fn() });
+    const service = Effect.runSync(
+      CloudCredentials.make({ store }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make(() => Effect.die("Unexpected request")),
+        ),
+      ),
+    );
 
     await expect(Effect.runPromise(service.auth.status)).rejects.toMatchObject({
       reason: "temporarily unavailable",
     });
     expect(await Effect.runPromise(service.auth.status)).toEqual({ state: "disconnected" });
     expect(reads).toBe(2);
+  });
+
+  for (const [status, body, code] of [
+    [401, "not json", "authorization-expired"],
+    [403, "not json", "request-failed"],
+    [500, "not json", "request-failed"],
+    [200, "not json", "invalid-response"],
+    [200, JSON.stringify({ unexpected: true }), "invalid-response"],
+    [400, "not json", "invalid-response"],
+    [
+      400,
+      JSON.stringify({ _tag: "DeviceFlowError", code: "access_denied" }),
+      "authorization-denied",
+    ],
+  ] as const) {
+    effectIt.effect(`preserves ${code} for HTTP ${status} with body ${body}`, () =>
+      Effect.gen(function* () {
+        let signal: AbortSignal | undefined;
+        const service = yield* CloudCredentials.make({ store: new MemoryStore() }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request, _url, requestSignal) => {
+              signal = requestSignal;
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(request, new Response(body, { status })),
+              );
+            }),
+          ),
+        );
+        const error = yield* Effect.flip(service.clientAuth.poll("device-1"));
+        assert.strictEqual(error.code, code);
+        assert.isTrue(signal?.aborted);
+      }),
+    );
+  }
+
+  effectIt.effect("maps transport failures without exposing their cause", () =>
+    Effect.gen(function* () {
+      const service = yield* CloudCredentials.make({ store: new MemoryStore() }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.fail(
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({ request, cause: "session-secret" }),
+              }),
+            ),
+          ),
+        ),
+      );
+      const error = yield* Effect.flip(service.clientAuth.poll("device-1"));
+      assert.strictEqual(error.code, "request-failed");
+      assert.notInclude(JSON.stringify(error), "session-secret");
+    }),
+  );
+
+  effectIt.effect("clears stored authorization after a credential request returns 401", () =>
+    Effect.gen(function* () {
+      const store = new MemoryStore();
+      store.value = JSON.stringify({
+        state: "connected",
+        token: "session-secret",
+        userId: "user-1",
+        email: "user@example.com",
+        expiresAt: 60_000,
+      });
+      const service = yield* CloudCredentials.make({ store, now: () => 1_000 }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.succeed(
+              HttpClientResponse.fromWeb(request, new Response(null, { status: 401 })),
+            ),
+          ),
+        ),
+      );
+      assert.strictEqual((yield* service.credentials.catalog)._tag, "CredentialCatalogUnavailable");
+      assert.isNull(store.value);
+      assert.deepStrictEqual(yield* service.auth.status, { state: "disconnected" });
+    }),
+  );
+
+  effectIt.effect("aborts an interrupted request", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      let signal: AbortSignal | undefined;
+      const service = yield* CloudCredentials.make({ store: new MemoryStore() }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((_request, _url, requestSignal) => {
+            signal = requestSignal;
+            return Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
+          }),
+        ),
+      );
+      const fiber = yield* service.clientAuth.poll("device-1").pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      assert.isFalse(signal?.aborted);
+      yield* Fiber.interrupt(fiber);
+      assert.isTrue(signal?.aborted);
+    }),
+  );
+
+  it("captures the FetchHttpClient transport and keeps its scope open through body decoding", async () => {
+    const store = new MemoryStore();
+    store.value = JSON.stringify({
+      state: "connected",
+      token: "session-secret",
+      userId: "user-1",
+      email: "user@example.com",
+      expiresAt: 60_000,
+    });
+    let signal: AbortSignal | null | undefined;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(String(input)).toBe("https://cloud.example/api/login/device/code");
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer session-secret");
+      expect(new Headers(init?.headers).get("client-id")).toBe("custom-client");
+      expect(new Headers(init?.headers).get("content-type")).toBeNull();
+      signal = init?.signal;
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            expect(signal?.aborted).toBe(false);
+            controller.enqueue(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  device_code: "device-1",
+                  verification_uri_complete: "https://cloud.example/login/device?code=CODE",
+                }),
+              ),
+            );
+            controller.close();
+          },
+        }),
+      );
+    });
+    const service = Effect.runSync(
+      CloudCredentials.make({
+        store,
+        baseUrl: "https://cloud.example/api/",
+        clientId: "custom-client",
+        now: () => 1_000,
+      }).pipe(
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+      ),
+    );
+    expect(await Effect.runPromise(service.clientAuth.start)).toMatchObject({
+      device_code: "device-1",
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(signal?.aborted).toBe(true);
   });
 });

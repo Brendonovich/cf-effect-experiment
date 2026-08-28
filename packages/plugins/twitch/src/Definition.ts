@@ -77,6 +77,15 @@ export class ClientRpcs extends RpcGroup.make(
 ) {}
 
 export class RuntimeRpcs extends RpcGroup.make(
+  Rpc.make("ExecuteAction", {
+    payload: S.Struct({
+      account_id: AccountId,
+      action: S.String,
+      inputs: S.Record(S.String, S.Json),
+    }),
+    success: S.Struct({ response: S.Json, outputs: S.Record(S.String, S.Json) }),
+    error: S.Union([Helix.HelixError, MissingCredential, CredentialAuthorizationError]),
+  }),
   Rpc.make("SendChatMessage", {
     payload: S.Struct({
       account_id: AccountId,
@@ -90,7 +99,7 @@ export class RuntimeRpcs extends RpcGroup.make(
         S.Struct({
           message_id: S.String,
           is_sent: S.Boolean,
-          drop_reason: S.optional(S.Struct({ code: S.String, message: S.String })),
+          drop_reason: S.optional(S.NullOr(S.Struct({ code: S.String, message: S.String }))),
         }),
       ),
     }),
@@ -117,7 +126,9 @@ export class RuntimeRpcs extends RpcGroup.make(
       moderator_id: S.String,
       emote_mode: S.optional(S.Boolean),
       follower_mode: S.optional(S.Boolean),
+      follower_mode_duration: S.optional(S.Int),
       slow_mode: S.optional(S.Boolean),
+      slow_mode_wait_time: S.optional(S.Int),
       subscriber_mode: S.optional(S.Boolean),
     }),
     success: S.Struct({

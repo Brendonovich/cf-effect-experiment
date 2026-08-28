@@ -24,9 +24,12 @@
     { "path": "../../packages/plugins/websocket-server" },
     { "path": "../../packages/plugins/discord" },
     { "path": "../../packages/plugins/elevenlabs" },
+    { "path": "../../packages/plugins/elgato-key-light" },
     { "path": "../../packages/plugins/fs" },
     { "path": "../../packages/plugins/goxlr" },
+    { "path": "../../packages/plugins/ikea-tradfri" },
     { "path": "../../packages/plugins/json" },
+    { "path": "../../packages/plugins/lifx" },
     { "path": "../../packages/plugins/list" },
     { "path": "../../packages/plugins/logic" },
     { "path": "../../packages/plugins/math" },
@@ -36,6 +39,7 @@
     { "path": "../../packages/plugins/streamdeck" },
     { "path": "../../packages/plugins/streamlabs" },
     { "path": "../../packages/plugins/string" },
+    { "path": "../../packages/plugins/tiktok-euler-stream" },
     { "path": "../../packages/plugins/voicemod" },
     { "path": "../../packages/plugins/vtube-studio" }
   ]

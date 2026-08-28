@@ -6,10 +6,13 @@ import { Persistence } from "@macrograph/persistence";
 import { Engine } from "@macrograph/plugin";
 import Discord from "@macrograph/plugin-discord/Deployment";
 import ElevenLabs from "@macrograph/plugin-elevenlabs/Deployment";
+import ElgatoKeyLight from "@macrograph/plugin-elgato-key-light/Deployment";
 import Filesystem from "@macrograph/plugin-fs/Deployment";
 import GoXLR from "@macrograph/plugin-goxlr/Deployment";
 import HttpClient from "@macrograph/plugin-http-client/Deployment/Local";
+import IkeaTradfri from "@macrograph/plugin-ikea-tradfri/Deployment";
 import Json from "@macrograph/plugin-json";
+import LIFX from "@macrograph/plugin-lifx/Deployment";
 import List from "@macrograph/plugin-list";
 import Logic from "@macrograph/plugin-logic";
 import Math from "@macrograph/plugin-math";
@@ -20,6 +23,7 @@ import SpeakerBot from "@macrograph/plugin-speakerbot/Deployment";
 import StreamDeck from "@macrograph/plugin-streamdeck/Deployment";
 import Streamlabs from "@macrograph/plugin-streamlabs/Deployment";
 import Strings from "@macrograph/plugin-string";
+import TikTok from "@macrograph/plugin-tiktok-euler-stream/Deployment";
 import Twitch from "@macrograph/plugin-twitch/Deployment/WebSocket";
 import Utilities from "@macrograph/plugin-utilities/Deployment";
 import Voicemod from "@macrograph/plugin-voicemod/Deployment";
@@ -36,15 +40,19 @@ import { ProjectExecution } from "../src/ProjectExecution.ts";
 const deployments = [
   Discord,
   ElevenLabs,
+  ElgatoKeyLight,
   Filesystem,
   GoXLR,
   HttpClient,
+  IkeaTradfri,
+  LIFX,
   OBS,
   OpenAI,
   Shell,
   SpeakerBot,
   StreamDeck,
   Streamlabs,
+  TikTok,
   Twitch,
   Utilities,
   Voicemod,
@@ -58,15 +66,19 @@ const statelessPlugins = [Json, List, Logic, Math, Strings];
 const mounted = Layer.mergeAll(
   PluginHost.deploymentLayer(Discord),
   PluginHost.deploymentLayer(ElevenLabs),
+  PluginHost.deploymentLayer(ElgatoKeyLight),
   PluginHost.deploymentLayer(Filesystem),
   PluginHost.deploymentLayer(GoXLR),
   PluginHost.deploymentLayer(HttpClient),
+  PluginHost.deploymentLayer(IkeaTradfri),
+  PluginHost.deploymentLayer(LIFX),
   PluginHost.deploymentLayer(OBS),
   PluginHost.deploymentLayer(OpenAI),
   PluginHost.deploymentLayer(Shell),
   PluginHost.deploymentLayer(SpeakerBot),
   PluginHost.deploymentLayer(StreamDeck),
   PluginHost.deploymentLayer(Streamlabs),
+  PluginHost.deploymentLayer(TikTok),
   PluginHost.deploymentLayer(Twitch),
   PluginHost.deploymentLayer(Utilities),
   PluginHost.deploymentLayer(Voicemod),
@@ -131,18 +143,26 @@ describe("Self-hosted plugins", () => {
       for (const [id, count] of [
         ["discord", 6],
         ["elevenlabs", 1],
-        ["fs", 2],
+        ["elgato-key-light", 10],
+        ["fs", 4],
         ["goxlr", 13],
-        ["json", 13],
-        ["list", 10],
+        ["http-client", 7],
+        ["ikea-tradfri", 6],
+        ["json", 19],
+        ["lifx", 6],
+        ["list", 11],
         ["logic", 18],
         ["math", 33],
+        ["obs", 209],
         ["openai", 2],
         ["shell", 1],
         ["speakerbot", 6],
         ["streamdeck", 2],
         ["streamlabs", 5],
         ["string", 26],
+        ["tiktok-euler-stream", 19],
+        ["twitch", 92],
+        ["util", 7],
         ["voicemod", 3],
         ["vtube-studio", 6],
       ] as const) {

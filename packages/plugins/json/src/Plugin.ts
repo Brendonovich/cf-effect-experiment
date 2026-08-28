@@ -13,9 +13,15 @@ const scalar = (name: string): DataType.Scalar => {
     case "Bool":
       return DataType.Bool;
     default:
-      throw new TypeError("Type must be String, Int, Float, or Bool");
+      // IO generation is synchronous; reject invalid properties in the run Effect.
+      return DataType.String;
   }
 };
+const validateScalar = (name: string) =>
+  name === scalar(name)._tag
+    ? Effect.succeed(scalar(name))
+    : Effect.fail(new TypeError("Type must be String, Int, Float, or Bool"));
+const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 && count <= 1024;
 const typed = {
   type: {
     name: "Type",
@@ -29,14 +35,19 @@ const conversionType = (type: string, list: boolean) =>
   list ? DataType.List(scalar(type)) : scalar(type);
 
 // JSON numeric overflow must not silently become null when serialized again.
-const parse = (input: string): Schema.Json =>
-  Schema.decodeUnknownSync(Schema.Json)(
-    JSON.parse(input, (_key, value: unknown) => {
-      if (typeof value === "number" && !Number.isFinite(value))
-        throw new RangeError("JSON numbers must be finite");
-      return value;
-    }),
-  );
+const parse = Effect.fnUntraced(function* (input: string) {
+  let nonfinite = false;
+  const value: unknown = yield* Effect.try({
+    try: () =>
+      JSON.parse(input, (_key, value: unknown) => {
+        if (typeof value === "number" && !Number.isFinite(value)) nonfinite = true;
+        return value;
+      }),
+    catch: (error) => error,
+  });
+  if (nonfinite) return yield* Effect.fail(new RangeError("JSON numbers must be finite"));
+  return yield* Schema.decodeUnknownEffect(Schema.Json)(value);
+});
 const object = (value: Schema.Json): value is Schema.JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const member = (value: Schema.Json | undefined, key: string): Schema.Json | undefined => {
@@ -101,9 +112,12 @@ const JsonPlugin = Plugin.make({
           output: io.data.out("out", DataType.String, { name: "JSON" }),
         }),
         run: ({ io }) =>
-          Effect.try({
-            try: () => io.output(JSON.stringify(parse(io.input))),
-            catch: (error) => error,
+          Effect.gen(function* () {
+            const value = yield* parse(io.input);
+            yield* Effect.try({
+              try: () => io.output(JSON.stringify(value)),
+              catch: (error) => error,
+            });
           }),
       });
     }
@@ -117,7 +131,7 @@ const JsonPlugin = Plugin.make({
         input: io.data.in("in", conversionType(properties.type, properties.list), {
           defaultValue: properties.list
             ? []
-            : properties.type === "String"
+            : scalar(properties.type)._tag === "String"
               ? ""
               : properties.type === "Bool"
                 ? false
@@ -126,13 +140,20 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.String, { name: "JSON" }),
       }),
       run: ({ io, properties }) =>
-        Effect.try({
-          try: () => {
-            if (!DataType.isValue(conversionType(properties.type, properties.list), io.input))
-              throw new TypeError("Input does not match the configured JSON conversion type");
-            io.output(JSON.stringify(io.input));
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          const valid = yield* Effect.try({
+            try: () => DataType.isValue(conversionType(properties.type, properties.list), io.input),
+            catch: (error) => error,
+          });
+          if (!valid)
+            return yield* Effect.fail(
+              new TypeError("Input does not match the configured JSON conversion type"),
+            );
+          yield* Effect.try({
+            try: () => io.output(JSON.stringify(io.input)),
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({
@@ -150,13 +171,13 @@ const JsonPlugin = Plugin.make({
         ),
       }),
       run: ({ io, properties }) =>
-        Effect.try({
-          try: () => {
-            const value = parse(io.input);
-            const type = scalar(properties.type);
-            io.output(properties.list ? extractList(value, type) : extract(value, type));
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const type = yield* validateScalar(properties.type);
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(properties.list ? extractList(value, type) : extract(value, type)),
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({
@@ -170,27 +191,28 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.Option(DataType.String), { name: "JSON" }),
       }),
       run: ({ io, properties }) =>
-        Effect.try({
-          try: () => {
-            const query = properties.query;
-            let keys: ReadonlyArray<string>;
-            if (query === "" || query === ".") keys = [];
-            else if (query.startsWith(".")) keys = query.slice(1).split(".");
-            else if (query.startsWith("/"))
-              keys = query
-                .slice(1)
-                .split("/")
-                .map((key) => {
-                  if (/~(?:[^01]|$)/.test(key))
-                    throw new SyntaxError("Invalid JSON pointer escape");
-                  return key.replaceAll("~1", "/").replaceAll("~0", "~");
-                });
-            else throw new SyntaxError("Query must be empty, a dot path, or a JSON pointer");
-            let value: Schema.Json | undefined = parse(io.input);
-            for (const key of keys) value = member(value, key);
-            io.output(serializedOption(value));
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const query = properties.query;
+          let keys: ReadonlyArray<string>;
+          if (query === "" || query === ".") keys = [];
+          else if (query.startsWith(".")) keys = query.slice(1).split(".");
+          else if (query.startsWith("/")) {
+            keys = query.slice(1).split("/");
+            if (keys.some((key) => /~(?:[^01]|$)/.test(key)))
+              return yield* Effect.fail(new SyntaxError("Invalid JSON pointer escape"));
+            keys = keys.map((key) => key.replaceAll("~1", "/").replaceAll("~0", "~"));
+          } else
+            return yield* Effect.fail(
+              new SyntaxError("Query must be empty, a dot path, or a JSON pointer"),
+            );
+          let value: Schema.Json | undefined = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => {
+              for (const key of keys) value = member(value, key);
+              io.output(serializedOption(value));
+            },
+            catch: (error) => error,
+          });
         }),
     });
     for (const [id, name, type] of [
@@ -210,9 +232,12 @@ const JsonPlugin = Plugin.make({
           output: io.data.out("out", DataType.Option(type)),
         }),
         run: ({ io }) =>
-          Effect.try({
-            try: () => io.output(extract(parse(io.input), type)),
-            catch: (error) => error,
+          Effect.gen(function* () {
+            const value = yield* parse(io.input);
+            yield* Effect.try({
+              try: () => io.output(extract(value, type)),
+              catch: (error) => error,
+            });
           }),
       });
     }
@@ -227,16 +252,18 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.Option(DataType.List(DataType.String))),
       }),
       run: ({ io }) =>
-        Effect.try({
-          try: () => {
-            const value = parse(io.input);
-            io.output(
-              Array.isArray(value)
-                ? Option.some(value.map((item) => JSON.stringify(item)))
-                : Option.none(),
-            );
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => {
+              io.output(
+                Array.isArray(value)
+                  ? Option.some(value.map((item) => JSON.stringify(item)))
+                  : Option.none(),
+              );
+            },
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({
@@ -251,9 +278,13 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.Option(DataType.List(scalar(properties.type)))),
       }),
       run: ({ io, properties }) =>
-        Effect.try({
-          try: () => io.output(extractList(parse(io.input), scalar(properties.type))),
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const type = yield* validateScalar(properties.type);
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(extractList(value, type)),
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({
@@ -267,12 +298,12 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.Option(DataType.List(DataType.String))),
       }),
       run: ({ io }) =>
-        Effect.try({
-          try: () => {
-            const value = parse(io.input);
-            io.output(object(value) ? Option.some(Object.keys(value)) : Option.none());
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(object(value) ? Option.some(Object.keys(value)) : Option.none()),
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({
@@ -287,9 +318,166 @@ const JsonPlugin = Plugin.make({
         output: io.data.out("out", DataType.Option(DataType.String)),
       }),
       run: ({ io }) =>
-        Effect.try({
-          try: () => io.output(serializedOption(member(parse(io.input), io.key))),
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(serializedOption(member(value, io.key))),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONCreateObject",
+      name: "JSON Create Object",
+      description:
+        "Builds an object from JSON-text entries. Entries must be between 0 and 1024. Duplicate keys use the last value; invalid JSON fails.",
+      type: "pure",
+      properties: { number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
+      io: (io, properties) => {
+        return {
+          entries: Array.from(
+            { length: validCount(properties.number) ? properties.number : 0 },
+            (_, index) => ({
+              key: io.data.in(`key-${index}`, DataType.String, { defaultValue: "" }),
+              value: io.data.in(`value-${index}`, DataType.String, {
+                name: `JSON Value ${index}`,
+                defaultValue: "null",
+              }),
+            }),
+          ),
+          output: io.data.out("out", DataType.String, { name: "JSON Object" }),
+        };
+      },
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          if (!validCount(properties.number))
+            return yield* Effect.fail(
+              new RangeError("Entries must be an integer between 0 and 1024"),
+            );
+          const entries: Array<readonly [string, Schema.Json]> = [];
+          for (const { key, value } of io.entries) entries.push([key, yield* parse(value)]);
+          yield* Effect.try({
+            try: () => io.output(JSON.stringify(Object.fromEntries(entries))),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONSetProperty",
+      name: "JSON Set Property",
+      description:
+        "Inserts or replaces an own object key with a JSON-text value. Returns a new object and the previous optional JSON value. Does not modify the source. Non-object inputs fail.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", DataType.String, { defaultValue: "" }),
+        value: io.data.in("value", DataType.String, { name: "JSON Value", defaultValue: "null" }),
+        output: io.data.out("out", DataType.String, { name: "JSON Object" }),
+        previous: io.data.out("previous", DataType.Option(DataType.String)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const input = yield* parse(io.input);
+          if (!object(input)) return yield* Effect.fail(new TypeError("Expected a JSON object"));
+          const value = yield* parse(io.value);
+          yield* Effect.try({
+            try: () => {
+              const previous = serializedOption(member(input, io.key));
+              // A computed property defines __proto__ as data rather than invoking its setter.
+              io.output(JSON.stringify({ ...input, [io.key]: value }));
+              io.previous(previous);
+            },
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONRemoveProperty",
+      name: "JSON Remove Property",
+      description:
+        "Removes an own object key from a new JSON object and returns the optional removed JSON value. Missing keys return None; JSON null is Some('null'). Non-object inputs fail.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", DataType.String, { defaultValue: "" }),
+        output: io.data.out("out", DataType.String, { name: "JSON Object" }),
+        removed: io.data.out("removed", DataType.Option(DataType.String)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const input = yield* parse(io.input);
+          if (!object(input)) return yield* Effect.fail(new TypeError("Expected a JSON object"));
+          yield* Effect.try({
+            try: () => {
+              io.output(
+                JSON.stringify(
+                  Object.fromEntries(Object.entries(input).filter(([key]) => key !== io.key)),
+                ),
+              );
+              io.removed(serializedOption(member(input, io.key)));
+            },
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONHasProperty",
+      name: "JSON Has Property",
+      description:
+        "Tests whether an object has an own key, including keys whose value is null. Non-object inputs fail.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", DataType.String, { defaultValue: "" }),
+        output: io.data.out("out", DataType.Bool),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const input = yield* parse(io.input);
+          if (!object(input)) return yield* Effect.fail(new TypeError("Expected a JSON object"));
+          yield* Effect.try({
+            try: () => io.output(Object.hasOwn(input, io.key)),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONGetObjectValues",
+      name: "JSON Get Object Values",
+      description:
+        "Returns an object's own values as a list of JSON texts, in Object.keys order. Non-object inputs fail.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
+        output: io.data.out("out", DataType.List(DataType.String)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const input = yield* parse(io.input);
+          if (!object(input)) return yield* Effect.fail(new TypeError("Expected a JSON object"));
+          yield* Effect.try({
+            try: () => io.output(Object.values(input).map((value) => JSON.stringify(value))),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONGetObjectSize",
+      name: "JSON Get Object Size",
+      description: "Counts an object's own keys. Non-object inputs fail.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
+        output: io.data.out("out", DataType.Int),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const input = yield* parse(io.input);
+          if (!object(input)) return yield* Effect.fail(new TypeError("Expected a JSON object"));
+          yield* Effect.try({
+            try: () => io.output(Object.keys(input).length),
+            catch: (error) => error,
+          });
         }),
     });
   }),

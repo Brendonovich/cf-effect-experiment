@@ -333,7 +333,7 @@ describe("Discord engine", () => {
         webhookUrl: "https://discordapp.com/api/webhooks/1/private-webhook",
         content: "hello",
         username: "Test",
-        avatarUrl: "",
+        avatarUrl: "https://cdn.example.com/avatar.png",
         tts: false,
       });
       assert.strictEqual(status, 204);
@@ -369,6 +369,7 @@ describe("Discord engine", () => {
         );
         assert.isTrue(Result.isFailure(message));
         for (const url of [
+          "not a URL",
           "https://evil.example/api/webhooks/1/secret",
           "https://discord.com.evil.example/api/webhooks/1/secret",
           "http://discord.com/api/webhooks/1/secret",
@@ -394,6 +395,24 @@ describe("Discord engine", () => {
             assert.strictEqual(result.failure.reason, "invalid-webhook");
             assert.isFalse(JSON.stringify(result.failure).includes("secret"));
           }
+        }
+        for (const avatarUrl of [
+          "not a URL",
+          "http://cdn.example.com/avatar.png",
+          "https://user:secret@cdn.example.com/avatar.png",
+        ]) {
+          const error = yield* Effect.flip(
+            runtime.DiscordSendWebhook({
+              webhookUrl: "https://discord.com/api/webhooks/1/secret",
+              content: "hello",
+              username: "",
+              avatarUrl,
+              tts: false,
+            }),
+          );
+          assert.instanceOf(error, DiscordFailure);
+          assert.strictEqual(error.reason, "invalid-message");
+          assert.notInclude(JSON.stringify(error), "secret");
         }
         assert.strictEqual(h.requests.length, 0);
       }),

@@ -13,9 +13,15 @@ const scalar = (name: string): DataType.Scalar => {
     case "Bool":
       return DataType.Bool;
     default:
-      throw new TypeError("Type must be String, Int, Float, or Bool");
+      // IO generation is synchronous; reject invalid properties in the run Effect.
+      return DataType.String;
   }
 };
+const validateScalar = (name: string) =>
+  name === scalar(name)._tag
+    ? Effect.succeed(scalar(name))
+    : Effect.fail(new TypeError("Type must be String, Int, Float, or Bool"));
+const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 && count <= 1024;
 const typed = {
   type: {
     name: "Type",
@@ -101,7 +107,11 @@ const LogicPlugin = Plugin.make({
           output: io.data.out("output", type),
         };
       },
-      run: ({ io }) => Effect.sync(() => io.output(io.condition ? io.whenTrue : io.whenFalse)),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          io.output(io.condition ? io.whenTrue : io.whenFalse);
+        }),
     });
     yield* context.schema.register({
       id: "Switch",
@@ -111,24 +121,24 @@ const LogicPlugin = Plugin.make({
       properties: { ...typed, number: { name: "Keys", type: DataType.Int, defaultValue: 1 } },
       io: (io, properties) => {
         const type = scalar(properties.type);
-        if (
-          !Number.isSafeInteger(properties.number) ||
-          properties.number < 0 ||
-          properties.number > 1024
-        )
-          throw new RangeError("Keys must be an integer between 0 and 1024");
         return {
           input: io.data.in("switchOn", type),
           output: io.data.out("switchOut", type),
           fallback: io.exec.out("exec", { name: "Default" }),
-          cases: Array.from({ length: properties.number }, (_, index) => ({
-            value: io.data.in(`key-${index}`, type),
-            exec: io.exec.out(`key-${index}`, { name: `Case ${index}` }),
-          })),
+          cases: Array.from(
+            { length: validCount(properties.number) ? properties.number : 0 },
+            (_, index) => ({
+              value: io.data.in(`key-${index}`, type),
+              exec: io.exec.out(`key-${index}`, { name: `Case ${index}` }),
+            }),
+          ),
         };
       },
-      run: ({ io }) =>
-        Effect.sync(() => {
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          if (!validCount(properties.number))
+            return yield* Effect.fail(new RangeError("Keys must be an integer between 0 and 1024"));
           io.output(io.input);
           return io.cases.find((item) => item.value === io.input)?.exec ?? io.fallback;
         }),
@@ -148,7 +158,11 @@ const LogicPlugin = Plugin.make({
         }),
         equal: io.data.out("equal", DataType.Bool),
       }),
-      run: ({ io }) => Effect.sync(() => io.equal(io.one === io.two)),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          io.equal(io.one === io.two);
+        }),
     });
     yield* context.schema.register({
       id: "MakeSome",
@@ -162,7 +176,11 @@ const LogicPlugin = Plugin.make({
         }),
         output: io.data.out("out", DataType.Option(scalar(properties.type))),
       }),
-      run: ({ io }) => Effect.sync(() => io.output(Option.some(io.input))),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          io.output(Option.some(io.input));
+        }),
     });
     yield* context.schema.register({
       id: "UnwrapOption",
@@ -176,10 +194,12 @@ const LogicPlugin = Plugin.make({
         }),
         output: io.data.out("output", scalar(properties.type)),
       }),
-      run: ({ io }) =>
-        Option.isSome(io.input)
-          ? Effect.sync(() => io.output(Option.getOrThrow(io.input)))
-          : Effect.fail(new Error("Cannot unwrap None")),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          if (Option.isNone(io.input)) return yield* Effect.fail(new Error("Cannot unwrap None"));
+          io.output(io.input.value);
+        }),
     });
     yield* context.schema.register({
       id: "UnwrapOptionOr",
@@ -196,7 +216,11 @@ const LogicPlugin = Plugin.make({
         }),
         output: io.data.out("output", scalar(properties.type)),
       }),
-      run: ({ io }) => Effect.sync(() => io.output(Option.getOrElse(io.input, () => io.fallback))),
+      run: ({ io, properties }) =>
+        Effect.gen(function* () {
+          yield* validateScalar(properties.type);
+          io.output(Option.getOrElse(io.input, () => io.fallback));
+        }),
     });
     for (const [id, name, predicate] of [
       ["IsOptionSome", "Is Option Some", Option.isSome],
@@ -214,7 +238,11 @@ const LogicPlugin = Plugin.make({
           }),
           output: io.data.out("output", DataType.Bool),
         }),
-        run: ({ io }) => Effect.sync(() => io.output(predicate(io.input))),
+        run: ({ io, properties }) =>
+          Effect.gen(function* () {
+            yield* validateScalar(properties.type);
+            io.output(predicate(io.input));
+          }),
       });
     }
     for (const id of ["Cache", "Copy"] as const) {
@@ -222,15 +250,28 @@ const LogicPlugin = Plugin.make({
         id,
         name: id,
         description:
-          "Captures a scalar input on execution for downstream reuse. Scalars are immutable; lists and composite values are not supported by this node.",
-        properties: typed,
-        io: (io, properties) => ({
-          input: io.data.in("in", scalar(properties.type), {
-            defaultValue: scalarDefault(scalar(properties.type)),
+          id === "Copy"
+            ? "Captures a scalar or shallow-copies a typed scalar list on execution. Enable List to copy a list without modifying the input."
+            : "Captures a scalar or typed scalar list on execution for downstream reuse. Enable List for list pins; the captured value is not cloned.",
+        properties: {
+          ...typed,
+          list: { name: "List", type: DataType.Bool, defaultValue: false },
+        },
+        io: (io, properties) => {
+          const element = scalar(properties.type);
+          const type = properties.list ? DataType.List(element) : element;
+          return {
+            input: io.data.in("in", type, {
+              defaultValue: properties.list ? [] : scalarDefault(element),
+            }),
+            output: io.data.out("out", type),
+          };
+        },
+        run: ({ io, properties }) =>
+          Effect.gen(function* () {
+            yield* validateScalar(properties.type);
+            io.output(id === "Copy" && Array.isArray(io.input) ? [...io.input] : io.input);
           }),
-          output: io.data.out("out", scalar(properties.type)),
-        }),
-        run: ({ io }) => Effect.sync(() => io.output(io.input)),
       });
     }
   }),

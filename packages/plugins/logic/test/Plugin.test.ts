@@ -118,7 +118,17 @@ describe("Logic plugin", () => {
         assert.strictEqual(io.dataOutputs[0]?.type._tag, type);
       }
       assert.strictEqual(conditional.dataOutputs[0]?.type._tag, "String");
-      assert.throws(() => conditional.generateIO({ type: "Any" }), TypeError);
+      for (const item of registered.filter((item) =>
+        item.properties.some((property) => property.id === "type"),
+      )) {
+        assert.deepStrictEqual(
+          item.generateIO({ type: "Any" }),
+          item.generateIO({ type: "String" }),
+        );
+        const result = yield* Effect.result(run(item, {}, { type: "Any" }));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, TypeError);
+      }
     }),
   );
   it.effect("implements all boolean truth tables and branches", () =>
@@ -201,8 +211,17 @@ describe("Logic plugin", () => {
       const fallback = yield* run(switchNode, { switchOn: "value" }, { number: 0 });
       assert.strictEqual(fallback.selected?.id, "exec");
       assert.strictEqual(fallback.outputs.get("switchOut"), "value");
-      for (const number of [-1, 1.5, 1025, Infinity])
-        assert.throws(() => switchNode.generateIO({ number }), RangeError);
+      for (const number of [-1, 1.5, 1025, Infinity, NaN]) {
+        const io = switchNode.generateIO({ number });
+        assert.lengthOf(io.dataInputs, 1);
+        assert.deepStrictEqual(
+          io.executionOutputs.map((ref) => ref.id),
+          ["exec"],
+        );
+        const result = yield* Effect.result(run(switchNode, { switchOn: "value" }, { number }));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+      }
     }),
   );
   it.effect("handles Some and None without losing false, zero, or empty strings", () =>
@@ -252,6 +271,34 @@ describe("Logic plugin", () => {
           yield* Effect.result(run(schema(registered, "UnwrapOption"), { input: Option.none() })),
         ),
       );
+    }),
+  );
+  it.effect("captures and shallow-copies typed lists without changing scalar defaults", () =>
+    Effect.gen(function* () {
+      const registered = yield* schemas;
+      for (const [type, values] of [
+        ["String", ["", "value"]],
+        ["Int", [0, -1]],
+        ["Float", [0, 1.5]],
+        ["Bool", [false, true]],
+      ] as const) {
+        const list = Object.freeze([...values]);
+        for (const id of ["Cache", "Copy"]) {
+          const item = schema(registered, id);
+          const properties = { type, list: true };
+          const io = item.generateIO(properties);
+          assert.deepStrictEqual(io.dataInputs[0]?.type, DataType.List({ _tag: type }));
+          assert.deepStrictEqual(io.dataOutputs[0]?.type, io.dataInputs[0]?.type);
+          assert.deepStrictEqual(io.dataInputs[0]?.defaultValue, []);
+          assert.strictEqual(item.generateIO({ type }).dataInputs[0]?.type._tag, type);
+          const output = (yield* run(item, { in: list }, properties)).outputs.get("out");
+          assert.deepStrictEqual(output, list);
+          if (id === "Copy") assert.notStrictEqual(output, list);
+          else assert.strictEqual(output, list);
+          assert.deepStrictEqual((yield* run(item, {}, properties)).outputs.get("out"), []);
+        }
+        assert.deepStrictEqual(list, values);
+      }
     }),
   );
   it.effect("waits on the Effect clock and rejects invalid timer boundaries", () =>

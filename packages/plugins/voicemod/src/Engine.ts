@@ -14,9 +14,8 @@ import * as Protocol from "./Protocol.ts";
 
 const Registration = Schema.Struct({ status: Schema.Struct({ code: Schema.Number }) });
 
-export const layer = Layer.effect(VoicemodEngine)(
+export const layer = VoicemodEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* VoicemodEngine.EngineContext;
     let config = yield* mg.storage.get;
     const parentScope = yield* Effect.scope;
     const socketContext = yield* Effect.context<Socket.WebSocketConstructor>();

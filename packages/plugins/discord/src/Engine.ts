@@ -30,9 +30,8 @@ const decode =
       Effect.mapError(() => new DiscordFailure({ reason: "invalid-response" })),
     );
 
-export const layer = Layer.effect(DiscordEngine)(
+export const layer = DiscordEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* DiscordEngine.EngineContext;
     const http = yield* Http;
     const gateway = yield* Gateway;
     const lock = yield* Semaphore.make(1);
@@ -187,15 +186,14 @@ export const layer = Layer.effect(DiscordEngine)(
             yield* validateMessage(content);
             if (username.length > 80 || avatarUrl.length > 2048)
               return yield* new DiscordFailure({ reason: "invalid-message" });
-            if (avatarUrl)
-              yield* Effect.try({
-                try: () => {
-                  const avatar = new URL(avatarUrl);
-                  if (avatar.protocol !== "https:" || avatar.username || avatar.password)
-                    throw new Error("Invalid avatar");
-                },
+            if (avatarUrl) {
+              const avatar = yield* Effect.try({
+                try: () => new URL(avatarUrl),
                 catch: () => new DiscordFailure({ reason: "invalid-message" }),
               });
+              if (avatar.protocol !== "https:" || avatar.username || avatar.password)
+                return yield* new DiscordFailure({ reason: "invalid-message" });
+            }
             const response = yield* http
               .request(url, {
                 method: "POST",

@@ -1,9 +1,11 @@
-import { DataType } from "@macrograph/plugin/DataType";
 import type * as Engine from "@macrograph/plugin/Engine";
 import type * as Registration from "@macrograph/plugin/Registration";
+
+import { DataType } from "@macrograph/plugin/DataType";
 import { Effect } from "effect";
 
 import { OBSEngine, OBSSocket } from "./Definition.ts";
+import { canvasRequests, highVolumeSubscriptions } from "./Protocol.ts";
 
 type Context = Registration.PluginContext<typeof OBSEngine>;
 
@@ -24,6 +26,7 @@ type Field = {
 };
 type Request = {
   readonly id: string;
+  readonly requestType?: string;
   readonly name?: string;
   readonly inputs?: ReadonlyArray<Field>;
   readonly outputs?: ReadonlyArray<Field>;
@@ -115,6 +118,20 @@ const event = (id: string, ...outputs: ReadonlyArray<Field>): Event => ({
 });
 
 export const events: ReadonlyArray<Event> = [
+  event("ConnectionOpened"),
+  event("CanvasCreated", s("canvasName"), s("canvasUuid")),
+  event("CanvasRemoved", s("canvasName"), s("canvasUuid")),
+  event("CanvasNameChanged", s("canvasUuid"), s("oldCanvasName"), s("canvasName")),
+  event("InputActiveStateChanged", s("inputName"), s("inputUuid"), b("videoActive")),
+  event("InputShowStateChanged", s("inputName"), s("inputUuid"), b("videoShowing")),
+  event("InputVolumeMeters", j("inputs", "Inputs (JSON)")),
+  event(
+    "SceneItemTransformChanged",
+    s("sceneName"),
+    s("sceneUuid"),
+    i("sceneItemId"),
+    j("sceneItemTransform", "Scene Item Transform (JSON)"),
+  ),
   event(
     "CurrentProgramSceneChanged",
     s("sceneName", "Scene Name"),
@@ -297,7 +314,17 @@ const request = (
   name?: string,
 ): Request => ({
   id,
-  inputs,
+  inputs: canvasRequests.has(id)
+    ? [
+        ...inputs,
+        optional(
+          s("canvasUuid", "Canvas UUID (Optional)", [
+            { requestType: "GetCanvasList", list: "canvases", name: "canvasUuid" },
+          ]),
+          "",
+        ),
+      ]
+    : inputs,
   outputs,
   ...(name === undefined ? {} : { name }),
 });
@@ -334,6 +361,11 @@ const imageFormat = s("imageFormat", undefined, [
 const output = s("outputName", "Output Name");
 
 export const requests: ReadonlyArray<Request> = [
+  request("GetCanvasList", [], [j("canvases", "Canvases (JSON)")]),
+  {
+    ...request("SetInputVolumeDb", [input, f("inputVolumeDb")], [], "Set Input Volume (dB)"),
+    requestType: "SetInputVolume",
+  },
   request("GetCurrentProgramScene", [], [s("sceneName"), s("sceneUuid")]),
   request("SetCurrentProgramScene", [scene]),
   request(
@@ -804,12 +836,19 @@ const dataInput = (
               (typeof dependency !== "string" || dependency.length === 0)
             )
               return [];
+            const canvasUuid = inputDefaults.canvasUuid;
+            const requestData = {
+              ...(request.dependency === undefined ? {} : { [request.dependency]: dependency }),
+              ...(canvasRequests.has(request.requestType) &&
+              typeof canvasUuid === "string" &&
+              canvasUuid !== ""
+                ? { canvasUuid }
+                : {}),
+            };
             const response = yield* engine.Call({
               address: properties.socket,
               requestType: request.requestType,
-              ...(request.dependency === undefined
-                ? {}
-                : { requestData: { [request.dependency]: dependency } }),
+              ...(Object.keys(requestData).length === 0 ? {} : { requestData }),
             });
             const values = record(response)[request.list];
             if (!Array.isArray(values)) continue;
@@ -869,12 +908,34 @@ const isScalarField = (
   field.kind !== "strings";
 
 export const ids = [
+  "RGBAHexToOBSColour",
   ...requests.map(({ id }) => id),
   ...events.map(({ id }) => id),
 ] as const;
 export const count = ids.length;
 
 export const register = Effect.fnUntraced(function* (context: Context) {
+  yield* context.schema.register({
+    id: "RGBAHexToOBSColour",
+    name: "RGBA Hex to OBS Colour",
+    description:
+      "Converts eight RGBA hex digits (optionally prefixed with #) to OBS's unsigned ABGR colour integer.",
+    type: "pure",
+    io: (io) => ({
+      input: io.data.in("input", DataType.String),
+      output: io.data.out("output", DataType.Int),
+    }),
+    run: ({ io }) =>
+      Effect.gen(function* () {
+        const input = io.input.replace(/^#/, "");
+        if (!/^[\da-f]{8}$/i.test(input))
+          return yield* Effect.fail(new Error("Expected eight RGBA hex digits"));
+        const bytes = [0, 2, 4, 6].map((offset) =>
+          Number.parseInt(input.slice(offset, offset + 2), 16),
+        );
+        io.output(bytes.reduce((colour, byte, index) => colour + byte * 2 ** (index * 8), 0));
+      }),
+  });
   for (const definition of requests) {
     const listOutputs = (definition.outputs ?? []).filter(isListField);
     if (listOutputs.length > 0) {
@@ -909,7 +970,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
             const values = record(
               yield* engine.Call({
                 address: properties.socket,
-                requestType: definition.id,
+                requestType: definition.requestType ?? definition.id,
                 ...(entries.length === 0
                   ? {}
                   : { requestData: Object.fromEntries(entries) }),
@@ -951,7 +1012,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           }
           const result = yield* engine.Call({
             address: properties.socket,
-            requestType: definition.id,
+            requestType: definition.requestType ?? definition.id,
             ...(entries.length === 0
               ? {}
               : { requestData: Object.fromEntries(entries) }),
@@ -971,7 +1032,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     yield* context.schema.register({
       id: definition.id,
       name: definition.name ?? words(definition.id),
-      description: `Runs when OBS emits ${words(definition.id)} for the selected socket.`,
+      description:
+        definition.id === "ConnectionOpened"
+          ? "Runs when the selected WebSocket opens, before OBS authentication and identification. OBS requests are not ready yet."
+          : `Runs when OBS emits ${words(definition.id)} for the selected socket.${Object.hasOwn(highVolumeSubscriptions, definition.id) ? " Requires explicit highVolumeEvents socket opt-in; older buffered high-volume events are dropped on overload." : ""}`,
       type: "event",
       properties: socketProperty,
       event: (value, { properties }) =>

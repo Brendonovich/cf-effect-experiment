@@ -1,5 +1,7 @@
-import { CloudCredentials, SessionStoreError } from "@macrograph/cloud-credentials";
 import type * as Engine from "@macrograph/plugin/Engine";
+import type { HttpClient } from "effect/unstable/http";
+
+import { CloudCredentials, SessionStoreError } from "@macrograph/cloud-credentials";
 import { Effect } from "effect";
 
 import type { StorageLike } from "./LocalStoragePersistence";
@@ -8,7 +10,6 @@ export const MACROGRAPH_AUTH_SESSION_KEY = "macrograph:local-browser:cloud-auth:
 
 export interface BrowserCredentialEnvironment {
   readonly storage: StorageLike;
-  readonly fetch: typeof globalThis.fetch;
   readonly baseUrl?: string;
   readonly now?: () => number;
 }
@@ -19,11 +20,14 @@ export interface BrowserCredentialProvider {
 
 export const makeBrowserCredentialProvider = (
   environment: BrowserCredentialEnvironment,
-): BrowserCredentialProvider => {
+): Effect.Effect<BrowserCredentialProvider, never, HttpClient.HttpClient> => {
   const store: CloudCredentials.SessionStore = {
     read: Effect.try({
       try: () => environment.storage.getItem(MACROGRAPH_AUTH_SESSION_KEY),
-      catch: () => new SessionStoreError({ reason: "Browser storage could not read MacroGraph authorization" }),
+      catch: () =>
+        new SessionStoreError({
+          reason: "Browser storage could not read MacroGraph authorization",
+        }),
     }),
     write: (value) =>
       Effect.try({
@@ -35,15 +39,15 @@ export const makeBrowserCredentialProvider = (
       }),
     clear: Effect.try({
       try: () => environment.storage.removeItem(MACROGRAPH_AUTH_SESSION_KEY),
-      catch: () => new SessionStoreError({ reason: "Browser storage could not remove MacroGraph authorization" }),
+      catch: () =>
+        new SessionStoreError({
+          reason: "Browser storage could not remove MacroGraph authorization",
+        }),
     }),
   };
-  return {
-    service: CloudCredentials.make({
-      store,
-      fetch: environment.fetch,
-      ...(environment.baseUrl === undefined ? {} : { baseUrl: environment.baseUrl }),
-      ...(environment.now === undefined ? {} : { now: environment.now }),
-    }).credentials,
-  };
+  return CloudCredentials.make({
+    store,
+    ...(environment.baseUrl === undefined ? {} : { baseUrl: environment.baseUrl }),
+    ...(environment.now === undefined ? {} : { now: environment.now }),
+  }).pipe(Effect.map((client) => ({ service: client.credentials })));
 };

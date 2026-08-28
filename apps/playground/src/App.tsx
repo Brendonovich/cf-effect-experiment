@@ -7,6 +7,8 @@ import {
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import { Effect } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
 
@@ -123,11 +125,13 @@ export function App() {
     (import.meta.env.DEV ? new URL("__macrograph_credentials", location.origin).href : undefined);
   const credentials = makeBrowserCredentialProvider({
     storage: localStorage,
-    fetch,
     ...(credentialBaseUrl === undefined ? {} : { baseUrl: credentialBaseUrl }),
   });
   const editor = createEditorController({
-    connection: makeLocalConnection(store, credentials),
+    connection: credentials.pipe(
+      Effect.flatMap((provider) => makeLocalConnection(store, provider)),
+      Effect.provide(FetchHttpClient.layer),
+    ),
     workspaceId: "local-browser",
     userId: localUserId(),
     settingsDescriptors: discoveredPluginSettings,

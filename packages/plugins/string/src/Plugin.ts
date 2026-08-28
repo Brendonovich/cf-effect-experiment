@@ -2,11 +2,13 @@ import { DataType } from "@macrograph/plugin/DataType";
 import * as Plugin from "@macrograph/plugin/Plugin";
 import { Effect, Option } from "effect";
 
-const radix = (base: number) => {
+const radix = Effect.fnUntraced(function* (base: number) {
   if (!Number.isInteger(base) || base < 2 || base > 36)
-    throw new RangeError("Base must be an integer between 2 and 36");
+    return yield* Effect.fail(new RangeError("Base must be an integer between 2 and 36"));
   return base;
-};
+});
+const validEntries = (number: number) =>
+  Number.isSafeInteger(number) && number >= 0 && number <= 1024;
 const decimal = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
 
 const StringPlugin = Plugin.make({
@@ -129,21 +131,17 @@ const StringPlugin = Plugin.make({
         "Concatenates 0 to 1024 strings. Entries explicitly controls the pin count instead of legacy connection-driven pins.",
       type: "pure",
       properties: { number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
-      io: (io, properties) => {
-        if (
-          !Number.isSafeInteger(properties.number) ||
-          properties.number < 0 ||
-          properties.number > 1024
-        )
-          throw new RangeError("Entries must be an integer between 0 and 1024");
-        return {
-          inputs: Array.from({ length: properties.number }, (_, index) =>
-            io.data.in(`value-${index}`, DataType.String, { defaultValue: "" }),
-          ),
-          output: io.data.out("output", DataType.String),
-        };
-      },
-      run: ({ io }) => Effect.sync(() => io.output(io.inputs.join(""))),
+      io: (io, properties) => ({
+        inputs: Array.from(
+          { length: validEntries(properties.number) ? properties.number : 0 },
+          (_, index) => io.data.in(`value-${index}`, DataType.String, { defaultValue: "" }),
+        ),
+        output: io.data.out("output", DataType.String),
+      }),
+      run: ({ io, properties }) =>
+        validEntries(properties.number)
+          ? Effect.sync(() => io.output(io.inputs.join("")))
+          : Effect.fail(new RangeError("Entries must be an integer between 0 and 1024")),
     });
     for (const [id, name, type] of [
       ["IntToString", "Int To String", DataType.Int],
@@ -176,12 +174,14 @@ const StringPlugin = Plugin.make({
         output: io.data.out("string", DataType.String),
       }),
       run: ({ io }) =>
-        Effect.try({
-          try: () => {
-            if (!Number.isSafeInteger(io.input)) throw new RangeError("Expected a safe integer");
-            io.output(io.input.toString(radix(io.base)));
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          if (!Number.isSafeInteger(io.input))
+            return yield* Effect.fail(new RangeError("Expected a safe integer"));
+          const base = yield* radix(io.base);
+          yield* Effect.try({
+            try: () => io.output(io.input.toString(base)),
+            catch: (error) => error,
+          });
         }),
     });
     for (const [id, name, type] of [
@@ -225,21 +225,23 @@ const StringPlugin = Plugin.make({
         output: io.data.out("int", DataType.Option(DataType.Int)),
       }),
       run: ({ io }) =>
-        Effect.try({
-          try: () => {
-            const base = radix(io.base);
-            const text = io.input.trim();
-            const digits = text.replace(/^[+-]/, "").toLowerCase();
-            const value = Number.parseInt(text, base);
-            const valid =
-              digits.length > 0 &&
-              [...digits].every((digit) => {
-                const index = "0123456789abcdefghijklmnopqrstuvwxyz".indexOf(digit);
-                return index >= 0 && index < base;
-              });
-            io.output(valid && Number.isSafeInteger(value) ? Option.some(value) : Option.none());
-          },
-          catch: (error) => error,
+        Effect.gen(function* () {
+          const base = yield* radix(io.base);
+          yield* Effect.try({
+            try: () => {
+              const text = io.input.trim();
+              const digits = text.replace(/^[+-]/, "").toLowerCase();
+              const value = Number.parseInt(text, base);
+              const valid =
+                digits.length > 0 &&
+                [...digits].every((digit) => {
+                  const index = "0123456789abcdefghijklmnopqrstuvwxyz".indexOf(digit);
+                  return index >= 0 && index < base;
+                });
+              io.output(valid && Number.isSafeInteger(value) ? Option.some(value) : Option.none());
+            },
+            catch: (error) => error,
+          });
         }),
     });
     yield* context.schema.register({

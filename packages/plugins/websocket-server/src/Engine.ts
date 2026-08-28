@@ -1,3 +1,4 @@
+import type { Engine } from "@macrograph/plugin";
 import {
 	Cause,
 	Deferred,
@@ -131,8 +132,10 @@ const failureReason = (cause: Cause.Cause<unknown>, fallback: string) => {
 		: fallback;
 };
 
-export const make = Effect.fnUntraced(function* (adapter: Adapter["Service"]) {
-	const mg = yield* WebSocketServerEngine.EngineContext;
+export const make = Effect.fnUntraced(function* (
+	mg: Engine.ContextOf<typeof WebSocketServerEngine>,
+	adapter: Adapter["Service"],
+) {
 	const engineScope = yield* Effect.scope;
 	const state = yield* SubscriptionRef.make<ReadonlyMap<ServerId, Entry>>(
 		new Map(),
@@ -733,8 +736,8 @@ export const make = Effect.fnUntraced(function* (adapter: Adapter["Service"]) {
 	});
 });
 
-export const layer = Layer.effect(WebSocketServerEngine)(
-	Effect.flatMap(Adapter, make),
+export const layer = WebSocketServerEngine.toLayer((mg) =>
+	Effect.flatMap(Adapter, (adapter) => make(mg, adapter)),
 );
 export const localLayer = (adapter: Layer.Layer<Adapter>) =>
 	layer.pipe(Layer.provide(adapter));

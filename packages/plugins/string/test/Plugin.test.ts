@@ -15,8 +15,8 @@ const run = (
   registered: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>> = {},
   properties: Readonly<Record<string, unknown>> = {},
+  outputs = new Map<string, unknown>(),
 ) => {
-  const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
@@ -71,8 +71,14 @@ describe("String plugin", () => {
       const create = schema(registered, "CreateString");
       assert.lengthOf(create.generateIO({ number: 0 }).dataInputs, 0);
       assert.lengthOf(create.generateIO({ number: 1024 }).dataInputs, 1024);
-      for (const number of [-1, 1.5, 1025, Infinity])
-        assert.throws(() => create.generateIO({ number }), RangeError);
+      for (const number of [-1, 1.5, 1025, Infinity]) {
+        assert.lengthOf(create.generateIO({ number }).dataInputs, 0);
+        const outputs = new Map<string, unknown>();
+        const result = yield* Effect.result(run(create, {}, { number }, outputs));
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+        assert.strictEqual(outputs.size, 0);
+      }
       assert.strictEqual(
         (yield* run(create, { "value-0": "a", "value-1": "b" }, { number: 2 })).get("output"),
         "ab",
@@ -211,16 +217,24 @@ describe("String plugin", () => {
             Option.none(),
           );
       for (const base of [0, 1, 37, 2.5]) {
-        assert.isTrue(
-          Result.isFailure(
-            yield* Effect.result(run(schema(registered, "IntToStringBase"), { int: 1, base })),
-          ),
+        for (const id of ["IntToStringBase", "StringToIntBase"]) {
+          const outputs = new Map<string, unknown>();
+          const result = yield* Effect.result(
+            run(schema(registered, id), { int: 1, string: "1", base }, {}, outputs),
+          );
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+          assert.strictEqual(outputs.size, 0);
+        }
+      }
+      for (const int of [1.5, Number.MAX_SAFE_INTEGER + 1, Infinity]) {
+        const outputs = new Map<string, unknown>();
+        const result = yield* Effect.result(
+          run(schema(registered, "IntToStringBase"), { int }, {}, outputs),
         );
-        assert.isTrue(
-          Result.isFailure(
-            yield* Effect.result(run(schema(registered, "StringToIntBase"), { string: "1", base })),
-          ),
-        );
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+        assert.strictEqual(outputs.size, 0);
       }
       assert.isTrue(
         Result.isFailure(

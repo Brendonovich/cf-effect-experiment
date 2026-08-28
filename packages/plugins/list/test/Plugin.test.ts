@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
 import { DataType } from "@macrograph/plugin/DataType";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Random, Result } from "effect";
 
 import ListPlugin from "../src/Plugin.ts";
 
@@ -102,7 +102,7 @@ describe("List plugin", () => {
       }),
   );
   it.effect(
-    "registers all seven legacy list schemas and three list utilities with concrete IO",
+    "registers all eight legacy list schemas and three list utilities with concrete IO",
     () =>
       Effect.gen(function* () {
         const registered = yield* schemas;
@@ -115,6 +115,7 @@ describe("List plugin", () => {
             "SetListValue",
             "RemoveListValue",
             "GetListValue",
+            "GetRandomListItem",
             "JoinStringList",
             "ListIncludes",
             "ListLength",
@@ -134,9 +135,21 @@ describe("List plugin", () => {
         const create = schema(registered, "ListCreate");
         assert.lengthOf(create.generateIO({ number: 0 }).dataInputs, 0);
         assert.lengthOf(create.generateIO({ number: 1024 }).dataInputs, 1024);
-        for (const number of [-1, 1.5, 1025, Infinity])
-          assert.throws(() => create.generateIO({ number }), RangeError);
-        assert.throws(() => create.generateIO({ type: "Any" }), TypeError);
+        for (const number of [-1, 1.5, 1025, Infinity, NaN]) {
+          assert.lengthOf(create.generateIO({ number }).dataInputs, 0);
+          const result = yield* Effect.result(run(create, {}, { number }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+        }
+        for (const item of registered.filter((item) => item.id !== "JoinStringList")) {
+          assert.deepStrictEqual(
+            item.generateIO({ type: "Any" }),
+            item.generateIO({ type: "String" }),
+          );
+          const result = yield* Effect.result(run(item, {}, { type: "Any" }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, TypeError);
+        }
       }),
   );
   it.effect("creates and edits immutable lists of every scalar type", () =>
@@ -209,6 +222,68 @@ describe("List plugin", () => {
       }
     }),
   );
+  it.effect("samples list items only on execution using injectable randomness", () =>
+    Effect.gen(function* () {
+      const random = schema(yield* schemas, "GetRandomListItem");
+      assert.strictEqual(random.type, "exec");
+      assert.deepStrictEqual(
+        random.executionInputs.map((ref) => ref.id),
+        ["exec"],
+      );
+      assert.deepStrictEqual(
+        random.executionOutputs.map((ref) => ref.id),
+        ["exec"],
+      );
+      let samples = 0;
+      const source = {
+        nextIntUnsafe: () => 0,
+        nextDoubleUnsafe: () => {
+          samples++;
+          return 0.5;
+        },
+      };
+      assert.deepStrictEqual(
+        (yield* run(random).pipe(Effect.provideService(Random.Random, source))).get("return"),
+        Option.none(),
+      );
+      assert.strictEqual(samples, 0);
+      for (const [type, values] of [
+        ["String", ["a", "", "c"]],
+        ["Int", [-1, 0, 1]],
+        ["Float", [-1.5, 0, 1.5]],
+        ["Bool", [true, false, true]],
+      ] as const) {
+        const list = Object.freeze([...values]);
+        assert.deepStrictEqual(
+          (yield* run(random, { list }, { type }).pipe(
+            Effect.provideService(Random.Random, source),
+          )).get("return"),
+          Option.some(values[1]),
+        );
+        assert.deepStrictEqual(list, values);
+        for (const [sample, index] of [
+          [0, 0],
+          [0.999999, 2],
+          [1, 2],
+        ] as const)
+          assert.deepStrictEqual(
+            (yield* run(random, { list }, { type }).pipe(
+              Effect.provideService(Random.Random, { ...source, nextDoubleUnsafe: () => sample }),
+            )).get("return"),
+            Option.some(values[index]),
+          );
+        assert.deepStrictEqual(
+          (yield* run(random, { list: [values[1]] }, { type })).get("return"),
+          Option.some(values[1]),
+        );
+      }
+      assert.strictEqual(samples, 4);
+      assert.deepStrictEqual(
+        yield* run(random, { list: ["a", "b", "c"] }).pipe(Random.withSeed("list")),
+        yield* run(random, { list: ["a", "b", "c"] }).pipe(Random.withSeed("list")),
+      );
+    }),
+  );
   it.effect("handles empty lists, invalid indices, and missing elements deliberately", () =>
     Effect.gen(function* () {
       const registered = yield* schemas;
@@ -246,9 +321,14 @@ describe("List plugin", () => {
         );
       }
       for (const id of ["GetListValue", "RemoveListValue"])
-        assert.isTrue(
-          Result.isFailure(yield* Effect.result(run(schema(registered, id), { list, index: 0.5 }))),
-        );
+        for (const index of [0.5, Infinity, NaN]) {
+          const result = yield* Effect.result(run(schema(registered, id), { list, index }));
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) {
+            assert.instanceOf(result.failure, RangeError);
+            assert.strictEqual(result.failure.message, "Index must be a safe integer");
+          }
+        }
       assert.deepStrictEqual(
         (yield* run(schema(registered, "GetListValue"), { list: [], index: 0 })).get("return"),
         Option.none(),

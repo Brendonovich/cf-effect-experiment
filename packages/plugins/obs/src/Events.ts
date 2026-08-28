@@ -2,6 +2,71 @@ import * as S from "effect/Schema";
 
 import { SocketAddress } from "./Types.ts";
 
+export class ConnectionOpened extends S.TaggedClass<ConnectionOpened>()("ConnectionOpened", {
+  address: SocketAddress,
+}) {}
+
+export class CanvasCreated extends S.TaggedClass<CanvasCreated>()("CanvasCreated", {
+  canvasName: S.String,
+  canvasUuid: S.String,
+  address: SocketAddress,
+}) {}
+
+export class CanvasRemoved extends S.TaggedClass<CanvasRemoved>()("CanvasRemoved", {
+  canvasName: S.String,
+  canvasUuid: S.String,
+  address: SocketAddress,
+}) {}
+
+export class CanvasNameChanged extends S.TaggedClass<CanvasNameChanged>()("CanvasNameChanged", {
+  canvasName: S.String,
+  oldCanvasName: S.String,
+  canvasUuid: S.String,
+  address: SocketAddress,
+}) {}
+
+export class InputActiveStateChanged extends S.TaggedClass<InputActiveStateChanged>()(
+  "InputActiveStateChanged",
+  {
+    inputName: S.String,
+    inputUuid: S.optional(S.String),
+    videoActive: S.Boolean,
+    address: SocketAddress,
+  },
+) {}
+
+export class InputShowStateChanged extends S.TaggedClass<InputShowStateChanged>()(
+  "InputShowStateChanged",
+  {
+    inputName: S.String,
+    inputUuid: S.optional(S.String),
+    videoShowing: S.Boolean,
+    address: SocketAddress,
+  },
+) {}
+
+export class InputVolumeMeters extends S.TaggedClass<InputVolumeMeters>()("InputVolumeMeters", {
+  inputs: S.Array(
+    S.Struct({
+      inputName: S.String,
+      inputUuid: S.optional(S.String),
+      inputLevelsMul: S.Array(S.Array(S.Number)),
+    }),
+  ),
+  address: SocketAddress,
+}) {}
+
+export class SceneItemTransformChanged extends S.TaggedClass<SceneItemTransformChanged>()(
+  "SceneItemTransformChanged",
+  {
+    sceneName: S.String,
+    sceneUuid: S.optional(S.String),
+    sceneItemId: S.Number,
+    sceneItemTransform: S.Record(S.String, S.Unknown),
+    address: SocketAddress,
+  },
+) {}
+
 // General events
 export class ExitStarted extends S.TaggedClass<ExitStarted>()("ExitStarted", {
   address: SocketAddress,
@@ -446,6 +511,14 @@ export class VendorEvent extends S.TaggedClass<VendorEvent>()("VendorEvent", {
 }) {}
 
 export const Any = S.Union([
+  ConnectionOpened,
+  CanvasCreated,
+  CanvasRemoved,
+  CanvasNameChanged,
+  InputActiveStateChanged,
+  InputShowStateChanged,
+  InputVolumeMeters,
+  SceneItemTransformChanged,
   ExitStarted,
   CustomEvent,
   CurrentSceneCollectionChanging,

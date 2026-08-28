@@ -5,16 +5,13 @@ import { Effect, Layer } from "effect";
 
 import { ClientRpcs, RuntimeRpcs, SpeakerBotConnection, SpeakerBotEngine } from "./Definition.ts";
 
-export const layer = Layer.effect(SpeakerBotEngine)(
+export const layer = SpeakerBotEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const context = yield* SpeakerBotEngine.EngineContext;
-    const base = yield* make().pipe(
-      Effect.provideService(WebSocket.WebSocketClientEngine.EngineContext, {
-        ...context,
-        resource: { refresh: () => context.resource.refresh(SpeakerBotConnection) },
-        emit: () => Effect.void,
-      }),
-    );
+    const base = yield* make({
+      ...mg,
+      resource: { refresh: () => mg.resource.refresh(SpeakerBotConnection) },
+      emit: () => Effect.void,
+    });
     const send = yield* WebSocket.RuntimeRpcs.accessHandler("WebSocketSendMessage").pipe(
       Effect.provide(base.rpcs),
     );

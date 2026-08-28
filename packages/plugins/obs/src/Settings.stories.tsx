@@ -7,6 +7,7 @@ import Settings, { type SettingsProps } from "./Settings";
 
 const rpc = {
   AddSocket: () => Effect.succeed(undefined),
+  UpdateSocket: () => Effect.succeed(undefined),
   RemoveSocket: () => Effect.succeed(undefined),
   ConnectSocket: () => Effect.succeed(undefined),
 } satisfies SettingsProps["rpc"];
@@ -38,6 +39,7 @@ export const Connected: Story = {
           name: "Streaming PC",
           address: SocketAddress.make("ws://localhost:4455"),
           connectOnStartup: true,
+          highVolumeEvents: ["InputVolumeMeters", "SceneItemTransformChanged"],
           state: "connected",
         },
       ],

@@ -1,14 +1,12 @@
-import {
-  Crypto,
-  Deferred,
-  Effect,
-  Fiber,
-  PubSub,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
+import { Cause, Crypto, Deferred, Effect, Fiber, PubSub, Schema, Scope, Stream } from "effect";
 import { Socket } from "effect/unstable/socket";
+
+import {
+  canvasRequests,
+  highVolumeSubscriptions,
+  supportsCanvases,
+  type HighVolumeEvent,
+} from "./Protocol.ts";
 
 export class ProtocolError extends Schema.TaggedError<ProtocolError>()(
   "ProtocolError",
@@ -91,16 +89,14 @@ export interface ObsEvent {
 }
 
 export type CallError = RequestError | ConnectionError;
-export type ConnectError =
-  | ProtocolError
-  | AuthenticationError
-  | ConnectionError;
+export type ConnectError = ProtocolError | AuthenticationError | ConnectionError;
 
 export interface Client {
   readonly call: (
     requestType: string,
     requestData?: Readonly<Record<string, unknown>>,
   ) => Effect.Effect<unknown, CallError>;
+  // The engine owns this single-consumer stream, subscribed before socket startup.
   readonly events: Stream.Stream<ObsEvent>;
   readonly disconnect: Effect.Effect<void>;
 }
@@ -132,6 +128,10 @@ const authenticate = Effect.fnUntraced(function* (
 export const make = Effect.fnUntraced(function* (
   address: string,
   password?: string,
+  options?: {
+    readonly highVolumeEvents?: ReadonlyArray<HighVolumeEvent>;
+    readonly onOpen?: Effect.Effect<void>;
+  },
 ): Effect.fn.Return<
   Client,
   ConnectError,
@@ -144,6 +144,12 @@ export const make = Effect.fnUntraced(function* (
   const write = yield* socket.writer;
   const identified = yield* Deferred.make<void, ConnectError>();
   const eventBus = yield* PubSub.unbounded<ObsEvent>();
+  // Never block socket reads (including request responses) on high-volume consumers.
+  const highVolumeBus = yield* PubSub.sliding<ObsEvent>(64);
+  // Subscribe before starting the reader so events cannot race engine installation.
+  const eventSubscription = yield* PubSub.subscribe(eventBus);
+  const highVolumeSubscription = yield* PubSub.subscribe(highVolumeBus);
+  const highVolumeEvents = new Set(options?.highVolumeEvents ?? []);
   const pending = new Map<
     string,
     {
@@ -156,6 +162,7 @@ export const make = Effect.fnUntraced(function* (
   );
   let requestSequence = 0;
   let helloReceived = false;
+  let canvasesSupported = false;
   let connected = true;
 
   const failConnection = (reason: string) =>
@@ -170,6 +177,7 @@ export const make = Effect.fnUntraced(function* (
       );
       pending.clear();
       yield* PubSub.shutdown(eventBus);
+      yield* PubSub.shutdown(highVolumeBus);
     });
 
   const handlePacket = (
@@ -186,7 +194,10 @@ export const make = Effect.fnUntraced(function* (
           );
         }
         helloReceived = true;
+        canvasesSupported = supportsCanvases(packet.d.obsWebSocketVersion);
         return Effect.gen(function* () {
+          if (packet.d.rpcVersion < 1)
+            return yield* new ProtocolError({ reason: "OBS does not support RPC version 1" });
           const authentication =
             packet.d.authentication === undefined
               ? undefined
@@ -203,20 +214,30 @@ export const make = Effect.fnUntraced(function* (
             JSON.stringify({
               op: 1,
               d: {
-                rpcVersion: packet.d.rpcVersion,
-                eventSubscriptions: 0x7fffffff,
+                rpcVersion: 1,
+                eventSubscriptions:
+                  0x7ff |
+                  (canvasesSupported ? 1 << 11 : 0) |
+                  [...highVolumeEvents].reduce(
+                    (mask, event) => mask | highVolumeSubscriptions[event],
+                    0,
+                  ),
                 ...(authentication === undefined ? {} : { authentication }),
               },
             }),
           );
         });
       case 2:
-        return helloReceived
+        return helloReceived && packet.d.negotiatedRpcVersion === 1
           ? Deferred.succeed(identified, undefined).pipe(Effect.asVoid)
-          : Effect.fail(
-              new ProtocolError({ reason: "Received Identified before Hello" }),
-            );
+          : Effect.fail(new ProtocolError({ reason: "Invalid OBS RPC identification" }));
       case 5:
+        if (packet.d.eventType === "ConnectionOpened") return Effect.void;
+        if (Object.hasOwn(highVolumeSubscriptions, packet.d.eventType)) {
+          if (![...highVolumeEvents].some((event) => event === packet.d.eventType))
+            return Effect.void;
+          return PubSub.publish(highVolumeBus, packet.d).pipe(Effect.asVoid);
+        }
         return PubSub.publish(eventBus, packet.d).pipe(Effect.asVoid);
       case 7: {
         const pendingRequest = pending.get(packet.d.requestId);
@@ -239,18 +260,20 @@ export const make = Effect.fnUntraced(function* (
   };
 
   const run = socket
-    .runRaw((input) =>
-      decodePacket(
-        typeof input === "string" ? input : new TextDecoder().decode(input),
-      ).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProtocolError({
-              reason: `Invalid OBS WebSocket message: ${cause.message}`,
-            }),
+    .runRaw(
+      (input) =>
+        decodePacket(
+          typeof input === "string" ? input : new TextDecoder().decode(input),
+        ).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProtocolError({
+                reason: `Invalid OBS WebSocket message: ${cause.message}`,
+              }),
+          ),
+          Effect.flatMap(handlePacket),
         ),
-        Effect.flatMap(handlePacket),
-      ),
+      { onOpen: options?.onOpen },
     )
     .pipe(
       Effect.mapError((error) =>
@@ -272,6 +295,36 @@ export const make = Effect.fnUntraced(function* (
           reason: "OBS WebSocket is disconnected",
         });
 
+      const canvasUuid = requestData?.canvasUuid;
+      if (
+        canvasUuid !== undefined &&
+        canvasUuid !== "" &&
+        (typeof canvasUuid !== "string" || !canvasRequests.has(requestType))
+      )
+        return yield* new RequestError({
+          requestType,
+          code: 402,
+          comment: "This request does not support the supplied canvasUuid",
+        });
+      if (
+        (requestType === "GetCanvasList" || (typeof canvasUuid === "string" && canvasUuid !== "")) &&
+        !canvasesSupported
+      )
+        return yield* new RequestError({
+          requestType,
+          code: 204,
+          comment: "Canvas requests require obs-websocket 5.7.0 or newer (stable)",
+        });
+      // Empty canvas pins mean the default canvas, including on older servers.
+      const data =
+        requestData === undefined
+          ? undefined
+          : Object.fromEntries(
+              Object.entries(requestData).filter(
+                ([key, value]) => key !== "canvasUuid" || (value !== "" && value !== undefined),
+              ),
+            );
+
       const requestId = `${requestPrefix}-${requestSequence++}`;
       const response = yield* Deferred.make<unknown, CallError>();
       pending.set(requestId, { requestType, response });
@@ -280,7 +333,7 @@ export const make = Effect.fnUntraced(function* (
         d: {
           requestType,
           requestId,
-          ...(requestData === undefined ? {} : { requestData }),
+          ...(data === undefined || Object.keys(data).length === 0 ? {} : { requestData: data }),
         },
       });
 
@@ -296,7 +349,12 @@ export const make = Effect.fnUntraced(function* (
 
   return {
     call,
-    events: Stream.fromPubSub(eventBus),
+    events: Stream.merge(
+      Stream.fromSubscription(eventSubscription),
+      Stream.fromEffectRepeat(
+        PubSub.take(highVolumeSubscription).pipe(Effect.onInterrupt(() => Cause.done())),
+      ),
+    ),
     disconnect: Fiber.interrupt(socketFiber),
   };
 });

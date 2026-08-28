@@ -2,7 +2,13 @@ import { Data, Option, Ref } from "effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as S from "effect/Schema";
-import { Headers, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
+import {
+  Headers,
+  HttpClient,
+  HttpClientError,
+  HttpClientRequest,
+  HttpClientResponse,
+} from "effect/unstable/http";
 import {
   HttpApi,
   HttpApiClient,
@@ -85,7 +91,7 @@ export namespace Api {
             S.Struct({
               message_id: S.String,
               is_sent: S.Boolean,
-              drop_reason: S.optional(S.Struct({ code: S.String, message: S.String })),
+              drop_reason: S.optional(S.NullOr(S.Struct({ code: S.String, message: S.String }))),
             }),
           ),
         }),
@@ -103,7 +109,9 @@ export namespace Api {
         payload: S.Struct({
           emote_mode: S.optional(S.Boolean),
           follower_mode: S.optional(S.Boolean),
+          follower_mode_duration: S.optional(S.Int),
           slow_mode: S.optional(S.Boolean),
+          slow_mode_wait_time: S.optional(S.Int),
           subscriber_mode: S.optional(S.Boolean),
         }),
         success: S.Struct({ data: S.Array(ChatSettings) }),
@@ -343,29 +351,65 @@ export const makeClient = (
     const httpClient = yield* HttpClient.HttpClient;
     const tokenRef = yield* Ref.make(token);
 
-    return yield* HttpApiClient.makeWith(Api.HelixApi, {
-      baseUrl: "https://api.twitch.tv/helix",
-      httpClient: httpClient.pipe(
-        HttpClient.mapRequest((req) => ({
-          ...req,
-          headers: Headers.fromInput({
-            Authorization: pipe(req.headers, Headers.get("authorization"), Option.getOrUndefined),
-            "Client-Id": clientId,
-            "Content-Type": "application/json",
-          }),
-        })),
-        HttpClient.mapRequest((request) =>
-          HttpClientRequest.bearerToken(request, Ref.getUnsafe(tokenRef)),
+    const authenticated = httpClient.pipe(
+      HttpClient.mapRequest((req) => ({
+        ...req,
+        headers: Headers.fromInput(
+          req.url === "https://id.twitch.tv/oauth2/validate"
+            ? {}
+            : {
+                Authorization: pipe(
+                  req.headers,
+                  Headers.get("authorization"),
+                  Option.getOrUndefined,
+                ),
+                "Client-Id": clientId,
+                "Content-Type": "application/json",
+              },
         ),
-        refreshCredentialsRetry(
-          refreshCredential.pipe(Effect.flatMap((newToken) => Ref.set(tokenRef, newToken))),
-        ),
-        // Twitch's CORS policy rejects Effect's b3 and traceparent headers.
-        HttpClient.transformResponse(
-          Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-        ),
+      })),
+      HttpClient.mapRequest((request) =>
+        HttpClientRequest.bearerToken(request, Ref.getUnsafe(tokenRef)),
       ),
+      refreshCredentialsRetry(
+        refreshCredential.pipe(Effect.flatMap((newToken) => Ref.set(tokenRef, newToken))),
+      ),
+      // Twitch's CORS policy rejects Effect's b3 and traceparent headers.
+      HttpClient.transformResponse(
+        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+      ),
+    );
+    const api = yield* HttpApiClient.makeWith(Api.HelixApi, {
+      baseUrl: "https://api.twitch.tv/helix",
+      httpClient: authenticated,
     });
+    return {
+      ...api,
+      request: (
+        method: "GET" | "POST" | "PATCH" | "DELETE",
+        path: string,
+        query: Readonly<Record<string, string>>,
+        body?: S.Json,
+      ) => {
+        // Only the fixed OAuth validation URL may leave the Helix origin.
+        const url =
+          path === "https://id.twitch.tv/oauth2/validate"
+            ? path
+            : `https://api.twitch.tv/helix${path}`;
+        const request = HttpClientRequest.make(method)(url).pipe(
+          HttpClientRequest.setUrlParams(query),
+        );
+        return authenticated
+          .execute(body === undefined ? request : HttpClientRequest.bodyJsonUnsafe(request, body))
+          .pipe(
+            Effect.flatMap((response) =>
+              response.status === 204
+                ? Effect.succeed(null)
+                : HttpClientResponse.schemaBodyJson(S.Json)(response),
+            ),
+          );
+      },
+    };
   });
 
 export * as Helix from "./Helix.ts";

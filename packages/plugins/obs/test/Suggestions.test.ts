@@ -24,6 +24,61 @@ type Call = {
 };
 
 describe("OBS suggestions", () => {
+  it.effect(
+    "suggests canvas UUIDs and scopes scene/source lookups without sending empty canvas fields",
+    () =>
+      Effect.gen(function* () {
+        const address = SocketAddress.make("ws://localhost:4455");
+        for (const [schemaId, inputId, requestTypes] of [
+          ["CreateScene", "canvasUuid", ["GetCanvasList"]],
+          ["RemoveScene", "sceneName", ["GetSceneList"]],
+          ["GetSceneItemId", "sourceName", ["GetSceneItemList"]],
+          ["GetSourceFilter", "filterName", ["GetSourceFilterList"]],
+          ["CreateSceneItem", "sourceName", ["GetSceneList", "GetInputList"]],
+        ] as const) {
+          const suggest = yield* resolver(schemaId, inputId);
+          for (const canvasUuid of [undefined, "", "portrait"]) {
+            const calls: Array<Call> = [];
+            const values = yield* suggest({
+              properties: { socket: address },
+              inputDefaults: {
+                sceneName: "Scene",
+                sourceName: "Source",
+                ...(canvasUuid === undefined ? {} : { canvasUuid }),
+              },
+              engine: {
+                Call: (payload: Call) =>
+                  Effect.sync(() => {
+                    calls.push(payload);
+                    return {
+                      canvases: [{ canvasName: "Portrait", canvasUuid: "portrait" }],
+                      scenes: [{ sceneName: "Scene" }],
+                      sceneItems: [{ sourceName: "Source" }],
+                      filters: [{ filterName: "Filter" }],
+                      inputs: [{ inputName: "Input" }],
+                    };
+                  }),
+              },
+            });
+            if (inputId === "canvasUuid") assert.deepStrictEqual(values, ["portrait"]);
+            assert.deepStrictEqual(
+              calls.map(({ requestType }) => requestType),
+              [...requestTypes],
+            );
+            for (const call of calls)
+              assert.strictEqual(
+                call.requestData?.canvasUuid,
+                canvasUuid === "portrait" &&
+                  call.requestType !== "GetCanvasList" &&
+                  call.requestType !== "GetInputList"
+                  ? canvasUuid
+                  : undefined,
+              );
+          }
+        }
+      }),
+  );
+
   it.effect("resolves each list family through the selected socket", () =>
     Effect.gen(function* () {
       const responses: Readonly<Record<string, unknown>> = {

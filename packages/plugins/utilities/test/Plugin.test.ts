@@ -20,8 +20,8 @@ const run = (
   inputs: Readonly<Record<string, unknown>> = {},
   properties: Readonly<Record<string, unknown>> = {},
   event?: TickEvent,
+  outputs = new Map<string, unknown>(),
 ) => {
-  const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => inputs[ref.id] ?? ref.defaultValue,
@@ -47,12 +47,12 @@ const run = (
 };
 
 describe("Utilities plugin", () => {
-  it.effect("registers six complete schemas", () =>
+  it.effect("registers seven complete schemas", () =>
     Effect.gen(function* () {
       const registered = yield* schemas;
       assert.deepStrictEqual(
         registered.map((item) => item.id),
-        ["Print", "ConcatStrings", "IntToString", "Branch", "FormatString", "Tick"],
+        ["Print", "ConcatStrings", "IntToString", "Branch", "FormatString", "FormatTime", "Tick"],
       );
       assert.isTrue(registered.every((item) => item.description !== undefined));
 
@@ -67,16 +67,24 @@ describe("Utilities plugin", () => {
         })),
         [{ id: "in", name: "Input", type: "String", defaultValue: "" }],
       );
-      assert.deepStrictEqual(print.executionInputs.map((input) => input.id), ["exec"]);
-      assert.deepStrictEqual(print.executionOutputs.map((output) => output.id), ["exec"]);
+      assert.deepStrictEqual(
+        print.executionInputs.map((input) => input.id),
+        ["exec"],
+      );
+      assert.deepStrictEqual(
+        print.executionOutputs.map((output) => output.id),
+        ["exec"],
+      );
 
       const branch = schema(registered, "Branch");
-      assert.deepStrictEqual(branch.executionInputs.map((input) => input.id), ["exec"]);
-      assert.deepStrictEqual(branch.executionOutputs.map((output) => output.id), [
-        "exec",
-        "trueOut",
-        "falseOut",
-      ]);
+      assert.deepStrictEqual(
+        branch.executionInputs.map((input) => input.id),
+        ["exec"],
+      );
+      assert.deepStrictEqual(
+        branch.executionOutputs.map((output) => output.id),
+        ["exec", "trueOut", "falseOut"],
+      );
 
       const tick = schema(registered, "Tick");
       assert.deepStrictEqual(
@@ -127,6 +135,82 @@ describe("Utilities plugin", () => {
       });
       assert.strictEqual(result.outputs.get("result"), "macrograph");
       assert.strictEqual((yield* run(concat)).outputs.get("result"), "");
+    }),
+  );
+  it.effect("Print supports legacy console severity without adding a duplicate node", () =>
+    Effect.gen(function* () {
+      const print = schema(yield* schemas, "Print");
+      const levels: Array<string> = [];
+      const logger = Logger.make<unknown, void>((options) => {
+        levels.push(options.logLevel);
+      });
+      for (const type of ["log", "warn", "error"])
+        yield* run(print, { in: "message" }, { type }).pipe(Effect.provide(Logger.layer([logger])));
+      assert.deepStrictEqual(levels, ["Info", "Warn", "Error"]);
+      assert.isTrue(Result.isFailure(yield* Effect.result(run(print, {}, { type: "invalid" }))));
+    }),
+  );
+  it.effect("Format Time formats UTC dates and millisecond durations deterministically", () =>
+    Effect.gen(function* () {
+      const format = schema(yield* schemas, "FormatTime");
+      assert.strictEqual(format.type, "pure");
+      assert.lengthOf(format.executionInputs, 0);
+      assert.lengthOf(format.executionOutputs, 0);
+      assert.strictEqual((yield* run(format)).outputs.get("timeOut"), "1970-01-01T00:00:00Z");
+      for (const [timeIn, string, expected] of [
+        [0, "YYYY-MM-DD HH:mm:ss Z", "1970-01-01 00:00:00 +00:00"],
+        [-1, "YYYY-MM-DD HH:mm:ss.SSS", "1969-12-31 23:59:59.999"],
+        [1709210096789, "YYYY-MM-DD HH:mm:ss.SSS", "2024-02-29 12:34:56.789"],
+        [0, "[Today:] dddd, MMMM D", "Today: Thursday, January 1"],
+      ] as const)
+        assert.strictEqual(
+          (yield* run(format, { timeIn }, { string })).outputs.get("timeOut"),
+          expected,
+        );
+      for (const [timeIn, string, expected] of [
+        [0, "HH:mm:ss", "00:00:00"],
+        [3723456, "HH:mm:ss.SSS", "01:02:03.456"],
+        [90061000, "DD [days] HH:mm:ss", "01 days 01:01:01"],
+        [-1000, "s [seconds]", "-1 seconds"],
+      ] as const)
+        assert.strictEqual(
+          (yield* run(format, { timeIn }, { string, duration: true })).outputs.get("timeOut"),
+          expected,
+        );
+      for (const duration of [false, true])
+        for (const timeIn of [NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+          const outputs = new Map<string, unknown>();
+          const result = yield* Effect.result(
+            run(format, { timeIn }, { duration }, undefined, outputs),
+          );
+          assert.isTrue(Result.isFailure(result));
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+          assert.strictEqual(outputs.size, 0);
+        }
+      const outputs = new Map<string, unknown>();
+      const result = yield* Effect.result(
+        run(format, { timeIn: 8640000000000001 }, {}, undefined, outputs),
+      );
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError);
+      assert.strictEqual(outputs.size, 0);
+      for (const duration of [false, true]) {
+        const outputs = new Map<string, unknown>();
+        const result = yield* Effect.result(
+          run(format, {}, { string: 123, duration }, undefined, outputs),
+        );
+        assert.isTrue(Result.isFailure(result));
+        if (Result.isFailure(result)) assert.instanceOf(result.failure, TypeError);
+        assert.strictEqual(outputs.size, 0);
+      }
+      assert.strictEqual(
+        typeof (yield* run(
+          format,
+          { timeIn: Number.MAX_SAFE_INTEGER },
+          { duration: true },
+        )).outputs.get("timeOut"),
+        "string",
+      );
     }),
   );
 

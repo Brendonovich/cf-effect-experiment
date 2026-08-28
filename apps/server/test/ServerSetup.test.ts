@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CloudCredentials, SESSION_LIFETIME_MS } from "@macrograph/cloud-credentials";
 import { Deferred, Effect, Exit, Fiber } from "effect";
-import { Headers } from "effect/unstable/http";
+import { Headers, HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { type AtomicFileStore, AtomicFileStoreError } from "../src/AtomicFileStore.ts";
 import { ClientSessions } from "../src/ClientSessions.ts";
@@ -33,36 +33,33 @@ const makeHarness = (
   const sessionStore = memoryStore();
   const requests: string[] = [];
   let approved = false;
-  const cloud = CloudCredentials.make({
-    store: legacyAuthStore,
-    now: options.now ?? (() => 0),
-    fetch: async (input, init) => {
-      const url = new URL(String(input));
-      const request = `${init?.method ?? "GET"} ${url.pathname}`;
+  const http = HttpClient.make((outgoing, url) =>
+    Effect.sync(() => {
+      const request = `${outgoing.method} ${url.pathname}`;
+      const json = (value: unknown, status = 200) =>
+        HttpClientResponse.fromWeb(outgoing, Response.json(value, { status }));
       requests.push(request);
       switch (request) {
         case "POST /api/server/registration/start":
-          return Response.json({
+          return json({
             id: "registration-id",
             userCode: "CODE",
             verification_uri: "https://www.macrograph.app/register",
             verification_uri_complete: "https://www.macrograph.app/register?code=CODE",
           });
         case "POST /api/server/registration":
-          assert.deepStrictEqual(JSON.parse(String(init?.body)), { id: "registration-id" });
+          assert.strictEqual(outgoing.body._tag, "Uint8Array");
+          if (outgoing.body._tag === "Uint8Array")
+            assert.deepStrictEqual(JSON.parse(new TextDecoder().decode(outgoing.body.body)), {
+              id: "registration-id",
+            });
           return approved
-            ? Response.json({ token: "cloud-token" })
-            : Response.json(
-                { _tag: "ServerRegistrationError", code: "authorization_pending" },
-                { status: 400 },
-              );
+            ? json({ token: "cloud-token" })
+            : json({ _tag: "ServerRegistrationError", code: "authorization_pending" }, 400);
         case "GET /api/server/registration":
         case "GET /api/user":
-          assert.strictEqual(
-            new globalThis.Headers(init?.headers).get("authorization"),
-            "Bearer cloud-token",
-          );
-          return Response.json(
+          assert.strictEqual(outgoing.headers.authorization, "Bearer cloud-token");
+          return json(
             request.endsWith("/user")
               ? { id: "owner", email: "owner@example.com" }
               : { ownerId: "owner" },
@@ -70,8 +67,14 @@ const makeHarness = (
         default:
           throw new Error(`Unexpected cloud request: ${request}`);
       }
-    },
-  });
+    }),
+  );
+  const cloud = Effect.runSync(
+    CloudCredentials.make({
+      store: legacyAuthStore,
+      now: options.now ?? (() => 0),
+    }).pipe(Effect.provideService(HttpClient.HttpClient, http)),
+  );
   const sessions = ClientSessions.make(sessionStore);
   const setup = ServerSetup.make({ store, legacyAuthStore, auth: cloud.auth, sessions });
   return {
@@ -79,6 +82,7 @@ const makeHarness = (
     legacyAuthStore,
     sessionStore,
     cloud,
+    http,
     sessions,
     setup,
     requests,
@@ -136,8 +140,17 @@ describe("ServerSetup", () => {
     "claims a pending cloud registration, persists the owner, and authenticates a durable local session",
     () =>
       Effect.gen(function* () {
-        const { setup, sessions, cloud, store, legacyAuthStore, sessionStore, approve, requests } =
-          makeHarness();
+        const {
+          setup,
+          sessions,
+          cloud,
+          http,
+          store,
+          legacyAuthStore,
+          sessionStore,
+          approve,
+          requests,
+        } = makeHarness();
         const key = (yield* setup.setupKey)!;
         const pending = yield* setup.start(key);
         assert.deepStrictEqual(pending, {
@@ -174,7 +187,9 @@ describe("ServerSetup", () => {
           store,
           legacyAuthStore,
           sessions: restartedSessions,
-          auth: CloudCredentials.make({ store: legacyAuthStore }).auth,
+          auth: (yield* CloudCredentials.make({ store: legacyAuthStore }).pipe(
+            Effect.provideService(HttpClient.HttpClient, http),
+          )).auth,
         });
         assert.strictEqual(yield* restarted.ownerId, "owner");
         assert.isUndefined(yield* restarted.setupKey);

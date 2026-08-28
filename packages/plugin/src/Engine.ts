@@ -42,6 +42,18 @@ export type InstanceOf<Definition extends AnyDef> =
     ? Instance<Resource, Rpcs, ClientState, ClientRpcs>
     : never;
 
+export type ContextOf<Definition extends AnyDef> =
+  Definition extends Def<
+    infer Resource,
+    infer Event,
+    infer Storage,
+    infer _Rpcs,
+    infer _ClientState,
+    infer _ClientRpcs
+  >
+    ? ToLayerCtx<Resource, Event, Storage>
+    : never;
+
 export type ImplementationLayer<Definition extends AnyDef> = Layer.Layer<
   InstanceOf<Definition>,
   any,

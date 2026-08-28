@@ -39,21 +39,23 @@ import { StaticRoutes } from "./StaticRoutes.ts";
 const config = ServerConfig.makeServerConfig(process.env);
 mkdirSync(config.dataDirectory, { recursive: true });
 const authFile = makeAtomicFileStore(config.cloudAuthPath);
-const cloudCredentials = CloudCredentials.make({
-  baseUrl: config.cloudBaseUrl,
-  store: {
-    read: authFile.read.pipe(
-      Effect.mapError((error) => new SessionStoreError({ reason: error.reason })),
-    ),
-    write: (value) =>
-      authFile
-        .write(value)
-        .pipe(Effect.mapError((error) => new SessionStoreError({ reason: error.reason }))),
-    clear: authFile.clear.pipe(
-      Effect.mapError((error) => new SessionStoreError({ reason: error.reason })),
-    ),
-  },
-});
+const cloudCredentials = Effect.runSync(
+  CloudCredentials.make({
+    baseUrl: config.cloudBaseUrl,
+    store: {
+      read: authFile.read.pipe(
+        Effect.mapError((error) => new SessionStoreError({ reason: error.reason })),
+      ),
+      write: (value) =>
+        authFile
+          .write(value)
+          .pipe(Effect.mapError((error) => new SessionStoreError({ reason: error.reason }))),
+      clear: authFile.clear.pipe(
+        Effect.mapError((error) => new SessionStoreError({ reason: error.reason })),
+      ),
+    },
+  }).pipe(Effect.provide(FetchHttpClient.layer)),
+);
 const clientSessions = ClientSessions.make(makeAtomicFileStore(config.clientAuthPath));
 const setup = ServerSetup.make({
   store: makeAtomicFileStore(config.ownerPath),

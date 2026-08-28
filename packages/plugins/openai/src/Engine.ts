@@ -23,9 +23,8 @@ const ImageResponse = Schema.Struct({
   ),
 });
 
-export const layer = Layer.effect(OpenAIEngine)(
+export const layer = OpenAIEngine.toLayer((mg) =>
   Effect.gen(function* () {
-    const mg = yield* OpenAIEngine.EngineContext;
     const client = HttpClient.withScope(yield* HttpClient.HttpClient);
 
     const requestJson = Effect.fnUntraced(

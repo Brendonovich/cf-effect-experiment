@@ -15,8 +15,8 @@ const schema = (registered: ReadonlyArray<Registration.RegisteredSchema>, id: st
 const run = (
   registered: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>> = {},
+  outputs = new Map<string, unknown>(),
 ) => {
-  const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
@@ -157,17 +157,21 @@ describe("Math plugin", () => {
           ["Sin", { input: Infinity }],
           ["MakeInt", { input: 1.5 }],
           ["MakeFloat", { input: NaN }],
+          ["CompareInt", { number: 1, compare: 1.5 }],
+          ["CompareFloat", { number: 1, compare: Infinity }],
           ["RoundFloat", { input: 1, decimal: 309 }],
           ["RoundFloat", { input: 1, decimal: 0.5 }],
           ["RandomIntegerInRange", { min: 2, max: 1 }],
           ["RandomIntegerInRange", { min: 0.5, max: 1 }],
           ["RandomIntegerInRange", { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }],
           ["RandomFloatInRange", { min: -Number.MAX_VALUE, max: Number.MAX_VALUE }],
-        ] as const)
-          assert.isTrue(
-            Result.isFailure(yield* Effect.result(run(schema(registered, id), inputs))),
-            id,
-          );
+        ] as const) {
+          const outputs = new Map<string, unknown>();
+          const result = yield* Effect.result(run(schema(registered, id), inputs, outputs));
+          assert.isTrue(Result.isFailure(result), id);
+          if (Result.isFailure(result)) assert.instanceOf(result.failure, RangeError, id);
+          assert.strictEqual(outputs.size, 0, id);
+        }
       }),
   );
   it.effect(

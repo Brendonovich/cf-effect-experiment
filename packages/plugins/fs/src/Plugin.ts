@@ -27,6 +27,36 @@ const FilesystemPlugin = Plugin.make({
           ),
       });
     }
+    yield* context.schema.register({
+      id: "ReadTextFile",
+      name: "Read Text File",
+      description:
+        "Reads a UTF-8 file on the runtime host. Invalid or unreadable files fail execution.",
+      io: (io) => ({
+        file: io.data.in("file", DataType.String, { name: "File Location" }),
+        text: io.data.out("textOut", DataType.String, { name: "File Contents" }),
+      }),
+      run: ({ io, engine }) =>
+        engine.FilesystemReadText({ path: io.file }).pipe(
+          Effect.tap((text) => Effect.sync(() => io.text(text))),
+          Effect.asVoid,
+        ),
+    });
+    yield* context.schema.register({
+      id: "WriteTextFile",
+      name: "Write Text File",
+      description:
+        "Creates or overwrites a UTF-8 file on the runtime host. Requires MACROGRAPH_ENABLE_FILE_WRITES=true. Failures stop execution; parent directories are not created.",
+      io: (io) => ({
+        file: io.data.in("file", DataType.String, { name: "File Location" }),
+        text: io.data.in("text", DataType.String, { name: "Text to Write", defaultValue: "" }),
+        success: io.data.out("success", DataType.Bool),
+      }),
+      run: ({ io, engine }) =>
+        engine
+          .FilesystemWriteText({ path: io.file, text: io.text })
+          .pipe(Effect.tap(() => Effect.sync(() => io.success(true)))),
+    });
   }),
 });
 

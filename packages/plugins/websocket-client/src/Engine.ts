@@ -1,3 +1,4 @@
+import type { Engine } from "@macrograph/plugin";
 import {
   Cause,
   Deferred,
@@ -76,8 +77,7 @@ const utf8Size = (input: string) => {
   return size;
 };
 
-export const make = Effect.fnUntraced(function* () {
-  const mg = yield* WebSocketClientEngine.EngineContext;
+export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof WebSocketClientEngine>) {
   const policy = yield* UrlPolicy;
   const socketContext = yield* Effect.context<
     Scope.Scope | Socket.WebSocketConstructor
@@ -450,7 +450,7 @@ export const make = Effect.fnUntraced(function* () {
   });
 });
 
-export const layer = Layer.effect(WebSocketClientEngine)(make());
+export const layer = WebSocketClientEngine.toLayer((mg) => make(mg));
 export const productionLayer = layer.pipe(Layer.provide(secureLayer));
 export const localLayer = layer.pipe(Layer.provide(localPolicyLayer));
 
