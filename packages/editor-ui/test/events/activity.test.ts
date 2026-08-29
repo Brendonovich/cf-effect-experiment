@@ -8,6 +8,8 @@ const event: RuntimeActivity.Event = {
   id: "event-1",
   pluginId: "obs",
   name: "SceneChanged",
+  source: "Engine",
+  replayable: true,
   startedAt: 1000,
   finishedAt: 1100,
   status: "complete",

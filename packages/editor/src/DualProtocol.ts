@@ -1,4 +1,4 @@
-import { Cause, Effect, Queue, Result, Scope, Stream, Types } from "effect";
+import { Cause, Effect, Queue, Result, Schedule, Scope, Stream, Types } from "effect";
 import { RpcClient, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
 
@@ -19,18 +19,6 @@ const toBytes = (data: string | Uint8Array): Uint8Array =>
 
 export const frameRpc = (payload: string | Uint8Array): Uint8Array =>
   frame(rpcFrameTag, toBytes(payload));
-
-const isSocketClose = (error: unknown) => {
-  if (typeof error !== "object" || error === null || !("_tag" in error)) return false;
-  if (error._tag !== "SocketError" || !("reason" in error)) return false;
-  const reason = error.reason;
-  return (
-    typeof reason === "object" &&
-    reason !== null &&
-    "_tag" in reason &&
-    reason._tag === "SocketCloseError"
-  );
-};
 
 export const makeDualServerProtocol = (
   onCustom?: (customSocket: Socket.Socket) => Effect.Effect<void, never, Scope.Scope>,
@@ -156,7 +144,10 @@ export const makeDualServerProtocol = (
             .pipe(
               Effect.catchCause((cause) => {
                 const failure = Cause.findFail(cause);
-                if (Result.isSuccess(failure) && isSocketClose(failure.success)) {
+                if (
+                  Result.isSuccess(failure) &&
+                  failure.success.error.reason._tag === "SocketCloseError"
+                ) {
                   return Effect.void;
                 }
                 return Effect.failCause(cause);
@@ -210,85 +201,29 @@ export const makeDualClientProtocol: Effect.Effect<
   RpcSerialization.RpcSerialization | Socket.Socket | Scope.Scope
 > = Effect.gen(function* () {
   const socket = yield* Socket.Socket;
-  const serialization = yield* RpcSerialization.RpcSerialization;
   const customMessages = yield* Queue.make<Uint8Array>();
-  const requestClientMap = new Map<string | number, number>();
   const writeRaw = yield* socket.writer;
 
-  const protocol = yield* RpcClient.Protocol.make(
-    (
-      writeResponse: (
-        clientId: number,
-        response: RpcMessage.FromServerEncoded,
-      ) => Effect.Effect<void>,
-    ) =>
-      Effect.gen(function* () {
-        const parser = serialization.makeUnsafe();
-
-        yield* socket
-          .runRaw((data) => {
-            const bytes = toBytes(data);
-            if (bytes.byteLength === 0) return Effect.void;
-
-            const tag = bytes[0];
-            const payload = bytes.subarray(1);
-
-            if (tag === rpcFrameTag) {
-              try {
-                const responses = parser.decode(
-                  payload,
-                ) as ReadonlyArray<RpcMessage.FromServerEncoded>;
-                if (responses.length === 0) return Effect.void;
-
-                return Effect.forEach(
-                  responses,
-                  (response) => {
-                    if (response._tag === "Pong") return Effect.void;
-                    const cid =
-                      "requestId" in response ? (requestClientMap.get(response.requestId) ?? 0) : 0;
-                    if (response._tag === "Exit") requestClientMap.delete(response.requestId);
-                    return writeResponse(cid, response);
-                  },
-                  { discard: true },
-                );
-              } catch {
-                return Effect.void;
-              }
-            } else if (tag === customFrameTag) {
-              return Queue.offer(customMessages, payload);
-            }
-
+  const rpcSocket = Socket.make({
+    runRaw: (handler, options) =>
+      socket.runRaw((data) => {
+        const bytes = toBytes(data);
+        if (bytes.byteLength === 0) return Effect.void;
+        const payload = bytes.subarray(1);
+        switch (bytes[0]) {
+          case rpcFrameTag:
+            return handler(payload);
+          case customFrameTag:
+            return Queue.offer(customMessages, payload);
+          default:
             return Effect.void;
-          })
-          .pipe(
-            Effect.catchCause((cause) => {
-              const failure = Cause.findFail(cause);
-              if (Result.isSuccess(failure) && isSocketClose(failure.success)) {
-                return Effect.void;
-              }
-              return Effect.failCause(cause);
-            }),
-            Effect.orDie,
-            Effect.forkScoped,
-          );
-
-        return {
-          send: (
-            _clientId: number,
-            request: RpcMessage.FromClientEncoded,
-            _transferables?: ReadonlyArray<globalThis.Transferable>,
-          ): Effect.Effect<void, never> => {
-            if (request._tag === "Request") {
-              requestClientMap.set(request.id, _clientId);
-            }
-            const encoded = parser.encode(request);
-            if (encoded === undefined) return Effect.void;
-            return Effect.orDie(writeRaw(frameRpc(encoded)));
-          },
-          supportsAck: false,
-          supportsTransferables: false,
-        };
-      }),
+        }
+      }, options),
+    writer: Effect.succeed((data) => writeRaw(Socket.isCloseEvent(data) ? data : frameRpc(data))),
+  });
+  // The editor reconnects the whole session, including its streams, after transport failure.
+  const protocol = yield* RpcClient.makeProtocolSocket({ retryPolicy: Schedule.recurs(0) }).pipe(
+    Effect.provideService(Socket.Socket, rpcSocket),
   );
 
   const sendCustom = (data: Uint8Array): Effect.Effect<void> =>

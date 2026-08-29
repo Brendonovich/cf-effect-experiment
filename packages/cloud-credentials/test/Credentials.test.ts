@@ -1,5 +1,6 @@
 import { assert, it as effectIt } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import {
   FetchHttpClient,
   HttpClient,
@@ -314,6 +315,41 @@ describe("MacroGraph cloud credentials", () => {
       assert.deepStrictEqual(yield* service.auth.status, { state: "disconnected" });
     }),
   );
+
+  for (const stalled of ["response", "body"] as const) {
+    effectIt.effect(`times out a stalled ${stalled} and releases the authorization lock`, () =>
+      Effect.gen(function* () {
+        const store = new MemoryStore();
+        const started = yield* Deferred.make<void>();
+        let signal: AbortSignal | undefined;
+        const service = yield* CloudCredentials.make({ store }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request, _url, requestSignal) => {
+              signal = requestSignal;
+              return Deferred.succeed(started, undefined).pipe(
+                Effect.andThen(
+                  stalled === "response"
+                    ? Effect.never
+                    : Effect.succeed(
+                        HttpClientResponse.fromWeb(request, new Response(new ReadableStream())),
+                      ),
+                ),
+              );
+            }),
+          ),
+        );
+        const fiber = yield* service.auth.start.pipe(Effect.flip, Effect.forkChild);
+        yield* Deferred.await(started);
+        yield* TestClock.adjust("10 seconds");
+        const error = yield* Fiber.join(fiber);
+        assert.strictEqual(error.reason, "MacroGraph credential request timed out; try again");
+        assert.isTrue(signal?.aborted);
+        assert.isNull(store.value);
+        assert.deepStrictEqual(yield* service.auth.status, { state: "disconnected" });
+      }),
+    );
+  }
 
   effectIt.effect("aborts an interrupted request", () =>
     Effect.gen(function* () {

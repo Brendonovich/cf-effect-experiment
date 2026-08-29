@@ -1,5 +1,6 @@
 import type { SessionStatus, WebsiteSession } from "@macrograph/cloud-api";
-import type { Effect } from "effect";
+
+import { Effect } from "effect";
 
 import { runApi } from "./api";
 import { tryWebsiteLogin } from "./websiteLogin";
@@ -14,12 +15,15 @@ interface SessionApi {
   }): Effect.Effect<SessionStatus, unknown>;
 }
 
+const runSession = <A>(effect: Effect.Effect<A, unknown>) =>
+  runApi(effect.pipe(Effect.timeout("15 seconds")));
+
 export async function* cloudLogin(
   session: SessionApi,
   useWebsiteLogin: boolean,
   sleep = (duration: number) => new Promise<void>((resolve) => setTimeout(resolve, duration)),
 ): AsyncGenerator<SessionStatus | { state: "failed" }> {
-  let state = await runApi(session.get());
+  let state = await runSession(session.get());
   if (state === undefined) {
     yield { state: "failed" };
     return;
@@ -27,13 +31,18 @@ export async function* cloudLogin(
 
   let websiteSession: WebsiteSession | undefined;
   if (state.state !== "connected" && useWebsiteLogin) {
-    websiteSession = await runApi(session.startWebsite());
+    websiteSession = await runSession(session.startWebsite());
     if (websiteSession !== undefined)
       state = { state: "pending", verificationUrl: websiteSession.verificationUrl };
+    else if (state.state === "disconnected") {
+      // Both start endpoints use the same upstream registration service.
+      yield { state: "failed" };
+      return;
+    }
   }
   if (websiteSession === undefined) {
-    if (state.state === "disconnected") state = await runApi(session.start());
-    else if (state.state === "pending") state = await runApi(session.poll());
+    if (state.state === "disconnected") state = await runSession(session.start());
+    else if (state.state === "pending") state = await runSession(session.poll());
   }
   if (state === undefined) {
     yield { state: "failed" };
@@ -48,14 +57,14 @@ export async function* cloudLogin(
       if (approval === "retry") {
         // A 409 means the website is signed in. Check for manual approval before replacing
         // an expired attempt; if the website is unavailable, keep the manual attempt alive.
-        const previous = await runApi(
+        const previous = await runSession(
           session.pollWebsite({ payload: { registrationId: websiteSession.registrationId } }),
         );
         if (previous?.state === "connected") {
           yield previous;
           return;
         }
-        const renewed = await runApi(session.startWebsite());
+        const renewed = await runSession(session.startWebsite());
         if (renewed !== undefined) {
           websiteSession = renewed;
           polls = 0;
@@ -65,7 +74,7 @@ export async function* cloudLogin(
       }
     }
     await sleep(2000);
-    const next = await runApi(
+    const next = await runSession(
       websiteSession === undefined
         ? session.poll()
         : session.pollWebsite({ payload: { registrationId: websiteSession.registrationId } }),

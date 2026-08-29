@@ -129,20 +129,18 @@ export function createEditorConnection(
           }),
         );
 
-        yield* activeClient.PresenceStream().pipe(
-          Stream.runForEach((event) =>
-            Effect.sync(() => {
-              if (event._tag === "PresenceSnapshot") {
-                setSelfConnectionId(event.selfConnectionId);
-              }
-              setPresenceClients(event.clients);
-            }),
-          ),
-          Effect.forkScoped,
-        );
-
         yield* Effect.all(
           [
+            activeClient.PresenceStream().pipe(
+              Stream.runForEach((event) =>
+                Effect.sync(() => {
+                  if (event._tag === "PresenceSnapshot") {
+                    setSelfConnectionId(event.selfConnectionId);
+                  }
+                  setPresenceClients(event.clients);
+                }),
+              ),
+            ),
             Effect.gen(function* () {
               const packages = yield* activeClient.GetPackages({});
               setPackages(packages as Package.Model[]);

@@ -23,6 +23,11 @@ export function editorConnection(
         .connect(dualProtocol.protocol)
         .pipe(Effect.map((connected) => [registration.id, connected] as const)),
     );
-    return { client, pluginSettings: new Map(settings), activity: runtimeClient.ActivityStream() };
+    return {
+      client,
+      pluginSettings: new Map(settings),
+      activity: runtimeClient.ActivityStream(),
+      replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
+    };
   }).pipe(Effect.provide([RpcSerialization.layerJsonRpc(), BrowserSocket.layerWebSocket(url)]));
 }

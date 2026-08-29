@@ -1,7 +1,11 @@
 import type { RuntimeActivity } from "@macrograph/execution";
 
+import { Cause, Effect } from "effect";
 import { createMemo, createSignal, For, Show } from "solid-js";
 
+import { runPromise } from "../observability/browserTracing";
+import { Button } from "../ui/Button";
+import { LoadingState } from "../ui/LoadingState";
 import { activityExecutions } from "./activity";
 import { createClock } from "./createClock";
 import {
@@ -14,7 +18,6 @@ import {
   EventTimeline,
 } from "./Events";
 import { styles } from "./events.stylex";
-import { LoadingState } from "../ui/LoadingState";
 
 export interface LiveEventsProps {
   readonly events: ReadonlyArray<RuntimeActivity.Event>;
@@ -22,11 +25,23 @@ export interface LiveEventsProps {
   readonly state: "connecting" | "live" | "error";
   readonly error: string;
   readonly onRetry: () => void;
+  readonly onReplay?: ((eventId: string) => Effect.Effect<void, unknown>) | undefined;
 }
 
 export function LiveEvents(props: LiveEventsProps) {
   const [search, setSearch] = createSignal("");
   const [selectedId, setSelectedId] = createSignal<string>();
+  const [replaying, setReplaying] = createSignal(false);
+  let replayInFlight = false;
+  const [replayFeedback, setReplayFeedback] = createSignal<{
+    readonly eventId: string;
+    readonly error: boolean;
+    readonly message: string;
+  }>();
+  const selectedReplayFeedback = createMemo(() => {
+    const feedback = replayFeedback();
+    return feedback?.eventId === selectedId() ? feedback : undefined;
+  });
   const now = createClock();
   const filtered = createMemo(() => {
     const query = search().trim().toLowerCase();
@@ -49,6 +64,53 @@ export function LiveEvents(props: LiveEventsProps) {
     }
   });
 
+  const replay = async () => {
+    const event = selected();
+    const onReplay = props.onReplay;
+    if (!event?.replayable || onReplay === undefined || replayInFlight || props.state !== "live")
+      return;
+    if (
+      !window.confirm(
+        `Replay "${event.name}"?\n\nThis creates a new event and runs all matching graphs in the runtime's current project, not the event's original project state.\n\nThis performs real actions and may repeat side effects. It is not a dry run.`,
+      )
+    )
+      return;
+    replayInFlight = true;
+    setReplaying(true);
+    setReplayFeedback(undefined);
+    try {
+      const feedback = await runPromise(
+        Effect.suspend(() => onReplay(event.id)).pipe(
+          Effect.as({
+            error: false,
+            message:
+              "Replay queued. A new event will appear in the timeline; execution results may take longer.",
+          }),
+          Effect.catchCause((cause) => {
+            const failure = Cause.squash(cause);
+            const tag =
+              typeof failure === "object" && failure !== null && "_tag" in failure
+                ? failure._tag
+                : undefined;
+            return Effect.succeed({
+              error: true,
+              message:
+                tag === "ReplayUnavailable"
+                  ? "This event is no longer available to replay."
+                  : tag === "EditorForbidden"
+                    ? "You do not have permission to replay events."
+                    : "Could not confirm the replay. Check the timeline before trying again to avoid duplicate actions.",
+            });
+          }),
+        ),
+      );
+      setReplayFeedback({ eventId: event.id, ...feedback });
+    } finally {
+      replayInFlight = false;
+      setReplaying(false);
+    }
+  };
+
   return (
     <EventsLayout>
       <EventTimeline
@@ -67,7 +129,7 @@ export function LiveEvents(props: LiveEventsProps) {
               id={id}
               name={byId().get(id)?.name ?? ""}
               pluginName={pluginName(byId().get(id)?.pluginId ?? "")}
-              source="Engine"
+              source={byId().get(id)?.source ?? "Engine"}
               receivedAt={byId().get(id)?.startedAt ?? 0}
               now={now()}
               selected={selectedId() === id}
@@ -99,13 +161,39 @@ export function LiveEvents(props: LiveEventsProps) {
                   name={event().name}
                   receivedAt={event().startedAt}
                   now={now()}
-                />
+                >
+                  <Show when={props.onReplay !== undefined}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={replaying() || !event().replayable || props.state !== "live"}
+                      onClick={() => void replay()}
+                    >
+                      {replaying() ? "Replaying..." : "Replay"}
+                    </Button>
+                  </Show>
+                </EventDetailHeader>
+                <Show when={selectedReplayFeedback()}>
+                  {(feedback) => (
+                    <div
+                      sx={[
+                        styles.fields,
+                        styles.panelDescription,
+                        feedback().error && styles.runError,
+                      ]}
+                      role={feedback().error ? "alert" : "status"}
+                    >
+                      {feedback().message}
+                    </div>
+                  )}
+                </Show>
                 <Show when={event().error}>
                   {(error) => <div sx={styles.error}>{error()}</div>}
                 </Show>
 
                 <div sx={styles.detailBody}>
-                  <EventPayload eventId={event().id} source="Engine" payload={payload()}>
+                  <EventPayload eventId={event().id} source={event().source} payload={payload()}>
                     <span sx={styles.fieldValue} title={pluginName(event().pluginId)}>
                       {pluginName(event().pluginId)}
                     </span>

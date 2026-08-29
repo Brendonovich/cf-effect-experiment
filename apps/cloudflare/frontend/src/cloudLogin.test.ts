@@ -37,6 +37,48 @@ afterEach(() => {
 });
 
 describe("cloud login", () => {
+  it("fails without starting another registration when website registration is unavailable", async () => {
+    const session = makeSession();
+    session.get.mockReturnValue(Effect.succeed({ state: "disconnected" }));
+    session.startWebsite.mockReturnValue(Effect.die("unavailable"));
+    const login = cloudLogin(session, true, sleep);
+
+    assert.deepEqual((await login.next()).value, { state: "failed" });
+    assert.isTrue((await login.next()).done);
+    assert.strictEqual(session.start.mock.calls.length, 0);
+    assert.strictEqual(session.poll.mock.calls.length, 0);
+  });
+
+  it.each(["get", "start", "poll", "startWebsite", "pollWebsite"] as const)(
+    "fails and interrupts a stalled %s request",
+    async (endpoint) => {
+      vi.useFakeTimers();
+      const session = makeSession();
+      if (endpoint === "start" || endpoint === "startWebsite")
+        session.get.mockReturnValue(Effect.succeed({ state: "disconnected" }));
+      let interrupted = false;
+      session[endpoint].mockReturnValue(
+        Effect.never.pipe(Effect.ensuring(Effect.sync(() => (interrupted = true)))),
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 204 })),
+      );
+      const login = cloudLogin(
+        session,
+        endpoint === "startWebsite" || endpoint === "pollWebsite",
+        sleep,
+      );
+      if (endpoint === "pollWebsite") await login.next();
+
+      const result = login.next();
+      await vi.advanceTimersByTimeAsync(15_000);
+      assert.deepEqual((await result).value, { state: "failed" });
+      assert.isTrue(interrupted);
+      assert.isTrue((await login.next()).done);
+    },
+  );
+
   it("replaces an existing pending attempt before approving through the website", async () => {
     const session = makeSession();
     const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 204 }));

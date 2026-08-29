@@ -32,6 +32,8 @@ export const Event = Schema.Struct({
   id: Schema.String,
   pluginId: Schema.String,
   name: Schema.String,
+  source: Schema.Literals(["Engine", "Replay"]),
+  replayable: Schema.Boolean,
   startedAt: Schema.Number,
   finishedAt: Schema.NullOr(Schema.Number),
   status: Status,
@@ -43,8 +45,14 @@ export type Event = typeof Event.Type;
 
 export const limits = { events: 100, nodes: 200, payload: 8192, error: 2048 } as const;
 
+export class ReplayUnavailable extends Schema.TaggedError<ReplayUnavailable>()(
+  "ReplayUnavailable",
+  { eventId: Schema.String },
+) {}
+
 export const Rpcs = RpcGroup.make(
   Rpc.make("ActivityStream", { success: Schema.Array(Event), stream: true }),
+  Rpc.make("ReplayEvent", { payload: { eventId: Schema.String }, error: ReplayUnavailable }),
 );
 
 const CurrentEvent = Context.Reference<string | undefined>("macrograph/RuntimeActivity/Event", {
@@ -113,12 +121,16 @@ export class Service extends Context.Service<
     ) => Effect.Effect<A, E, R>;
     readonly executionDriver: Executor.ExecutionDriver;
     readonly wrap: (executor: Executor.Service) => Executor.Service;
+    readonly replay: (eventId: string) => Effect.Effect<void, ReplayUnavailable>;
   }
 >()("macrograph/RuntimeActivity") {}
 
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     let events: ReadonlyArray<Event> = [];
+    const scope = yield* Effect.scope;
+    // Retain the original input, not the lossy display payload, only while its event is retained.
+    const replays = new Map<string, () => Effect.Effect<void, Executor.ExecutorError>>();
     const semaphore = yield* Semaphore.make(1);
     // Full snapshots can be coalesced. Replay makes subscribing atomic with reading the latest state.
     const snapshots = yield* PubSub.sliding<ReadonlyArray<Event>>({ capacity: 1, replay: 1 });
@@ -130,6 +142,8 @@ export const layer = Layer.effect(Service)(
           const next = f(events);
           if (next === events) return;
           events = next;
+          const retained = new Set(events.map((event) => event.id));
+          for (const id of replays.keys()) if (!retained.has(id)) replays.delete(id);
           yield* PubSub.publish(snapshots, events);
         }),
       );
@@ -145,25 +159,36 @@ export const layer = Layer.effect(Service)(
           error: Exit.isFailure(exit) ? display(Cause.squash(exit.cause), limits.error) : null,
         })),
       );
-    const track: Service["Service"]["track"] = (pluginId, event, effect) =>
+    const track = <A, E, R, Input extends { readonly _tag: string }>(
+      pluginId: string,
+      event: Input,
+      effect: Effect.Effect<A, E, R>,
+      replay?: () => Effect.Effect<void, Executor.ExecutorError>,
+      source: Event["source"] = "Engine",
+    ): Effect.Effect<A, E, R> =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const id = crypto.randomUUID();
           const startedAt = yield* Clock.currentTimeMillis;
-          yield* update((events) => [
-            {
-              id,
-              pluginId,
-              name: event._tag,
-              startedAt,
-              finishedAt: null,
-              status: "running",
-              payload: display(event, limits.payload),
-              error: null,
-              nodes: [],
-            },
-            ...events.slice(0, limits.events - 1),
-          ]);
+          yield* update((events) => {
+            if (replay !== undefined) replays.set(id, replay);
+            return [
+              {
+                id,
+                pluginId,
+                name: event._tag,
+                source,
+                replayable: replay !== undefined,
+                startedAt,
+                finishedAt: null,
+                status: "running",
+                payload: display(event, limits.payload),
+                error: null,
+                nodes: [],
+              },
+              ...events.slice(0, limits.events - 1),
+            ];
+          });
           return yield* restore(Effect.provideService(effect, CurrentEvent, id)).pipe(
             Effect.onExit((exit) =>
               finish(exit).pipe(
@@ -234,10 +259,28 @@ export const layer = Layer.effect(Service)(
       changes: Stream.fromPubSub(snapshots),
       track,
       executionDriver,
+      replay: (eventId) =>
+        Effect.gen(function* () {
+          const replay = replays.get(eventId);
+          if (replay === undefined) return yield* new ReplayUnavailable({ eventId });
+          yield* replay().pipe(
+            Effect.catchCause((cause) => Effect.logError("Event replay failed", cause)),
+            Effect.forkIn(scope),
+          );
+        }),
       wrap: (executor) => ({
         ...executor,
-        handleEvent: (plugin, event) =>
-          track(plugin.id, event, executor.handleEvent(plugin, event)),
+        handleEvent: (plugin, event) => {
+          const replay = (): Effect.Effect<void, Executor.ExecutorError> =>
+            track(
+              plugin.id,
+              event,
+              Effect.suspend(() => executor.handleEvent(plugin, event)),
+              replay,
+              "Replay",
+            );
+          return track(plugin.id, event, executor.handleEvent(plugin, event), replay);
+        },
       }),
     });
   }),
@@ -246,7 +289,10 @@ export const layer = Layer.effect(Service)(
 export const handlerLayer = Rpcs.toLayer(
   Effect.gen(function* () {
     const activity = yield* Service;
-    return Rpcs.of({ ActivityStream: () => activity.changes });
+    return Rpcs.of({
+      ActivityStream: () => activity.changes,
+      ReplayEvent: ({ eventId }) => activity.replay(eventId),
+    });
   }),
 );
 

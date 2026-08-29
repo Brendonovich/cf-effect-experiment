@@ -1,7 +1,7 @@
 import type { Package, SchemaRef } from "@macrograph/core";
 
 import * as stylex from "@stylexjs/stylex";
-import { For, Show, createSignal, onSettled } from "solid-js";
+import { For, Show, createMemo, createSignal, onSettled } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { rankedSearch } from "../catalog/search";
@@ -83,8 +83,6 @@ const styles = stylex.create({
     minHeight: 0,
     overscrollBehavior: "contain",
     overflowY: "auto",
-    paddingBottom: 4,
-    paddingInline: 4,
   },
   empty: {
     color: colors.gray11,
@@ -93,18 +91,27 @@ const styles = stylex.create({
     padding: 12,
     textAlign: "center",
   },
-  packageGroup: { marginTop: { default: 4, ":first-child": 0 } },
-  packageName: {
-    backgroundColor: colors.gray3,
+  packageToggle: {
+    alignItems: "center",
+    backgroundColor: { default: colors.gray3, ":hover": colors.gray5 },
     color: colors.gray11,
-    fontSize: 11,
+    display: "flex",
+    fontSize: 12,
     fontWeight: 500,
+    gap: 8,
+    minHeight: { default: null, "@media (pointer: coarse)": 40 },
     paddingBlock: 4,
-    paddingInline: 4,
+    paddingInline: 8,
     position: "sticky",
+    textAlign: "left",
     top: 0,
+    width: "100%",
     zIndex: 10,
   },
+  disclosure: { flexShrink: 0, height: 12, width: 12 },
+  disclosureOpen: { transform: "rotate(90deg)" },
+  packageLabel: { flex: 1 },
+  packageCount: { color: colors.gray9, fontSize: 11 },
   option: {
     alignItems: "center",
     backgroundColor: {
@@ -117,13 +124,13 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "row",
     gap: 8,
+    marginInline: 4,
     paddingBlock: 4,
-    paddingInline: 4,
+    paddingInline: 8,
     textAlign: "left",
-    width: "100%",
+    width: "calc(100% - 8px)",
     minHeight: { default: null, "@media (pointer: coarse)": 40 },
   },
-  coarsePadding: { paddingInline: { default: 4, "@media (pointer: coarse)": 8 } },
   dot: { borderRadius: "50%", height: 12, width: 12 },
   event: { backgroundColor: "#b91c1c" },
   exec: { backgroundColor: "#2563eb" },
@@ -147,6 +154,8 @@ export function NodeCreationMenu(props: {
   onClose: () => void;
 }) {
   const [search, setSearch] = createSignal("");
+  const [expansion, setExpansion] = createSignal<ReadonlyMap<string, boolean>>(new Map());
+  const hasSearch = createMemo(() => search().trim().length > 0);
   let root: HTMLDivElement | undefined;
 
   const packages = () => {
@@ -207,7 +216,10 @@ export function NodeCreationMenu(props: {
           aria-label="Search nodes"
           placeholder="Search nodes"
           value={search()}
-          onInput={(event) => setSearch(event.currentTarget.value)}
+          onInput={(event) => {
+            setSearch(event.currentTarget.value);
+            setExpansion(new Map());
+          }}
         />
       </div>
       <div sx={styles.list} onWheel={(event) => event.stopPropagation()}>
@@ -216,40 +228,65 @@ export function NodeCreationMenu(props: {
           fallback={<div sx={styles.empty}>No schemas found.</div>}
         >
           <For each={packages()}>
-            {(pkg) => (
-              <section sx={styles.packageGroup}>
-                <div sx={styles.packageName}>{pkg.name}</div>
-                <For each={pkg.schemas}>
-                  {(schema) => (
-                    <button
-                      type="button"
-                      sx={[styles.focus, styles.option, styles.coarsePadding]}
-                      title={
-                        schema.description
-                          ? `${schema.name}\n${schema.description}`
-                          : schema.name
-                      }
-                      onClick={() => {
-                        props.onCreate({ package: pkg.id, schema: schema.id }, schema.name);
-                        props.onClose();
-                      }}
+            {(pkg) => {
+              const open = createMemo(() => expansion().get(pkg.id) ?? hasSearch());
+              return (
+                <section>
+                  <button
+                    type="button"
+                    sx={[styles.focus, styles.packageToggle]}
+                    aria-expanded={open() ? "true" : "false"}
+                    onClick={() => {
+                      const values = new Map(expansion());
+                      values.set(pkg.id, !open());
+                      setExpansion(values);
+                    }}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      sx={[styles.disclosure, open() && styles.disclosureOpen]}
                     >
-                      <span
-                        sx={[
-                          styles.dot,
-                          schema.type === "event"
-                            ? styles.event
-                            : schema.type === "exec"
-                              ? styles.exec
-                              : styles.pure,
-                        ]}
-                      />
-                      <span sx={styles.schemaName}>{schema.name}</span>
-                    </button>
-                  )}
-                </For>
-              </section>
-            )}
+                      <path d="m4 2 4 4-4 4" stroke="currentColor" stroke-width="1.5" />
+                    </svg>
+                    <span sx={[styles.schemaName, styles.packageLabel]}>{pkg.name}</span>
+                    <span sx={styles.packageCount}>{pkg.schemas.length}</span>
+                  </button>
+                  <Show when={open()}>
+                    <For each={pkg.schemas}>
+                      {(schema) => (
+                        <button
+                          type="button"
+                          sx={[styles.focus, styles.option]}
+                          title={
+                            schema.description
+                              ? `${schema.name}\n${schema.description}`
+                              : schema.name
+                          }
+                          onClick={() => {
+                            props.onCreate({ package: pkg.id, schema: schema.id }, schema.name);
+                            props.onClose();
+                          }}
+                        >
+                          <span
+                            sx={[
+                              styles.dot,
+                              schema.type === "event"
+                                ? styles.event
+                                : schema.type === "exec"
+                                  ? styles.exec
+                                  : styles.pure,
+                            ]}
+                          />
+                          <span sx={styles.schemaName}>{schema.name}</span>
+                        </button>
+                      )}
+                    </For>
+                  </Show>
+                </section>
+              );
+            }}
           </For>
         </Show>
       </div>

@@ -52,6 +52,35 @@ const LogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
 	}),
 );
 
+export const LegacyDatabaseRole = Planetscale.PostgresRole(
+	"LegacyDatabaseRuntimeRole",
+	Database.pipe(
+		Effect.map((database) => ({
+			database,
+			inheritedRoles: [],
+			successor: "postgres",
+		})),
+	),
+).pipe(retain());
+
+// Dev and prod intentionally share this database; the old web app owns its schema.
+export const LegacyLogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
+	"LegacyLogicalDatabase",
+	Effect.gen(function* () {
+		const adminRole = yield* DatabaseAdminRole;
+		const appRole = yield* LegacyDatabaseRole;
+
+		return {
+			name: "macrograph_legacy",
+			adminOrigin: adminRole.origin,
+			appRoleName: Output.map(
+				appRole.username,
+				PlanetscaleLogicalDb.postgresRoleNameFromUsername,
+			),
+		};
+	}),
+).pipe(retain());
+
 export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
 	"AppDatabaseHyperdrive",
 	Effect.gen(function* () {

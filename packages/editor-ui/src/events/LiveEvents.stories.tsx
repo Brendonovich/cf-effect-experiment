@@ -1,6 +1,8 @@
 import type { RuntimeActivity } from "@macrograph/execution";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
+import { Effect } from "effect";
+
 import { LiveEvents } from "./LiveEvents";
 
 const now = Date.now();
@@ -8,6 +10,8 @@ const event: RuntimeActivity.Event = {
   id: "event-13",
   pluginId: "obs",
   name: "CurrentProgramSceneChanged",
+  source: "Engine",
+  replayable: true,
   startedAt: now - 3000,
   finishedAt: now - 2980,
   status: "complete",
@@ -47,6 +51,7 @@ const meta: Meta<typeof LiveEvents> = {
     state: "live",
     error: "",
     onRetry: () => {},
+    onReplay: () => Effect.void,
   },
 };
 export default meta;

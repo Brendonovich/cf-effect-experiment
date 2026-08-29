@@ -2,7 +2,7 @@ import type { EditorRpc } from "@macrograph/editor";
 import type { RuntimeActivity } from "@macrograph/execution";
 import type { ClientSettings } from "@macrograph/plugin";
 import type { JSX } from "@solidjs/web";
-import type { Stream } from "effect";
+import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
 import * as stylex from "@stylexjs/stylex";
@@ -331,6 +331,7 @@ export interface EditorConnection {
   readonly client: EditorRpcClient;
   readonly pluginSettings: ReadonlyMap<string, ClientSettings.Connected<JSX.Element>>;
   readonly activity?: Stream.Stream<ReadonlyArray<RuntimeActivity.Event>, unknown>;
+  readonly replayEvent?: (eventId: string) => Effect.Effect<void, unknown>;
 }
 
 export type PluginSettingsDescriptor = ClientSettings.Descriptor<JSX.Element>;

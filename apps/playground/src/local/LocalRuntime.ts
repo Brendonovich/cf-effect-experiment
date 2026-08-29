@@ -167,6 +167,7 @@ export const makeLocalConnection = (
         return {
           client,
           activity: runtimeClient.ActivityStream(),
+          replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
           pluginSettings: new Map<string, ClientSettings.Connected<JSX.Element>>([
             [utilitiesSettings.id, utilitiesConnected],
             [obsSettings.id, obsConnected],

@@ -10,7 +10,18 @@ import { OBSEngine } from "@macrograph/plugin-obs/Definition";
 import OBSDeployment from "@macrograph/plugin-obs/Deployment/WebSocket";
 import TwitchPlugin from "@macrograph/plugin-twitch";
 import TwitchDeployment from "@macrograph/plugin-twitch/Deployment/WebSocket";
-import { Array, Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import {
+  Array,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,10 +41,11 @@ const TestLayer = ProjectExecution.layer.pipe(
 );
 
 describe("ProjectExecution", () => {
-  it.effect("captures events and driver nodes using the shared runtime activity service", () =>
+  it.effect("captures events and driver nodes and replays against current editor state", () =>
     Effect.gen(function* () {
-      class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", {}) {}
+      class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", { message: Schema.String }) {}
       class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
+      const input = new Trigger({ message: "x".repeat(20_000) });
       let nodeEffect: Effect.Effect<void, Error> = Effect.void;
       const plugin = Plugin.make({
         id: "activity-test",
@@ -42,7 +54,7 @@ describe("ProjectExecution", () => {
           registration.schema.register({
             id: "event",
             type: "event",
-            event: () => Effect.succeed(true),
+            event: (event) => Effect.succeed(event.message === input.message),
             io: () => ({}),
             run: () => nodeEffect,
           }),
@@ -65,7 +77,7 @@ describe("ProjectExecution", () => {
         },
       });
       yield* Effect.yieldNow;
-      yield* executor.handleEvent(plugin, new Trigger({}));
+      yield* executor.handleEvent(plugin, input);
       const event = (yield* activity.snapshot)[0]!;
       assert.strictEqual(event.name, "Trigger");
       assert.strictEqual(event.status, "complete");
@@ -76,19 +88,47 @@ describe("ProjectExecution", () => {
 
       nodeEffect = Effect.fail(new Error("node failed"));
       assert.isTrue(
-        Exit.isFailure(yield* executor.handleEvent(plugin, new Trigger({})).pipe(Effect.exit)),
+        Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)),
       );
       assert.strictEqual((yield* activity.snapshot)[0]?.status, "failed");
       assert.strictEqual((yield* activity.snapshot)[0]?.nodes[0]?.status, "failed");
 
       const started = yield* Deferred.make<void>();
       nodeEffect = Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
-      const fiber = yield* executor.handleEvent(plugin, new Trigger({})).pipe(Effect.forkChild);
+      const fiber = yield* executor.handleEvent(plugin, input).pipe(Effect.forkChild);
       yield* Deferred.await(started);
       yield* Fiber.interrupt(fiber);
       assert.isTrue(Exit.hasInterrupts(yield* Fiber.await(fiber)));
       assert.strictEqual((yield* activity.snapshot)[0]?.status, "interrupted");
       assert.strictEqual((yield* activity.snapshot)[0]?.nodes[0]?.status, "interrupted");
+
+      nodeEffect = Effect.void;
+      const added = yield* editor.node.create({
+        graphID: graph.id,
+        node: {
+          schema: { package: PackageId.make(plugin.id), schema: SchemaId.make("event") },
+          position: { x: 100, y: 0 },
+        },
+      });
+      yield* Effect.yieldNow;
+      assert.isDefined((yield* executor.project).graphs[graph.id]?.nodes[added.node.id]);
+      yield* activity.replay(event.id);
+      const replayed = Option.getOrThrow(
+        yield* activity.changes.pipe(
+          Stream.filter(
+            (events) => events[0]?.source === "Replay" && events[0]?.status === "complete",
+          ),
+          Stream.runHead,
+        ),
+      )[0]!;
+      assert.notStrictEqual(replayed.id, event.id);
+      assert.isTrue(replayed.replayable);
+      assert.deepStrictEqual(
+        replayed.nodes.map((node) => node.nodeId).sort(),
+        [created.node.id, added.node.id].sort(),
+      );
+      assert.isTrue(replayed.nodes.every((node) => node.status === "complete"));
+      assert.lengthOf(event.nodes, 1);
     }).pipe(Effect.provide(TestLayer)),
   );
 

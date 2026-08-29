@@ -1,5 +1,19 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect";
+import { Project } from "@macrograph/core";
+import { Engine, Plugin } from "@macrograph/plugin";
+import {
+  Array as EffectArray,
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
 import { RpcTest } from "effect/unstable/rpc";
 
 import { Executor, RuntimeActivity } from "../src/index.ts";
@@ -16,7 +30,165 @@ const key = (id: string): Executor.NodeExecutionKey => ({
 });
 const result: Executor.NodeExecutionResult = { outputs: [], executionOutputId: null };
 
+class Message extends Schema.TaggedClass<Message>()("Message", {
+  message: Schema.String,
+  values: Schema.Array(Schema.Number),
+}) {}
+class TestEngine extends Engine.make({ events: EffectArray.empty<Message>() }) {}
+const plugin = Plugin.make({ id: "replay-test", engine: TestEngine, effect: () => Effect.void });
+
 describe("RuntimeActivity", () => {
+  it.effect("replays the full original input with fresh IDs and the current executor", () =>
+    Effect.gen(function* () {
+      const activity = yield* RuntimeActivity.Service;
+      const event = new Message({
+        message: "x".repeat(20_000),
+        values: EffectArray.range(0, 100),
+      });
+      let version = 0;
+      const calls: number[] = [];
+      const executor = activity.wrap({
+        ...(yield* Executor.make(Project.empty())),
+        handleEvent: (definition, input) => {
+          const currentVersion = version;
+          return Effect.sync(() => {
+            assert.isTrue(Object.is(definition, plugin));
+            assert.strictEqual(input, event);
+            assert.instanceOf(input, Message);
+            calls.push(currentVersion);
+          });
+        },
+      });
+      yield* executor.handleEvent(plugin, event);
+      const original = (yield* activity.snapshot)[0]!;
+      assert.strictEqual(original.source, "Engine");
+      assert.isTrue(original.replayable);
+      assert.notStrictEqual(original.payload, JSON.stringify(event));
+      assert.isAtMost(original.payload.length, RuntimeActivity.limits.payload);
+
+      let previous = original;
+      for (version = 1; version <= 2; version++) {
+        assert.isUndefined(yield* activity.replay(previous.id));
+        const events = Option.getOrThrow(
+          yield* activity.changes.pipe(
+            Stream.filter(
+              (events) => events[0]?.id !== previous.id && events[0]?.status === "complete",
+            ),
+            Stream.runHead,
+          ),
+        );
+        const replayed = events[0]!;
+        assert.strictEqual(replayed.source, "Replay");
+        assert.isTrue(replayed.replayable);
+        assert.strictEqual(replayed.pluginId, original.pluginId);
+        assert.strictEqual(replayed.name, original.name);
+        assert.strictEqual(replayed.payload, original.payload);
+        assert.strictEqual(new Set(events.map((event) => event.id)).size, version + 1);
+        assert.isNotNull(replayed.finishedAt);
+        assert.isNull(replayed.error);
+        previous = replayed;
+      }
+      assert.deepStrictEqual(calls, [0, 1, 2]);
+    }).pipe(Effect.provide(RuntimeActivity.layer)),
+  );
+
+  it.effect(
+    "queues replay RPCs beyond the request lifetime and records asynchronous failures",
+    () =>
+      Effect.gen(function* () {
+        const activity = yield* RuntimeActivity.Service;
+        const client = yield* RpcTest.makeClient(RuntimeActivity.Rpcs);
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        let nodeEffect: Effect.Effect<Executor.NodeExecutionResult, Executor.ExecutorError> =
+          Effect.succeed(result);
+        const executor = activity.wrap({
+          ...(yield* Executor.make(Project.empty())),
+          handleEvent: () =>
+            activity.executionDriver.executeNode(key("queued"), nodeEffect).pipe(Effect.asVoid),
+        });
+        yield* executor.handleEvent(plugin, new Message({ message: "queued", values: [] }));
+        const original = (yield* activity.snapshot)[0]!;
+        nodeEffect = Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.andThen(
+            Effect.fail(
+              new Executor.NodeExecutionError({
+                nodeId: "queued",
+                cause: new Error("replay failed"),
+              }),
+            ),
+          ),
+        );
+        assert.isUndefined(
+          yield* client
+            .ReplayEvent({ eventId: original.id })
+            .pipe(Effect.forkChild, Effect.flatMap(Fiber.join)),
+        );
+        yield* Deferred.await(started);
+        const running = (yield* activity.snapshot)[0]!;
+        assert.notStrictEqual(running.id, original.id);
+        assert.strictEqual(running.source, "Replay");
+        assert.isTrue(running.replayable);
+        assert.strictEqual(running.status, "running");
+        assert.isNull(running.finishedAt);
+        assert.strictEqual(running.nodes[0]?.status, "running");
+
+        yield* Deferred.succeed(release, undefined);
+        const failed = Option.getOrThrow(
+          yield* client.ActivityStream().pipe(
+            Stream.filter((events) => events[0]?.status === "failed"),
+            Stream.runHead,
+          ),
+        )[0]!;
+        assert.strictEqual(failed.id, running.id);
+        assert.include(failed.error!, "replay failed");
+        assert.isNotNull(failed.finishedAt);
+        assert.strictEqual(failed.nodes[0]?.status, "failed");
+        assert.isNotNull(failed.nodes[0]?.finishedAt);
+        assert.strictEqual((yield* activity.snapshot)[1]?.status, "complete");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          RuntimeActivity.handlerLayer.pipe(Layer.provideMerge(RuntimeActivity.layer)),
+        ),
+      ),
+  );
+
+  it.effect("rejects missing, non-replayable, and evicted events without executing them", () =>
+    Effect.gen(function* () {
+      const activity = yield* RuntimeActivity.Service;
+      let calls = 0;
+      const executor = activity.wrap({
+        ...(yield* Executor.make(Project.empty())),
+        handleEvent: () =>
+          Effect.sync(() => {
+            calls++;
+          }),
+      });
+      yield* executor.handleEvent(plugin, new Message({ message: "old", values: [] }));
+      const evictedId = (yield* activity.snapshot)[0]!.id;
+      for (let index = 0; index < RuntimeActivity.limits.events; index++)
+        yield* activity.track("test", { _tag: String(index) }, Effect.void);
+      const events = yield* activity.snapshot;
+      assert.lengthOf(events, RuntimeActivity.limits.events);
+      assert.isFalse(events.some((event) => event.id === evictedId));
+      assert.isFalse(events[0]!.replayable);
+      for (const eventId of ["missing", events[0]!.id, evictedId]) {
+        const replayed = yield* activity.replay(eventId).pipe(Effect.exit);
+        assert.isTrue(Exit.isFailure(replayed));
+        if (Exit.isFailure(replayed))
+          assert.deepStrictEqual(
+            Cause.squash(replayed.cause),
+            new RuntimeActivity.ReplayUnavailable({ eventId }),
+          );
+      }
+      yield* Effect.yieldNow;
+      assert.strictEqual(calls, 1);
+      assert.strictEqual(yield* activity.snapshot, events);
+    }).pipe(Effect.provide(RuntimeActivity.layer)),
+  );
+
   it.effect("captures event and node success without changing their result", () =>
     Effect.gen(function* () {
       const activity = yield* RuntimeActivity.Service;

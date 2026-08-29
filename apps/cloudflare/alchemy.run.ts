@@ -13,6 +13,7 @@ import { traceDatasetName } from "./src/Observability.ts";
 import {
 	DatabaseHyperdrive,
 	DeploymentSnapshotsBucket,
+	LegacyLogicalDatabase,
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
 	CloudWorker,
@@ -39,6 +40,7 @@ export default Alchemy.Stack(
 		const ctx = yield* Alchemy.AlchemyContext;
 		yield* DatabaseHyperdrive;
 		yield* DeploymentSnapshotsBucket;
+		const legacyDatabase = yield* LegacyLogicalDatabase;
 
 		const frontendBuild = !ctx.dev
 			? yield* Command.Build("WebAppBuild", {
@@ -65,6 +67,7 @@ export default Alchemy.Stack(
 			return { cloudWorker, ingressWorker };
 		}).pipe(Effect.provide(IngressWorkerLayer));
 		return {
+			legacyDatabaseName: legacyDatabase.name,
 			url: ctx.dev ? "http://0.0.0.0:5175/" : cloudWorker.url,
 			...(!ctx.dev && {
 				publicWorkerUrl: cloudWorker.url,

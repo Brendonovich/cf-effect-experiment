@@ -351,6 +351,23 @@ describe("local browser runtime", () => {
           assert.strictEqual(events[0]?.nodes[0]?.graphId, "graph");
           assert.strictEqual(events[0]?.nodes[0]?.nodeId, "event");
           assert.strictEqual(events[0]?.nodes[0]?.status, "complete");
+          assert.isDefined(connection.replayEvent);
+          yield* connection.replayEvent!(events[0]!.id);
+          const replayed = Option.getOrThrow(
+            yield* connection.activity!.pipe(
+              Stream.filter(
+                (snapshot) =>
+                  snapshot[0]?.source === "Replay" && snapshot[0]?.status === "complete",
+              ),
+              Stream.runHead,
+            ),
+          );
+          assert.lengthOf(replayed, events.length + 1);
+          assert.notStrictEqual(replayed[0]?.id, events[0]?.id);
+          assert.strictEqual(replayed[0]?.payload, events[0]?.payload);
+          assert.strictEqual(replayed[0]?.nodes[0]?.nodeId, "event");
+          assert.strictEqual(replayed[0]?.nodes[0]?.status, "complete");
+          assert.deepStrictEqual(replayed[1], events[0]);
         }),
       ).pipe(Effect.ensuring(Effect.sync(() => vi.unstubAllGlobals())));
     }),

@@ -40,7 +40,7 @@ export function createEditorPresence(options: {
     const graphId = activeWorkspaceView().type === "graph" ? selectedGraphId() : null;
     const graph = graphId === null ? undefined : store.project?.graphs[graphId];
     const activeGraph = graph === undefined ? null : graphId;
-    if (c === null) return;
+    if (c === null || selfConnectionId() === undefined) return;
     runFork(
       c
         .UpdatePresence({
@@ -77,7 +77,8 @@ export function createEditorPresence(options: {
       const graphId = activeWorkspaceView().type === "graph" ? selectedGraphId() : null;
       const graph = graphId === null ? undefined : store.project?.graphs[graphId];
       return {
-        updatePresence: client()?.UpdatePresence ?? null,
+        updatePresence:
+          selfConnectionId() === undefined ? null : (client()?.UpdatePresence ?? null),
         activeGraph: graph === undefined ? null : graphId,
         cursor: untrack(localCursor),
         selectedNodeIds:
@@ -99,7 +100,7 @@ export function createEditorPresence(options: {
   );
   const dispose = () => {
     if (pendingPresenceTimer !== undefined) clearTimeout(pendingPresenceTimer);
-    publishPointer(null, true);
+    setLocalCursor(null);
   };
 
   return { publishPointer, setLocalCursor, remotePresence, dispose };

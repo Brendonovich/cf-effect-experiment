@@ -283,7 +283,19 @@ export const make = Effect.fnUntraced(function* (
             }),
         ),
       );
-    }).pipe(Effect.scoped);
+    }).pipe(
+      Effect.scoped,
+      Effect.timeoutOrElse({
+        duration: "10 seconds",
+        orElse: () =>
+          Effect.fail(
+            new CloudCredentialError({
+              code: "request-failed",
+              reason: "MacroGraph credential request timed out; try again",
+            }),
+          ),
+      }),
+    );
   const fetchCredentials = Effect.gen(function* () {
     const session = yield* activeSession;
     if (session === undefined)

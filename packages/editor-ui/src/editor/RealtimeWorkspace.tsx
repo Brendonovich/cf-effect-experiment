@@ -4,10 +4,10 @@ import * as stylex from "@stylexjs/stylex";
 import { Cause, Effect, Fiber, Stream } from "effect";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
 
-import { runFork } from "../observability/browserTracing";
-import { Editor, type EditorProps } from "./Editor";
 import { LiveEvents } from "../events/LiveEvents";
+import { runFork } from "../observability/browserTracing";
 import { colors } from "../tokens.stylex";
+import { Editor, type EditorProps } from "./Editor";
 
 /** A single live editor connection survives navigation to events and settings. */
 export function RealtimeWorkspace(
@@ -84,6 +84,11 @@ export function RealtimeWorkspace(
           state={activityState()}
           error={error()}
           onRetry={() => setRetry((value) => value + 1)}
+          onReplay={
+            props.controller.connection.canEdit()
+              ? props.controller.connection.activeConnection()?.replayEvent
+              : undefined
+          }
         />
       </div>
       <Show when={view() === "settings"}>
