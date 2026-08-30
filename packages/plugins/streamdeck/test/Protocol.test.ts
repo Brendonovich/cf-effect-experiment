@@ -1,130 +1,93 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
-import {
-  ClientConnected,
-  ClientDisconnected,
-  MessageReceived,
-  WebSocketServerEngine,
-  ClientRpcs as BaseClientRpcs,
-} from "@macrograph/plugin-websocket-server/Definition";
-import { Effect } from "effect";
+import { ClientRpcs as BaseClientRpcs } from "@macrograph/plugin-websocket-server/Definition";
+import * as Protocol from "@macrograph/streamdeck-protocol";
+import * as Wire from "@macrograph/streamdeck-protocol/schema";
+import { Effect, Schema } from "effect";
 
 import {
-  ClientId,
+  ButtonId,
   ClientRpcs,
+  DEFAULT_HOST,
   DEFAULT_PORT,
-  type KeyEvent,
-  ServerId,
+  DeviceId,
+  StreamDeckButton,
   StreamDeckEngine,
+  StreamDeckKeyDown,
   StreamDeckServer,
 } from "../src/Definition.ts";
 import plugin from "../src/Plugin.ts";
-import { makeReceiver } from "../src/Protocol.ts";
 
-const payload = {
-  coordinates: { column: 1, row: 2 },
-  isInMultiAction: false,
-  settings: { id: "my-key", remoteServer: "ws://localhost:1880" },
-};
-
-describe("Stream Deck", () => {
-  it.effect("accepts valid key events only from each server's first connected client", () =>
+describe("Stream Deck protocol + schemas", () => {
+  it.effect("decodes and encodes the wire protocol", () =>
     Effect.gen(function* () {
-      const events: KeyEvent[] = [];
-      const receive = makeReceiver((event) =>
-        Effect.sync(() => {
-          events.push(event);
+      const hello = yield* Schema.decodeUnknownEffect(Wire.Hello)(
+        Protocol.hello("com.macrograph.streamdeck"),
+      );
+      assert.strictEqual(hello.type, "hello");
+      assert.strictEqual(hello.version, Protocol.PROTOCOL_VERSION);
+      assert.strictEqual(Protocol.CLIENT_ID, "macrograph-streamdeck");
+      assert.strictEqual(Protocol.BUTTON_SETTING_KEY, "mgButtonId");
+
+      const keyDown = yield* Schema.decodeUnknownEffect(Wire.PluginMessage)(
+        Protocol.keyDown({
+          deviceId: "d1",
+          action: "com.macrograph.streamdeck.button",
+          context: "c1",
+          coordinates: { column: 0, row: 1 },
+          settings: { [Protocol.BUTTON_SETTING_KEY]: "btn" },
+          payload: { n: 1 },
         }),
       );
-      const serverId = ServerId.make("deck");
-      const otherServer = ServerId.make("other-server");
-      const first = ClientId.make("first");
-      const other = ClientId.make("other");
-      const message = (clientId: ClientId, event: string, server = serverId) =>
-        new MessageReceived({
-          serverId: server,
-          clientId,
-          message: JSON.stringify({ event, payload }),
-        });
-      yield* receive(message(first, "keyDown"));
-      yield* receive(new ClientConnected({ serverId, clientId: first }));
-      yield* receive(new ClientConnected({ serverId, clientId: other }));
-      yield* receive(message(other, "keyDown"));
-      yield* receive(message(first, "keyDown"));
-      yield* receive(message(first, "keyUp"));
-      yield* receive(new ClientConnected({ serverId: otherServer, clientId: other }));
-      yield* receive(message(other, "keyDown", otherServer));
-      assert.deepStrictEqual(
-        events.map((event) => [event.serverId, event.event, event.payload.settings.id]),
-        [
-          [serverId, "keyDown", "my-key"],
-          [serverId, "keyUp", "my-key"],
-          [otherServer, "keyDown", "my-key"],
-        ],
+      assert.strictEqual(keyDown.type, "keyDown");
+
+      const encoded = yield* Schema.encodeUnknownEffect(Wire.MasterMessage)(
+        Protocol.setTitle("c1", "Hello", 1),
       );
-      yield* receive(
-        new ClientDisconnected({ serverId, clientId: other, cause: "peer", reason: "closed" }),
-      );
-      yield* receive(message(first, "keyDown"));
-      assert.strictEqual(events.length, 4);
-      yield* receive(
-        new ClientDisconnected({ serverId, clientId: first, cause: "server", reason: "stopped" }),
-      );
-      yield* receive(message(first, "keyDown"));
-      yield* receive(message(other, "keyDown"));
-      assert.strictEqual(events.length, 4);
-      yield* receive(new ClientConnected({ serverId, clientId: other }));
-      yield* receive(message(other, "keyUp"));
-      assert.strictEqual(events.length, 5);
+      assert.deepStrictEqual(encoded, {
+        type: "setTitle",
+        context: "c1",
+        title: "Hello",
+        state: 1,
+      });
+
+      const bad = yield* Schema.decodeUnknownEffect(Wire.PluginMessage)({
+        type: "keyDown",
+      }).pipe(Effect.result);
+      assert.isTrue(bad._tag === "Failure");
     }),
   );
-  it.effect("drops malformed/unknown messages without breaking subsequent events", () =>
+
+  it.effect("registers event and action schemas filtered by button", () =>
     Effect.gen(function* () {
-      const events: KeyEvent[] = [];
-      const receive = makeReceiver((event) =>
-        Effect.sync(() => {
-          events.push(event);
-        }),
-      );
-      const serverId = ServerId.make("deck");
-      const clientId = ClientId.make("client");
-      yield* receive(new ClientConnected({ serverId, clientId }));
-      for (const message of [
-        "not-json",
-        "null",
-        "{}",
-        JSON.stringify({ event: "dialRotate", payload }),
-        JSON.stringify({
-          event: "keyDown",
-          payload: { ...payload, settings: { id: 123, remoteServer: "" } },
-        }),
-        JSON.stringify({ event: "keyDown", payload: { settings: payload.settings } }),
-      ]) {
-        yield* receive(new MessageReceived({ serverId, clientId, message }));
-      }
-      assert.strictEqual(events.length, 0);
-      yield* receive(
-        new MessageReceived({
-          serverId,
-          clientId,
-          message: JSON.stringify({ event: "keyDown", payload }),
-        }),
-      );
-      assert.strictEqual(events.length, 1);
       const schemas = yield* Registration.collect(plugin.effect);
-      assert.deepStrictEqual(
-        schemas.map((schema) => schema.id),
-        ["KeyDown", "KeyUp"],
-      );
-      assert.isTrue(yield* schemas[0]!.matches(events[0]!, { server: serverId }));
-      assert.isFalse(yield* schemas[1]!.matches(events[0]!, { server: serverId }));
-      assert.isFalse(yield* schemas[0]!.matches(events[0]!, { server: ServerId.make("other") }));
-      const outputs: unknown[] = [];
+      const ids = schemas.map((schema) => schema.id);
+      for (const id of ["KeyDown", "KeyUp", "SetButtonState", "SetButtonTitle"] as const)
+        assert.isTrue(ids.includes(id), `missing schema ${id}`);
+      assert.strictEqual(ids.length, 4);
+
+      const event = new StreamDeckKeyDown({
+        deviceId: DeviceId.make("device"),
+        buttonId: ButtonId.make("btn-1"),
+        buttonName: "Mute",
+        context: "ctx",
+        column: 0,
+        row: 0,
+        state: 1,
+        settings: { [Protocol.BUTTON_SETTING_KEY]: "btn-1" },
+        payload: { ok: true, state: 1 },
+      });
+      assert.isTrue(yield* schemas[0]!.matches(event, {}));
+      assert.isTrue(yield* schemas[0]!.matches(event, { button: ButtonId.make("btn-1") }));
+      assert.isFalse(yield* schemas[0]!.matches(event, { button: ButtonId.make("other") }));
+      assert.isFalse(yield* schemas[1]!.matches(event, { button: ButtonId.make("btn-1") }));
+
+      const allOutputs: unknown[] = [];
       yield* schemas[0]!.run({
         input: () => undefined,
-        output: (_ref, value) => outputs.push(value),
-        properties: { server: serverId },
-        event: events[0],
+        output: (_ref, value) => allOutputs.push(value),
+        properties: {},
+        event,
         engine: {},
         execution: {
           projectId: "project",
@@ -140,15 +103,55 @@ describe("Stream Deck", () => {
           withSpan: <A, E, R>(_name: string, effect: Effect.Effect<A, E, R>) => effect,
         },
       });
-      assert.deepStrictEqual(outputs, ["my-key"]);
+      assert.deepStrictEqual(allOutputs, [
+        "Mute",
+        true,
+        "device",
+        JSON.stringify({ ok: true, state: 1 }),
+        JSON.stringify({ [Protocol.BUTTON_SETTING_KEY]: "btn-1" }),
+      ]);
+
+      const filteredOutputs: unknown[] = [];
+      yield* schemas[0]!.run({
+        input: () => undefined,
+        output: (_ref, value) => filteredOutputs.push(value),
+        properties: { button: ButtonId.make("btn-1") },
+        event,
+        engine: {},
+        execution: {
+          projectId: "project",
+          graphId: "graph",
+          eventNodeId: "event",
+          traceId: "trace",
+        },
+        node: {
+          nodeId: "node",
+          kind: "exec",
+          executionPath: "node",
+          traceId: "trace",
+          withSpan: <A, E, R>(_name: string, effect: Effect.Effect<A, E, R>) => effect,
+        },
+      });
+      assert.deepStrictEqual(filteredOutputs, [
+        "Mute",
+        true,
+        "device",
+        JSON.stringify({ ok: true, state: 1 }),
+        JSON.stringify({ [Protocol.BUTTON_SETTING_KEY]: "btn-1" }),
+      ]);
+
       assert.deepStrictEqual(
         schemas[0]!.properties.map((property) =>
-          "resource" in property ? property.resource : undefined,
+          "resource" in property
+            ? { resource: property.resource, optional: property.optional }
+            : undefined,
         ),
-        [StreamDeckServer.key],
+        [{ resource: StreamDeckButton.key, optional: true }],
       );
       assert.strictEqual(DEFAULT_PORT, 1880);
-      assert.notStrictEqual(StreamDeckEngine.key, WebSocketServerEngine.key);
+      assert.strictEqual(DEFAULT_HOST, "0.0.0.0");
+      assert.notStrictEqual(StreamDeckServer.key, StreamDeckButton.key);
+      assert.notStrictEqual(StreamDeckEngine.key, "WebSocketServer");
       for (const tag of ClientRpcs.requests.keys())
         assert.isFalse(BaseClientRpcs.requests.has(tag));
     }),

@@ -1,0 +1,19 @@
+{
+  "name": "@macrograph/streamdeck-protocol",
+  "version": "0.0.1",
+  "description": "Dependency-free wire protocol between MacroGraph and the external Stream Deck plugin relay",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  }
+}

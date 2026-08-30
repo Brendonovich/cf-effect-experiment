@@ -99,7 +99,7 @@ export type ResourcePropertyDefinition<Type extends Resource.AnyClass = Resource
   readonly name: string;
   readonly description?: string;
   readonly resource: Type;
-  readonly optional?: false;
+  readonly optional?: boolean;
 };
 
 export type PropertyDefinition = ScalarPropertyDefinition | ResourcePropertyDefinition;
@@ -107,7 +107,9 @@ export type PropertyDefinitions = Readonly<Record<string, PropertyDefinition>>;
 
 export type PropertyValues<Properties extends PropertyDefinitions> = {
   readonly [Key in keyof Properties]: Properties[Key] extends ResourcePropertyDefinition<infer R>
-    ? Resource.ResourceClassSelf<R>
+    ? Properties[Key] extends { readonly optional: true }
+      ? Resource.ResourceClassSelf<R> | undefined
+      : Resource.ResourceClassSelf<R>
     : Properties[Key] extends ScalarPropertyDefinition<infer Type>
       ? Properties[Key] extends { readonly optional: true }
         ? DataType.Value<Type> | undefined
@@ -194,7 +196,7 @@ export interface RegisteredResourceProperty {
   readonly description?: string;
   readonly resource: string;
   readonly resourceClass: Resource.AnyClass;
-  readonly optional: false;
+  readonly optional: boolean;
 }
 
 export type RegisteredProperty = RegisteredScalarProperty | RegisteredResourceProperty;
@@ -335,7 +337,7 @@ const makeRegistered = <
             ...(property.description === undefined ? {} : { description: property.description }),
             resource: property.resource.key,
             resourceClass: property.resource,
-            optional: false as const,
+            optional: property.optional === true,
           }
         : {
             id,

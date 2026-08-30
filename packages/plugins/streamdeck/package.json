@@ -17,9 +17,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
     "@macrograph/plugin": "workspace:*",
     "@macrograph/plugin-websocket-server": "workspace:*",
+    "@macrograph/streamdeck-protocol": "workspace:*",
     "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.1"
   },

@@ -214,20 +214,33 @@ export function Inspector(props: {
                                 const value = selected();
                                 return typeof value === "string" ? value : "";
                               };
-                              const valid = () =>
-                                typeof selected() === "string" &&
-                                constants().some((constant) => constant.id === selected());
+                              const options = () =>
+                                resourceProperty().optional
+                                  ? [{ id: "", name: "All" }, ...constants()]
+                                  : constants();
+                              const valid = () => {
+                                if (resourceProperty().optional && selectedConstantId() === "")
+                                  return true;
+                                return (
+                                  typeof selected() === "string" &&
+                                  constants().some((constant) => constant.id === selected())
+                                );
+                              };
                               return (
                                 <label sx={styles.field}>
                                   <span sx={styles.fieldLabel}>{property.name}</span>
                                   <Select
-                                    options={constants()}
+                                    options={options()}
                                     value={selectedConstantId()}
                                     valid={valid()}
-                                    placeholder="Missing constant"
-                                    onChange={(value) =>
-                                      props.onSetNodeProperty(property.id, value)
+                                    placeholder={
+                                      resourceProperty().optional ? "All" : "Missing constant"
                                     }
+                                    onChange={(value) => {
+                                      if (value === "")
+                                        props.onClearNodeProperty(property.id);
+                                      else props.onSetNodeProperty(property.id, value);
+                                    }}
                                   />
                                 </label>
                               );

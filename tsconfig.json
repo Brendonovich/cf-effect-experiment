@@ -59,6 +59,9 @@
       "path": "packages/effect-node-dtls"
     },
     {
+      "path": "packages/streamdeck-protocol"
+    },
+    {
       "path": "packages/project-host"
     },
     {

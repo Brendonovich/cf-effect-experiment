@@ -28,7 +28,7 @@ const ResourcePropertyDefinition = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
   resource: Schema.String,
-  optional: Schema.Literal(false),
+  optional: Schema.Boolean,
 });
 export const PropertyDefinition = Schema.Union([
   ScalarPropertyDefinition,

@@ -1502,15 +1502,24 @@ importers:
 
   packages/plugins/streamdeck:
     dependencies:
+      '@macrograph/editor-ui':
+        specifier: workspace:*
+        version: link:../../editor-ui
       '@macrograph/plugin':
         specifier: workspace:*
         version: link:../../plugin
       '@macrograph/plugin-websocket-server':
         specifier: workspace:*
         version: link:../websocket-server
+      '@macrograph/streamdeck-protocol':
+        specifier: workspace:*
+        version: link:../../streamdeck-protocol
       '@solidjs/web':
         specifier: 2.0.0-rc.1
         version: 2.0.0-rc.1(solid-js@2.0.0-rc.1)
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.107
@@ -1873,6 +1882,12 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(happy-dom@20.11.6)(jsdom@27.4.0)(vite@8.1.5(@types/node@24.12.4)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/streamdeck-protocol:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-beta.107
 
 packages:
 

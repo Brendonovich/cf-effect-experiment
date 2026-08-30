@@ -1,0 +1,47 @@
+{
+  "Name": "MacroGraph",
+  "Version": "0.1.0",
+  "Author": "MacroGraph",
+  "Description": "Bind Stream Deck keys to MacroGraph buttons over a local WebSocket bridge.",
+  "URL": "https://github.com/Brendonovich/macrograph",
+  "UUID": "com.macrograph.streamdeck",
+  "Icon": "imgs/plugin",
+  "Category": "MacroGraph",
+  "CategoryIcon": "imgs/plugin",
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "10.15" },
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ],
+  "Software": {
+    "MinimumVersion": "6.5"
+  },
+  "CodePath": "bin/plugin.js",
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "inspect"
+  },
+  "Actions": [
+    {
+      "Icon": "imgs/action",
+      "Name": "MacroGraph Button",
+      "UUID": "com.macrograph.streamdeck.button",
+      "Tooltip": "A MacroGraph-controlled Stream Deck button.",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "imgs/action",
+          "TitleAlignment": "middle",
+          "FontSize": 12
+        },
+        {
+          "Image": "imgs/action",
+          "TitleAlignment": "middle",
+          "FontSize": 12
+        }
+      ]
+    }
+  ]
+}

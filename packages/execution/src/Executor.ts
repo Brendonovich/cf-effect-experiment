@@ -222,12 +222,17 @@ export const make = Effect.fnUntraced(function* (
       for (const property of schema.properties) {
         if (!("resource" in property)) continue;
         const constantId = node.properties[property.id];
-        if (typeof constantId !== "string")
+        if (typeof constantId !== "string") {
+          if (property.optional) {
+            delete resolved[property.id];
+            continue;
+          }
           return yield* new ResourceResolutionError({
             nodeId: node.id,
             property: property.id,
             reason: "Property is not bound to a resource constant",
           });
+        }
         const constant = currentProject.constants[constantId];
         if (constant === undefined)
           return yield* new ResourceResolutionError({

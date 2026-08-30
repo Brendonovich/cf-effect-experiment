@@ -1,46 +1,45 @@
-# Stream Deck WebSocket
+# Stream Deck
 
-Local-only integration for the legacy MacroGraph Stream Deck WebSocket bridge.
-This is not a Stream Deck SDK plugin. Configure the bridge to connect to the
-listener and select that listener on each event node.
+Native Elgato Stream Deck integration for MacroGraph. MacroGraph hosts a local
+WebSocket listener; an external `.sdPlugin` (separate repo) connects out and
+relays the Stream Deck SDK over `@macrograph/streamdeck-protocol`.
 
-Settings offer **Add Stream Deck Listener (1880)**, which creates a loopback
-listener with the legacy default port `1880`. Click **Start** to bind it. The
-reused WebSocket server settings also support explicit custom hosts and ports;
-their generic add form initially shows port `1890`. No listener starts from
-empty initial storage, and bind failures remain visible rather than succeeding.
+This is **not** the legacy keyDown/keyUp JS bridge. The old protocol is gone.
+
+## Setup
+
+1. Open a project — the engine **auto-seeds and starts** a listener on
+   `0.0.0.0:1880` (no Settings host/port UI).
+2. Create **Buttons** in Stream Deck settings. They persist with the project.
+3. Install the MacroGraph Stream Deck plugin and drag **MacroGraph Button** onto a key.
+4. In the property inspector, pick a MacroGraph button. That writes `mgButtonId`
+   into the key's Stream Deck settings.
+
+Live bindings are runtime-only and rebuild when the plugin reconnects (via
+`deviceConnected` + `appear` replay after `hello`/`helloAck`).
 
 ## Schemas
 
-| ID        | Legacy Name          | Outputs               |
-| --------- | -------------------- | --------------------- |
-| `KeyDown` | Stream Deck Key Down | `id`: string (Key ID) |
-| `KeyUp`   | Stream Deck Key Up   | `id`: string (Key ID) |
+| ID               | Type   | Purpose |
+| ---------------- | ------ | ------- |
+| `KeyDown` / `KeyUp` | event  | Emit **State** (bool) from the key’s current icon state — wire through **NOT** into **Set Button State** to toggle. |
+| `SetButtonState`    | action | Set on/off from a bool |
+| `SetButtonTitle` | action | Set the text on the key |
 
-Both legacy schemas are implemented without structured-output adaptations.
-Inbound JSON must contain `event: "keyDown" | "keyUp"` and the legacy `payload`
-shape: numeric `coordinates.column`/`coordinates.row`, boolean
-`isInMultiAction`, and string `settings.id`/`settings.remoteServer`. Malformed or
-unknown messages are logged and dropped without breaking subsequent events.
+Outbound commands to unbound buttons log a warning and succeed.
 
-Only the first connected client for each configured listener supplies events,
-matching the legacy bridge. Its disconnection clears the selection; a newly
-connected client can then become active. Existing ignored clients must reconnect.
-Events are additionally filtered by the node's selected listener. No outgoing
-commands exist in the legacy plugin.
+## Resources
 
-The engine delegates the existing WebSocket server transport and Node listener,
-but has independent engine/context keys, a `StreamDeckServer` resource and
-`StreamDeck`-prefixed client RPCs. Settings bind to this plugin rather than the
-generic server plugin. The protocol has no authentication; loopback binding is
-recommended. No cloud deployment is provided.
+- `StreamDeckServer` — auto-managed bridge listener
+- `StreamDeckButton` — project button definitions (persisted)
+- `StreamDeckDevice` — connected devices reported by the plugin
+
+## Protocol
+
+Wire shapes live in `@macrograph/streamdeck-protocol`. Handshake requires
+`version === 1` and `client === "macrograph-streamdeck"`.
 
 Exports: plugin default, `Definition`, `Engine`, `Deployment`, and `Settings`
 (named `settings`). Standalone discovery uses `./src/Deployment.ts`.
 
-Runtime dependencies: `@macrograph/plugin`, `@macrograph/plugin-websocket-server`,
-`effect`, `solid-js`, `@solidjs/web`. Tests use `@effect/vitest` and `vitest`.
-
-Run `pnpm exec vitest run` in this package. Tests cover key output/filtering,
-per-listener client selection, malformed-message recovery, management RPC
-delegation, listener failure propagation and the default port.
+Run `pnpm exec vitest run` in this package.

@@ -9,5 +9,10 @@
     "jsxImportSource": "@solidjs/web"
   },
   "include": ["src", "test"],
-  "references": [{ "path": "../../plugin" }, { "path": "../websocket-server" }]
+  "references": [
+    { "path": "../../plugin" },
+    { "path": "../../editor-ui" },
+    { "path": "../../streamdeck-protocol" },
+    { "path": "../websocket-server" }
+  ]
 }
