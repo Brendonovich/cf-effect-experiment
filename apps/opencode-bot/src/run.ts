@@ -9,7 +9,10 @@ if (!Number.isFinite(lifetime) || lifetime <= 0) throw new Error("Console access
 
 // Fetch the account catalog explicitly; environment keys lack OAuth connection metadata.
 const response = await fetch("https://opencode.ai/console/api/config", {
-  headers: { Authorization: `Bearer ${process.env.OPENCODE_API_KEY}` },
+  headers: {
+    Authorization: `Bearer ${process.env.OPENCODE_API_KEY}`,
+    "x-org-id": process.env.OPENCODE_ORG_ID ?? "",
+  },
   signal: AbortSignal.timeout(15_000),
 });
 if (!response.ok) throw new Error(`Console catalog request failed (HTTP ${response.status})`);
