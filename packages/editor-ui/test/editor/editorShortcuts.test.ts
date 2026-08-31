@@ -279,6 +279,7 @@ describe("createEditorShortcuts", () => {
       canvas.onNodeMouseDown(
         new PointerEvent("pointerdown", {
           pointerId: 1,
+          button: 0,
           clientX: 200,
           clientY: 200,
         }),

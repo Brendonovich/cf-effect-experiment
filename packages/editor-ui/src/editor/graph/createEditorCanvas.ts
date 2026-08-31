@@ -387,6 +387,8 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     graphId: string;
     startClientX: number;
     startClientY: number;
+    moved: boolean;
+    deselectOnClick: string | undefined;
     items: Array<{ nodeId: string; origX: number; origY: number }>;
     lastSend: number;
     pending: Array<{ nodeId: string; x: number; y: number }> | null;
@@ -436,6 +438,9 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     publishDragPointer(e);
     const dx = (e.clientX - currentDrag.startClientX) / canvasScale();
     const dy = (e.clientY - currentDrag.startClientY) / canvasScale();
+    currentDrag.moved ||=
+      Math.hypot(e.clientX - currentDrag.startClientX, e.clientY - currentDrag.startClientY) > 5;
+    if (!currentDrag.moved) return;
     const positions = currentDrag.items.map((item) => ({
       nodeId: item.nodeId,
       x: item.origX + dx,
@@ -464,6 +469,15 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     window.removeEventListener("pointermove", onDragMove);
     window.removeEventListener("pointerup", onDragEnd);
     window.removeEventListener("pointercancel", onDragEnd);
+    if (
+      !ds.moved &&
+      (e.type === "pointercancel" ||
+        Math.hypot(e.clientX - ds.startClientX, e.clientY - ds.startClientY) <= 5)
+    ) {
+      if (e.type !== "pointercancel" && ds.deselectOnClick !== undefined)
+        selectNode(ds.deselectOnClick, true);
+      return;
+    }
     const positions =
       e.type === "pointercancel"
         ? ds.current
@@ -494,6 +508,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     window.removeEventListener("pointermove", onDragMove);
     window.removeEventListener("pointerup", onDragEnd);
     window.removeEventListener("pointercancel", onDragEnd);
+    if (!ds.moved) return;
     const positions = ds.items.map((item) => ({
       nodeId: item.nodeId,
       x: item.origX,
@@ -509,22 +524,25 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     e: PointerEvent,
     node: { id: string; position: { x: number; y: number } },
   ) => {
-    if (!canEdit()) return;
+    if (e.button !== 0 || !canEdit()) return;
     cancelNodeDrag();
     e.preventDefault();
     e.stopPropagation();
     const graphId = selectedGraphId();
     if (!graphId) return;
     const graph = selectedGraph();
-    const ids = selectedNodeIds().includes(node.id) ? selectedNodeIds() : [node.id];
-    if (!selectedNodeIds().includes(node.id)) {
-      setSelectedNodeIds([node.id]);
-    }
+    const selected = selectedNodeIds();
+    const alreadySelected = selected.includes(node.id);
+    const ids = alreadySelected ? selected : e.shiftKey ? [...selected, node.id] : [node.id];
+    if (!alreadySelected) selectNode(node.id, e.shiftKey);
     setDragState({
       pointerId: e.pointerId,
       graphId,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      moved: false,
+      // Shift-click toggles on release so holding Shift can still drag the selection.
+      deselectOnClick: e.shiftKey && alreadySelected ? node.id : undefined,
       items: ids.flatMap((id) => {
         const item = graph?.nodes[id];
         return item ? [{ nodeId: id, origX: item.position.x, origY: item.position.y }] : [];
