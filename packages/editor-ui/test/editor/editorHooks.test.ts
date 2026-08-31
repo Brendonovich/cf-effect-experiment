@@ -240,7 +240,7 @@ describe("editor concern hooks", () => {
       });
       flush();
       expect(untrack(dragging)).toEqual([false, false, false]);
-      const pointer = { pointerId: 1, clientX: 10, clientY: 20 };
+      const pointer = { pointerId: 1, button: 0, shiftKey: false, clientX: 10, clientY: 20 };
       canvas.onNodeMouseDown(
         Object.assign(new Event("pointerdown"), pointer) as PointerEvent,
         nodes[0]!,
@@ -285,6 +285,137 @@ describe("editor concern hooks", () => {
       if (end !== "dispose") expect(untrack(dragging)).toEqual([false, false, false]);
     },
   );
+
+  it("distinguishes node-name Shift clicks from group drags without writing click positions", () => {
+    const setNodePosition = vi.fn(() => Effect.never);
+    const { canvas, editor, nodes, selectedNodeIds } = createRoot((cleanup) => {
+      dispose = cleanup;
+      const editor = createEditorStore();
+      const nodes: Node.Model[] = ["first", "second", "other"].map((id) => ({
+        id: Node.NodeId.make(id),
+        name: id,
+        schema: { package: PackageId.make("test"), schema: SchemaId.make("test") },
+        properties: {},
+        inputDefaults: {},
+        foldPins: false,
+        position: { x: 0, y: 0 },
+      }));
+      editor.setProject(
+        {
+          ...Project.empty(),
+          graphs: {
+            main: {
+              ...Graph.empty("main"),
+              nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
+            },
+          },
+        },
+        {},
+      );
+      const [selectedNodeIds, setSelectedNodeIds] = createSignal(["first"]);
+      const canvas = createEditorCanvas({
+        editor,
+        client: () => ({ SetNodePosition: setNodePosition }) as unknown as EditorRpcClient,
+        canEdit: () => true,
+        publishPointer: () => {},
+        selectedGraphId: () => "main",
+        selectedGraph: () => editor.store.project!.graphs.main!,
+        nodes: () => nodes,
+        selectedNodeIds,
+        setSelectedNodeIds,
+        canvasScale: () => 1,
+        setCanvasScale: () => {},
+        canvasOrigin: () => ({ x: 0, y: 0 }),
+        setCanvasOrigin: () => {},
+      });
+      return { canvas, editor, nodes, selectedNodeIds };
+    });
+    flush();
+    const pointer = { pointerId: 1, button: 0, shiftKey: true, clientX: 0, clientY: 0 };
+    const press = (node: Node.Model, overrides: Partial<typeof pointer> = {}) => {
+      const event = Object.assign(
+        new Event("pointerdown", { cancelable: true }),
+        pointer,
+        overrides,
+      );
+      canvas.onNodeMouseDown(event as PointerEvent, node);
+      flush();
+      return event;
+    };
+
+    press(nodes[1]!);
+    expect(selectedNodeIds()).toEqual(["first", "second"]);
+    expect(nodes.map((node) => canvas.isNodeDragging(node.id))).toEqual([true, true, false]);
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(setNodePosition).not.toHaveBeenCalled();
+
+    press(nodes[1]!);
+    expect(selectedNodeIds()).toEqual(["first", "second"]);
+    window.dispatchEvent(
+      Object.assign(new Event("pointermove"), pointer, { clientX: 3, clientY: 4 }),
+    );
+    window.dispatchEvent(
+      Object.assign(new Event("pointerup"), pointer, { clientX: 3, clientY: 4 }),
+    );
+    flush();
+    expect(selectedNodeIds()).toEqual(["first"]);
+    expect(canvas.isDragging()).toBe(false);
+    window.dispatchEvent(Object.assign(new Event("pointermove"), pointer, { clientX: 40 }));
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer, { clientX: 40 }));
+    for (const node of nodes)
+      expect(editor.store.project?.graphs.main?.nodes[node.id]?.position).toEqual({ x: 0, y: 0 });
+
+    press(nodes[0]!);
+    window.dispatchEvent(Object.assign(new Event("pointercancel"), pointer));
+    flush();
+    expect(selectedNodeIds()).toEqual(["first"]);
+    press(nodes[0]!);
+    canvas.cancelNodeDrag();
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(selectedNodeIds()).toEqual(["first"]);
+    press(nodes[0]!);
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(selectedNodeIds()).toEqual([]);
+    expect(canvas.isDragging()).toBe(false);
+    press(nodes[1]!);
+    expect(selectedNodeIds()).toEqual(["second"]);
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(setNodePosition).not.toHaveBeenCalled();
+
+    for (const button of [1, 2]) {
+      expect(press(nodes[2]!, { button }).defaultPrevented).toBe(false);
+      expect(selectedNodeIds()).toEqual(["second"]);
+      expect(canvas.isDragging()).toBe(false);
+    }
+    press(nodes[2]!, { shiftKey: false });
+    expect(selectedNodeIds()).toEqual(["other"]);
+    expect(nodes.map((node) => canvas.isNodeDragging(node.id))).toEqual([false, false, true]);
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(setNodePosition).not.toHaveBeenCalled();
+
+    press(nodes[1]!);
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+    flush();
+    expect(selectedNodeIds()).toEqual(["other", "second"]);
+    press(nodes[1]!);
+    window.dispatchEvent(Object.assign(new Event("pointermove"), pointer, { clientX: 6 }));
+    flush();
+    expect(selectedNodeIds()).toEqual(["other", "second"]);
+    for (const id of ["other", "second"])
+      expect(editor.store.project?.graphs.main?.nodes[id]?.position).toEqual({ x: 6, y: 0 });
+    expect(editor.store.project?.graphs.main?.nodes.first?.position).toEqual({ x: 0, y: 0 });
+    window.dispatchEvent(Object.assign(new Event("pointerup"), pointer, { clientX: 6 }));
+    flush();
+    expect(selectedNodeIds()).toEqual(["other", "second"]);
+    expect(canvas.isDragging()).toBe(false);
+    expect(setNodePosition).toHaveBeenCalledWith({ graphId: "main", nodeId: "other", x: 6, y: 0 });
+    expect(setNodePosition).toHaveBeenCalledWith({ graphId: "main", nodeId: "second", x: 6, y: 0 });
+  });
 
   it.each(["input", "output"] as const)(
     "retains a draft from an %s pin through the menu and async node creation",

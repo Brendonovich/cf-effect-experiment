@@ -439,7 +439,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         title={props.schema?.description}
         onPointerDown={(event) => {
           event.stopPropagation();
-          props.onSelect(props.node.id, event.shiftKey);
+          if (event.button === 0) props.onSelect(props.node.id, event.shiftKey);
         }}
       >
         <div sx={styles.dragHandle} onPointerDown={(event) => props.onDragStart(event, props.node)}>
