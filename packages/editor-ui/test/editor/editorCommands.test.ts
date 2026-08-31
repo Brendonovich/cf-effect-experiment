@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EditorRpcClient } from "../../src/editor/Editor";
 
 import { createEditorCommands } from "../../src/editor/createEditorCommands";
-import { handlePosition } from "../../src/editor/graph/graphPresentation";
+import { graphNodeWidth, graphPortOffset } from "../../src/editor/graph/graphPresentation";
 import { createEditorStore } from "../../src/editor/store";
 
 vi.mock(
@@ -128,13 +128,17 @@ const setup = () =>
 
 describe("node creation placement", () => {
   it.each([
-    ["input", "execution"],
-    ["output", "execution"],
-    ["input", "data"],
-    ["output", "data"],
+    ["input", "execution", false],
+    ["output", "execution", false],
+    ["input", "data", false],
+    ["output", "data", false],
+    ["input", "execution", true],
+    ["output", "execution", true],
+    ["input", "data", true],
+    ["output", "data", true],
   ] as const)(
-    "aligns the connected pin when dragging from an %s %s pin",
-    async (direction, kind) => {
+    "places from an %s %s pin with Shift=%s after applying the pin offset",
+    async (direction, kind, shiftKey) => {
       const { editor, rpc, commands } = setup();
       let finishPosition = (_event: EditorEvent.NodePositionChanged) => {};
       rpc.SetNodePosition.mockImplementationOnce(() =>
@@ -145,29 +149,39 @@ describe("node creation placement", () => {
             }),
         ),
       );
-      const creation = commands.createNode(schema, "A node with a long title", position, {
-        nodeId: "source",
-        direction,
-        port:
-          kind === "execution"
-            ? { kind, id: "exec" }
-            : { kind, id: "value", type: { _tag: "String" } },
-      });
+      const creation = commands.createNode(
+        schema,
+        "A node with a long title",
+        position,
+        {
+          nodeId: "source",
+          direction,
+          port:
+            kind === "execution"
+              ? { kind, id: "exec" }
+              : { kind, id: "value", type: { _tag: "String" } },
+        },
+        shiftKey,
+      );
       await vi.waitFor(() => expect(rpc.SetNodePosition).toHaveBeenCalledOnce());
       flush();
       expect(commands.isNodePositioning("created")).toBe(true);
       expect(commands.isNodePositioning("source")).toBe(false);
       const graph = editor.store.project!.graphs.main!;
-      expect(
-        handlePosition(
-          graph,
-          () => io,
-          "created",
-          kind === "execution" ? "exec" : "value",
-          direction === "output" ? "input" : "output",
-          kind,
-        ),
-      ).toEqual(position);
+      const offset = graphPortOffset(
+        graphNodeWidth(io, "A node with a long title"),
+        direction === "output" ? "input" : "output",
+        kind === "execution" ? 0 : 2,
+      );
+      const aligned = { x: position.x - offset.x, y: position.y - offset.y };
+      expect(graph.nodes.created!.position).toEqual(
+        shiftKey
+          ? aligned
+          : {
+              x: Math.round(aligned.x / 40) * 40,
+              y: Math.round(aligned.y / 40) * 40,
+            },
+      );
       const payload = rpc.SetNodePosition.mock.calls[0]![0];
       expect(payload).toEqual({
         graphId: "main",
@@ -190,11 +204,17 @@ describe("node creation placement", () => {
     },
   );
 
-  it("keeps ordinary menu creation anchored at the node corner", async () => {
+  it.each([false, true])("places ordinary menu creation with Shift=%s", async (shiftKey) => {
     const { editor, rpc, commands } = setup();
-    await commands.createNode(schema, "Node", position);
+    await commands.createNode(schema, "Node", position, undefined, shiftKey);
     flush();
-    expect(editor.store.project!.graphs.main!.nodes.created!.position).toEqual(position);
+    expect(editor.store.project!.graphs.main!.nodes.created!.position).toEqual(
+      shiftKey ? position : { x: 440, y: 200 },
+    );
+    expect(rpc.CreateNode).toHaveBeenCalledWith({
+      graphId: "main",
+      node: { name: "Node", schema, position: shiftKey ? position : { x: 440, y: 200 } },
+    });
     expect(rpc.SetNodePosition).not.toHaveBeenCalled();
     expect(rpc.CreateConnection).not.toHaveBeenCalled();
     expect(commands.isNodePositioning("created")).toBe(false);
