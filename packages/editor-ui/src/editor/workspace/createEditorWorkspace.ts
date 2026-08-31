@@ -275,6 +275,10 @@ export function createEditorWorkspace(
     });
     queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
   };
+  const openShortcuts = () => {
+    dispatchWorkspace({ type: "open-tab", tab: { type: "shortcuts" } });
+    queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
+  };
   const onProjectSnapshot = (project: Parameters<EditorStore["setProject"]>[0]) => {
     const currentTab = selectedWorkspaceTab(workspace());
     const initialGraphId =
@@ -284,7 +288,8 @@ export function createEditorWorkspace(
     if (
       initialGraphId !== undefined &&
       currentTab?.type !== "package" &&
-      currentTab?.type !== "settings"
+      currentTab?.type !== "settings" &&
+      currentTab?.type !== "shortcuts"
     ) {
       dispatchWorkspace({
         type: "open-tab",
@@ -360,6 +365,7 @@ export function createEditorWorkspace(
     activateWorkspacePane,
     openProjectSettings,
     openPackage,
+    openShortcuts,
     selectedPaneId,
     graphs,
     selectedGraph,

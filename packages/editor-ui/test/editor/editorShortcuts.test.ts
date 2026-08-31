@@ -13,6 +13,7 @@ import {
   saveWorkspaceState,
   selectedTab,
   workspaceStorageKey,
+  type WorkspaceState,
 } from "../../src/editor/workspace/workspace";
 
 vi.mock(
@@ -56,18 +57,16 @@ const press = (code: string, key: string, modifiers: KeyboardEventInit = {}) => 
   return event;
 };
 
-const setup = () => {
+const setup = (
+  workspace: WorkspaceState = createWorkspaceState({ type: "graph", graphId: "main" }),
+) => {
   const root = document.createElement("div");
   const activeCanvas = document.createElement("div");
   activeCanvas.setAttribute("data-active-graph-canvas", "");
   vi.spyOn(activeCanvas, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 80, 600, 400));
   root.append(activeCanvas);
   document.body.append(root);
-  saveWorkspaceState(
-    localStorage,
-    workspaceStorageKey("shortcuts", "user"),
-    createWorkspaceState({ type: "graph", graphId: "main" }),
-  );
+  saveWorkspaceState(localStorage, workspaceStorageKey("shortcuts", "user"), workspace);
   const state = createRoot((cleanup) => {
     dispose = cleanup;
     const editor = createEditorStore();
@@ -118,6 +117,35 @@ const setup = () => {
 };
 
 describe("createEditorShortcuts", () => {
+  it("opens and restores shortcuts without losing graph view or running graph actions", async () => {
+    const { layout, commands } = setup();
+    const snapshot = { ...Project.empty(), graphs: { main: Graph.empty("main") } };
+    layout.setCanvasOrigin({ x: 20, y: 30 });
+    layout.setSelectedNodeIds(["expanded"]);
+    layout.openShortcuts();
+    await settle();
+    expect(selectedTab(layout.workspace())?.type).toBe("shortcuts");
+    expect(layout.activeWorkspaceView().type).toBe("shortcuts");
+    expect(layout.selectedGraphId()).toBeNull();
+    press("Delete", "Delete");
+    expect(commands.deleteNode).not.toHaveBeenCalled();
+    layout.onProjectSnapshot(snapshot);
+    expect(selectedTab(layout.workspace())?.type).toBe("shortcuts");
+
+    const saved = layout.workspace();
+    dispose();
+    document.body.replaceChildren();
+    const restored = setup(saved);
+    restored.layout.onProjectSnapshot(snapshot);
+    expect(restored.layout.activeWorkspaceView().type).toBe("shortcuts");
+    expect(selectedTab(restored.layout.workspace())?.type).toBe("shortcuts");
+    expect(press("KeyW", "w", { ctrlKey: true }).defaultPrevented).toBe(true);
+    await settle();
+    expect(restored.layout.selectedGraphId()).toBe("main");
+    expect(restored.layout.canvasOrigin()).toEqual({ x: 20, y: 30 });
+    expect(restored.layout.selectedNodeIds()).toEqual(["expanded"]);
+  });
+
   it("persists replacements, restores on remount, rejects conflicts and resets defaults", () => {
     const { shortcuts } = setup();
     expect(shortcuts.replace("toggle-navigation", "super+i")).toBe(false);

@@ -17,6 +17,44 @@ const leaves = (tree: PaneTree): ReadonlyArray<string> =>
   tree.type === "pane" ? [tree.paneId] : [...leaves(tree.first), ...leaves(tree.second)];
 
 describe("workspace reducer", () => {
+  it("opens shortcuts once per pane and supports splitting, moving, persistence and closing", () => {
+    let state = createWorkspaceState({ type: "graph", graphId: "main" });
+    const firstPaneId = state.focusedPaneId;
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "shortcuts" } });
+    const shortcuts = selectedTab(state)!;
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "shortcuts" } });
+    expect(state.panes[firstPaneId]?.tabs.map((tab) => tab.type)).toEqual(["graph", "shortcuts"]);
+    expect(selectedTab(state)).toEqual(shortcuts);
+
+    state = workspaceReducer(state, {
+      type: "split-pane",
+      paneId: firstPaneId,
+      direction: "horizontal",
+    });
+    const secondPaneId = state.focusedPaneId;
+    const copy = selectedTab(state)!;
+    expect(copy).toEqual({ id: expect.any(String), type: "shortcuts" });
+    expect(copy.id).not.toBe(shortcuts.id);
+    state = workspaceReducer(state, {
+      type: "close-tab",
+      paneId: firstPaneId,
+      tabId: shortcuts.id,
+    });
+    expect(selectedTab(state, firstPaneId)?.type).toBe("graph");
+    expect(parseWorkspaceState(JSON.stringify(state))).toEqual(state);
+
+    state = workspaceReducer(state, {
+      type: "move-tab",
+      fromPaneId: secondPaneId,
+      toPaneId: firstPaneId,
+      tabId: copy.id,
+    });
+    expect(state.panes[secondPaneId]).toBeUndefined();
+    expect(selectedTab(state)).toEqual(copy);
+    state = workspaceReducer(state, { type: "cycle-tab", delta: -1 });
+    expect(selectedTab(state)?.type).toBe("graph");
+  });
+
   it("creates an empty workspace when no initial tab is provided", () => {
     const state = createWorkspaceState();
     expect(state.panes[state.focusedPaneId]).toMatchObject({ tabs: [], selectedTabId: null });

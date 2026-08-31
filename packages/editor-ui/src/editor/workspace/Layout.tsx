@@ -369,6 +369,7 @@ export function TabLayout(props: {
           };
           element.addEventListener("pointerdown", focus, { capture: true });
           element.addEventListener("wheel", focus, { capture: true });
+          element.addEventListener("focusin", focus, { capture: true });
         }}
         sx={styles.content}
       >

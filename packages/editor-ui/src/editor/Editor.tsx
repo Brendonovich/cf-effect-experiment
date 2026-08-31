@@ -74,6 +74,22 @@ const styles = stylex.create({
   },
   errorActions: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 20 },
   tabIcon: { width: 14, height: 14, flexShrink: 0 },
+  footer: {
+    display: "flex",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    borderTop: `1px solid ${colors.gray5}`,
+    backgroundColor: colors.gray2,
+    paddingInline: 8,
+  },
+  shortcutsButton: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    borderRadius: 4,
+    color: colors.gray12,
+    fontSize: 12,
+    minHeight: { default: 44, "@media (min-width: 768px)": 32 },
+    paddingInline: 12,
+  },
   editor: {
     "--gray-1": "#111111",
     "--gray-2": "#191919",
@@ -430,6 +446,7 @@ function EditorContent(
           tab.packageId,
         description: "Plugin",
       };
+    if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
     return {
       id: tab.id,
       title: "Settings",
@@ -438,6 +455,7 @@ function EditorContent(
   };
 
   const renderWorkspacePreview = (tab: WorkspaceTab) => {
+    if (tab.type === "shortcuts") return <ShortcutsHelp shortcuts={shortcuts} />;
     if (tab.type === "package") {
       const pkg = () =>
         controller.editor.store.packages.find((candidate) => candidate.id === tab.packageId);
@@ -949,7 +967,15 @@ function EditorContent(
               />
             </Sidebar>
           </div>
-          <ShortcutsHelp shortcuts={shortcuts} />
+          <footer sx={styles.footer}>
+            <button
+              type="button"
+              sx={[styles.focusRing, styles.shortcutsButton]}
+              onClick={controller.layout.openShortcuts}
+            >
+              Shortcuts
+            </button>
+          </footer>
         </Show>
       </div>
     </div>

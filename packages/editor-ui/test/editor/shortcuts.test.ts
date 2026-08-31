@@ -255,23 +255,38 @@ describe("editor keymap", () => {
     }
   });
 
-  it("blocks every editor action while the shortcuts dialog is open, including body events", () => {
+  it("keeps workspace shortcuts available with a shortcuts pane open", () => {
     const { root, run } = setup();
-    const dialog = document.createElement("dialog");
-    dialog.setAttribute("data-editor-shortcuts", "");
-    dialog.open = true;
+    const pane = document.createElement("section");
+    pane.setAttribute("data-editor-shortcuts", "");
     const button = document.createElement("button");
-    dialog.append(button);
-    root.append(dialog);
+    pane.append(button);
+    root.append(pane);
+    for (const target of [button, document.body]) {
+      expect(press("b", { metaKey: true }, target).defaultPrevented).toBe(true);
+      expect(press("w", { ctrlKey: true }, target).defaultPrevented).toBe(true);
+    }
+    expect(run.mock.calls).toEqual([
+      ["toggle-navigation"],
+      ["close-tab"],
+      ["toggle-navigation"],
+      ["close-tab"],
+    ]);
+    run.mockClear();
+    pane.setAttribute("data-recording-shortcut", "");
+    button.focus();
     for (const target of [button, document.body]) {
       expect(press("b", { metaKey: true }, target).defaultPrevented).toBe(false);
-      expect(press("Backspace", {}, target).defaultPrevented).toBe(false);
+      expect(press("w", { ctrlKey: true }, target).defaultPrevented).toBe(false);
       expect(press("Escape", {}, target).defaultPrevented).toBe(false);
     }
     expect(run).not.toHaveBeenCalled();
-    dialog.open = false;
-    press("b", { metaKey: true });
+    const canvas = document.createElement("div");
+    root.append(canvas);
+    expect(press("b", { metaKey: true }, canvas).defaultPrevented).toBe(true);
     expect(run).toHaveBeenCalledExactlyOnceWith("toggle-navigation");
+    pane.removeAttribute("data-recording-shortcut");
+    expect(press("w", { ctrlKey: true }, button).defaultPrevented).toBe(true);
   });
 
   it("lists platform aliases without duplicate or non-Apple Command bindings", () => {

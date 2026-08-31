@@ -7,14 +7,6 @@ import { colors } from "../tokens.stylex.ts";
 import { capturedShortcut, editorShortcuts, type ShortcutAction } from "./shortcuts";
 
 const styles = stylex.create({
-  footer: {
-    display: "flex",
-    justifyContent: "flex-end",
-    flexShrink: 0,
-    borderTop: `1px solid ${colors.gray5}`,
-    backgroundColor: colors.gray2,
-    paddingInline: 8,
-  },
   button: {
     backgroundColor: { default: "transparent", ":hover": colors.gray4 },
     borderRadius: 4,
@@ -25,20 +17,15 @@ const styles = stylex.create({
     outline: "none",
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
-  dialog: {
+  pane: {
     backgroundColor: colors.gray2,
-    border: `1px solid ${colors.gray6}`,
-    borderRadius: 8,
-    boxShadow: "0 24px 80px rgb(0 0 0 / 0.5)",
     color: colors.gray12,
-    margin: "auto",
-    maxHeight: "calc(100dvh - 24px)",
-    maxWidth: "calc(100vw - 24px)",
+    containerType: "inline-size",
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
     overflow: "auto",
-    padding: 0,
     userSelect: "text",
-    width: 600,
-    "::backdrop": { backgroundColor: "rgb(0 0 0 / 0.65)" },
   },
   header: {
     alignItems: "center",
@@ -61,7 +48,10 @@ const styles = stylex.create({
     borderBottom: `1px solid ${colors.gray4}`,
     display: "grid",
     gap: 8,
-    gridTemplateColumns: { default: "1fr", "@media (min-width: 480px)": "1fr 1fr" },
+    gridTemplateColumns: {
+      default: "minmax(0, 1fr)",
+      "@container (min-width: 480px)": "minmax(0, 1fr) minmax(0, 1fr)",
+    },
     paddingBlock: 8,
     fontSize: 12,
   },
@@ -70,7 +60,7 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     gap: 6,
-    justifyContent: { default: "flex-start", "@media (min-width: 480px)": "flex-end" },
+    justifyContent: { default: "flex-start", "@container (min-width: 480px)": "flex-end" },
     margin: 0,
   },
   key: {
@@ -81,15 +71,13 @@ const styles = stylex.create({
     fontSize: 11,
     paddingBlock: 2,
     paddingInline: 6,
-    whiteSpace: "nowrap",
+    overflowWrap: "anywhere",
   },
   gesture: { color: colors.gray11, margin: 0 },
 });
 
 export function ShortcutsHelp(props: { shortcuts: ReturnType<typeof createEditorShortcuts> }) {
   const [recording, setRecording] = createSignal<ShortcutAction>();
-  let dialog: HTMLDialogElement | undefined;
-  let trigger: HTMLButtonElement | undefined;
   const titleId = createUniqueId();
   const descriptionId = createUniqueId();
   const apple = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -115,137 +103,124 @@ export function ShortcutsHelp(props: { shortcuts: ReturnType<typeof createEditor
   ];
 
   return (
-    <div sx={styles.footer}>
-      <button
-        ref={trigger}
-        type="button"
-        sx={styles.button}
-        aria-haspopup="dialog"
-        onClick={() => dialog?.showModal()}
-      >
-        Shortcuts
-      </button>
-      <dialog
-        ref={dialog}
-        data-editor-shortcuts
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        sx={styles.dialog}
-        onClose={() => {
+    <section
+      data-editor-shortcuts
+      data-recording-shortcut={recording() === undefined ? undefined : ""}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      sx={styles.pane}
+      onFocusOut={(event) => {
+        if (
+          !(event.relatedTarget instanceof globalThis.Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        )
           setRecording(undefined);
-          trigger?.focus();
-        }}
-        onCancel={() => setRecording(undefined)}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          const action = untrack(recording);
-          if (action === undefined || event.key === "Tab") return;
-          event.preventDefault();
-          if (
-            event.key === "Escape" &&
-            !event.ctrlKey &&
-            !event.metaKey &&
-            !event.altKey &&
-            !event.shiftKey
-          ) {
+      }}
+      onKeyDown={(event) => {
+        const action = untrack(recording);
+        if (action === undefined) return;
+        event.stopPropagation();
+        if (event.key === "Tab") return;
+        event.preventDefault();
+        if (
+          event.key === "Escape" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey
+        ) {
+          setRecording(undefined);
+          return;
+        }
+        const key = capturedShortcut(event);
+        if (key !== undefined && props.shortcuts.replace(action, key)) setRecording(undefined);
+      }}
+    >
+      <header sx={styles.header}>
+        <h2 id={titleId} sx={styles.title}>
+          Keyboard shortcuts
+        </h2>
+      </header>
+      <div sx={styles.content}>
+        <p id={descriptionId} sx={styles.note}>
+          Shortcuts apply to the focused editor pane, not while typing in a field. Editing actions
+          require edit access. Pane splitting is desktop-only. Changes are saved in this browser on
+          this device, not in the project or account.
+        </p>
+        <h3 sx={styles.heading}>{apple ? "Mac / iPad keyboard" : "Windows / Linux keyboard"}</h3>
+        <p sx={styles.note}>
+          {apple ? "Command is shown as \u2318. " : ""}
+          Each key combination is an alternative. Some browser shortcuts may be reserved. Change
+          replaces all alternatives for an action. Conflicts are rejected, not reassigned.
+        </p>
+        <button
+          type="button"
+          sx={styles.button}
+          onClick={() => {
             setRecording(undefined);
-            return;
-          }
-          const key = capturedShortcut(event);
-          if (key !== undefined && props.shortcuts.replace(action, key)) setRecording(undefined);
-        }}
-      >
-        <header sx={styles.header}>
-          <h2 id={titleId} sx={styles.title}>
-            Keyboard shortcuts
-          </h2>
-          <button type="button" autofocus sx={styles.button} onClick={() => dialog?.close()}>
-            Close
-          </button>
-        </header>
-        <div sx={styles.content}>
-          <p id={descriptionId} sx={styles.note}>
-            Shortcuts apply to the focused editor pane, not while typing in a field. Editing actions
-            require edit access. Pane splitting is desktop-only. Changes are saved in this browser
-            on this device, not in the project or account.
-          </p>
-          <h3 sx={styles.heading}>{apple ? "Mac / iPad keyboard" : "Windows / Linux keyboard"}</h3>
-          <p sx={styles.note}>
-            {apple ? "Command is shown as \u2318. " : ""}
-            Each key combination is an alternative. Some browser shortcuts may be reserved. Change
-            replaces all alternatives for an action. Conflicts are rejected, not reassigned.
-          </p>
-          <button
-            type="button"
-            sx={styles.button}
-            onClick={() => {
-              setRecording(undefined);
-              props.shortcuts.reset();
-            }}
-          >
-            Reset all to defaults
-          </button>
-          <p role="status" aria-live="polite" sx={styles.note}>
-            {props.shortcuts.message()}
-          </p>
-          <dl sx={styles.list}>
-            <For each={editorShortcuts}>
-              {(shortcut) => (
-                <div sx={styles.row} data-shortcut-action={shortcut.action}>
-                  <dt>{shortcut.label}</dt>
-                  <dd sx={styles.bindings}>
-                    <For each={props.shortcuts.labels(shortcut.action, apple)}>
-                      {(label) => <kbd sx={styles.key}>{label}</kbd>}
-                    </For>
-                    <Show when={recording() === shortcut.action}>
-                      <span sx={styles.note}>
-                        Press a shortcut; Escape cancels. Tab moves focus.
-                      </span>
-                    </Show>
+            props.shortcuts.reset();
+          }}
+        >
+          Reset all to defaults
+        </button>
+        <p role="status" aria-live="polite" sx={styles.note}>
+          {props.shortcuts.message()}
+        </p>
+        <dl sx={styles.list}>
+          <For each={editorShortcuts}>
+            {(shortcut) => (
+              <div sx={styles.row} data-shortcut-action={shortcut.action}>
+                <dt>{shortcut.label}</dt>
+                <dd sx={styles.bindings}>
+                  <For each={props.shortcuts.labels(shortcut.action, apple)}>
+                    {(label) => <kbd sx={styles.key}>{label}</kbd>}
+                  </For>
+                  <Show when={recording() === shortcut.action}>
+                    <span sx={styles.note}>Press a shortcut; Escape cancels. Tab moves focus.</span>
+                  </Show>
+                  <button
+                    type="button"
+                    sx={styles.button}
+                    aria-label={`Change ${shortcut.label}`}
+                    aria-pressed={recording() === shortcut.action ? "true" : "false"}
+                    onClick={() =>
+                      setRecording((current) =>
+                        current === shortcut.action ? undefined : shortcut.action,
+                      )
+                    }
+                  >
+                    {recording() === shortcut.action ? "Cancel" : "Change"}
+                  </button>
+                  <Show when={props.shortcuts.overrides()[shortcut.action] !== undefined}>
                     <button
                       type="button"
                       sx={styles.button}
-                      aria-label={`Change ${shortcut.label}`}
-                      aria-pressed={recording() === shortcut.action ? "true" : "false"}
-                      onClick={() =>
-                        setRecording((current) =>
-                          current === shortcut.action ? undefined : shortcut.action,
-                        )
-                      }
+                      aria-label={`Reset ${shortcut.label}`}
+                      onClick={() => {
+                        setRecording(undefined);
+                        props.shortcuts.reset(shortcut.action);
+                      }}
                     >
-                      {recording() === shortcut.action ? "Cancel" : "Change"}
+                      Reset
                     </button>
-                    <Show when={props.shortcuts.overrides()[shortcut.action] !== undefined}>
-                      <button
-                        type="button"
-                        sx={styles.button}
-                        aria-label={`Reset ${shortcut.label}`}
-                        onClick={() => {
-                          setRecording(undefined);
-                          props.shortcuts.reset(shortcut.action);
-                        }}
-                      >
-                        Reset
-                      </button>
-                    </Show>
-                  </dd>
-                </div>
-              )}
-            </For>
-          </dl>
-          <h3 sx={styles.heading}>Mouse, trackpad and touch</h3>
-          <dl sx={styles.list}>
-            <For each={gestures}>
-              {(gesture) => (
-                <div sx={styles.row}>
-                  <dt>{gesture[0]}</dt>
-                  <dd sx={styles.gesture}>{gesture[1]}</dd>
-                </div>
-              )}
-            </For>
-          </dl>
-        </div>
-      </dialog>
-    </div>
+                  </Show>
+                </dd>
+              </div>
+            )}
+          </For>
+        </dl>
+        <h3 sx={styles.heading}>Mouse, trackpad and touch</h3>
+        <dl sx={styles.list}>
+          <For each={gestures}>
+            {(gesture) => (
+              <div sx={styles.row}>
+                <dt>{gesture[0]}</dt>
+                <dd sx={styles.gesture}>{gesture[1]}</dd>
+              </div>
+            )}
+          </For>
+        </dl>
+      </div>
+    </section>
   );
 }

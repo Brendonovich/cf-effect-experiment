@@ -206,10 +206,15 @@ export function registerEditorShortcuts(
         name: action,
         run: ({ event }) => {
           const original = event.originalEvent;
+          const target =
+            original?.target === root.ownerDocument.body
+              ? root.ownerDocument.activeElement
+              : original?.target;
           if (
             !root.isConnected ||
             root.closest("[hidden], .hidden, [inert]") !== null ||
-            root.ownerDocument.querySelector("dialog[open][data-editor-shortcuts]") !== null ||
+            // The host captures on body before the pane's delegated recording handler.
+            (target instanceof Element && target.closest("[data-recording-shortcut]") !== null) ||
             original?.defaultPrevented ||
             original?.isComposing ||
             (original?.target instanceof globalThis.Node &&
