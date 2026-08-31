@@ -29,6 +29,7 @@ import {
   wireColor,
 } from "./graph/graphPresentation";
 import { shortcutLabel } from "./shortcuts";
+import { ShortcutsHelp } from "./ShortcutsHelp";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -942,6 +943,7 @@ function EditorContent(
               />
             </Sidebar>
           </div>
+          <ShortcutsHelp />
         </Show>
       </div>
     </div>
