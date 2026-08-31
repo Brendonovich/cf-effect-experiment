@@ -14,6 +14,8 @@ import { createStore } from "solid-js";
 type MutableGraph = {
   id: Graph.GraphId;
   name: string;
+  kind?: Graph.Model["kind"];
+  signature?: Graph.FunctionSignature | undefined;
   nodes: Record<string, Node.Model>;
   connections: Connection.Model[];
 };
@@ -45,9 +47,7 @@ export function createEditorStore() {
     events: [],
     resourceValues: {},
   });
-  const setStore = (
-    update: (store: MutableEditorStore) => MutableEditorStore | undefined | void,
-  ) =>
+  const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
     setStoreValue((current) => {
       const draft: MutableEditorStore = {
         project:
@@ -114,6 +114,7 @@ export function createEditorStore() {
               nodes: { ...event.graph.nodes },
               connections: [...event.graph.connections],
             };
+            store.nodeIO[event.graph.id] = { ...event.nodeIO };
           }
         });
         break;
@@ -124,10 +125,32 @@ export function createEditorStore() {
           if (store.project) {
             store.project.graphs = graphs;
             delete store.nodeIO[event.graphId];
+            for (const graph of Object.values(store.project.graphs)) {
+              for (const node of Object.values(graph.nodes)) {
+                if (
+                  node.schema.package === "macrograph-functions" &&
+                  node.schema.schema === "call" &&
+                  node.properties.function === event.graphId
+                ) {
+                  const io = store.nodeIO[graph.id]?.[node.id];
+                  if (io)
+                    store.nodeIO[graph.id]![node.id] = { ...io, dataInputs: [], dataOutputs: [] };
+                }
+              }
+            }
           }
         });
         break;
       }
+      case "FunctionSignatureChanged":
+        setStore((store) => {
+          const graph = store.project?.graphs[event.graphId];
+          if (graph) graph.signature = event.signature;
+          for (const [graphId, nodes] of Object.entries(event.nodeIO)) {
+            Object.assign((store.nodeIO[graphId] ??= {}), nodes);
+          }
+        });
+        break;
       case "GraphNameChanged": {
         const graph = store.project.graphs[event.graphId];
         if (!graph) break;

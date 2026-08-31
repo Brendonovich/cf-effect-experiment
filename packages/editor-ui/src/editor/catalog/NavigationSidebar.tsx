@@ -304,6 +304,7 @@ export function NavigationSidebar(props: {
   onCreateGraph: () => void;
   onCreateQueue?: () => void;
   queuesPanel?: JSX.Element;
+  onCreateFunction?: () => void;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -534,6 +535,17 @@ export function NavigationSidebar(props: {
             />
           </div>
           <Show when={props.section === "graphs"}>
+            <Show when={props.onCreateFunction && props.canEditGraphs}>
+              <button
+                type="button"
+                sx={[styles.focus, styles.newButton]}
+                aria-label="New function"
+                title="New function"
+                onClick={() => props.onCreateFunction?.()}
+              >
+                fn
+              </button>
+            </Show>
             <button
               type="button"
               sx={[styles.focus, styles.newButton]}
@@ -659,7 +671,7 @@ export function NavigationSidebar(props: {
           >
             {([id, graph]) => (
               <GraphNavigationOption
-                name={graph.name}
+                name={graph.kind === "function" ? `fn ${graph.name}` : graph.name}
                 selected={props.selectedPaneId === `graph:${id}`}
                 canEdit={props.canEditGraphs}
                 onSelect={() => props.onSelectGraph(id)}

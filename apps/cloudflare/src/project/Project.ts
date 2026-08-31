@@ -203,6 +203,7 @@ export const make = (
             .createGraph(payload, user.id)
             .pipe(
               Effect.catchTags({
+                FunctionError: () => new HttpApiError.BadRequest(),
                 SchemaNotFoundError: () => new HttpApiError.BadRequest(),
                 InvalidPropertyError: () => new HttpApiError.BadRequest(),
                 InvalidInputDefaultError: () => new HttpApiError.BadRequest(),
@@ -238,18 +239,21 @@ export const make = (
       deleteGraph: ({
         projectId,
         graphId,
+        force = false,
       }: {
         readonly projectId: string;
         readonly graphId: string;
+        readonly force?: boolean;
       }) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
           const project = yield* load(projectId);
           yield* projectEditors
             .getByName(project.id)
-            .deleteGraph(graphId, project.id, user.id)
+            .deleteGraph(graphId, project.id, user.id, force)
             .pipe(
               Effect.catchTags({
+                ProjectNotFoundError: () => new HttpApiError.NotFound(),
                 GraphNotFoundError: () => new HttpApiError.NotFound(),
                 PersistenceError: (error) => Effect.die(error),
               }),
@@ -358,6 +362,7 @@ export const make = (
             .createNode(graphId, payload, user.id)
             .pipe(
               Effect.catchTags({
+                FunctionError: () => new HttpApiError.BadRequest(),
                 GraphNotFoundError: () => new HttpApiError.NotFound(),
                 SchemaNotFoundError: () => new HttpApiError.BadRequest(),
                 InvalidPropertyError: () => new HttpApiError.BadRequest(),

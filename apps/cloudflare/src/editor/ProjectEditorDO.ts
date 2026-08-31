@@ -266,8 +266,14 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         };
         return endpoints;
       });
-      const reconcileEditorIngress = (engines: Readonly<Record<string, unknown>>, remount = false) =>
-        reconcileEditorIngressRaw(engines, remount).pipe(Effect.provide(runtimeContext), Effect.orDie);
+      const reconcileEditorIngress = (
+        engines: Readonly<Record<string, unknown>>,
+        remount = false,
+      ) =>
+        reconcileEditorIngressRaw(engines, remount).pipe(
+          Effect.provide(runtimeContext),
+          Effect.orDie,
+        );
 
       const endpointHostLayer = Layer.succeed(
         HttpEndpoint.Host,
@@ -507,9 +513,11 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               }
             }
 
-            const created = yield* editor.graph.create(
-              input.name === undefined ? {} : { name: input.name },
-            );
+            const created = yield* editor.graph.create({
+              ...(input.name === undefined ? {} : { name: input.name }),
+              ...(input.kind === undefined ? {} : { kind: input.kind }),
+              ...(input.signature === undefined ? {} : { signature: input.signature }),
+            });
 
             return yield* Effect.gen(function* () {
               const nodeIds = new Map<string, string>();
@@ -538,7 +546,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
             }).pipe(
               Effect.catchCause((cause) =>
                 editor.graph
-                  .delete({ graphID: created.graph.id })
+                  .delete({ graphID: created.graph.id, force: true })
                   .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
               ),
             );
@@ -557,11 +565,12 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         graphId: string,
         projectId: string,
         userId: string,
+        force = false,
       ) {
         yield* persistence.loadGraph(graphId);
         const actor = { type: "CLIENT", id: userId } as const;
         yield* editorEvents.withActor(
-          editor.graph.delete({ graphID: graphId }).pipe(
+          editor.graph.delete({ graphID: graphId, force }).pipe(
             Effect.tap(() =>
               presence.graphDeleted(graphId).pipe(
                 Effect.provideService(EditorAccess.Connection, {
