@@ -137,6 +137,7 @@ const styles = stylex.create({
   portList: {
     display: "flex",
     flex: 1,
+    minWidth: 0,
     flexDirection: "column",
     alignItems: "stretch",
     gap: 8,
@@ -157,7 +158,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: 6,
     minWidth: 0,
-    flex: 1,
+    flex: "1 1 auto",
   },
   portLabel: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   outputSide: { justifyContent: "flex-end" },
@@ -469,8 +470,13 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       props.connectedOutputIds,
     );
   const hasHiddenPins = () =>
-    inputs().length !== graphNodeInputs(props.io).length ||
-    outputs().length !== graphNodeOutputs(props.io).length;
+    inputs().length <
+      retainedPorts(
+        graphNodeInputs(props.io),
+        props.connectedInputIds,
+        Object.keys(props.node.inputDefaults),
+      ).length ||
+    outputs().length < retainedPorts(graphNodeOutputs(props.io), props.connectedOutputIds).length;
   const rows = () =>
     Array.from({
       length: Math.max(inputs().length, outputs().length),

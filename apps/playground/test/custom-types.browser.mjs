@@ -369,6 +369,18 @@ try {
   await selectNode(make);
   await page.getByText(/Orphan input:/).waitFor();
   assert.equal((await page.locator("[data-invalid-pin]").count()) > 0, true);
+  const nodeBounds = await page.locator(`[data-graph-node="${make.id}"]`).boundingBox();
+  const retainedOutput = await page
+    .locator(`[data-node-id="${make.id}"][data-io-direction="output"]`)
+    .first()
+    .boundingBox();
+  assert(
+    nodeBounds &&
+      retainedOutput &&
+      retainedOutput.x >= nodeBounds.x &&
+      retainedOutput.x + retainedOutput.width <= nodeBounds.x + nodeBounds.width,
+    "orphan labels must not push current output pins outside the node",
+  );
   await button(
     "Remove default",
     page.locator("[data-default-editor]").filter({ hasText: "Ada" }).first(),
@@ -438,11 +450,13 @@ try {
   await preview();
   await confirm();
   const beforeBlocked = logs.filter((log) => log.includes("Utilities Print")).length;
+  const blockedLogStart = logs.length;
   await button("events").click();
   await page.getByRole("button").filter({ hasText: "TickEvent" }).first().click();
   page.once("dialog", (dialog) => dialog.accept());
   await button("Replay").click();
   await page.getByText(/Replay queued/).waitFor();
+  await waitLog((log) => log.includes("InvalidInputValue"), blockedLogStart);
   await page.getByRole("button").filter({ hasText: "TickEvent" }).first().click();
   await page
     .getByText(/InvalidTypeGraph|Invalid.*default|does not match/)
