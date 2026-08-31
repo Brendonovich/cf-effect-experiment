@@ -10,17 +10,13 @@ import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,8 +24,11 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
-import { shortcutLabel } from "./shortcuts";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -410,7 +409,12 @@ function EditorContent(
     canvasOrigin: controller.layout.canvasOrigin,
     setCanvasOrigin: controller.layout.setCanvasOrigin,
   });
-  createEditorShortcuts(() => editorRoot, controller.layout, canvas, controller.commands);
+  const shortcuts = createEditorShortcuts(
+    () => editorRoot,
+    controller.layout,
+    canvas,
+    controller.commands,
+  );
 
   const workspaceTabTitle = (tab: WorkspaceTab) => {
     if (tab.type === "graph")
@@ -534,7 +538,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.leftPill]}
-                title={`Toggle navigation (${shortcutLabel("toggle-navigation")})`}
+                title={`Toggle navigation (${shortcuts.label("toggle-navigation")})`}
                 onClick={controller.layout.toggleNavigation}
               >
                 Browse
@@ -543,6 +547,7 @@ function EditorContent(
 
             <main sx={[styles.main, controller.layout.paneZoomed() ? styles.zoomedMain : null]}>
               <WorkspacePanes
+                shortcutLabel={shortcuts.label}
                 state={controller.layout.workspace()}
                 mobile={controller.layout.isMobile()}
                 title={workspaceTabTitle}
@@ -595,8 +600,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
@@ -910,7 +915,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.rightPill]}
-                title={`Toggle inspector (${shortcutLabel("toggle-inspector")})`}
+                title={`Toggle inspector (${shortcuts.label("toggle-inspector")})`}
                 onClick={() => controller.layout.setInspectorOpen(true)}
               >
                 Inspect
@@ -943,7 +948,7 @@ function EditorContent(
               />
             </Sidebar>
           </div>
-          <ShortcutsHelp />
+          <ShortcutsHelp shortcuts={shortcuts} />
         </Show>
       </div>
     </div>

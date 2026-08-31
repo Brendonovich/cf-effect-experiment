@@ -1,8 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { For, createUniqueId } from "solid-js";
+import { For, Show, createSignal, createUniqueId, untrack } from "solid-js";
+
+import type { createEditorShortcuts } from "./createEditorShortcuts";
 
 import { colors } from "../tokens.stylex.ts";
-import { editorShortcuts, shortcutLabels } from "./shortcuts";
+import { capturedShortcut, editorShortcuts, type ShortcutAction } from "./shortcuts";
 
 const styles = stylex.create({
   footer: {
@@ -83,7 +85,8 @@ const styles = stylex.create({
   gesture: { color: colors.gray11, margin: 0 },
 });
 
-export function ShortcutsHelp() {
+export function ShortcutsHelp(props: { shortcuts: ReturnType<typeof createEditorShortcuts> }) {
+  const [recording, setRecording] = createSignal<ShortcutAction>();
   let dialog: HTMLDialogElement | undefined;
   let trigger: HTMLButtonElement | undefined;
   const titleId = createUniqueId();
@@ -93,7 +96,10 @@ export function ShortcutsHelp() {
     ["Pan graph", "Scroll, or drag empty canvas with the middle or right mouse button"],
     ["Zoom graph", apple ? "Command or Ctrl + scroll" : "Ctrl + scroll"],
     ["Select nodes in an area", "Drag empty canvas; hold Shift to add to selection"],
-    ["Toggle a node in selection", "Shift + click the node header outside its name"],
+    [
+      "Toggle a node in selection",
+      "Shift + click a node, including its name; ports and fields keep their own actions",
+    ],
     ["Move selected nodes", "Drag a node header"],
     ["Create node", "Right-click or long-press empty canvas"],
     ["Node actions", "Right-click a node"],
@@ -121,8 +127,29 @@ export function ShortcutsHelp() {
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         sx={styles.dialog}
-        onClose={() => trigger?.focus()}
-        onKeyDown={(event) => event.stopPropagation()}
+        onClose={() => {
+          setRecording(undefined);
+          trigger?.focus();
+        }}
+        onCancel={() => setRecording(undefined)}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          const action = untrack(recording);
+          if (action === undefined || event.key === "Tab") return;
+          event.preventDefault();
+          if (
+            event.key === "Escape" &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            !event.altKey &&
+            !event.shiftKey
+          ) {
+            setRecording(undefined);
+            return;
+          }
+          const key = capturedShortcut(event);
+          if (key !== undefined && props.shortcuts.replace(action, key)) setRecording(undefined);
+        }}
       >
         <header sx={styles.header}>
           <h2 id={titleId} sx={styles.title}>
@@ -135,23 +162,68 @@ export function ShortcutsHelp() {
         <div sx={styles.content}>
           <p id={descriptionId} sx={styles.note}>
             Shortcuts apply to the focused editor pane, not while typing in a field. Editing actions
-            require edit access. Pane splitting is desktop-only. This is a reference; shortcuts
-            cannot be remapped yet.
+            require edit access. Pane splitting is desktop-only. Changes are saved in this browser
+            on this device, not in the project or account.
           </p>
           <h3 sx={styles.heading}>{apple ? "Mac / iPad keyboard" : "Windows / Linux keyboard"}</h3>
           <p sx={styles.note}>
             {apple ? "Command is shown as \u2318. " : ""}
-            Each key combination is an alternative. Some browser shortcuts may be reserved.
+            Each key combination is an alternative. Some browser shortcuts may be reserved. Change
+            replaces all alternatives for an action. Conflicts are rejected, not reassigned.
+          </p>
+          <button
+            type="button"
+            sx={styles.button}
+            onClick={() => {
+              setRecording(undefined);
+              props.shortcuts.reset();
+            }}
+          >
+            Reset all to defaults
+          </button>
+          <p role="status" aria-live="polite" sx={styles.note}>
+            {props.shortcuts.message()}
           </p>
           <dl sx={styles.list}>
             <For each={editorShortcuts}>
               {(shortcut) => (
-                <div sx={styles.row}>
+                <div sx={styles.row} data-shortcut-action={shortcut.action}>
                   <dt>{shortcut.label}</dt>
                   <dd sx={styles.bindings}>
-                    <For each={shortcutLabels(shortcut.action, apple)}>
+                    <For each={props.shortcuts.labels(shortcut.action, apple)}>
                       {(label) => <kbd sx={styles.key}>{label}</kbd>}
                     </For>
+                    <Show when={recording() === shortcut.action}>
+                      <span sx={styles.note}>
+                        Press a shortcut; Escape cancels. Tab moves focus.
+                      </span>
+                    </Show>
+                    <button
+                      type="button"
+                      sx={styles.button}
+                      aria-label={`Change ${shortcut.label}`}
+                      aria-pressed={recording() === shortcut.action ? "true" : "false"}
+                      onClick={() =>
+                        setRecording((current) =>
+                          current === shortcut.action ? undefined : shortcut.action,
+                        )
+                      }
+                    >
+                      {recording() === shortcut.action ? "Cancel" : "Change"}
+                    </button>
+                    <Show when={props.shortcuts.overrides()[shortcut.action] !== undefined}>
+                      <button
+                        type="button"
+                        sx={styles.button}
+                        aria-label={`Reset ${shortcut.label}`}
+                        onClick={() => {
+                          setRecording(undefined);
+                          props.shortcuts.reset(shortcut.action);
+                        }}
+                      >
+                        Reset
+                      </button>
+                    </Show>
                   </dd>
                 </div>
               )}

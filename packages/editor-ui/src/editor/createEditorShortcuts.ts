@@ -1,11 +1,20 @@
-import { onSettled } from "solid-js";
+import { createSignal, onSettled, untrack } from "solid-js";
 
-import type { createEditorCanvas } from "./graph/createEditorCanvas";
 import type { createEditorCommands } from "./createEditorCommands";
+import type { createEditorCanvas } from "./graph/createEditorCanvas";
 import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 import { foldSelectedPins } from "./graph/connectionAuthoring";
-import { registerEditorShortcuts } from "./shortcuts";
+import {
+  decodeShortcutOverrides,
+  registerEditorShortcuts,
+  shortcutKeys,
+  shortcutLabel,
+  shortcutLabels,
+  shortcutsStorageKey,
+  type ShortcutAction,
+  type ShortcutOverrides,
+} from "./shortcuts";
 import { selectedTab as selectedWorkspaceTab, workspaceReducer } from "./workspace/workspace";
 
 export function createEditorShortcuts(
@@ -14,6 +23,37 @@ export function createEditorShortcuts(
   canvas: ReturnType<typeof createEditorCanvas>,
   commands: Pick<ReturnType<typeof createEditorCommands>, "deleteNode" | "setNodeFoldPins">,
 ) {
+  const [overrides, setOverrides] = createSignal<ShortcutOverrides>({});
+  const [message, setMessage] = createSignal("");
+  let registration: ReturnType<typeof registerEditorShortcuts> | undefined;
+  const read = () => {
+    try {
+      return decodeShortcutOverrides(localStorage.getItem(shortcutsStorageKey));
+    } catch {
+      return {};
+    }
+  };
+  const apply = (next: ShortcutOverrides) => {
+    const effective = registration?.update(next) ?? next;
+    setOverrides(effective);
+    if (Object.keys(next).length !== Object.keys(effective).length)
+      setMessage(
+        "Saved shortcuts conflict with each other or current defaults. Using defaults; choose new bindings or reset all.",
+      );
+  };
+  const save = (next: ShortcutOverrides) => {
+    apply(next);
+    try {
+      if (Object.keys(next).length === 0) localStorage.removeItem(shortcutsStorageKey);
+      else localStorage.setItem(shortcutsStorageKey, JSON.stringify(next));
+      window.dispatchEvent(new Event(shortcutsStorageKey));
+      setMessage("Saved on this device.");
+    } catch {
+      setMessage(
+        "Applied for this editor only. Device storage is unavailable; changes will not survive reload.",
+      );
+    }
+  };
   const {
     workspace,
     setWorkspace,
@@ -154,9 +194,52 @@ export function createEditorShortcuts(
           return true;
       }
     });
+    registration = dispose;
+    apply(read());
+    const sync = () => apply(read());
+    const storage = (event: StorageEvent) => {
+      if (event.key === shortcutsStorageKey || event.key === null) sync();
+    };
+    window.addEventListener(shortcutsStorageKey, sync);
+    window.addEventListener("storage", storage);
     return () => {
+      registration = undefined;
+      window.removeEventListener(shortcutsStorageKey, sync);
+      window.removeEventListener("storage", storage);
       dispose();
       root.removeEventListener("pointermove", trackPointer);
     };
   });
+  return {
+    overrides,
+    message,
+    label: (action: ShortcutAction) => shortcutLabel(action, undefined, overrides()),
+    labels: (action: ShortcutAction, apple: boolean) => shortcutLabels(action, apple, overrides()),
+    replace: (action: ShortcutAction, key: string) => {
+      const current = untrack(overrides);
+      const conflict = registration?.conflict(action, [key], current);
+      if (conflict !== undefined) {
+        setMessage(`Already assigned to ${conflict.label}. Choose another shortcut.`);
+        return false;
+      }
+      save({ ...current, [action]: key });
+      return true;
+    },
+    reset: (action?: ShortcutAction) => {
+      if (action === undefined) {
+        save({});
+        return;
+      }
+      const next = { ...untrack(overrides) };
+      delete next[action];
+      const conflict = registration?.conflict(action, shortcutKeys(action), next);
+      if (conflict !== undefined) {
+        setMessage(
+          `Default conflicts with ${conflict.label}. Reset that action first or reset all.`,
+        );
+        return;
+      }
+      save(next);
+    },
+  };
 }

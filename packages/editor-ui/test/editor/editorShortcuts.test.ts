@@ -4,10 +4,10 @@ import { Graph, Node, PackageId, Project, SchemaId } from "@macrograph/core";
 import { createRoot, flush } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import { createEditorShortcuts } from "../../src/editor/createEditorShortcuts";
-import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
+import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import { createEditorStore } from "../../src/editor/store";
+import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
 import {
   createWorkspaceState,
   saveWorkspaceState,
@@ -110,14 +110,84 @@ const setup = () => {
       deleteNode: vi.fn<(nodeId: string) => void>(),
       setNodeFoldPins: vi.fn<(nodeId: string, foldPins: boolean) => void>(),
     };
-    createEditorShortcuts(() => root, layout, canvas, commands);
-    return { editor, layout, canvas, commands, nodes };
+    const shortcuts = createEditorShortcuts(() => root, layout, canvas, commands);
+    return { editor, layout, canvas, commands, nodes, shortcuts };
   });
   flush();
   return { ...state, root, activeCanvas };
 };
 
 describe("createEditorShortcuts", () => {
+  it("persists replacements, restores on remount, rejects conflicts and resets defaults", () => {
+    const { shortcuts } = setup();
+    expect(shortcuts.replace("toggle-navigation", "super+i")).toBe(false);
+    flush();
+    expect(shortcuts.message()).toContain("Already assigned");
+    expect(shortcuts.replace("toggle-inspector", "ctrl+shift+k")).toBe(true);
+    flush();
+    expect(shortcuts.label("toggle-inspector")).toBe("Ctrl+Shift+K");
+    dispose();
+    document.body.replaceChildren();
+    const restored = setup().shortcuts;
+    expect(restored.label("toggle-inspector")).toBe("Ctrl+Shift+K");
+    restored.reset("toggle-inspector");
+    flush();
+    expect(restored.labels("toggle-inspector", true)).toEqual(["\u2318R", "\u2318I"]);
+    restored.replace("toggle-navigation", "ctrl+shift+k");
+    restored.reset();
+    flush();
+    expect(restored.overrides()).toEqual({});
+  });
+
+  it("synchronizes storage events and reports failed device persistence", () => {
+    const { shortcuts } = setup();
+    localStorage.setItem(
+      "macrograph:device-shortcuts:v1",
+      JSON.stringify({ "toggle-inspector": "ctrl+shift+k" }),
+    );
+    window.dispatchEvent(new StorageEvent("storage", { key: "macrograph:device-shortcuts:v1" }));
+    flush();
+    expect(shortcuts.label("toggle-inspector")).toBe("Ctrl+Shift+K");
+    const write = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      shortcuts.replace("toggle-inspector", "ctrl+shift+j");
+      flush();
+      expect(shortcuts.label("toggle-inspector")).toBe("Ctrl+Shift+J");
+      expect(shortcuts.message()).toContain("will not survive reload");
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("updates two mounted editors without leaving stale bindings or subscriptions", () => {
+    const first = setup();
+    const disposeFirst = dispose;
+    try {
+      const second = setup();
+      first.shortcuts.replace("toggle-inspector", "ctrl+shift+k");
+      flush();
+      expect(second.shortcuts.label("toggle-inspector")).toBe("Ctrl+Shift+K");
+      disposeFirst();
+      first.root.remove();
+      second.shortcuts.reset();
+      flush();
+      expect(first.shortcuts.label("toggle-inspector")).toBe("Ctrl+Shift+K");
+      expect(second.shortcuts.label("toggle-inspector")).toBe("\u2318R");
+    } finally {
+      disposeFirst();
+    }
+  });
+
+  it("rejects conflicting persisted bindings without crashing or overwriting storage", () => {
+    const raw = JSON.stringify({ "toggle-navigation": "super+i" });
+    localStorage.setItem("macrograph:device-shortcuts:v1", raw);
+    const { shortcuts } = setup();
+    expect(shortcuts.overrides()).toEqual({});
+    expect(shortcuts.message()).toContain("Using defaults");
+    expect(localStorage.getItem("macrograph:device-shortcuts:v1")).toBe(raw);
+  });
   it("restores the last navigation section and toggles inspector and pane zoom", () => {
     const { layout } = setup();
     layout.setNavSection("packages");

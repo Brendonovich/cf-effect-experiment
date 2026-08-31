@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  capturedShortcut,
+  decodeShortcutOverrides,
   editorShortcuts,
   registerEditorShortcuts,
   shortcutLabel,
@@ -36,6 +38,103 @@ const press = (
 };
 
 describe("editor keymap", () => {
+  it("captures physical keys and safely decodes only supported single strokes", () => {
+    expect(
+      capturedShortcut(
+        new KeyboardEvent("keydown", {
+          key: "|",
+          code: "Backslash",
+          shiftKey: true,
+          ctrlKey: true,
+        }),
+      ),
+    ).toBe("ctrl+shift+\\");
+    expect(capturedShortcut(new KeyboardEvent("keydown", { key: "Shift" }))).toBeUndefined();
+    expect(capturedShortcut(new KeyboardEvent("keydown", { key: "Tab" }))).toBeUndefined();
+    expect(
+      capturedShortcut(new KeyboardEvent("keydown", { key: "k", isComposing: true })),
+    ).toBeUndefined();
+    for (const raw of ["{", "[]", "null", "42"]) expect(decodeShortcutOverrides(raw)).toEqual({});
+    expect(
+      decodeShortcutOverrides(
+        JSON.stringify({
+          "toggle-navigation": "ctrl+shift+k",
+          cancel: [],
+          "close-tab": "ctrl+k ctrl+w",
+          "next-tab": "shift+ctrl+k",
+          unknown: "k",
+        }),
+      ),
+    ).toEqual({ "toggle-navigation": "ctrl+shift+k" });
+    for (const key of ["\\", "[", "]", ".", ",", "/", ";", "'", "`", "-", "="])
+      expect(
+        decodeShortcutOverrides(JSON.stringify({ "create-node": `ctrl+shift+${key}` })),
+      ).toEqual({ "create-node": `ctrl+shift+${key}` });
+  });
+
+  it.each(["MacIntel", "Win32"])(
+    "uses library overrides and platform-aware conflict matching on %s",
+    (platform) => {
+      const { root, run } = setup(platform);
+      dispose();
+      const registration = registerEditorShortcuts(root, run);
+      dispose = registration;
+      const modifier = platform === "MacIntel" ? { metaKey: true } : { ctrlKey: true };
+      expect(
+        registration.conflict(
+          "toggle-navigation",
+          [platform === "MacIntel" ? "super+i" : "ctrl+i"],
+          {},
+        )?.action,
+      ).toBe("toggle-inspector");
+      registration.update({ "toggle-inspector": "ctrl+shift+k" });
+      expect(press("i", modifier).defaultPrevented).toBe(false);
+      expect(press("r", modifier).defaultPrevented).toBe(false);
+      expect(press("K", { code: "KeyK", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(
+        true,
+      );
+      expect(run).toHaveBeenCalledExactlyOnceWith("toggle-inspector");
+      expect(
+        shortcutLabel("toggle-inspector", platform === "MacIntel", {
+          "toggle-inspector": "ctrl+shift+k",
+        }),
+      ).toBe("Ctrl+Shift+K");
+      expect(
+        registration.update({
+          "toggle-navigation": platform === "MacIntel" ? "super+i" : "ctrl+i",
+        }),
+      ).toEqual({});
+      press("i", modifier);
+      expect(run).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("isolates multiple editors and keeps remapped cancel out of editable fields", () => {
+    const { root, run } = setup();
+    const second = document.createElement("div");
+    const button = document.createElement("button");
+    second.append(button);
+    document.body.append(second);
+    const secondRun = vi.fn(() => true);
+    const registration = registerEditorShortcuts(second, secondRun, { cancel: "k" });
+    try {
+      press("b", { metaKey: true });
+      expect(run).not.toHaveBeenCalled();
+      expect(secondRun).not.toHaveBeenCalled();
+      button.focus();
+      press("b", { metaKey: true });
+      expect(run).not.toHaveBeenCalled();
+      expect(secondRun).toHaveBeenCalledExactlyOnceWith("toggle-navigation");
+      const input = document.createElement("input");
+      second.append(input);
+      press("k", {}, input);
+      expect(secondRun).toHaveBeenCalledOnce();
+      press("b", { metaKey: true }, root);
+      expect(run).toHaveBeenCalledOnce();
+    } finally {
+      registration();
+    }
+  });
   it.each([
     ["b", { metaKey: true }, "toggle-navigation"],
     ["r", { metaKey: true }, "toggle-inspector"],
