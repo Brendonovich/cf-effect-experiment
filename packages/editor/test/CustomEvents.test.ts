@@ -97,3 +97,34 @@ it("validates imported registries and defaults old projects", () => {
       Schema.decodeUnknownSync(Project.Model)({ ...Project.empty(), customEvents }),
     ).toThrow();
 });
+
+it.effect("roundtrips edited nested event types into generated Emit and On IO", () =>
+  Effect.gen(function* () {
+    const editor = yield* Editor.Service;
+    const type = DataType.List(DataType.Option(DataType.List(DataType.Int)));
+    yield* editor.customEvent.put({ ...event, fields: [{ ...event.fields[0]!, type }] });
+    const { graph } = yield* editor.graph.create({});
+    const emit = yield* editor.node.create({
+      graphID: graph.id,
+      node: {
+        schema: { package: CustomEvent.packageId, schema: CustomEvent.schemaId(event.id, "emit") },
+      },
+    });
+    const on = yield* editor.node.create({
+      graphID: graph.id,
+      node: {
+        schema: { package: CustomEvent.packageId, schema: CustomEvent.schemaId(event.id, "on") },
+      },
+    });
+    const edited = DataType.List(DataType.List(DataType.List(DataType.Bool)));
+    yield* editor.customEvent.put({ ...event, fields: [{ ...event.fields[0]!, type: edited }] });
+    const snapshot = yield* editor.project.snapshot();
+    expect(snapshot.nodeIO[graph.id]![emit.node.id]!.dataInputs[0]!.type).toEqual(edited);
+    expect(snapshot.nodeIO[graph.id]![on.node.id]!.dataOutputs[0]!.type).toEqual(edited);
+    const encoded = yield* Schema.encodeUnknownEffect(Project.Model)(snapshot.project);
+    expect(
+      (yield* Schema.decodeUnknownEffect(Project.Model)(encoded)).customEvents[event.id]!.fields[0]!
+        .type,
+    ).toEqual(edited);
+  }).pipe(Effect.provide(layer)),
+);

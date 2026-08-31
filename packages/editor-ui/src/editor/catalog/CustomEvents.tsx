@@ -5,6 +5,8 @@ import { createSignal, For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { Button } from "../../ui/Button";
+import { DataTypePicker } from "../../ui/DataTypePicker";
+import { formatDataType } from "../graph/GraphNode";
 
 const styles = stylex.create({
   root: { padding: 8, display: "flex", flexDirection: "column", gap: 8, fontSize: 12 },
@@ -34,51 +36,6 @@ const styles = stylex.create({
   muted: { color: colors.gray10, lineHeight: "18px" },
   error: { color: colors.red11 },
 });
-
-function FieldType(props: { value: DataType.Any; onChange: (type: DataType.Any) => void }) {
-  return (
-    <div sx={styles.row}>
-      <select
-        aria-label="Field type"
-        sx={styles.input}
-        value={props.value._tag}
-        onChange={(event) => {
-          const tag = event.currentTarget.value;
-          if (tag === "List") props.onChange(DataType.List(DataType.String));
-          else if (tag === "Option") props.onChange(DataType.Option(DataType.String));
-          else if (
-            tag === "String" ||
-            tag === "Int" ||
-            tag === "Float" ||
-            tag === "Bool" ||
-            tag === "DateTime"
-          )
-            props.onChange(DataType[tag]);
-        }}
-      >
-        <For each={["String", "Int", "Float", "Bool", "DateTime", "List", "Option"]}>
-          {(type) => <option value={type}>{type}</option>}
-        </For>
-      </select>
-      <Show when={props.value._tag === "List" || props.value._tag === "Option"}>
-        <FieldType
-          value={
-            props.value._tag === "List"
-              ? props.value.item
-              : props.value._tag === "Option"
-                ? props.value.inner
-                : DataType.String
-          }
-          onChange={(inner) =>
-            props.onChange(
-              props.value._tag === "List" ? DataType.List(inner) : DataType.Option(inner),
-            )
-          }
-        />
-      </Show>
-    </div>
-  );
-}
 
 export function CustomEvents(props: {
   events: Readonly<Record<string, CustomEvent.Model>>;
@@ -147,7 +104,7 @@ export function CustomEvents(props: {
             <For each={event.fields}>
               {(field) => (
                 <span sx={styles.muted}>
-                  {field.name}: {field.type._tag}
+                  {field.name}: {formatDataType(field.type)}
                 </span>
               )}
             </For>
@@ -157,7 +114,7 @@ export function CustomEvents(props: {
                   disabled={pending()}
                   onClick={() => {
                     setError("");
-                    setDraft(structuredClone(event));
+                    setDraft({ ...event, fields: event.fields.map((field) => ({ ...field })) });
                   }}
                 >
                   Edit {event.name}
@@ -192,47 +149,52 @@ export function CustomEvents(props: {
                 onInput={(e) => setDraft({ ...event(), name: e.currentTarget.value })}
               />
             </label>
-            <For each={event().fields}>
-              {(field) => (
-                <div sx={styles.card}>
-                  <input
-                    required
-                    aria-label="Field name"
-                    sx={styles.input}
-                    value={field.name}
-                    onInput={(e) =>
-                      setDraft({
-                        ...event(),
-                        fields: event().fields.map((item) =>
-                          item.id === field.id ? { ...item, name: e.currentTarget.value } : item,
-                        ),
-                      })
-                    }
-                  />
-                  <FieldType
-                    value={field.type}
-                    onChange={(type) =>
-                      setDraft({
-                        ...event(),
-                        fields: event().fields.map((item) =>
-                          item.id === field.id ? { ...item, type } : item,
-                        ),
-                      })
-                    }
-                  />
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      setDraft({
-                        ...event(),
-                        fields: event().fields.filter((item) => item.id !== field.id),
-                      })
-                    }
-                  >
-                    Remove field
-                  </Button>
-                </div>
-              )}
+            <For each={event().fields.map((field) => field.id)}>
+              {(fieldId) => {
+                const field = () => event().fields.find((field) => field.id === fieldId)!;
+                return (
+                  <div sx={styles.card}>
+                    <input
+                      required
+                      aria-label="Field name"
+                      sx={styles.input}
+                      value={field().name}
+                      onInput={(e) =>
+                        setDraft({
+                          ...event(),
+                          fields: event().fields.map((item) =>
+                            item.id === fieldId ? { ...item, name: e.currentTarget.value } : item,
+                          ),
+                        })
+                      }
+                    />
+                    <DataTypePicker
+                      label="Field type"
+                      disabled={pending() || !props.canEdit}
+                      value={field().type}
+                      onChange={(type) =>
+                        setDraft({
+                          ...event(),
+                          fields: event().fields.map((item) =>
+                            item.id === fieldId ? { ...item, type } : item,
+                          ),
+                        })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        setDraft({
+                          ...event(),
+                          fields: event().fields.filter((item) => item.id !== fieldId),
+                        })
+                      }
+                    >
+                      Remove field
+                    </Button>
+                  </div>
+                );
+              }}
             </For>
             <Button
               type="button"
