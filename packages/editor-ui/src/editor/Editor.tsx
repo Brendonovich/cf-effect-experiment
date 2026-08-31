@@ -10,17 +10,14 @@ import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { ClipboardRebind } from "./ClipboardRebind";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,8 +25,12 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -463,6 +464,24 @@ function EditorContent(
 
   return (
     <div ref={editorRoot} sx={styles.editor}>
+      <Show when={controller.commands.clipboardRebind()}>
+        {(requests) => (
+          <ClipboardRebind
+            requests={requests()}
+            finish={controller.commands.finishClipboardRebind}
+          />
+        )}
+      </Show>
+      <Show when={controller.commands.clipboardError()}>
+        {(message) => (
+          <div role="alert">
+            {message()}
+            <Button type="button" onClick={controller.commands.dismissClipboardError}>
+              Dismiss
+            </Button>
+          </div>
+        )}
+      </Show>
       <div
         sx={[
           styles.loadingOverlay,
@@ -595,8 +614,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,

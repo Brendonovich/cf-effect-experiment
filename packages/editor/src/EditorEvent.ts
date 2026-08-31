@@ -36,6 +36,23 @@ export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
 });
 export type NodeCreated = typeof NodeCreated.Type;
 
+export const FragmentPasted = Schema.TaggedStruct("FragmentPasted", {
+  actor,
+  graphId: Schema.String,
+  nodes: Schema.Array(Node.Model),
+  connections: Schema.Array(Connection.Model),
+  nodeIO: Schema.Record(Schema.String, NodeIO),
+});
+export type FragmentPasted = typeof FragmentPasted.Type;
+
+export const FragmentDeleted = Schema.TaggedStruct("FragmentDeleted", {
+  actor,
+  graphId: Schema.String,
+  nodeIds: Schema.Array(Schema.String),
+  deletedConnectionIds: Schema.Array(Schema.String),
+});
+export type FragmentDeleted = typeof FragmentDeleted.Type;
+
 export const NodeDeleted = Schema.TaggedStruct("NodeDeleted", {
   actor,
   graphId: Schema.String,
@@ -152,6 +169,8 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
 export type EditorEvent =
+  | FragmentPasted
+  | FragmentDeleted
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged

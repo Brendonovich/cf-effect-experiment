@@ -43,9 +43,7 @@ export function createEditorStore() {
     events: [],
     resourceValues: {},
   });
-  const setStore = (
-    update: (store: MutableEditorStore) => MutableEditorStore | undefined | void,
-  ) =>
+  const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
     setStoreValue((current) => {
       const draft: MutableEditorStore = {
         project:
@@ -97,6 +95,30 @@ export function createEditorStore() {
     if (!store.project) return;
 
     switch (event._tag) {
+      case "FragmentPasted":
+      case "FragmentDeleted":
+        setStore((store) => {
+          const graph = store.project?.graphs[event.graphId];
+          if (graph === undefined) return;
+          if (event._tag === "FragmentPasted") {
+            for (const node of event.nodes) graph.nodes[node.id] = node;
+            store.nodeIO[event.graphId] = { ...store.nodeIO[event.graphId], ...event.nodeIO };
+            const existing = new Set(graph.connections.map((connection) => connection.id));
+            graph.connections.push(
+              ...event.connections.filter((connection) => !existing.has(connection.id)),
+            );
+          } else {
+            for (const id of event.nodeIds) {
+              delete graph.nodes[id];
+              delete store.nodeIO[event.graphId]?.[id];
+            }
+            const deleted = new Set(event.deletedConnectionIds);
+            graph.connections = graph.connections.filter(
+              (connection) => !deleted.has(connection.id),
+            );
+          }
+        });
+        break;
       case "GraphCreated":
         setStore((store) => {
           if (store.project) {

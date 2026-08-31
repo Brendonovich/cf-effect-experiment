@@ -4,10 +4,10 @@ import { Graph, Node, PackageId, Project, SchemaId } from "@macrograph/core";
 import { createRoot, flush } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import { createEditorShortcuts } from "../../src/editor/createEditorShortcuts";
-import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
+import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import { createEditorStore } from "../../src/editor/store";
+import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
 import {
   createWorkspaceState,
   saveWorkspaceState,
@@ -107,6 +107,12 @@ const setup = () => {
     });
     canvas.setGraphCanvas(activeCanvas);
     const commands = {
+      copyNodes: vi
+        .fn<(nodeIds: ReadonlyArray<string>, cut?: boolean) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      pasteNodes: vi
+        .fn<(position: { x: number; y: number }) => Promise<void>>()
+        .mockResolvedValue(undefined),
       deleteNode: vi.fn<(nodeId: string) => void>(),
       setNodeFoldPins: vi.fn<(nodeId: string, foldPins: boolean) => void>(),
     };
@@ -118,6 +124,30 @@ const setup = () => {
 };
 
 describe("createEditorShortcuts", () => {
+  it("dispatches clipboard actions and leaves native editable clipboard shortcuts untouched", () => {
+    const { layout, commands } = setup();
+    layout.setSelectedGraphId("main");
+    layout.setSelectedNodeIds(["folded"]);
+    flush();
+    expect(press("KeyC", "c", { metaKey: true }).defaultPrevented).toBe(true);
+    expect(commands.copyNodes).toHaveBeenCalledWith(["folded"], false);
+    press("KeyX", "x", { metaKey: true });
+    expect(commands.copyNodes).toHaveBeenCalledWith(["folded"], true);
+    press("KeyV", "v", { metaKey: true });
+    expect(commands.pasteNodes).toHaveBeenCalledTimes(1);
+    const input = document.createElement("input");
+    document.body.append(input);
+    const event = new KeyboardEvent("keydown", {
+      code: "KeyC",
+      key: "c",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(commands.copyNodes).toHaveBeenCalledTimes(2);
+  });
   it("restores the last navigation section and toggles inspector and pane zoom", () => {
     const { layout } = setup();
     layout.setNavSection("packages");

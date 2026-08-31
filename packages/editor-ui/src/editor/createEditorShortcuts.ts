@@ -1,7 +1,7 @@
 import { onSettled } from "solid-js";
 
-import type { createEditorCanvas } from "./graph/createEditorCanvas";
 import type { createEditorCommands } from "./createEditorCommands";
+import type { createEditorCanvas } from "./graph/createEditorCanvas";
 import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 import { foldSelectedPins } from "./graph/connectionAuthoring";
@@ -12,7 +12,10 @@ export function createEditorShortcuts(
   rootElement: () => HTMLDivElement | undefined,
   layout: ReturnType<typeof createEditorWorkspace>,
   canvas: ReturnType<typeof createEditorCanvas>,
-  commands: Pick<ReturnType<typeof createEditorCommands>, "deleteNode" | "setNodeFoldPins">,
+  commands: Pick<
+    ReturnType<typeof createEditorCommands>,
+    "deleteNode" | "setNodeFoldPins" | "copyNodes" | "pasteNodes"
+  >,
 ) {
   const {
     workspace,
@@ -55,6 +58,17 @@ export function createEditorShortcuts(
       if ((shortcut === "split-horizontal" || shortcut === "split-vertical") && isMobile())
         return false;
       switch (shortcut) {
+        case "copy-nodes":
+        case "cut-nodes":
+          if (
+            tab?.type !== "graph" ||
+            selectedNodeIds().length === 0 ||
+            isDragging() ||
+            connectionDrag() !== undefined
+          )
+            return false;
+          void commands.copyNodes([...selectedNodeIds()], shortcut === "cut-nodes");
+          return true;
         case "cancel":
           if (isDragging()) cancelNodeDrag();
           else if (connectionDrag() !== undefined) {
@@ -116,6 +130,7 @@ export function createEditorShortcuts(
           });
           return true;
         }
+        case "paste-nodes":
         case "create-node": {
           if (tab?.type !== "graph" || isDragging() || connectionDrag() !== undefined) return false;
           const element = root.querySelector<HTMLDivElement>("[data-active-graph-canvas]");
@@ -130,6 +145,10 @@ export function createEditorShortcuts(
               ? pointer
               : { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
           canvas.setGraphCanvas(element);
+          if (shortcut === "paste-nodes") {
+            void commands.pasteNodes(canvas.canvasPosition(screen.x, screen.y));
+            return true;
+          }
           setNodeMenu({ screen, graph: canvas.canvasPosition(screen.x, screen.y) });
           return true;
         }

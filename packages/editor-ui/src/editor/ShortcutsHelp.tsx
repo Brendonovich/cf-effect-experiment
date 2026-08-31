@@ -141,7 +141,12 @@ export function ShortcutsHelp() {
           <h3 sx={styles.heading}>{apple ? "Mac / iPad keyboard" : "Windows / Linux keyboard"}</h3>
           <p sx={styles.note}>
             {apple ? "Command is shown as \u2318. " : ""}
-            Each key combination is an alternative. Some browser shortcuts may be reserved.
+            Each key combination is an alternative. Some browser shortcuts may be reserved. Node
+            clipboard uses the system clipboard and requires browser permission. Paste snaps the
+            group's top-left anchor to the grid, preserving relative spacing. System-created nodes
+            are skipped when copying or cutting. Missing definitions require explicit rebinding;
+            they are never imported. Valid external links reconnect only in the source graph;
+            missing endpoints and occupied inputs are skipped.
           </p>
           <dl sx={styles.list}>
             <For each={editorShortcuts}>
