@@ -228,7 +228,9 @@ it.each(["copy", "cut", "paste"] as const)(
 it("runs clipboard and local editor mutations offline", async () => {
   const state = setup();
   onlineManager.setOnline(false);
-  await state.commands.copyNodes(["a"], true);
+  const cut = state.commands.copyNodes(["a"], true);
+  expect(state.commands.clipboardMutation.isPaused).toBe(false);
+  await cut;
   await state.commands.pasteNodes({ x: 0, y: 0 });
   expect(state.deleteFragment).toHaveBeenCalledTimes(1);
   expect(state.pasteFragment).toHaveBeenCalledTimes(1);

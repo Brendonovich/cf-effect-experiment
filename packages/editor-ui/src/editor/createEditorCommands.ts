@@ -40,13 +40,14 @@ export function createEditorCommands(
   const [editingName, setEditingName] = createSignal<
     { type: "graph"; id: string } | { type: "node"; id: string } | null
   >(null);
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { networkMode: "always" } },
+  });
   onCleanup(() => queryClient.clear());
   const clipboardMutation = useMutation(
     () => ({
       mutationFn: (operation: () => Promise<void>) => operation(),
-      // Clipboard and local editor RPCs must also run offline, without replaying writes.
-      networkMode: "always" as const,
+      // Do not replay clipboard writes or editor mutations automatically.
       retry: false,
     }),
     () => queryClient,

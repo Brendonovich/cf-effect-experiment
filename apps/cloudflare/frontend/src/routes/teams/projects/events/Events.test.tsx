@@ -8,7 +8,7 @@ import {
   type ProjectIngressEventRecord,
 } from "@macrograph/cloud-api";
 import { render } from "@solidjs/web";
-import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { HttpApiError } from "effect/unstable/httpapi";
 import { createSignal, flush } from "solid-js";
@@ -62,6 +62,7 @@ let queryClient: QueryClient;
 afterEach(() => {
   dispose();
   queryClient.clear();
+  onlineManager.setOnline(true);
   document.body.replaceChildren();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -99,7 +100,9 @@ const setup = async (
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   const onSelectionChange = vi.fn();
   let select!: (id: string) => void;
-  queryClient = new QueryClient();
+  queryClient = new QueryClient({
+    defaultOptions: { mutations: { networkMode: "always" } },
+  });
   dispose = render(() => {
     const [selection, setSelection] = createSignal<string>(options.selected ?? "event");
     select = setSelection;
@@ -369,8 +372,9 @@ it.each([
   });
 });
 
-it("warns against duplicate actions when the replay outcome is unknown", async () => {
+it("surfaces transport failures even when the browser reports offline", async () => {
   const { api, button } = await setup();
+  onlineManager.setOnline(false);
   api.replay.mockReturnValue(Effect.die("network failure"));
   button()?.click();
   await vi.waitFor(() => {
@@ -378,5 +382,7 @@ it("warns against duplicate actions when the replay outcome is unknown", async (
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
       "Check the timeline before trying again",
     );
+    expect(button()?.disabled).toBe(false);
   });
+  expect(api.replay).toHaveBeenCalledTimes(1);
 });

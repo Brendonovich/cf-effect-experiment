@@ -47,7 +47,9 @@ function AuthenticatedApp(props: RouteSectionProps) {
   );
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { mutations: { networkMode: "always" } },
+});
 const Router = createRouter({
   base: import.meta.env.BASE_URL,
   routes: [
