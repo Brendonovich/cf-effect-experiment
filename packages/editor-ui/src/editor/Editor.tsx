@@ -6,7 +6,7 @@ import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
 import * as stylex from "@stylexjs/stylex";
-import { Errored, For, Show } from "solid-js";
+import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
@@ -22,7 +22,12 @@ import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
 import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
-import { connectionPath, wireColor } from "./graph/graphPresentation";
+import {
+  connectedPortIds,
+  connectionPath,
+  graphConnections,
+  wireColor,
+} from "./graph/graphPresentation";
 import { shortcutLabel } from "./shortcuts";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
@@ -553,6 +558,28 @@ function EditorContent(
                     active() ? controller.layout.canvasOrigin() : tab().view.origin;
                   const selectedIds = () =>
                     active() ? controller.layout.selectedNodeIds() : tab().view.selectedNodeIds;
+                  // Pane contents belong to the tab, not the globally focused graph.
+                  const graph = () => controller.editor.store.project?.graphs[tab().graphId];
+                  const nodes = createMemo(() => Object.values(graph()?.nodes ?? {}));
+                  const ioForNode = (nodeId: string) =>
+                    controller.editor.store.nodeIO[tab().graphId]?.[nodeId];
+                  const edges = createMemo(() => {
+                    const value = graph();
+                    return value === undefined ? [] : graphConnections(value, ioForNode);
+                  });
+                  const remotePresence = () =>
+                    controller.connection
+                      .presenceClients()
+                      .filter(
+                        (entry) =>
+                          entry.connectionId !== controller.connection.selfConnectionId() &&
+                          entry.activeGraph === tab().graphId,
+                      );
+                  const connectionPreview = () =>
+                    active() ? canvas.connectionPreview() : undefined;
+                  const connectionDrag = () => (active() ? canvas.connectionDrag() : undefined);
+                  const isNodeDragging = (nodeId: string) =>
+                    active() && canvas.isNodeDragging(nodeId);
                   const grid = () => canvas.gridForScale(scale());
                   return (
                     <div sx={styles.graphPane}>
@@ -575,7 +602,7 @@ function EditorContent(
                         }}
                         onPointerMove={(event) => {
                           // The window drag listener owns cursor updates during a node drag.
-                          if (canvas.isDragging()) return;
+                          if (!active() || canvas.isDragging()) return;
                           canvas.setGraphCanvas(event.currentTarget);
                           if (
                             event.pointerType === "touch" ||
@@ -586,8 +613,13 @@ function EditorContent(
                             canvas.canvasPosition(event.clientX, event.clientY),
                           );
                         }}
-                        onPointerLeave={() => controller.presence.publishPointer(null, true)}
-                        onWheel={canvas.onWheel}
+                        onPointerLeave={() => {
+                          if (active()) controller.presence.publishPointer(null, true);
+                        }}
+                        onWheel={(event) => {
+                          canvas.setGraphCanvas(event.currentTarget);
+                          canvas.onWheel(event);
+                        }}
                         onPointerDown={canvas.onCanvasPointerDown}
                         onContextMenu={(event) => event.preventDefault()}
                       >
@@ -611,7 +643,7 @@ function EditorContent(
                           <div sx={styles.readOnly}>Read only</div>
                         </Show>
                         <Show
-                          when={controller.layout.selectedGraph()}
+                          when={graph()}
                           fallback={
                             <div sx={styles.emptyGraph}>
                               {controller.layout.graphs().length === 0
@@ -631,15 +663,12 @@ function EditorContent(
                               }}
                             >
                               <svg sx={[styles.canvasLayer, styles.wires]} aria-hidden="true">
-                                <For
-                                  each={canvas.graphConnections()}
-                                  keyed={(edge) => edge.connection.id}
-                                >
+                                <For each={edges()} keyed={(edge) => edge.connection.id}>
                                   {(edge) => (
                                     <path
                                       sx={
-                                        !canvas.isNodeDragging(edge().connection.outNodeId) &&
-                                        !canvas.isNodeDragging(edge().connection.inNodeId) &&
+                                        !isNodeDragging(edge().connection.outNodeId) &&
+                                        !isNodeDragging(edge().connection.inNodeId) &&
                                         styles.smoothWire
                                       }
                                       d={connectionPath(edge().from, edge().to)}
@@ -650,7 +679,7 @@ function EditorContent(
                                     />
                                   )}
                                 </For>
-                                <Show when={canvas.connectionPreview()} keyed>
+                                <Show when={connectionPreview()} keyed>
                                   {(drag) => (
                                     <path
                                       d={connectionPath(
@@ -673,40 +702,41 @@ function EditorContent(
                                   )}
                                 </Show>
                               </svg>
-                              <For each={controller.layout.nodes()} keyed={(node) => node.id}>
+                              <For each={nodes()} keyed={(node) => node.id}>
                                 {(node) => (
                                   <GraphNode
                                     node={node()}
                                     schema={canvas.schemaForNode(node())}
-                                    io={canvas.ioForNode(node().id)}
+                                    io={ioForNode(node().id)}
                                     selected={selectedIds().includes(node().id)}
-                                    dragging={canvas.isNodeDragging(node().id)}
-                                    positioning={controller.commands.isNodePositioning(node().id)}
+                                    dragging={isNodeDragging(node().id)}
+                                    positioning={
+                                      active() && controller.commands.isNodePositioning(node().id)
+                                    }
                                     presenceColor={
-                                      controller.presence
-                                        .remotePresence()
-                                        .find((entry) => entry.selectedNodeIds.includes(node().id))
-                                        ?.color
+                                      remotePresence().find((entry) =>
+                                        entry.selectedNodeIds.includes(node().id),
+                                      )?.color
                                     }
                                     connectionSource={
-                                      canvas.connectionPreview() === undefined
+                                      connectionPreview() === undefined
                                         ? undefined
                                         : {
-                                            nodeId: canvas.connectionPreview()!.source.nodeId,
-                                            ioId: canvas.connectionPreview()!.source.port.id,
-                                            kind: canvas.connectionPreview()!.source.port.kind,
-                                            direction: canvas.connectionPreview()!.source.direction,
-                                            dragging: canvas.connectionDrag() !== undefined,
+                                            nodeId: connectionPreview()!.source.nodeId,
+                                            ioId: connectionPreview()!.source.port.id,
+                                            kind: connectionPreview()!.source.port.kind,
+                                            direction: connectionPreview()!.source.direction,
+                                            dragging: connectionDrag() !== undefined,
                                           }
                                     }
                                     snapTarget={
-                                      canvas.connectionDrag()?.target === undefined
+                                      connectionDrag()?.target === undefined
                                         ? undefined
                                         : {
-                                            nodeId: canvas.connectionDrag()!.target!.nodeId,
-                                            ioId: canvas.connectionDrag()!.target!.port.id,
-                                            kind: canvas.connectionDrag()!.target!.port.kind,
-                                            direction: canvas.connectionDrag()!.target!.direction,
+                                            nodeId: connectionDrag()!.target!.nodeId,
+                                            ioId: connectionDrag()!.target!.port.id,
+                                            kind: connectionDrag()!.target!.port.kind,
+                                            direction: connectionDrag()!.target!.direction,
                                           }
                                     }
                                     onSelect={canvas.selectNode}
@@ -726,8 +756,13 @@ function EditorContent(
                                     onExpand={(nodeId) =>
                                       controller.commands.setNodeFoldPins(nodeId, false)
                                     }
-                                    connectedInputIds={canvas.connectedPortIds(node().id, "input")}
-                                    connectedOutputIds={canvas.connectedPortIds(
+                                    connectedInputIds={connectedPortIds(
+                                      graph()!,
+                                      node().id,
+                                      "input",
+                                    )}
+                                    connectedOutputIds={connectedPortIds(
+                                      graph()!,
                                       node().id,
                                       "output",
                                     )}
@@ -743,10 +778,7 @@ function EditorContent(
                                   />
                                 )}
                               </For>
-                              <For
-                                each={controller.presence.remotePresence()}
-                                keyed={(entry) => entry.connectionId}
-                              >
+                              <For each={remotePresence()} keyed={(entry) => entry.connectionId}>
                                 {(entry) => (
                                   <Show when={entry().cursor}>
                                     {(cursor) => (
@@ -780,7 +812,7 @@ function EditorContent(
                             </div>
                           </div>
                         </Show>
-                        <Show when={canvas.selectionRect()}>
+                        <Show when={active() && canvas.selectionRect()}>
                           {(rect) => {
                             const bounds = () => canvas.graphCanvas()?.getBoundingClientRect();
                             return (
@@ -795,7 +827,13 @@ function EditorContent(
                             );
                           }}
                         </Show>
-                        <Show when={canvas.nodeMenuPresence.present() && canvas.presentNodeMenu()}>
+                        <Show
+                          when={
+                            active() &&
+                            canvas.nodeMenuPresence.present() &&
+                            canvas.presentNodeMenu()
+                          }
+                        >
                           {(menu) => (
                             <NodeCreationMenu
                               ref={canvas.setNodeMenuElement}
@@ -820,7 +858,7 @@ function EditorContent(
                             />
                           )}
                         </Show>
-                        <Show when={canvas.nodeContextMenu()}>
+                        <Show when={active() && canvas.nodeContextMenu()}>
                           {(menu) => (
                             <div
                               sx={styles.contextMenu}
