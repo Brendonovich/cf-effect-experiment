@@ -1,6 +1,7 @@
 import type { EditorEvent } from "@macrograph/editor";
 
 import { Clipboard, IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
+import { QueryClient, useMutation } from "@tanstack/solid-query";
 import { Effect, Result, type Schema } from "effect";
 import { createSignal, onCleanup } from "solid-js";
 
@@ -39,7 +40,17 @@ export function createEditorCommands(
   const [editingName, setEditingName] = createSignal<
     { type: "graph"; id: string } | { type: "node"; id: string } | null
   >(null);
-  const [clipboardError, setClipboardError] = createSignal<string>();
+  const queryClient = new QueryClient();
+  onCleanup(() => queryClient.clear());
+  const clipboardMutation = useMutation(
+    () => ({
+      mutationFn: (operation: () => Promise<void>) => operation(),
+      // Clipboard and local editor RPCs must also run offline, without replaying writes.
+      networkMode: "always" as const,
+      retry: false,
+    }),
+    () => queryClient,
+  );
   const [clipboardRebind, setClipboardRebind] =
     createSignal<ReadonlyArray<Clipboard.RebindRequest>>();
   let resolveRebind: ((bindings: ReadonlyArray<Clipboard.Binding> | undefined) => void) | undefined;
@@ -49,116 +60,117 @@ export function createEditorCommands(
     resolveRebind = undefined;
   };
   onCleanup(() => finishClipboardRebind());
-  let clipboardBusy = false;
   const copyNodes = async (nodeIds: ReadonlyArray<string>, cut = false) => {
     const graph = selectedGraph();
     const graphId = selectedGraphId();
     const c = client();
-    if (clipboardBusy || !graph || !graphId || (cut && (!c || !canEdit()))) return;
-    clipboardBusy = true;
-    setClipboardError(undefined);
-    try {
-      const nodes = nodeIds.flatMap((id) => {
-        const node = graph.nodes[id];
-        if (!node) return [];
-        const schema = editor.store.packages
-          .find((pkg) => pkg.id === node.schema.package)
-          ?.schemas.find((schema) => schema.id === node.schema.schema);
-        return schema?.internal === true ? [] : [node];
-      });
-      if (nodes.length === 0) return;
-      const ids = new Set(nodes.map((node) => String(node.id)));
-      const capturedIO = Object.fromEntries(
-        nodes.flatMap((node) => {
-          const io = editor.store.nodeIO[graphId]?.[node.id];
-          return io === undefined ? [] : [[node.id, io]];
-        }),
-      );
-      const externalConnections = graph.connections.filter(
-        (connection) => ids.has(connection.inNodeId) !== ids.has(connection.outNodeId),
-      );
-      const internalConnections = graph.connections.filter(
-        (connection) => ids.has(connection.inNodeId) && ids.has(connection.outNodeId),
-      );
-      const session = c ? await runPromise(c.GetClipboardIdentity()) : undefined;
-      const text = JSON.stringify({
-        format: "macrograph/nodes",
-        version: 1,
-        nodes,
-        connections: internalConnections,
-        externalConnections,
-        nodeIO: capturedIO,
-        ...(session === undefined ? {} : { source: { session, graphId } }),
-      });
-      await runPromise(Clipboard.decode(text));
-      await navigator.clipboard.writeText(text);
-      // Graph, client and IDs were captured before awaiting clipboard permission.
-      if (cut && c) {
-        if (!canEdit() || client() !== c)
-          throw new Error("Editor connection changed; source nodes were not cut");
-        await runPromise(applyMutation(c.DeleteFragment({ graphId, nodeIds: [...ids] })));
-        if (selectedGraphId() === graphId)
-          setSelectedNodeIds((selected) => selected.filter((id) => !ids.has(id)));
-      }
-    } catch (error) {
-      setClipboardError(
-        `${cut ? "Cut" : "Copy"} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    } finally {
-      clipboardBusy = false;
-    }
+    if (clipboardMutation.isPending || !graph || !graphId || (cut && (!c || !canEdit()))) return;
+    const nodes = nodeIds.flatMap((id) => {
+      const node = graph.nodes[id];
+      if (!node) return [];
+      const schema = editor.store.packages
+        .find((pkg) => pkg.id === node.schema.package)
+        ?.schemas.find((schema) => schema.id === node.schema.schema);
+      return schema?.internal === true ? [] : [node];
+    });
+    const ids = new Set(nodes.map((node) => String(node.id)));
+    const capturedIO = Object.fromEntries(
+      nodes.flatMap((node) => {
+        const io = editor.store.nodeIO[graphId]?.[node.id];
+        return io === undefined ? [] : [[node.id, io]];
+      }),
+    );
+    const externalConnections = graph.connections.filter(
+      (connection) => ids.has(connection.inNodeId) !== ids.has(connection.outNodeId),
+    );
+    const internalConnections = graph.connections.filter(
+      (connection) => ids.has(connection.inNodeId) && ids.has(connection.outNodeId),
+    );
+    return clipboardMutation
+      .mutateAsync(async () => {
+        try {
+          if (nodes.length === 0) return;
+          const session = c ? await runPromise(c.GetClipboardIdentity()) : undefined;
+          const text = JSON.stringify({
+            format: "macrograph/nodes",
+            version: 1,
+            nodes,
+            connections: internalConnections,
+            externalConnections,
+            nodeIO: capturedIO,
+            ...(session === undefined ? {} : { source: { session, graphId } }),
+          });
+          await runPromise(Clipboard.decode(text));
+          await navigator.clipboard.writeText(text);
+          // Graph, client and IDs were captured before awaiting clipboard permission.
+          if (cut && c) {
+            if (!canEdit() || client() !== c)
+              throw new Error("Editor connection changed; source nodes were not cut");
+            await runPromise(applyMutation(c.DeleteFragment({ graphId, nodeIds: [...ids] })));
+            if (selectedGraphId() === graphId)
+              setSelectedNodeIds((selected) => selected.filter((id) => !ids.has(id)));
+          }
+        } catch (error) {
+          throw new Error(
+            `${cut ? "Cut" : "Copy"} failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      })
+      .catch(() => {}); // Errors are rendered from the mutation state.
   };
   const pasteNodes = async (position: { x: number; y: number }) => {
     const graphId = selectedGraphId();
     const c = client();
-    if (clipboardBusy || !graphId || !c || !canEdit()) return;
+    if (clipboardMutation.isPending || !graphId || !c || !canEdit()) return;
     const anchor = snapGraphPosition(position, false);
-    clipboardBusy = true;
-    setClipboardError(undefined);
-    try {
-      const text = await navigator.clipboard.readText();
-      await runPromise(Clipboard.decode(text));
-      if (!canEdit() || client() !== c)
-        throw new Error("Editor connection changed; nothing was pasted");
-      let bindings: ReadonlyArray<Clipboard.Binding> = [];
-      let result = await runPromise(
-        c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
-      );
-      while (Result.isFailure(result) && result.failure._tag === "ClipboardRebindRequired") {
-        setClipboardRebind(result.failure.requests);
-        const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
-          (resolve) => {
-            resolveRebind = resolve;
-          },
-        );
-        if (chosen === undefined) return;
-        bindings = [
-          ...bindings.filter(
-            (binding) =>
-              !chosen.some(
-                (next) => next.nodeId === binding.nodeId && next.property === binding.property,
+    return clipboardMutation
+      .mutateAsync(async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          await runPromise(Clipboard.decode(text));
+          if (!canEdit() || client() !== c)
+            throw new Error("Editor connection changed; nothing was pasted");
+          let bindings: ReadonlyArray<Clipboard.Binding> = [];
+          let result = await runPromise(
+            c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
+          );
+          while (Result.isFailure(result) && result.failure._tag === "ClipboardRebindRequired") {
+            setClipboardRebind(result.failure.requests);
+            const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
+              (resolve) => {
+                resolveRebind = resolve;
+              },
+            );
+            if (chosen === undefined) return;
+            bindings = [
+              ...bindings.filter(
+                (binding) =>
+                  !chosen.some(
+                    (next) => next.nodeId === binding.nodeId && next.property === binding.property,
+                  ),
               ),
-          ),
-          ...chosen,
-        ];
-        if (!canEdit() || client() !== c)
-          throw new Error("Editor connection changed; nothing was pasted");
-        result = await runPromise(
-          c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
-        );
-      }
-      if (Result.isFailure(result))
-        throw new Error(
-          "reason" in result.failure ? String(result.failure.reason) : result.failure._tag,
-        );
-      const event = result.success;
-      editor.applyEvent(event);
-      if (selectedGraphId() === graphId) setSelectedNodeIds(event.nodes.map((node) => node.id));
-    } catch (error) {
-      setClipboardError(`Paste failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      clipboardBusy = false;
-    }
+              ...chosen,
+            ];
+            if (!canEdit() || client() !== c)
+              throw new Error("Editor connection changed; nothing was pasted");
+            result = await runPromise(
+              c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
+            );
+          }
+          if (Result.isFailure(result))
+            throw new Error(
+              "reason" in result.failure ? String(result.failure.reason) : result.failure._tag,
+            );
+          const event = result.success;
+          editor.applyEvent(event);
+          if (selectedGraphId() === graphId) setSelectedNodeIds(event.nodes.map((node) => node.id));
+        } catch (error) {
+          throw new Error(
+            `Paste failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      })
+      .catch(() => {}); // Errors are rendered from the mutation state.
   };
   const [positioningNodes, setPositioningNodes] = createSignal<
     ReadonlyArray<{ graphId: string; nodeId: string }>
@@ -445,10 +457,13 @@ export function createEditorCommands(
   return {
     copyNodes,
     pasteNodes,
-    clipboardError,
+    clipboardMutation,
+    clipboardError: () => clipboardMutation.error?.message,
     clipboardRebind,
     finishClipboardRebind,
-    dismissClipboardError: () => setClipboardError(undefined),
+    dismissClipboardError: () => {
+      if (!clipboardMutation.isPending) clipboardMutation.reset();
+    },
     isNodePositioning: (nodeId: string) =>
       positioningNodes().some(
         (node) => node.graphId === selectedGraphId() && node.nodeId === nodeId,

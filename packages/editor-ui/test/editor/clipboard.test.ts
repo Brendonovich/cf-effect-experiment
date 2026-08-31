@@ -11,6 +11,7 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
+import { onlineManager } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { createRoot, createSignal, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
@@ -27,6 +28,7 @@ vi.mock(
 let dispose = () => {};
 afterEach(() => {
   dispose();
+  onlineManager.setOnline(true);
   vi.unstubAllGlobals();
 });
 
@@ -171,6 +173,66 @@ it("does not delete or change selection if clipboard write fails", async () => {
   expect(state.deleteFragment).not.toHaveBeenCalled();
   expect(state.selected()).toEqual(["a", "b", "protected"]);
   expect(state.commands.clipboardError()).toContain("Permission denied");
+  expect(state.commands.clipboardMutation.isError).toBe(true);
+  expect(state.commands.clipboardMutation.isPending).toBe(false);
+  expect(state.clipboard.writeText).toHaveBeenCalledTimes(1);
+  state.commands.dismissClipboardError();
+  expect(state.commands.clipboardMutation.isIdle).toBe(true);
+  expect(state.commands.clipboardError()).toBeUndefined();
+  state.clipboard.writeText.mockResolvedValue(undefined);
+  await state.commands.copyNodes(["a", "b"], true);
+  expect(state.commands.clipboardMutation.isSuccess).toBe(true);
+  expect(state.deleteFragment).toHaveBeenCalledTimes(1);
+});
+
+it.each(["copy", "cut", "paste"] as const)(
+  "tracks pending %s and blocks overlapping clipboard actions immediately",
+  async (operation) => {
+    const state = setup();
+    let resolve = () => {};
+    const permission = new Promise<void>((done) => {
+      resolve = done;
+    });
+    if (operation === "paste") {
+      const text = await state.clipboard.readText();
+      state.clipboard.readText.mockClear();
+      state.clipboard.readText.mockImplementation(async () => {
+        await permission;
+        return text;
+      });
+    } else {
+      state.clipboard.writeText.mockReturnValue(permission);
+    }
+    const pending =
+      operation === "paste"
+        ? state.commands.pasteNodes({ x: 0, y: 0 })
+        : state.commands.copyNodes(["a", "b"], operation === "cut");
+    expect(state.commands.clipboardMutation.isPending).toBe(true);
+    state.commands.dismissClipboardError();
+    expect(state.commands.clipboardMutation.isPending).toBe(true);
+    await state.commands.copyNodes(["a"], true);
+    await state.commands.pasteNodes({ x: 0, y: 0 });
+    expect(state.deleteFragment).not.toHaveBeenCalled();
+    expect(state.pasteFragment).not.toHaveBeenCalled();
+    resolve();
+    await pending;
+    expect(state.clipboard.readText).toHaveBeenCalledTimes(operation === "paste" ? 1 : 0);
+    expect(state.clipboard.writeText).toHaveBeenCalledTimes(operation === "paste" ? 0 : 1);
+    expect(state.commands.clipboardMutation.isPending).toBe(false);
+    expect(state.commands.clipboardMutation.isSuccess).toBe(true);
+    await state.commands.pasteNodes({ x: 0, y: 0 });
+    expect(state.pasteFragment).toHaveBeenCalledTimes(operation === "paste" ? 2 : 1);
+  },
+);
+
+it("runs clipboard and local editor mutations offline", async () => {
+  const state = setup();
+  onlineManager.setOnline(false);
+  await state.commands.copyNodes(["a"], true);
+  await state.commands.pasteNodes({ x: 0, y: 0 });
+  expect(state.deleteFragment).toHaveBeenCalledTimes(1);
+  expect(state.pasteFragment).toHaveBeenCalledTimes(1);
+  expect(state.commands.clipboardMutation.isSuccess).toBe(true);
 });
 
 it("cuts the captured source selection after graph focus changes", async () => {
@@ -207,6 +269,7 @@ it("captures paste destination, snaps one anchor and does not select nodes in an
   state.setGraphId("other");
   state.setSelected(["other-selected"]);
   flush();
+  await vi.waitFor(() => expect(state.clipboard.readText).toHaveBeenCalled());
   resolve(
     JSON.stringify({
       format: "macrograph/nodes",
@@ -232,6 +295,11 @@ it("selects pasted nodes and rejects malformed clipboard without calling the ser
   expect(state.pasteFragment).toHaveBeenCalledTimes(1);
   expect(state.selected()).toEqual(["fresh"]);
   expect(state.commands.clipboardError()).toContain("Paste failed");
+  const retry = state.commands.copyNodes(["a"]);
+  expect(state.commands.clipboardError()).toBeUndefined();
+  expect(state.commands.clipboardMutation.isPending).toBe(true);
+  await retry;
+  expect(state.commands.clipboardMutation.isSuccess).toBe(true);
 });
 
 it("rebind cancellation never inserts nodes and confirmation sends explicit mappings", async () => {
@@ -249,19 +317,28 @@ it("rebind cancellation never inserts nodes and confirmation sends explicit mapp
   );
   const cancel = state.commands.pasteNodes({ x: 0, y: 0 });
   await vi.waitFor(() => expect(state.commands.clipboardRebind()).toEqual([request]));
+  expect(state.commands.clipboardMutation.isPending).toBe(true);
+  await state.commands.copyNodes(["a"], true);
+  await state.commands.pasteNodes({ x: 0, y: 0 });
+  expect(state.clipboard.writeText).not.toHaveBeenCalled();
+  expect(state.clipboard.readText).toHaveBeenCalledTimes(1);
   expect(state.editor.store.project!.graphs.source!.nodes.fresh).toBeUndefined();
   state.commands.finishClipboardRebind();
   await cancel;
+  expect(state.commands.clipboardMutation.isPending).toBe(false);
+  expect(state.commands.clipboardError()).toBeUndefined();
   expect(state.pasteFragment).toHaveBeenCalledTimes(1);
   state.pasteFragment.mockImplementationOnce(
     requireRebind as unknown as typeof state.pasteFragment,
   );
   const confirm = state.commands.pasteNodes({ x: 0, y: 0 });
   await vi.waitFor(() => expect(state.commands.clipboardRebind()).toEqual([request]));
+  expect(state.commands.clipboardMutation.isPending).toBe(true);
   state.commands.finishClipboardRebind([
     { nodeId: "a", property: "account", target: "destination-account" },
   ]);
   await confirm;
+  expect(state.commands.clipboardMutation.isSuccess).toBe(true);
   expect(state.pasteFragment.mock.calls[2]![0]).toMatchObject({
     bindings: [{ nodeId: "a", property: "account", target: "destination-account" }],
   });
