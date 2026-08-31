@@ -19,7 +19,7 @@ export type GraphTab = {
 export type WorkspaceTab =
   | GraphTab
   | { readonly id: string; readonly type: "package"; readonly packageId: string }
-  | { readonly id: string; readonly type: "settings" };
+  | { readonly id: string; readonly type: "settings" | "shortcuts" };
 
 export interface PaneState {
   readonly id: string;
@@ -50,7 +50,7 @@ export interface WorkspaceState {
 export type TabInput =
   | { readonly type: "graph"; readonly graphId: string }
   | { readonly type: "package"; readonly packageId: string }
-  | { readonly type: "settings" };
+  | { readonly type: "settings" | "shortcuts" };
 
 export type WorkspaceAction =
   | { readonly type: "focus-pane"; readonly paneId: string }
@@ -111,7 +111,8 @@ const makeTab = (input: TabInput, tabId = id("tab")): WorkspaceTab => {
     case "package":
       return { id: tabId, type: "package", packageId: input.packageId };
     case "settings":
-      return { id: tabId, type: "settings" };
+    case "shortcuts":
+      return { id: tabId, type: input.type };
   }
 };
 
@@ -122,6 +123,7 @@ const tabKey = (tab: WorkspaceTab | TabInput) => {
     case "package":
       return `package:${tab.packageId}`;
     case "settings":
+    case "shortcuts":
       return tab.type;
   }
 };
@@ -375,7 +377,7 @@ const validTab = (value: unknown): value is WorkspaceTab => {
     return false;
   if (value.type === "graph") return typeof value.graphId === "string" && validView(value.view);
   if (value.type === "package") return typeof value.packageId === "string";
-  return value.type === "settings";
+  return value.type === "settings" || value.type === "shortcuts";
 };
 const validTree = (
   value: unknown,

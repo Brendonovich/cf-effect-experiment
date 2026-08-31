@@ -14,7 +14,7 @@ import type {
 
 import { colors } from "../../tokens.stylex.ts";
 import { tabMarker } from "../markers.stylex.ts";
-import { shortcutLabel } from "../shortcuts";
+import { shortcutLabel, type ShortcutAction } from "../shortcuts";
 
 const styles = stylex.create({
   focus: {
@@ -206,6 +206,7 @@ export interface EditorTab {
 }
 
 export function TabLayout(props: {
+  shortcutLabel?: (action: ShortcutAction) => string;
   tabs: ReadonlyArray<EditorTab>;
   selectedId: string | undefined;
   onSelect: (id: string) => void;
@@ -325,7 +326,7 @@ export function TabLayout(props: {
             <Show when={props.onSplit}>
               <button
                 type="button"
-                title={`Split horizontally (${shortcutLabel("split-horizontal")})`}
+                title={`Split horizontally (${(props.shortcutLabel ?? shortcutLabel)("split-horizontal")})`}
                 aria-label="Split horizontally"
                 sx={[styles.focus, styles.iconButton]}
                 onClick={() => props.onSplit?.("horizontal")}
@@ -334,7 +335,7 @@ export function TabLayout(props: {
               </button>
               <button
                 type="button"
-                title={`Split vertically (${shortcutLabel("split-vertical")})`}
+                title={`Split vertically (${(props.shortcutLabel ?? shortcutLabel)("split-vertical")})`}
                 aria-label="Split vertically"
                 sx={[styles.focus, styles.iconButton]}
                 onClick={() => props.onSplit?.("vertical")}
@@ -345,7 +346,7 @@ export function TabLayout(props: {
             <Show when={props.onZoom}>
               <button
                 type="button"
-                title={`Zoom this panel (${shortcutLabel("toggle-pane-zoom")})`}
+                title={`Zoom this panel (${(props.shortcutLabel ?? shortcutLabel)("toggle-pane-zoom")})`}
                 aria-label={props.zoomed ? "Restore all panes" : "Zoom this pane"}
                 sx={[styles.focus, styles.iconButton]}
                 onClick={() => props.onZoom?.()}
@@ -368,6 +369,7 @@ export function TabLayout(props: {
           };
           element.addEventListener("pointerdown", focus, { capture: true });
           element.addEventListener("wheel", focus, { capture: true });
+          element.addEventListener("focusin", focus, { capture: true });
         }}
         sx={styles.content}
       >
@@ -378,6 +380,7 @@ export function TabLayout(props: {
 }
 
 export function WorkspacePanes(props: {
+  shortcutLabel?: (action: ShortcutAction) => string;
   state: WorkspaceState;
   mobile: boolean;
   title: (tab: WorkspaceTab) => EditorTab;
@@ -405,6 +408,7 @@ export function WorkspacePanes(props: {
         ]}
       >
         <TabLayout
+          shortcutLabel={props.shortcutLabel ?? shortcutLabel}
           tabs={value().tabs.map(props.title)}
           selectedId={value().selectedTabId ?? undefined}
           paneId={paneId}

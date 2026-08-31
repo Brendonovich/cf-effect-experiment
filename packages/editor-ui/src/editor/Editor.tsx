@@ -10,17 +10,13 @@ import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,8 +24,11 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
-import { shortcutLabel } from "./shortcuts";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -75,6 +74,22 @@ const styles = stylex.create({
   },
   errorActions: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 20 },
   tabIcon: { width: 14, height: 14, flexShrink: 0 },
+  footer: {
+    display: "flex",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    borderTop: `1px solid ${colors.gray5}`,
+    backgroundColor: colors.gray2,
+    paddingInline: 8,
+  },
+  shortcutsButton: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    borderRadius: 4,
+    color: colors.gray12,
+    fontSize: 12,
+    minHeight: { default: 44, "@media (min-width: 768px)": 32 },
+    paddingInline: 12,
+  },
   editor: {
     "--gray-1": "#111111",
     "--gray-2": "#191919",
@@ -410,7 +425,12 @@ function EditorContent(
     canvasOrigin: controller.layout.canvasOrigin,
     setCanvasOrigin: controller.layout.setCanvasOrigin,
   });
-  createEditorShortcuts(() => editorRoot, controller.layout, canvas, controller.commands);
+  const shortcuts = createEditorShortcuts(
+    () => editorRoot,
+    controller.layout,
+    canvas,
+    controller.commands,
+  );
 
   const workspaceTabTitle = (tab: WorkspaceTab) => {
     if (tab.type === "graph")
@@ -426,6 +446,7 @@ function EditorContent(
           tab.packageId,
         description: "Plugin",
       };
+    if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
     return {
       id: tab.id,
       title: "Settings",
@@ -434,6 +455,7 @@ function EditorContent(
   };
 
   const renderWorkspacePreview = (tab: WorkspaceTab) => {
+    if (tab.type === "shortcuts") return <ShortcutsHelp shortcuts={shortcuts} />;
     if (tab.type === "package") {
       const pkg = () =>
         controller.editor.store.packages.find((candidate) => candidate.id === tab.packageId);
@@ -534,7 +556,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.leftPill]}
-                title={`Toggle navigation (${shortcutLabel("toggle-navigation")})`}
+                title={`Toggle navigation (${shortcuts.label("toggle-navigation")})`}
                 onClick={controller.layout.toggleNavigation}
               >
                 Browse
@@ -543,6 +565,7 @@ function EditorContent(
 
             <main sx={[styles.main, controller.layout.paneZoomed() ? styles.zoomedMain : null]}>
               <WorkspacePanes
+                shortcutLabel={shortcuts.label}
                 state={controller.layout.workspace()}
                 mobile={controller.layout.isMobile()}
                 title={workspaceTabTitle}
@@ -595,8 +618,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
@@ -911,7 +934,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.rightPill]}
-                title={`Toggle inspector (${shortcutLabel("toggle-inspector")})`}
+                title={`Toggle inspector (${shortcuts.label("toggle-inspector")})`}
                 onClick={() => controller.layout.setInspectorOpen(true)}
               >
                 Inspect
@@ -944,7 +967,15 @@ function EditorContent(
               />
             </Sidebar>
           </div>
-          <ShortcutsHelp />
+          <footer sx={styles.footer}>
+            <button
+              type="button"
+              sx={[styles.focusRing, styles.shortcutsButton]}
+              onClick={controller.layout.openShortcuts}
+            >
+              Shortcuts
+            </button>
+          </footer>
         </Show>
       </div>
     </div>
