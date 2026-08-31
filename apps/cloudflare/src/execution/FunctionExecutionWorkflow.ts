@@ -1,4 +1,5 @@
 import { Project } from "@macrograph/core";
+import { Queues } from "@macrograph/execution";
 import * as Executor from "@macrograph/execution/Executor";
 import { ProjectExecutor } from "@macrograph/project-host";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -10,6 +11,7 @@ import { DeploymentSnapshotsBucket } from "../Storage.ts";
 import * as ExecutorPlugins from "./ExecutorPlugins.ts";
 import * as Protocol from "./FunctionQueueProtocol.ts";
 import * as FunctionQueueTransport from "./FunctionQueueTransport.ts";
+import * as FunctionQueueValues from "./FunctionQueueValues.ts";
 import { nodeStepName } from "./GraphExecutionWorkflow.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
@@ -36,7 +38,7 @@ export default class FunctionExecutionWorkflow extends Cloudflare.Workflow<Funct
             return yield* Schema.decodeUnknownEffect(Project.Model)(value);
           }).pipe(Effect.orDie),
         );
-        const enqueue = yield* FunctionQueueTransport.make(queueProjects, input, input.id);
+        const enqueue = yield* FunctionQueueTransport.make(queueProjects, input, input.id, project);
         const engineClient = yield* WorkflowRuntime.make(project).pipe(
           Effect.provide(FetchHttpClient.layer),
         );
@@ -65,11 +67,24 @@ export default class FunctionExecutionWorkflow extends Cloudflare.Workflow<Funct
             ),
         });
         // Function graphs are invoked directly, not synthesized engine events or nested task bodies.
-        const values = yield* executor.invokeFunction(input.functionId, input.values, {
-          queueLineage: [...input.queueLineage, input.queueId],
-          executionPath: input.executionPath,
-          executionTraceId: input.id,
-        });
+        const signature = project.graphs[input.functionId]?.signature;
+        if (signature === undefined)
+          return yield* Effect.die(
+            "Queued function signature is unavailable in the deployment snapshot",
+          );
+        const decoded = yield* FunctionQueueValues.transform(
+          signature.inputs,
+          input.values,
+          "decode",
+        );
+        const result = yield* executor
+          .invokeFunction(input.functionId, decoded, {
+            queueLineage: [...input.queueLineage, input.queueId],
+            executionPath: input.executionPath,
+            executionTraceId: input.id,
+          })
+          .pipe(Effect.provideService(Queues.Lineage, [...input.queueLineage, input.queueId]));
+        const values = yield* FunctionQueueValues.transform(signature.outputs, result, "encode");
         return { ok: true, values } satisfies Protocol.Outcome;
       }).pipe(
         Effect.catchCause((cause) =>

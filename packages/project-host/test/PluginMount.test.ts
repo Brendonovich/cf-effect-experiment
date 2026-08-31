@@ -30,11 +30,11 @@ it.effect("registers an engine-less plugin without engine services, RPC clients,
     const catalog = yield* packages.getPackages();
     assert.deepStrictEqual(
       catalog.map((pkg) => pkg.id),
-      ["stateless"],
+      ["macrograph-functions", "macrograph-queues", "stateless"],
     );
-    assert.deepStrictEqual(catalog[0]?.resources, []);
+    assert.deepStrictEqual(catalog.find((pkg) => pkg.id === "stateless")?.resources, []);
     assert.deepStrictEqual(
-      catalog[0]?.schemas.map((schema) => schema.id),
+      catalog.find((pkg) => pkg.id === "stateless")?.schemas.map((schema) => schema.id),
       ["Value"],
     );
     const editor = yield* Editor.Service;

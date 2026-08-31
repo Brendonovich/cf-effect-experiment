@@ -100,15 +100,32 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
             continue;
           }
           if (entry.phase === "cancelling") {
-            if (
-              !entry.dispatched &&
-              (current._tag === "None" || current.value.status === "unknown")
-            ) {
+            const unavailable = current._tag === "None" || current.value.status === "unknown";
+            if (unavailable) {
+              // Cancellation already failed the caller; bounded uncertainty must not strand later work.
               queue = {
                 ...queue,
-                entries: queue.entries.filter((candidate) => candidate !== entry),
+                entries:
+                  !entry.dispatched || entry.attempts >= 4
+                    ? queue.entries.filter((candidate) => candidate !== entry)
+                    : queue.entries.map((candidate) =>
+                        candidate === entry
+                          ? { ...entry, attempts: entry.attempts + 1 }
+                          : candidate,
+                      ),
               };
-              continue;
+              if (entry.dispatched && entry.attempts >= 4)
+                yield* Effect.logWarning(
+                  "Releasing cancelled queue entry after unavailable Workflow status retries; termination is unconfirmed",
+                  { workId: entry.work.id, queueId: queue.queueId },
+                );
+            } else if (entry.attempts !== 0) {
+              queue = {
+                ...queue,
+                entries: queue.entries.map((candidate) =>
+                  candidate === entry ? { ...entry, attempts: 0 } : candidate,
+                ),
+              };
             }
             yield* Effect.tryPromise({
               try: async () => (await host.workflows.get(entry.work.id)).terminate(),
@@ -120,7 +137,9 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
                 queue = {
                   ...queue,
                   entries: queue.entries.map((candidate) =>
-                    candidate === entry ? { ...entry, phase: "cancelling" } : candidate,
+                    candidate === entry
+                      ? { ...entry, phase: "cancelling", attempts: 0 }
+                      : candidate,
                   ),
                 };
               } else {
@@ -130,6 +149,18 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
                 };
               }
             }
+          } else if (
+            entry.phase === "running" &&
+            (current._tag === "None" || current.value.status === "unknown")
+          ) {
+            // A status outage is not completion: retain singleflight until recovery or explicit cancellation.
+            yield* Effect.logWarning(
+              "Function Workflow status unavailable; retaining running queue entry",
+              {
+                workId: entry.work.id,
+                queueId: queue.queueId,
+              },
+            );
           }
         }
         queue = dispatch(queue);
@@ -230,6 +261,7 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
                               {
                                 ...entry,
                                 phase: "cancelling",
+                                attempts: entry.phase === "cancelling" ? entry.attempts : 0,
                                 failure: "Project deployment stopped",
                               },
                             ],
@@ -401,7 +433,14 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
               ? [entry]
               : entry.phase === "waiting" || (entry.phase === "dispatching" && !entry.dispatched)
                 ? []
-                : [{ ...entry, phase: "cancelling", failure: "Queue item removed" }],
+                : [
+                    {
+                      ...entry,
+                      phase: "cancelling",
+                      attempts: entry.phase === "cancelling" ? entry.attempts : 0,
+                      failure: "Queue item removed",
+                    },
+                  ],
           ),
         };
       }),
@@ -411,7 +450,14 @@ export const make = Effect.fnUntraced(function* <R>(host: Host<R>) {
         entries: queue.entries.flatMap((entry): Entry[] =>
           entry.phase === "waiting" || (entry.phase === "dispatching" && !entry.dispatched)
             ? []
-            : [{ ...entry, phase: "cancelling", failure: "Queue cleared" }],
+            : [
+                {
+                  ...entry,
+                  phase: "cancelling",
+                  attempts: entry.phase === "cancelling" ? entry.attempts : 0,
+                  failure: "Queue cleared",
+                },
+              ],
         ),
       })),
   };

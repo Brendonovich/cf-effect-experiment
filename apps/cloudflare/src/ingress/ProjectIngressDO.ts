@@ -126,8 +126,10 @@ export const projectIngressImplementation = Effect.gen(function* () {
     wake: Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       yield* Cloudflare.Workers.scheduleEvent(ProjectFunctionQueues.alarmId, new Date(now + 5_000), {}, 5_000);
-    }),
-    sleep: Cloudflare.Workers.cancelEvent(ProjectFunctionQueues.alarmId),
+    }).pipe(Effect.provideService(Cloudflare.DurableObjectState, durableState)),
+    sleep: Cloudflare.Workers.cancelEvent(ProjectFunctionQueues.alarmId).pipe(
+      Effect.provideService(Cloudflare.DurableObjectState, durableState),
+    ),
     send: (delivery) => Effect.tryPromise({
       try: () => FunctionQueueProtocol.queueBinding(workerEnvironment?.FunctionWorkQueue).send(delivery),
       catch: (error) => error,

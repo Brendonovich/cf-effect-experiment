@@ -273,7 +273,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 				const engineClient = yield* WorkflowRuntime.make(project).pipe(
 					Effect.provide(FetchHttpClient.layer),
 				);
-				const enqueueFunction = yield* FunctionQueueTransport.make(queueProjects, input, input.executionId);
+				const enqueueFunction = yield* FunctionQueueTransport.make(queueProjects, input, input.executionId, project);
 				const executor = yield* ProjectExecutor.make(project, {
 					projectId: input.projectId,
 					executionDriver,

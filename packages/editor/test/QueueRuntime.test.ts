@@ -1,10 +1,31 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Queue } from "@macrograph/core";
-import { Effect, Option, Stream } from "effect";
+import { Deferred, Effect, Fiber, Option, Stream } from "effect";
 
 import { QueueRuntime } from "../src/index.ts";
 
 describe("QueueRuntime", () => {
+  it.effect("a subscriber attached before mounting receives the live scheduler", () =>
+    Effect.gen(function* () {
+      const runtime = yield* QueueRuntime.Service;
+      const mount = yield* QueueRuntime.Mount;
+      const subscribed = yield* Deferred.make<void>();
+      const observer = yield* runtime.changes.pipe(
+        Stream.tap(() => Deferred.succeed(subscribed, undefined)),
+        Stream.filter((states) => states.length > 0),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+      yield* Deferred.await(subscribed);
+      const state: Queue.State = { queueId: "live", paused: false, waiting: [], running: [] };
+      yield* mount.set({
+        ...QueueRuntime.unavailable,
+        snapshot: Effect.succeed([state]),
+        changes: Stream.make([state]),
+      });
+      assert.deepStrictEqual(Option.getOrThrow(yield* Fiber.join(observer)), [state]);
+    }).pipe(Effect.provide(QueueRuntime.layer)),
+  );
   it.effect("mounts project management without leaking enqueue or captured arguments", () =>
     Effect.gen(function* () {
       const runtime = yield* QueueRuntime.Service;

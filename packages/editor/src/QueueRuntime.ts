@@ -1,5 +1,5 @@
 import { Queue } from "@macrograph/core";
-import { Context, Effect, Layer, Stream } from "effect";
+import { Context, Effect, Layer, PubSub, Stream } from "effect";
 
 export interface Interface {
   readonly snapshot: Effect.Effect<ReadonlyArray<Queue.State>>;
@@ -39,11 +39,14 @@ export class Mount extends Context.Service<
   { readonly set: (runtime: Interface) => Effect.Effect<void> }
 >()("macrograph/editor/QueueRuntime/Mount") {}
 export const layer = Layer.effectContext(
-  Effect.sync(() => {
+  Effect.gen(function* () {
     let runtime = unavailable;
+    const mounted = yield* PubSub.sliding<Interface>({ capacity: 1, replay: 1 });
+    yield* PubSub.publish(mounted, runtime);
+    yield* Effect.addFinalizer(() => PubSub.shutdown(mounted));
     return Context.make(Service, {
       snapshot: Effect.suspend(() => runtime.snapshot),
-      changes: Stream.unwrap(Effect.sync(() => runtime.changes)),
+      changes: Stream.fromPubSub(mounted).pipe(Stream.switchMap((runtime) => runtime.changes)),
       pause: (id, paused) => Effect.suspend(() => runtime.pause(id, paused)),
       advance: (id) => Effect.suspend(() => runtime.advance(id)),
       remove: (id, item) => Effect.suspend(() => runtime.remove(id, item)),
@@ -53,7 +56,7 @@ export const layer = Layer.effectContext(
         set: (next) =>
           Effect.sync(() => {
             runtime = next;
-          }),
+          }).pipe(Effect.andThen(PubSub.publish(mounted, next)), Effect.asVoid),
       }),
     );
   }),

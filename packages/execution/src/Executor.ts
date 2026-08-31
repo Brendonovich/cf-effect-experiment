@@ -229,7 +229,9 @@ export const make = Effect.fnUntraced(function* (
         : typeof target === "string"
           ? currentProject?.graphs[target]
           : undefined;
-      const model = FunctionGraph.pkg.schemas.find((schema) => schema.id === node.schema.schema);
+      const model = (
+        FunctionGraph.isQueuedCall(node) ? FunctionGraph.queuesPackage : FunctionGraph.pkg
+      ).schemas.find((schema) => schema.id === node.schema.schema);
       if (model === undefined)
         return yield* new SchemaNotRegistered({
           pluginId: node.schema.package,
@@ -494,7 +496,15 @@ export const make = Effect.fnUntraced(function* (
               const capturedInputs = Object.fromEntries(
                 [...inputs].map(([id, value]) => [id.slice(3), value]),
               );
-              const queueId = node.properties.queue;
+              const queueId = FunctionGraph.isQueuedCall(node) ? node.properties.queue : undefined;
+              if (
+                FunctionGraph.isQueuedCall(node) &&
+                (typeof queueId !== "string" || currentProject.queues[queueId] === undefined)
+              )
+                return yield* new Graph.FunctionError({
+                  graphId: graph.id,
+                  reason: "Add to Queue has a missing queue target",
+                });
               const result =
                 typeof queueId === "string"
                   ? options?.queueInvocation === undefined

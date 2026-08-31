@@ -1,7 +1,7 @@
 import type { Queue } from "@macrograph/core";
 
 import * as stylex from "@stylexjs/stylex";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 
 const styles = stylex.create({
   panel: { padding: 12 },
@@ -80,6 +80,7 @@ export function QueuesPanel(props: {
         }
       >
         {(queue) => {
+          const [draftName, setDraftName] = createSignal<string | null>(null);
           const state = createMemo(() => props.states.find((state) => state.queueId === queue.id));
           const items = createMemo(() => [
             ...(state()?.running ?? []).map((item) => ({ ...item, status: "Running" })),
@@ -90,9 +91,21 @@ export function QueuesPanel(props: {
               <input
                 sx={styles.name}
                 aria-label={`Queue name ${queue.name}`}
-                value={queue.name}
+                value={draftName() ?? queue.name}
                 disabled={!props.canEdit}
-                onChange={(event) => props.onRename(queue.id, event.currentTarget.value)}
+                onInput={(event) => setDraftName(event.currentTarget.value)}
+                onBlur={(event) => {
+                  props.onRename(queue.id, event.currentTarget.value);
+                  setDraftName(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                  if (event.key === "Escape") {
+                    event.currentTarget.value = queue.name;
+                    setDraftName(null);
+                    event.currentTarget.blur();
+                  }
+                }}
               />
               <div sx={styles.status}>
                 {state() === undefined

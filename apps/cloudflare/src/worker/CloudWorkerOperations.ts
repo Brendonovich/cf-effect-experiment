@@ -1,4 +1,4 @@
-import { Project } from "@macrograph/core";
+import { Project, Queue } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/plugin";
 import UtilitiesPlugin from "@macrograph/plugin-utilities";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -523,6 +523,14 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       );
     });
 
+    const queueScope = Effect.fnUntraced(function* (projectId: string, queueId: string) {
+      const deployment = yield* loadDesiredDeployment(projectId).pipe(Effect.catchCause((cause) =>
+        Effect.fail(new Queue.OperationError({ queueId,
+          reason: `Project deployment queue runtime unavailable: ${String(Cause.squash(cause))}` })),
+      ));
+      return { projectId, deploymentId: deployment.deploymentId, r2Key: deployment.r2Key };
+    });
+
     return {
       reconcileDeployments,
       reconcileProjectDeployment,
@@ -537,6 +545,22 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       getEndpoint,
       lookupEndpoint,
       undeployProject,
+      queueSnapshot: (projectId: string) => queueScope(projectId, "").pipe(
+        Effect.flatMap((scope) => projectIngressDos.getByName(projectId).queueSnapshot(scope)),
+        Effect.catch(() => Effect.succeed([])),
+      ),
+      queuePause: (projectId: string, queueId: string, paused: boolean) => queueScope(projectId, queueId).pipe(
+        Effect.flatMap((scope) => projectIngressDos.getByName(projectId).queuePause(scope, queueId, paused)),
+      ),
+      queueAdvance: (projectId: string, queueId: string) => queueScope(projectId, queueId).pipe(
+        Effect.flatMap((scope) => projectIngressDos.getByName(projectId).queueAdvance(scope, queueId)),
+      ),
+      queueRemove: (projectId: string, queueId: string, itemId: string) => queueScope(projectId, queueId).pipe(
+        Effect.flatMap((scope) => projectIngressDos.getByName(projectId).queueRemove(scope, queueId, itemId)),
+      ),
+      queueClear: (projectId: string, queueId: string) => queueScope(projectId, queueId).pipe(
+        Effect.flatMap((scope) => projectIngressDos.getByName(projectId).queueClear(scope, queueId)),
+      ),
     };
   });
 

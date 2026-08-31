@@ -319,6 +319,7 @@ export const layer = Layer.effect(Service)(
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
     yield* packages.loadPackage(FunctionGraph.pkg);
+    yield* packages.loadPackage(FunctionGraph.queuesPackage);
     const lock = yield* Semaphore.make(1);
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -374,6 +375,15 @@ export const layer = Layer.effect(Service)(
     const validateFunctionTarget = Effect.fnUntraced(function* (
       node: Pick<Node.Model, "schema" | "properties">,
     ) {
+      if (FunctionGraph.isQueuedCall(node) && node.properties.queue !== undefined) {
+        const queueId = node.properties.queue;
+        const project = yield* persistence.loadProject();
+        if (typeof queueId !== "string" || project.queues[queueId] === undefined)
+          return yield* new Package.InvalidPropertyError({
+            property: "queue",
+            reason: "Selected queue does not exist",
+          });
+      }
       if (!FunctionGraph.isCall(node) || node.properties.function === undefined) return;
       const target = node.properties.function;
       const project = yield* persistence.loadProject();

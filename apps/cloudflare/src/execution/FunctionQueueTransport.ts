@@ -1,9 +1,11 @@
-import { Queue } from "@macrograph/core";
+import { type Project, Queue } from "@macrograph/core";
+import { RuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Schema, Stream } from "effect";
 
 import ProjectIngressDO, { type ProjectIngressShape } from "../ingress/ProjectIngressDO.ts";
 import * as Protocol from "./FunctionQueueProtocol.ts";
+import * as FunctionQueueValues from "./FunctionQueueValues.ts";
 
 export const consume = (resource: Cloudflare.Queues.Queue) =>
   Effect.gen(function* () {
@@ -39,9 +41,11 @@ export const make = Effect.fnUntraced(function* (
   projects: Cloudflare.DurableObject<ProjectIngressShape>,
   scope: Protocol.Scope,
   parentId: string,
+  deployment: Project.Model,
 ) {
   const environment = yield* Cloudflare.WorkerEnvironment;
   const workflowStep = yield* Cloudflare.Workflows.WorkflowStep;
+  const runtimeContext = yield* Effect.context<RuntimeContext>();
   const project = projects.getByName(scope.projectId);
   return (request: EnqueueRequest) =>
     Effect.gen(function* () {
@@ -53,7 +57,22 @@ export const make = Effect.fnUntraced(function* (
       const id = yield* Effect.promise(() =>
         Protocol.workId(scope, parentId, request.executionPath),
       );
-      const work: Protocol.Work = { ...scope, ...request, id };
+      const signature = deployment.graphs[request.functionId]?.signature;
+      if (signature === undefined)
+        return yield* new Queue.OperationError({
+          queueId: request.queueId,
+          reason: "Queued function signature is unavailable in the deployment snapshot",
+        });
+      const values = yield* FunctionQueueValues.transform(
+        signature.inputs,
+        request.values,
+        "encode",
+      ).pipe(
+        Effect.mapError(
+          (error) => new Queue.OperationError({ queueId: request.queueId, reason: String(error) }),
+        ),
+      );
+      const work: Protocol.Work = { ...scope, ...request, values, id };
       const name = `function-queue-v1/${id}`;
       const admission = yield* Cloudflare.Workflows.task(
         `${name}/enqueue`,
@@ -108,9 +127,21 @@ export const make = Effect.fnUntraced(function* (
               queueId: request.queueId,
               reason: result.error,
             });
-          return result.values;
+          return yield* FunctionQueueValues.transform(
+            signature.outputs,
+            result.values,
+            "decode",
+          ).pipe(
+            Effect.mapError(
+              (error) =>
+                new Queue.OperationError({ queueId: request.queueId, reason: String(error) }),
+            ),
+          );
         }
         yield* Cloudflare.Workflows.sleep(`${name}/wait/${attempt}`, "5 seconds");
       }
-    }).pipe(Effect.provideService(Cloudflare.Workflows.WorkflowStep, workflowStep));
+    }).pipe(
+      Effect.provideService(Cloudflare.Workflows.WorkflowStep, workflowStep),
+      Effect.provide(runtimeContext),
+    );
 });

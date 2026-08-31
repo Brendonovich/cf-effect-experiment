@@ -8,6 +8,7 @@ import {
   NodeId,
   PackageId,
   Project,
+  Queue,
   RenderedProject,
   SchemaId,
 } from "@macrograph/core";
@@ -79,13 +80,20 @@ describe("Function invocation", () => {
         const call = outer.nodes.call!;
         let captured: Executor.QueueInvocation | undefined;
         const executor = yield* Executor.make(
-          project(identity("leaf"), {
-            ...outer,
-            nodes: {
-              ...outer.nodes,
-              call: { ...call, properties: { ...call.properties, queue: "queue" } },
-            },
-          }),
+          {
+            ...project(identity("leaf"), {
+              ...outer,
+              nodes: {
+                ...outer.nodes,
+                call: {
+                  ...call,
+                  schema: { package: FunctionGraph.queuePackageId, schema: SchemaId.make("add") },
+                  properties: { ...call.properties, queue: "queue" },
+                },
+              },
+            }),
+            queues: { queue: { id: Queue.QueueId.make("queue"), name: "Queue" } },
+          },
           {
             queueInvocation: (invocation) =>
               Effect.sync(() => {

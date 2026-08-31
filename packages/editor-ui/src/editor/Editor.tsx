@@ -519,20 +519,22 @@ function EditorContent(
                   onCreateGraph={() => controller.commands.createGraph()}
                   onCreateFunction={controller.commands.createFunction}
                   onCreateQueue={controller.commands.createQueue}
-                  queuesPanel={<QueuesPanel
-                    queues={controller.editor.store.project?.queues ?? {}}
-                    states={controller.connection.queueStates()}
-                    search={controller.catalog.navSearch()}
-                    canEdit={controller.connection.canEdit()}
-                    error={controller.commands.queueError()}
-                    functionName={(id) => controller.editor.store.project?.graphs[id]?.name ?? id}
-                    onRename={controller.commands.renameQueue}
-                    onDelete={controller.commands.deleteQueue}
-                    onPause={controller.commands.pauseQueue}
-                    onAdvance={controller.commands.advanceQueue}
-                    onClear={controller.commands.clearQueue}
-                    onRemove={controller.commands.removeQueueItem}
-                  />}
+                  queuesPanel={
+                    <QueuesPanel
+                      queues={controller.editor.store.project?.queues ?? {}}
+                      states={controller.connection.queueStates()}
+                      search={controller.catalog.navSearch()}
+                      canEdit={controller.connection.canEdit()}
+                      error={controller.commands.queueError()}
+                      functionName={(id) => controller.editor.store.project?.graphs[id]?.name ?? id}
+                      onRename={controller.commands.renameQueue}
+                      onDelete={controller.commands.deleteQueue}
+                      onPause={controller.commands.pauseQueue}
+                      onAdvance={controller.commands.advanceQueue}
+                      onClear={controller.commands.clearQueue}
+                      onRemove={controller.commands.removeQueueItem}
+                    />
+                  }
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}
@@ -958,6 +960,7 @@ function EditorContent(
                 node={controller.layout.selectedNode()}
                 packages={controller.editor.store.packages}
                 constants={controller.editor.store.project?.constants ?? {}}
+                queues={controller.editor.store.project?.queues ?? {}}
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>

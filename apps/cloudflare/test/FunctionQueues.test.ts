@@ -28,6 +28,8 @@ const setup = Effect.gen(function* () {
   const statuses = new Map<string, Protocol.WorkflowStatus>();
   let failSend = false;
   let failCreate = false;
+  let failStatus = false;
+  let failTerminate = false;
   const host: Scheduler.Host = {
     load: Effect.sync(() => structuredClone(stored)),
     save: (metadata) =>
@@ -49,10 +51,12 @@ const setup = Effect.gen(function* () {
         statuses.set(id, { status: "running" });
       },
       get: async (id) => {
+        if (failStatus) throw new Error("Workflow status outage");
         if (!statuses.has(id)) throw new Error("Workflow not found");
         return {
           status: async () => statuses.get(id)!,
           terminate: async () => {
+            if (failTerminate) throw new Error("Workflow termination unavailable");
             statuses.set(id, { status: "terminated" });
           },
         };
@@ -72,6 +76,15 @@ const setup = Effect.gen(function* () {
     },
     failCreate: () => {
       failCreate = true;
+    },
+    recoverCreate: () => {
+      failCreate = false;
+    },
+    failStatus: (value: boolean) => {
+      failStatus = value;
+    },
+    failTerminate: () => {
+      failTerminate = true;
     },
     stored: () => stored,
   };
@@ -235,6 +248,72 @@ describe("Cloud function queue transport", () => {
       yield* scheduler.reconcile;
       assert.deepStrictEqual(yield* scheduler.inspect(work("a")), { state: "absent" });
     }),
+  );
+
+  for (const unavailable of ["missing", "unknown"] as const) {
+    it.effect(
+      `cancelled ambiguous create with ${unavailable} status releases the head after bounded retries`,
+      () =>
+        Effect.gen(function* () {
+          const { scheduler, host, starts, statuses, failCreate, recoverCreate, failTerminate } =
+            yield* setup;
+          yield* scheduler.enqueue(work("a"));
+          yield* scheduler.enqueue(work("b"));
+          failCreate();
+          yield* Effect.exit(scheduler.deliver(work("a")));
+          recoverCreate();
+          if (unavailable === "unknown") statuses.set("a", { status: "unknown" });
+          failTerminate();
+          yield* scheduler.remove(scope, "queue", "a");
+          assert.propertyVal(yield* scheduler.inspect(work("a")), "error", "Queue item removed");
+          const restored = yield* Scheduler.make(host);
+          for (let attempt = 0; attempt < 3; attempt++) yield* restored.reconcile;
+          assert.propertyVal(yield* restored.inspect(work("a")), "state", "cancelling");
+          yield* restored.deliver(work("b"));
+          assert.deepStrictEqual(starts, []);
+          yield* restored.reconcile;
+          assert.deepStrictEqual(yield* restored.inspect(work("a")), { state: "absent" });
+          yield* restored.deliver(work("a"));
+          yield* restored.deliver(work("b"));
+          assert.deepStrictEqual(starts, ["b"]);
+        }),
+    );
+  }
+
+  it.effect("clear during unavailable cancellation releases subsequently enqueued calls", () =>
+    Effect.gen(function* () {
+      const { scheduler, failCreate, recoverCreate, starts } = yield* setup;
+      yield* scheduler.enqueue(work("a"));
+      failCreate();
+      yield* Effect.exit(scheduler.deliver(work("a")));
+      recoverCreate();
+      yield* scheduler.clear(scope, "queue");
+      yield* scheduler.enqueue(work("b"));
+      for (let attempt = 0; attempt < 3; attempt++) yield* scheduler.reconcile;
+      yield* scheduler.deliver(work("b"));
+      assert.deepStrictEqual(starts, ["b"]);
+    }),
+  );
+
+  it.effect(
+    "running status outages retain singleflight and terminal recovery releases subsequent work",
+    () =>
+      Effect.gen(function* () {
+        const { scheduler, statuses, starts, failStatus } = yield* setup;
+        yield* scheduler.enqueue(work("a"));
+        yield* scheduler.enqueue(work("b"));
+        yield* scheduler.deliver(work("a"));
+        failStatus(true);
+        for (let attempt = 0; attempt < 6; attempt++) yield* scheduler.reconcile;
+        yield* scheduler.deliver(work("b"));
+        assert.deepStrictEqual(starts, ["a"]);
+        assert.propertyVal(yield* scheduler.inspect(work("a")), "state", "running");
+        failStatus(false);
+        statuses.set("a", { status: "errored", error: { message: "function failed" } });
+        yield* scheduler.reconcile;
+        yield* scheduler.deliver(work("b"));
+        assert.deepStrictEqual(starts, ["a", "b"]);
+      }),
   );
 
   it("stable Workflow IDs include project, deployment, parent and execution path", async () => {
