@@ -45,6 +45,19 @@ const result = spawnSync("opencode2", ["run", "--standalone", "--auto", "--model
 });
 if (result.error || result.status !== 0) {
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const diagnostics = {
+    model: /model/i.test(output),
+    provider: /provider/i.test(output),
+    config: /config/i.test(output),
+    database: /sqlite|database|migration/i.test(output),
+    network: /fetch|connect|network|socket/i.test(output),
+    module: /module|resolve|import|package/i.test(output),
+    key: /api.?key|credential/i.test(output),
+    terminal: /tty|terminal|stdin/i.test(output),
+    reference: /reference|clone/i.test(output),
+    notFound: /not found|ENOENT|missing/i.test(output),
+  };
+  console.error(`Diagnostic flags: ${JSON.stringify(diagnostics)}`);
   const category = /model.*not found|model.*not available|ModelNotFound/i.test(output)
     ? "model unavailable"
     : /401|403|unauthorized|authentication/i.test(output)
