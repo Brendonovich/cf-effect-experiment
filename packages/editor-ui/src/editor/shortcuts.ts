@@ -111,6 +111,7 @@ export function registerEditorShortcuts(
           if (
             !root.isConnected ||
             root.closest("[hidden], .hidden, [inert]") !== null ||
+            root.querySelector("dialog[open][data-editor-shortcuts]") !== null ||
             original?.defaultPrevented ||
             original?.isComposing ||
             (original?.target instanceof globalThis.Node &&
@@ -127,15 +128,8 @@ export function registerEditorShortcuts(
   return () => destroy();
 }
 
-export const shortcutLabel = (
-  action: ShortcutAction,
-  apple = /Mac|iPhone|iPad/.test(navigator.platform),
-) => {
-  const shortcut = editorShortcuts.find((candidate) => candidate.action === action);
-  if (shortcut === undefined) return "";
-  const key =
-    shortcut.keys.find((key) => key.startsWith(apple ? "super+" : "ctrl+")) ?? shortcut.keys[0]!;
-  return key
+const formatShortcut = (key: string, apple: boolean) =>
+  key
     .split("+")
     .map((part) => {
       if (part === "mod") return apple ? "⌘" : "Ctrl";
@@ -144,4 +138,29 @@ export const shortcutLabel = (
     })
     .join("+")
     .replace("⌘+", "⌘");
+
+export const shortcutLabels = (
+  action: ShortcutAction,
+  apple = /Mac|iPhone|iPad/.test(navigator.platform),
+) => {
+  const shortcut = editorShortcuts.find((candidate) => candidate.action === action);
+  if (shortcut === undefined) return [];
+  return [
+    ...new Set(
+      shortcut.keys
+        .filter((key) => apple || !key.startsWith("super+"))
+        .map((key) => formatShortcut(key, apple)),
+    ),
+  ];
+};
+
+export const shortcutLabel = (
+  action: ShortcutAction,
+  apple = /Mac|iPhone|iPad/.test(navigator.platform),
+) => {
+  const shortcut = editorShortcuts.find((candidate) => candidate.action === action);
+  if (shortcut === undefined) return "";
+  const key =
+    shortcut.keys.find((key) => key.startsWith(apple ? "super+" : "ctrl+")) ?? shortcut.keys[0]!;
+  return formatShortcut(key, apple);
 };

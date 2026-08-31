@@ -112,6 +112,9 @@
       "path": "apps/cloudflare"
     },
     {
+      "path": "apps/opencode-bot"
+    },
+    {
       "path": "apps/cloudflare/frontend"
     },
     {
