@@ -66,6 +66,7 @@ const styles = stylex.create({
     fontSize: 12,
   },
   bindings: {
+    alignItems: "center",
     display: "flex",
     flexWrap: "wrap",
     gap: 6,
