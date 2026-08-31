@@ -1,5 +1,7 @@
 import type { Graph, NodeIO } from "@macrograph/core";
 
+import { DataType as Types } from "@macrograph/plugin/DataType";
+
 import { visiblePorts, type PortDirection } from "./connectionAuthoring";
 
 type NodeIOFor = (nodeId: string) => NodeIO | undefined;
@@ -35,6 +37,7 @@ export type GraphPort =
       readonly id: string;
       readonly name?: string;
       readonly type: DataType;
+      readonly invalid?: boolean;
     };
 
 export const graphNodeInputs = (io: NodeIO | undefined): ReadonlyArray<GraphPort> => [
@@ -50,6 +53,26 @@ export const graphNodeInputs = (io: NodeIO | undefined): ReadonlyArray<GraphPort
     kind: "data" as const,
   })) ?? []),
 ];
+
+export const retainedPorts = (
+  ports: ReadonlyArray<GraphPort>,
+  connectedIds: ReadonlySet<string>,
+  defaultIds: readonly string[] = [],
+): ReadonlyArray<GraphPort> => {
+  const known = new Set(ports.map((port) => port.id));
+  return [
+    ...ports,
+    ...[...new Set([...connectedIds, ...defaultIds])]
+      .filter((id) => !known.has(id))
+      .map((id) => ({
+        kind: "data" as const,
+        id,
+        name: `Missing: ${id}`,
+        type: Types.String,
+        invalid: true,
+      })),
+  ];
+};
 
 export const graphNodeOutputs = (io: NodeIO | undefined): ReadonlyArray<GraphPort> => [
   ...(io?.executionOutputs.map((port) => ({
@@ -105,7 +128,16 @@ export const visibleNodePorts = (
     direction === "input"
       ? graphNodeInputs(ioForNode(nodeId))
       : graphNodeOutputs(ioForNode(nodeId));
-  return visiblePorts(ports, node?.foldPins === true, connectedPortIds(graph, nodeId, direction));
+  const connected = connectedPortIds(graph, nodeId, direction);
+  return visiblePorts(
+    retainedPorts(
+      ports,
+      connected,
+      direction === "input" ? Object.keys(node?.inputDefaults ?? {}) : [],
+    ),
+    node?.foldPins === true,
+    connected,
+  );
 };
 
 export const handlePosition = (
@@ -159,7 +191,12 @@ export const graphConnections = (graph: Graph.Model, ioForNode: NodeIOFor) => {
     const layout: Layout = { input: new Map(), output: new Map() };
     for (const direction of ["input", "output"] as const) {
       const ports = direction === "input" ? graphNodeInputs(io) : graphNodeOutputs(io);
-      const visible = visiblePorts(ports, node.foldPins, connected.get(nodeId)![direction]);
+      const ids = connected.get(nodeId)![direction];
+      const visible = visiblePorts(
+        retainedPorts(ports, ids, direction === "input" ? Object.keys(node.inputDefaults) : []),
+        node.foldPins,
+        ids,
+      );
       visible.forEach((port, index) => {
         const offset = graphPortOffset(width, direction, index);
         // Duplicate IDs, including IDs shared by data and execution pins, are ambiguous.
@@ -178,13 +215,25 @@ export const graphConnections = (graph: Graph.Model, ioForNode: NodeIOFor) => {
   return graph.connections.flatMap((connection) => {
     const from = layoutForNode(connection.outNodeId)?.output.get(connection.outIoId);
     const to = layoutForNode(connection.inNodeId)?.input.get(connection.inIoId);
-    if (from === undefined || to === undefined || from.port.kind !== to.port.kind) return [];
+    if (from === undefined || to === undefined) return [];
+    const invalid =
+      (from.port.kind === "data" && from.port.invalid) ||
+      (to.port.kind === "data" && to.port.invalid)
+        ? "Missing wire endpoint"
+        : from.port.kind !== to.port.kind
+          ? "Execution/data pin mismatch"
+          : from.port.kind === "data" &&
+              to.port.kind === "data" &&
+              !Types.equals(from.port.type, to.port.type)
+            ? "Nominal data types do not match"
+            : undefined;
     return [
       {
         connection,
         from: from.position,
         to: to.position,
         type: from.port.kind === "data" ? from.port.type : undefined,
+        invalid,
       },
     ];
   });
@@ -210,7 +259,7 @@ export const wireColor = (type: DataType | undefined): string => {
     case "DateTime":
       return "#3b82f6";
     case "Custom":
-      return "#a78bfa";
+      return `hsl(${[...primary.id].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0) % 360} 70% 72%)`;
     case "List":
     case "Option":
       return wireColor(primary);

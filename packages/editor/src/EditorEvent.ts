@@ -1,4 +1,5 @@
 import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant } from "@macrograph/core";
+import { DataType } from "@macrograph/plugin/DataType";
 import { Effect, Schema } from "effect";
 
 const actor = Actor.Model.pipe(Schema.withDecodingDefaultKey(Effect.succeed(Actor.system)));
@@ -8,6 +9,13 @@ const emptyNodeIO: NodeIO = {
   executionInputs: [],
   executionOutputs: [],
 };
+
+export const TypeDefinitionsUpdated = Schema.TaggedStruct("TypeDefinitionsUpdated", {
+  actor,
+  types: DataType.Definitions,
+  nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
+});
+export type TypeDefinitionsUpdated = typeof TypeDefinitionsUpdated.Type;
 
 export const GraphCreated = Schema.TaggedStruct("GraphCreated", {
   actor,
@@ -152,6 +160,7 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
 export type EditorEvent =
+  | TypeDefinitionsUpdated
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged

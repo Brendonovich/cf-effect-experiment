@@ -6,6 +6,6 @@
     "outDir": "dist/types",
     "types": ["node"]
   },
-  "include": ["src", "drizzle"],
+  "include": ["src", "drizzle", "test"],
   "references": [{ "path": "../core" }, { "path": "../persistence" }, { "path": "../plugin" }]
 }

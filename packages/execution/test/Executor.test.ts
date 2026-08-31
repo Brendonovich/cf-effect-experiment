@@ -151,12 +151,21 @@ describe("Executor", () => {
           account: { ...project.constants.account!, value: "missing" },
         },
       });
-      const invalid = yield* executor
+      yield* executor.handleEvent(plugin, new Ping({ message: "go" }));
+      assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
+
+      const staleResource = yield* Executor.make(project, {
+        engineClient: () => Effect.succeed(runtime),
+        resourceValues: () => Effect.succeed([]),
+      });
+      yield* staleResource.plugin(plugin, deployment);
+      const invalid = yield* staleResource
         .handleEvent(plugin, new Ping({ message: "go" }))
         .pipe(Effect.result);
       assert(invalid._tag === "Failure");
       if (invalid._tag === "Failure")
         assert.strictEqual(invalid.failure._tag, "ResourceResolutionError");
+      assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
     }),
   );
 

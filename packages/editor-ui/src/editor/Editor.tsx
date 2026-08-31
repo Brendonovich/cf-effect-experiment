@@ -5,22 +5,20 @@ import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
+import { TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { TypeDefinitions } from "./catalog/TypeDefinitions";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,8 +26,12 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -511,6 +513,15 @@ function EditorContent(
                   packagesWithoutSettings={controller.catalog.filteredPackagesWithoutSettings()}
                   allPackages={controller.editor.store.packages}
                   constants={controller.editor.store.project?.constants ?? {}}
+                  typesPanel={
+                    <TypeDefinitions
+                      project={controller.editor.store.project}
+                      search={controller.catalog.navSearch()}
+                      canEdit={controller.connection.canEdit()}
+                      onPreview={controller.commands.previewTypeDefinition}
+                      onConfirm={controller.commands.confirmTypeDefinition}
+                    />
+                  }
                   onSectionChange={controller.layout.setNavSection}
                   onSearchChange={controller.catalog.setNavSearch}
                   onClose={() => controller.layout.setNavSection(null)}
@@ -595,8 +606,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
@@ -674,7 +685,9 @@ function EditorContent(
                                       }
                                       d={connectionPath(edge().from, edge().to)}
                                       fill="none"
-                                      stroke={wireColor(edge().type)}
+                                      stroke={edge().invalid ? "#ff9592" : wireColor(edge().type)}
+                                      stroke-dasharray={edge().invalid ? "6 4" : undefined}
+                                      data-invalid-wire={edge().invalid ? "" : undefined}
                                       stroke-width="2"
                                       opacity="0.75"
                                     />
@@ -709,6 +722,17 @@ function EditorContent(
                                     node={node()}
                                     schema={canvas.schemaForNode(node())}
                                     io={ioForNode(node().id)}
+                                    definitions={controller.editor.store.project?.types ?? {}}
+                                    diagnostics={TypeDefinition.nodeDiagnostics(
+                                      node(),
+                                      ioForNode(node().id) ?? {
+                                        dataInputs: [],
+                                        dataOutputs: [],
+                                        executionInputs: [],
+                                        executionOutputs: [],
+                                      },
+                                      controller.editor.store.project?.types ?? {},
+                                    )}
                                     selected={selectedIds().includes(node().id)}
                                     dragging={isNodeDragging(node().id)}
                                     positioning={
@@ -768,10 +792,14 @@ function EditorContent(
                                       "output",
                                     )}
                                     onSetInputDefault={(input, value) =>
-                                      controller.commands.setInputDefault(node().id, input, value)
+                                      void controller.commands
+                                        .setInputDefault(node().id, input, value)
+                                        .catch(console.error)
                                     }
                                     onClearInputDefault={(input) =>
-                                      controller.commands.clearInputDefault(node().id, input)
+                                      void controller.commands
+                                        .clearInputDefault(node().id, input)
+                                        .catch(console.error)
                                     }
                                     onGetSuggestions={(input) =>
                                       controller.commands.getInputSuggestions(node().id, input)
@@ -928,6 +956,13 @@ function EditorContent(
                 node={controller.layout.selectedNode()}
                 packages={controller.editor.store.packages}
                 constants={controller.editor.store.project?.constants ?? {}}
+                definitions={controller.editor.store.project?.types ?? {}}
+                nodeIO={
+                  controller.editor.store.nodeIO[controller.layout.selectedGraphId() ?? ""] ?? {}
+                }
+                onSaveDefault={controller.commands.setInputDefault}
+                onRemoveDefault={controller.commands.clearInputDefault}
+                onDisconnect={controller.commands.disconnectIo}
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>

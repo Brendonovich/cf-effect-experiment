@@ -1,14 +1,20 @@
+import type { DataType as Types } from "@macrograph/plugin/DataType";
+
 import { type Node, type NodeIO, type Package } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { For, Show, createSignal, type Component } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { defaultValueError } from "../../ui/defaultValues";
 import { TextInput } from "../../ui/TextInput";
+import { typeLabel } from "../../ui/typeSelection";
 import { visiblePorts } from "./connectionAuthoring";
 import {
   graphNodeInputs,
   graphNodeOutputs,
   graphNodeWidth,
+  retainedPorts,
+  wireColor,
   type GraphPort,
 } from "./graphPresentation";
 
@@ -145,7 +151,15 @@ const styles = stylex.create({
     justifyContent: "space-between",
     gap: 16,
   },
-  portSide: { display: "flex", flexDirection: "row", alignItems: "center", gap: 6 },
+  portSide: {
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+    flex: 1,
+  },
+  portLabel: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   outputSide: { justifyContent: "flex-end" },
   expandRow: {
     display: "flex",
@@ -169,22 +183,13 @@ const styles = stylex.create({
     paddingInline: 4,
   },
   expandIcon: { width: 16, height: 16, flexShrink: 0 },
+  invalidNode: { borderColor: colors.red9 },
+  invalidLabel: { color: colors.red11, fontSize: 10 },
 });
 
 type DataType = NodeIO["dataInputs"][number]["type"];
 
-export const formatDataType = (type: DataType): string => {
-  switch (type._tag) {
-    case "List":
-      return `List<${formatDataType(type.item)}>`;
-    case "Option":
-      return `Option<${formatDataType(type.inner)}>`;
-    case "Custom":
-      return `Custom<${type.id}>`;
-    default:
-      return type._tag;
-  }
-};
+export const formatDataType = typeLabel;
 
 const primaryDataType = (type: DataType): Exclude<DataType["_tag"], "List" | "Option"> =>
   type._tag === "List"
@@ -210,13 +215,19 @@ const dataPinStyle = (type: DataType) => {
   }
 };
 
-const formattedPortType = (port: GraphPort | undefined) =>
-  port?.kind === "data" ? formatDataType(port.type) : undefined;
+const formattedPortType = (port: GraphPort | undefined, definitions?: Types.Definitions) =>
+  port?.kind === "data"
+    ? port.invalid
+      ? "Missing input/output. Repair in the inspector."
+      : formatDataType(port.type, definitions)
+    : undefined;
 
 interface GraphNodeProps {
   node: Node.Model;
   schema?: Package.SchemaModel | undefined;
   io?: NodeIO | undefined;
+  definitions?: Types.Definitions;
+  diagnostics?: readonly string[];
   selected?: boolean;
   dragging?: boolean;
   positioning?: boolean;
@@ -273,6 +284,7 @@ const headerStyle = (type: Package.SchemaModel["type"] | undefined) => {
 const Pin: Component<{
   direction: "input" | "output";
   port: GraphPort;
+  definitions?: Types.Definitions;
   nodeId: string;
   filled?: boolean;
   highlighted?: boolean;
@@ -289,7 +301,10 @@ const Pin: Component<{
       data-io-kind={props.port.kind}
       data-node-id={props.nodeId}
       data-io-id={props.port.id}
-      title={props.port.kind === "data" ? formatDataType(props.port.type) : "Execution"}
+      title={
+        props.port.kind === "data" ? formattedPortType(props.port, props.definitions) : "Execution"
+      }
+      data-invalid-pin={props.port.kind === "data" && props.port.invalid ? "" : undefined}
       onPointerDown={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -317,6 +332,14 @@ const Pin: Component<{
         </svg>
       ) : (
         <div
+          style={{
+            color:
+              props.port.kind === "data" && props.port.invalid
+                ? "#ff9592"
+                : props.port.kind === "data"
+                  ? wireColor(props.port.type)
+                  : undefined,
+          }}
           sx={[
             styles.dataPin,
             dataPinStyle(props.port.type),
@@ -348,6 +371,7 @@ const DataDefaultControl: Component<{
   pluginDefault?: () => unknown;
   suggestions: boolean;
   connected: boolean;
+  definitions?: Types.Definitions;
   onSet: (value: unknown) => void;
   onClear: () => void;
   onGetSuggestions: () => Promise<ReadonlyArray<string>>;
@@ -359,6 +383,8 @@ const DataDefaultControl: Component<{
     const current = value();
     return typeof current === "string" || typeof current === "number" ? String(current) : "";
   };
+  const invalid = () =>
+    persisted() && !!defaultValueError(props.port.type, value(), props.definitions ?? {});
   const [draft, setDraft] = createSignal(formatValue);
   const commitNumber = () => {
     const next = Number(draft());
@@ -371,7 +397,20 @@ const DataDefaultControl: Component<{
   };
   return (
     <div sx={styles.defaultControls} onPointerDown={(event) => event.stopPropagation()}>
-      <Show when={!props.connected && props.port.type._tag === "String"}>
+      <Show when={props.port.invalid || invalid()}>
+        <button
+          type="button"
+          sx={styles.invalidLabel}
+          title="Select node and repair or remove its saved default in the inspector"
+        >
+          Invalid
+        </button>
+      </Show>
+      <Show
+        when={
+          !props.connected && !props.port.invalid && !invalid() && props.port.type._tag === "String"
+        }
+      >
         <TextInput
           value={formatValue()}
           label={props.port.name || props.port.id}
@@ -381,7 +420,10 @@ const DataDefaultControl: Component<{
       </Show>
       <Show
         when={
-          !props.connected && (props.port.type._tag === "Int" || props.port.type._tag === "Float")
+          !props.connected &&
+          !props.port.invalid &&
+          !invalid() &&
+          (props.port.type._tag === "Int" || props.port.type._tag === "Float")
         }
       >
         <input
@@ -393,7 +435,11 @@ const DataDefaultControl: Component<{
           onChange={commitNumber}
         />
       </Show>
-      <Show when={!props.connected && props.port.type._tag === "Bool"}>
+      <Show
+        when={
+          !props.connected && !props.port.invalid && !invalid() && props.port.type._tag === "Bool"
+        }
+      >
         <input
           sx={styles.checkbox}
           type="checkbox"
@@ -407,9 +453,21 @@ const DataDefaultControl: Component<{
 
 export const GraphNode: Component<GraphNodeProps> = (props) => {
   const inputs = () =>
-    visiblePorts(graphNodeInputs(props.io), props.node.foldPins, props.connectedInputIds);
+    visiblePorts(
+      retainedPorts(
+        graphNodeInputs(props.io),
+        props.connectedInputIds,
+        Object.keys(props.node.inputDefaults),
+      ),
+      props.node.foldPins,
+      props.connectedInputIds,
+    );
   const outputs = () =>
-    visiblePorts(graphNodeOutputs(props.io), props.node.foldPins, props.connectedOutputIds);
+    visiblePorts(
+      retainedPorts(graphNodeOutputs(props.io), props.connectedOutputIds),
+      props.node.foldPins,
+      props.connectedOutputIds,
+    );
   const hasHiddenPins = () =>
     inputs().length !== graphNodeInputs(props.io).length ||
     outputs().length !== graphNodeOutputs(props.io).length;
@@ -422,9 +480,15 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
     <div
       sx={[
         styles.node,
+        props.diagnostics?.length ||
+        inputs().some((port) => port.kind === "data" && port.invalid) ||
+        outputs().some((port) => port.kind === "data" && port.invalid)
+          ? styles.invalidNode
+          : null,
         props.selected && styles.selectedNode,
         !props.dragging && !props.positioning && styles.smoothPosition,
       ]}
+      data-graph-node={props.node.id}
       style={{
         width: `${graphNodeWidth(props.io, props.node.name)}px`,
         transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)`,
@@ -440,7 +504,8 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
     >
       <div
         sx={[styles.nodeHeader, headerStyle(props.schema?.type)]}
-        title={props.schema?.description}
+        data-node-header={props.node.id}
+        title={props.diagnostics?.length ? props.diagnostics.join("\n") : props.schema?.description}
         onPointerDown={(event) => {
           event.stopPropagation();
           if (event.button === 0) props.onSelect(props.node.id, event.shiftKey);
@@ -473,6 +538,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
                       <Pin
                         direction="input"
                         port={input()!}
+                        definitions={props.definitions ?? {}}
                         nodeId={props.node.id}
                         filled={props.connectedInputIds.has(input()!.id) || inputIsSource()}
                         highlighted={
@@ -496,7 +562,15 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
                         }
                       />
                     )}
-                    <span title={formattedPortType(input())}>
+                    <span
+                      sx={styles.portLabel}
+                      title={
+                        input()?.kind === "data" &&
+                        (input() as Extract<GraphPort, { kind: "data" }>).invalid
+                          ? input()?.name
+                          : formattedPortType(input(), props.definitions)
+                      }
+                    >
                       {input()?.kind === "data" && (input()?.name || input()?.id)}
                     </span>
                     <Show
@@ -512,6 +586,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
                           <DataDefaultControl
                             node={props.node}
                             port={port()}
+                            definitions={props.definitions ?? {}}
                             connected={props.connectedInputIds.has(port().id)}
                             pluginDefault={() => metadata()?.defaultValue}
                             suggestions={metadata()?.suggestions === true}
@@ -524,13 +599,22 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
                     </Show>
                   </div>
                   <div sx={[styles.portSide, styles.outputSide]}>
-                    <span title={formattedPortType(output())}>
+                    <span
+                      sx={styles.portLabel}
+                      title={
+                        output()?.kind === "data" &&
+                        (output() as Extract<GraphPort, { kind: "data" }>).invalid
+                          ? output()?.name
+                          : formattedPortType(output(), props.definitions)
+                      }
+                    >
                       {output()?.kind === "data" && (output()?.name || output()?.id)}
                     </span>
                     {output() && (
                       <Pin
                         direction="output"
                         port={output()!}
+                        definitions={props.definitions ?? {}}
                         nodeId={props.node.id}
                         filled={props.connectedOutputIds.has(output()!.id) || outputIsSource()}
                         highlighted={

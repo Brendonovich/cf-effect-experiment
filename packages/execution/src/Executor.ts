@@ -1,4 +1,11 @@
-import { Graph, Node, Project, ResourceConstant } from "@macrograph/core";
+import {
+  CustomTypes,
+  Graph,
+  Node,
+  Project,
+  ResourceConstant,
+  TypeDefinition,
+} from "@macrograph/core";
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Engine from "@macrograph/plugin/Engine";
 import * as Plugin from "@macrograph/plugin/Plugin";
@@ -62,6 +69,12 @@ export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()
   { nodeId: Schema.String, cause: Schema.Unknown },
 ) {}
 
+export class InvalidGraph extends Schema.TaggedError<InvalidGraph>()("InvalidGraph", {
+  graphId: Schema.String,
+  nodeId: Schema.String,
+  reasons: Schema.Array(Schema.String),
+}) {}
+
 const isEngineClientUnavailable = (value: unknown): value is EngineClientUnavailable =>
   typeof value === "object" &&
   value !== null &&
@@ -80,6 +93,7 @@ export type ExecutorError =
   | ResourceResolutionError
   | EngineClientUnavailable
   | NodeExecutionError
+  | InvalidGraph
   | Node.NotFoundError;
 
 interface RegisteredPlugin {
@@ -210,13 +224,18 @@ export const make = Effect.fnUntraced(function* (
 
   const handleEvent: Service["handleEvent"] = Effect.fnUntraced(function* (definition, event) {
     const currentProject = yield* Ref.get(project);
-    const registeredPlugins = yield* Ref.get(plugins);
+    const registeredPlugins = new Map(yield* Ref.get(plugins));
+    registeredPlugins.set(CustomTypes.packageId, {
+      schemas: CustomTypes.schemas(currentProject.types),
+      engineClient: undefined,
+    });
     if (!registeredPlugins.has(definition.id))
       return yield* new PluginNotRegistered({ pluginId: definition.id });
 
     const resolveProperties = Effect.fnUntraced(function* (
       node: Node.Model,
       schema: Registration.RegisteredSchema,
+      lookupLiveValues = true,
     ): Effect.fn.Return<Readonly<Record<string, unknown>>, ExecutorError> {
       const resolved: Record<string, unknown> = { ...node.properties };
       for (const property of schema.properties) {
@@ -250,7 +269,7 @@ export const make = Effect.fnUntraced(function* (
             property: property.id,
             reason: "Resource constant has no selected value",
           });
-        if (options?.resourceValues === undefined) {
+        if (!lookupLiveValues || options?.resourceValues === undefined) {
           resolved[property.id] = constant.value;
         } else {
           const values = yield* options.resourceValues(constant.resource).pipe(
@@ -279,11 +298,258 @@ export const make = Effect.fnUntraced(function* (
       return resolved;
     });
 
+    // Validate only the event's execution closure and its upstream data dependencies.
+    // No schema.run, execution driver, or resource lookup may happen during this pass.
+    const validateEventGraph = Effect.fnUntraced(function* (
+      graph: Graph.Model,
+      eventNode: Node.Model,
+    ): Effect.fn.Return<void, ExecutorError> {
+      const inspected = new Map<
+        string,
+        {
+          node: Node.Model;
+          schema: Registration.RegisteredSchema;
+          io: Registration.RegisteredNodeIO;
+        }
+      >();
+      const pending = [eventNode.id];
+      const executionNodes = new Set<string>([eventNode.id]);
+      const inspect = Effect.fnUntraced(function* (id: string) {
+        const cached = inspected.get(id);
+        if (cached !== undefined) return cached;
+        const node = yield* Graph.getNode(graph, id);
+        const schema = yield* getSchema(registeredPlugins, node);
+        const properties = yield* resolveProperties(node, schema, false);
+        const io = yield* Effect.try({
+          try: () => schema.generateIO(properties),
+          catch: () =>
+            new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: ["Schema IO could not be generated"],
+            }),
+        });
+        const result = { node, schema, io };
+        inspected.set(id, result);
+        return result;
+      });
+      const processed = new Set<string>();
+      const followedExecution = new Set<string>();
+      while (pending.length > 0) {
+        const id = pending.shift()!;
+        if (processed.has(id) && (!executionNodes.has(id) || followedExecution.has(id))) continue;
+        processed.add(id);
+        if (executionNodes.has(id)) followedExecution.add(id);
+        const { node, schema, io } = yield* inspect(id);
+        for (const property of schema.properties) {
+          if ("resource" in property) continue;
+          const value = Object.hasOwn(node.properties, property.id)
+            ? node.properties[property.id]
+            : property.defaultValue;
+          if (value === undefined && property.optional) continue;
+          if (!DataType.isValue(property.type, value))
+            return yield* new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: [`Property ${property.id} does not match ${property.type._tag}`],
+            });
+        }
+        const dependencyDefinitions: Record<string, DataType.Definition> = Object.create(null);
+        const missing = new Set<string>();
+        const visitType = (type: DataType.Any): void => {
+          if (type._tag === "List") return visitType(type.item);
+          if (type._tag === "Option") return visitType(type.inner);
+          if (type._tag !== "Custom" || Object.hasOwn(dependencyDefinitions, type.id)) return;
+          const definition = Object.hasOwn(currentProject.types, type.id)
+            ? currentProject.types[type.id]
+            : undefined;
+          if (definition === undefined) {
+            missing.add(type.id);
+            return;
+          }
+          dependencyDefinitions[type.id] = definition;
+          const fields =
+            definition._tag === "Struct"
+              ? definition.fields
+              : definition.variants.flatMap((variant) => variant.fields);
+          fields.forEach((field) => visitType(field.type));
+        };
+        [...io.dataInputs, ...io.dataOutputs].forEach((port) => visitType(port.type));
+        const reasons = [
+          ...Array.from(missing, (id) => `Unknown type ${id}`),
+          ...TypeDefinition.validate(dependencyDefinitions).map((error) => error.reason),
+        ];
+        if (
+          node.schema.package === "list" &&
+          node.schema.schema !== "JoinStringList" &&
+          DataType.parseSelector(
+            typeof node.properties.type === "string" ? node.properties.type : "String",
+          ) === undefined
+        )
+          reasons.push("Invalid list element type selector");
+        if (node.schema.package === "list" && node.schema.schema === "ListCreate") {
+          const count = node.properties.number ?? 1;
+          if (
+            typeof count !== "number" ||
+            !Number.isSafeInteger(count) ||
+            count < 0 ||
+            count > 1024
+          )
+            reasons.push("List entries must be an integer between 0 and 1024");
+        }
+        if (reasons.length > 0)
+          return yield* new InvalidGraph({ graphId: graph.id, nodeId: node.id, reasons });
+        for (const [inputId, value] of Object.entries(node.inputDefaults)) {
+          const inputs = io.dataInputs.filter((input) => input.id === inputId);
+          if (inputs.length !== 1 || io.executionInputs.some((input) => input.id === inputId))
+            return yield* new InvalidInputValue({
+              nodeId: node.id,
+              inputId,
+              reason: "Stored default refers to a missing or ambiguous data input",
+            });
+          yield* Schema.decodeUnknownEffect(
+            DataType.JsonValueSchema(inputs[0]!.type, currentProject.types),
+          )(value, { onExcessProperty: "error" }).pipe(
+            Effect.catchCause(
+              () =>
+                new InvalidInputValue({
+                  nodeId: node.id,
+                  inputId,
+                  reason: "Stored default does not match the current project type",
+                }),
+            ),
+          );
+        }
+        for (const input of io.dataInputs) {
+          const incoming = graph.connections.filter(
+            (connection) => connection.inNodeId === node.id && connection.inIoId === input.id,
+          );
+          if (incoming.length > 1)
+            return yield* new InvalidConnection({
+              connectionId: incoming[1]!.id,
+              reason: `Input ${input.id} has multiple connections`,
+            });
+          if (incoming.length === 0 && !Object.hasOwn(node.inputDefaults, input.id)) {
+            if (input.defaultValue === undefined)
+              return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
+            yield* Schema.decodeUnknownEffect(
+              DataType.ValueSchema(input.type, currentProject.types),
+            )(input.defaultValue, { onExcessProperty: "error" }).pipe(
+              Effect.catchCause(
+                () =>
+                  new InvalidInputValue({
+                    nodeId: node.id,
+                    inputId: input.id,
+                    reason: "Declaration default does not match the current project type",
+                  }),
+              ),
+            );
+          }
+        }
+        for (const connection of graph.connections) {
+          const incoming = connection.inNodeId === node.id;
+          const outgoing = connection.outNodeId === node.id;
+          if (!incoming && !outgoing) continue;
+          if (
+            incoming &&
+            !outgoing &&
+            io.executionInputs.some((port) => port.id === connection.inIoId) &&
+            !executionNodes.has(connection.outNodeId)
+          )
+            continue;
+          const source = outgoing ? { node, schema, io } : yield* inspect(connection.outNodeId);
+          const sourceData = source.io.dataOutputs.filter((port) => port.id === connection.outIoId);
+          const sourceExec = source.io.executionOutputs.filter(
+            (port) => port.id === connection.outIoId,
+          );
+          if (sourceData.length + sourceExec.length !== 1)
+            return yield* new InvalidConnection({
+              connectionId: connection.id,
+              reason: `Output ${connection.outIoId} is missing or ambiguous`,
+            });
+          // Data consumers outside this event closure are not executed or validated.
+          if (
+            outgoing &&
+            sourceData.length === 1 &&
+            !processed.has(connection.inNodeId) &&
+            !executionNodes.has(connection.inNodeId)
+          )
+            continue;
+          if (outgoing && sourceExec.length === 1 && !executionNodes.has(node.id)) continue;
+          const target = incoming ? { node, schema, io } : yield* inspect(connection.inNodeId);
+          const targetData = target.io.dataInputs.filter((port) => port.id === connection.inIoId);
+          const targetExec = target.io.executionInputs.filter(
+            (port) => port.id === connection.inIoId,
+          );
+          if (
+            targetData.length + targetExec.length !== 1 ||
+            (sourceData.length === 1
+              ? targetData.length !== 1 ||
+                !DataType.equals(sourceData[0]!.type, targetData[0]!.type)
+              : targetExec.length !== 1 || target.schema.type !== "exec")
+          )
+            return yield* new InvalidConnection({
+              connectionId: connection.id,
+              reason: "Wire endpoints are missing, ambiguous, or incompatible",
+            });
+          const duplicates = graph.connections.filter(
+            (candidate) =>
+              candidate.inNodeId === connection.inNodeId && candidate.inIoId === connection.inIoId,
+          );
+          if (duplicates.length > 1)
+            return yield* new InvalidConnection({
+              connectionId: duplicates[1]!.id,
+              reason: `Input ${connection.inIoId} has multiple connections`,
+            });
+          if (incoming && sourceData.length === 1) pending.push(source.node.id);
+          if (outgoing && sourceExec.length === 1 && executionNodes.has(node.id)) {
+            executionNodes.add(target.node.id);
+            pending.push(target.node.id);
+          }
+        }
+      }
+      const visiting = new Set<string>();
+      const visited = new Set<string>();
+      const checkCycle = (id: string, data: boolean): string | undefined => {
+        if (visiting.has(id)) return id;
+        if (visited.has(id)) return;
+        visiting.add(id);
+        const current = inspected.get(id)!;
+        for (const connection of graph.connections) {
+          const next = data
+            ? connection.inNodeId === id &&
+              current.io.dataInputs.some((port) => port.id === connection.inIoId) &&
+              inspected.get(connection.outNodeId)?.schema.type === "pure"
+              ? connection.outNodeId
+              : undefined
+            : connection.outNodeId === id &&
+                executionNodes.has(id) &&
+                current.io.executionOutputs.some((port) => port.id === connection.outIoId)
+              ? connection.inNodeId
+              : undefined;
+          if (next === undefined) continue;
+          const cycle = checkCycle(next, data);
+          if (cycle !== undefined) return cycle;
+        }
+        visiting.delete(id);
+        visited.add(id);
+      };
+      for (const data of [false, true]) {
+        visiting.clear();
+        visited.clear();
+        for (const id of processed) {
+          const cycle = checkCycle(id, data);
+          if (cycle !== undefined) return yield* new ExecutionCycle({ nodeId: cycle });
+        }
+      }
+    });
+
     const executeEventNode = Effect.fn("Executor.executeEventNode")(function* (
       graph: Graph.Model,
       eventNode: Node.Model,
       eventSchema: Registration.RegisteredSchema,
     ): Effect.fn.Return<void, ExecutorError> {
+      yield* validateEventGraph(graph, eventNode);
       const executionTraceId = crypto.randomUUID();
       const executionAttributes = {
         "macrograph.project.id": projectId,
@@ -425,8 +691,7 @@ export const make = Effect.fnUntraced(function* (
               );
             return transform(ports[0]!.type, output.value).pipe(
               Effect.map((value) => ({ ...output, value })),
-              Effect.catchTag(
-                "SchemaError",
+              Effect.catchCause(
                 () =>
                   new InvalidOutputValue({
                     nodeId: node.id,
@@ -475,12 +740,28 @@ export const make = Effect.fnUntraced(function* (
                   ),
                 );
 
+        if (node.schema.package === CustomTypes.packageId && nodeIO.executionInputs.length > 0) {
+          if (
+            result.executionOutputId === null ||
+            result.outputs.some(
+              (output) => !output.outputId.startsWith(`${result.executionOutputId}/`),
+            )
+          )
+            return yield* new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: ["Enum match payload does not belong to the selected branch"],
+            });
+        }
+
+        // An exec node may emit different payloads on successive branches. Never retain
+        // outputs from its previous invocation (including a previous enum match branch).
+        for (const port of nodeIO.dataOutputs) state.outputs.delete(outputKey(node.id, port.id));
         for (const output of result.outputs) {
           const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
           if (
             ports.length !== 1 ||
-            nodeIO.executionOutputs.some((port) => port.id === output.outputId) ||
-            !DataType.isValue(ports[0]!.type, output.value, currentProject.types)
+            nodeIO.executionOutputs.some((port) => port.id === output.outputId)
           ) {
             return yield* new InvalidOutputValue({
               nodeId: node.id,
@@ -488,8 +769,30 @@ export const make = Effect.fnUntraced(function* (
               reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
             });
           }
+          yield* Schema.decodeUnknownEffect(
+            DataType.ValueSchema(ports[0]!.type, currentProject.types),
+          )(output.value).pipe(
+            Effect.catchCause(
+              () =>
+                new InvalidOutputValue({
+                  nodeId: node.id,
+                  outputId: output.outputId,
+                  reason: `Expected ${ports[0]!.type._tag}`,
+                }),
+            ),
+          );
           state.outputs.set(outputKey(node.id, output.outputId), output.value);
         }
+        if (
+          result.executionOutputId !== null &&
+          nodeIO.executionOutputs.filter((port) => port.id === result.executionOutputId).length !==
+            1
+        )
+          return yield* new InvalidGraph({
+            graphId: graph.id,
+            nodeId: node.id,
+            reasons: ["Execution driver returned an undeclared branch"],
+          });
         yield* Effect.annotateCurrentSpan(
           "macrograph.execution.output.id",
           result.executionOutputId,
@@ -548,8 +851,7 @@ export const make = Effect.fnUntraced(function* (
             return yield* Schema.decodeUnknownEffect(
               DataType.JsonValueSchema(input.type, currentProject.types),
             )(node.inputDefaults[input.id]).pipe(
-              Effect.catchTag(
-                "SchemaError",
+              Effect.catchCause(
                 () =>
                   new InvalidInputValue({
                     nodeId: node.id,
@@ -560,13 +862,18 @@ export const make = Effect.fnUntraced(function* (
             );
           }
           if (input.defaultValue !== undefined) {
-            if (DataType.isValue(input.type, input.defaultValue, currentProject.types))
-              return input.defaultValue;
-            return yield* new InvalidInputValue({
-              nodeId: node.id,
-              inputId: input.id,
-              reason: `Declaration default does not match ${input.type._tag}`,
-            });
+            return yield* Schema.decodeUnknownEffect(
+              DataType.ValueSchema(input.type, currentProject.types),
+            )(input.defaultValue).pipe(
+              Effect.catchCause(
+                () =>
+                  new InvalidInputValue({
+                    nodeId: node.id,
+                    inputId: input.id,
+                    reason: `Declaration default does not match ${input.type._tag}`,
+                  }),
+              ),
+            );
           }
           return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
         }
@@ -613,13 +920,18 @@ export const make = Effect.fnUntraced(function* (
             outputId: connection.outIoId,
           });
         const value = state.outputs.get(key);
-        if (!DataType.isValue(input.type, value, currentProject.types))
-          return yield* new InvalidInputValue({
-            nodeId: node.id,
-            inputId: input.id,
-            reason: `Connected value does not match ${input.type._tag}`,
-          });
-        return value;
+        return yield* Schema.decodeUnknownEffect(
+          DataType.ValueSchema(input.type, currentProject.types),
+        )(value).pipe(
+          Effect.catchCause(
+            () =>
+              new InvalidInputValue({
+                nodeId: node.id,
+                inputId: input.id,
+                reason: `Connected value does not match ${input.type._tag}`,
+              }),
+          ),
+        );
       });
 
       const selectOutput = (
@@ -724,9 +1036,11 @@ export const make = Effect.fnUntraced(function* (
           Object.values(graph.nodes).filter((node) => node.schema.package === definition.id),
           (node) =>
             Effect.gen(function* () {
-              const schema = yield* getSchema(registeredPlugins, node);
-              if (schema.type !== "event") return;
-              const matches = yield* resolveProperties(node, schema).pipe(
+              const schema = registeredPlugins
+                .get(node.schema.package)
+                ?.schemas.get(node.schema.schema);
+              if (schema === undefined || schema.type !== "event") return;
+              const matches = yield* resolveProperties(node, schema, false).pipe(
                 Effect.flatMap((properties) => schema.matches(event, properties)),
                 Effect.tap((matched) =>
                   Effect.annotateCurrentSpan("macrograph.event.matched", matched),

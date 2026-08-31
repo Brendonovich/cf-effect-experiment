@@ -28,6 +28,14 @@ const definitions: DataType.Definitions = {
 };
 
 describe("custom data types", () => {
+  it("reads shipped scalar selectors and nested nominal descriptors", () => {
+    expect(DataType.parseSelector("String")).toEqual(DataType.String);
+    const nested = DataType.List(DataType.Option(DataType.Custom(treeId)));
+    expect(DataType.parseSelector(JSON.stringify(nested))).toEqual(nested);
+    expect(DataType.parseSelector("Custom")).toBeUndefined();
+    expect(DataType.parseSelector('{"_tag":"List"}')).toBeUndefined();
+  });
+
   it("round trips recursive structs and tagged enum payloads through JSON", () => {
     const value = {
       _type: "result",
@@ -71,6 +79,15 @@ describe("custom data types", () => {
 
   it("rejects missing definitions, unknown variants and invalid nested fields", () => {
     expect(DataType.isValue(DataType.Custom(treeId), {})).toBe(false);
+    expect(DataType.isValue(DataType.List(DataType.Custom(treeId)), [])).toBe(false);
+    expect(DataType.isValue(DataType.Option(DataType.Custom(treeId)), Option.none())).toBe(false);
+    expect(
+      DataType.isValue(
+        DataType.Custom(resultId),
+        { _type: "result", _tag: "Empty" },
+        { result: definitions.result! },
+      ),
+    ).toBe(false);
     expect(
       DataType.isValue(
         DataType.Custom(resultId),
@@ -99,5 +116,74 @@ describe("custom data types", () => {
     const value = { _type: "tree", count: 3 };
     expect(DataType.isValue(DataType.Custom(treeId), value, changed)).toBe(true);
     expect(DataType.isValue(DataType.Custom(treeId), value, definitions)).toBe(false);
+  });
+
+  it("rejects obsolete fields instead of silently stripping preserved defaults", () => {
+    const value = { _type: "result", _tag: "Empty", removedPayload: "keep me" };
+    const type = DataType.Custom(resultId);
+    expect(DataType.isValue(type, value, definitions)).toBe(false);
+    expect(() =>
+      Schema.decodeUnknownSync(DataType.JsonValueSchema(type, definitions))(value),
+    ).toThrow();
+    expect(value.removedPayload).toBe("keep me");
+  });
+
+  it("fails safely for inherited identities and malformed persisted registries", () => {
+    const inherited = Object.create(definitions) as DataType.Definitions;
+    expect(
+      DataType.isValue(DataType.Custom(resultId), { _type: "result", _tag: "Empty" }, inherited),
+    ).toBe(false);
+    const invalid: DataType.Definitions = {
+      result: { _tag: "Enum", id: resultId, name: "Result", variants: [] },
+      tree: {
+        _tag: "Struct",
+        id: treeId,
+        name: "Tree",
+        fields: [{ name: "__proto__", type: DataType.String }],
+      },
+    };
+    expect(DataType.isValue(DataType.Custom(resultId), {}, invalid)).toBe(false);
+    expect(DataType.isValue(DataType.Custom(treeId), {}, invalid)).toBe(false);
+    expect(DataType.isValue(DataType.Custom(DataType.DefinitionId.make("constructor")), {})).toBe(
+      false,
+    );
+  });
+
+  it("reports cyclic and excessively deep payloads as schema errors, not recursion defects", () => {
+    const cyclic: {
+      _type: string;
+      label: string;
+      parent: Option.Option<unknown>;
+      children: unknown[];
+    } = {
+      _type: "tree",
+      label: "cycle",
+      parent: Option.none(),
+      children: [],
+    };
+    cyclic.children.push(cyclic);
+    const schema = DataType.ValueSchema(DataType.Custom(treeId), definitions);
+    expect(DataType.isValue(DataType.Custom(treeId), cyclic, definitions)).toBe(false);
+    const decoded = Schema.decodeUnknownResult(schema)(cyclic);
+    expect(decoded._tag).toBe("Failure");
+    expect(Schema.decodeUnknownResult(DataType.JsonValueSchema(DataType.Custom(treeId), definitions))(cyclic)._tag)
+      .toBe("Failure");
+    expect(Schema.encodeUnknownResult(schema)(cyclic)._tag).toBe("Failure");
+    expect(
+      Schema.encodeUnknownResult(DataType.JsonValueSchema(DataType.Custom(treeId), definitions))(
+        cyclic,
+      )._tag,
+    ).toBe("Failure");
+    let deep: unknown = { _type: "tree", label: "leaf", parent: Option.none(), children: [] };
+    for (let i = 0; i < 130; i++)
+      deep = { _type: "tree", label: "branch", parent: Option.none(), children: [deep] };
+    expect(Schema.decodeUnknownResult(schema)(deep)._tag).toBe("Failure");
+    expect(Schema.encodeUnknownResult(schema)(deep)._tag).toBe("Failure");
+    expect(
+      DataType.isValue(
+        DataType.List(DataType.Int),
+        Array.from({ length: 100_001 }, () => 1),
+      ),
+    ).toBe(false);
   });
 });

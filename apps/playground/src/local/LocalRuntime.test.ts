@@ -181,6 +181,7 @@ describe("local browser runtime", () => {
 
         const packageIds = (yield* connection.client.GetPackages({})).map((pkg) => pkg.id).sort();
         assert.deepStrictEqual(packageIds, [
+          "CustomTypes",
           "http-client",
           "json",
           "list",

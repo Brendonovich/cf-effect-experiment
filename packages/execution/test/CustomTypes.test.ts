@@ -109,7 +109,7 @@ describe("custom type execution", () => {
       expect(yield* Ref.get(captured)).toEqual([value, value]);
       yield* executor.loadProject({ ...project, types: {} });
       const error = yield* Effect.flip(executor.handleEvent(plugin, new Trigger({})));
-      expect(error._tag).toBe("InvalidOutputValue");
+      expect(error._tag).toBe("InvalidGraph");
     }),
   );
 });

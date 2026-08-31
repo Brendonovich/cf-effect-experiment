@@ -1,37 +1,44 @@
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Plugin from "@macrograph/plugin/Plugin";
-import { Effect, Option, Random } from "effect";
+import { Effect, Equal, Option, Random } from "effect";
 
-const scalar = (name: string): DataType.Scalar => {
-  switch (name) {
-    case "String":
-      return DataType.String;
-    case "Int":
-      return DataType.Int;
-    case "Float":
-      return DataType.Float;
-    case "Bool":
-      return DataType.Bool;
-    default:
-      // IO generation is synchronous; reject invalid properties in the run Effect.
-      return DataType.String;
-  }
+// Persisted primitive selectors remain valid; nested/custom selectors use JSON descriptors.
+const elementType = (name: string): DataType.Any => DataType.parseSelector(name) ?? DataType.String;
+const validateType = (name: string) => {
+  const type = DataType.parseSelector(name);
+  return type === undefined
+    ? Effect.fail(new TypeError("Type must be a primitive name or a JSON data type descriptor"))
+    : Effect.succeed(type);
 };
-const validateScalar = (name: string) =>
-  name === scalar(name)._tag
-    ? Effect.succeed(scalar(name))
-    : Effect.fail(new TypeError("Type must be String, Int, Float, or Bool"));
 const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 && count <= 1024;
 const typed = {
   type: {
     name: "Type",
-    description: "Element type: String, Int, Float, or Bool.",
+    description: "Element type: a primitive name or JSON descriptor for nested and custom types.",
     type: DataType.String,
     defaultValue: "String",
   },
 };
-const scalarDefault = (type: DataType.Scalar): DataType.Value<DataType.Scalar> =>
-  type._tag === "String" ? "" : type._tag === "Bool" ? false : 0;
+const inputOptions = (
+  type: DataType.Any,
+): { readonly defaultValue?: DataType.Value<DataType.Any> } => {
+  switch (type._tag) {
+    case "String":
+      return { defaultValue: "" };
+    case "Bool":
+      return { defaultValue: false };
+    case "Int":
+    case "Float":
+      return { defaultValue: 0 };
+    case "List":
+      return { defaultValue: [] };
+    case "Option":
+      return { defaultValue: Option.none() };
+    case "Custom":
+    case "DateTime":
+      return {};
+  }
+};
 const indexOf = (index: number, length: number) =>
   Number.isSafeInteger(index)
     ? Effect.succeed(index < 0 ? length + index : index)
@@ -44,22 +51,23 @@ const ListPlugin = Plugin.make({
     yield* context.schema.register({
       id: "ListCreate",
       name: "List Create",
-      description: "Creates a typed scalar list from 0 to 1024 entries.",
+      description:
+        "Creates a typed list from 0 to 1024 entries, including nested and custom values.",
       type: "pure",
       properties: { ...typed, number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
       io: (io, properties) => {
-        const type = scalar(properties.type);
+        const type = elementType(properties.type);
         return {
           inputs: Array.from(
             { length: validCount(properties.number) ? properties.number : 0 },
-            (_, index) => io.data.in(`value-${index}`, type, { defaultValue: scalarDefault(type) }),
+            (_, index) => io.data.in(`value-${index}`, type, inputOptions(type)),
           ),
           output: io.data.out("out", DataType.List(type)),
         };
       },
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           if (!validCount(properties.number))
             return yield* Effect.fail(
               new RangeError("Entries must be an integer between 0 and 1024"),
@@ -70,19 +78,19 @@ const ListPlugin = Plugin.make({
     yield* context.schema.register({
       id: "PushListValue",
       name: "Push List Value",
-      description: "Appends a scalar to a new list without modifying the input.",
+      description: "Appends a typed value to a new list without modifying the input.",
       properties: typed,
       io: (io, properties) => {
-        const type = scalar(properties.type);
+        const type = elementType(properties.type);
         return {
           list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
-          value: io.data.in("value", type, { defaultValue: scalarDefault(type) }),
+          value: io.data.in("value", type, inputOptions(type)),
           output: io.data.out("outList", DataType.List(type)),
         };
       },
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           io.output([...io.list, io.value]);
         }),
     });
@@ -93,20 +101,20 @@ const ListPlugin = Plugin.make({
       yield* context.schema.register({
         id,
         name,
-        description: `${insert ? "Inserts" : "Replaces"} a scalar in a new list. Negative indices count from the end; out-of-range indices fail.`,
+        description: `${insert ? "Inserts" : "Replaces"} a typed value in a new list. Negative indices count from the end; out-of-range indices fail.`,
         properties: typed,
         io: (io, properties) => {
-          const type = scalar(properties.type);
+          const type = elementType(properties.type);
           return {
             list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
             index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
-            value: io.data.in("value", type, { defaultValue: scalarDefault(type) }),
+            value: io.data.in("value", type, inputOptions(type)),
             output: io.data.out("outList", DataType.List(type)),
           };
         },
         run: ({ io, properties }) =>
           Effect.gen(function* () {
-            yield* validateScalar(properties.type);
+            yield* validateType(properties.type);
             const index = yield* indexOf(io.index, io.list.length);
             if (index < 0 || index > io.list.length || (!insert && index === io.list.length))
               return yield* Effect.fail(new RangeError("List index out of range"));
@@ -128,7 +136,7 @@ const ListPlugin = Plugin.make({
         "Removes an element immutably, returning None and an unchanged copy if out of range. Negative indices count from the end.",
       properties: typed,
       io: (io, properties) => {
-        const type = scalar(properties.type);
+        const type = elementType(properties.type);
         return {
           list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
           index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
@@ -138,7 +146,7 @@ const ListPlugin = Plugin.make({
       },
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           const index = yield* indexOf(io.index, io.list.length);
           yield* Effect.try({
             try: () => {
@@ -162,13 +170,13 @@ const ListPlugin = Plugin.make({
       type: "pure",
       properties: typed,
       io: (io, properties) => ({
-        list: io.data.in("list", DataType.List(scalar(properties.type)), { defaultValue: [] }),
+        list: io.data.in("list", DataType.List(elementType(properties.type)), { defaultValue: [] }),
         index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
-        output: io.data.out("return", DataType.Option(scalar(properties.type))),
+        output: io.data.out("return", DataType.Option(elementType(properties.type))),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           const index = yield* indexOf(io.index, io.list.length);
           yield* Effect.try({
             try: () => io.output(Option.fromNullishOr(io.list[index])),
@@ -180,15 +188,17 @@ const ListPlugin = Plugin.make({
       id: "GetRandomListItem",
       name: "Get Random List Item",
       description:
-        "Samples an optional element from a typed scalar list on execution using Effect Random. Empty lists return None without sampling.",
+        "Samples an optional element from a typed list on execution using Effect Random. Empty lists return None without sampling.",
       properties: typed,
       io: (io, properties) => ({
-        list: io.data.in("list", DataType.List(scalar(properties.type)), { defaultValue: [] }),
-        output: io.data.out("return", DataType.Option(scalar(properties.type)), { name: "Value" }),
+        list: io.data.in("list", DataType.List(elementType(properties.type)), { defaultValue: [] }),
+        output: io.data.out("return", DataType.Option(elementType(properties.type)), {
+          name: "Value",
+        }),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           if (io.list.length === 0) return io.output(Option.none());
           const value = yield* Random.next;
           io.output(
@@ -213,35 +223,38 @@ const ListPlugin = Plugin.make({
     yield* context.schema.register({
       id: "ListIncludes",
       name: "List Includes",
-      description: "Checks whether a typed scalar list contains a value.",
+      description:
+        "Checks whether a typed list contains a structurally equal value, including nominal custom identity.",
       type: "pure",
       properties: typed,
       io: (io, properties) => ({
-        input: io.data.in("input", scalar(properties.type), {
-          defaultValue: scalarDefault(scalar(properties.type)),
-        }),
-        list: io.data.in("list", DataType.List(scalar(properties.type)), { defaultValue: [] }),
+        input: io.data.in(
+          "input",
+          elementType(properties.type),
+          inputOptions(elementType(properties.type)),
+        ),
+        list: io.data.in("list", DataType.List(elementType(properties.type)), { defaultValue: [] }),
         output: io.data.out("output", DataType.Bool),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
-          io.output(io.list.includes(io.input));
+          yield* validateType(properties.type);
+          io.output(io.list.some((value) => Equal.equals(value, io.input)));
         }),
     });
     yield* context.schema.register({
       id: "ListLength",
       name: "List Length",
-      description: "Counts elements in a typed scalar list.",
+      description: "Counts elements in a typed list.",
       type: "pure",
       properties: typed,
       io: (io, properties) => ({
-        list: io.data.in("list", DataType.List(scalar(properties.type)), { defaultValue: [] }),
+        list: io.data.in("list", DataType.List(elementType(properties.type)), { defaultValue: [] }),
         output: io.data.out("output", DataType.Int),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           io.output(io.list.length);
         }),
     });
@@ -253,14 +266,14 @@ const ListPlugin = Plugin.make({
       type: "pure",
       properties: typed,
       io: (io, properties) => ({
-        list: io.data.in("list", DataType.List(scalar(properties.type)), { defaultValue: [] }),
+        list: io.data.in("list", DataType.List(elementType(properties.type)), { defaultValue: [] }),
         start: io.data.in("start", DataType.Int, { defaultValue: 0 }),
         end: io.data.in("end", DataType.Int, { defaultValue: 0 }),
-        output: io.data.out("output", DataType.List(scalar(properties.type))),
+        output: io.data.out("output", DataType.List(elementType(properties.type))),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
-          yield* validateScalar(properties.type);
+          yield* validateType(properties.type);
           if (!Number.isSafeInteger(io.start) || !Number.isSafeInteger(io.end))
             return yield* Effect.fail(new RangeError("Slice indices must be safe integers"));
           io.output(io.list.slice(io.start, io.end === 0 ? undefined : io.end));

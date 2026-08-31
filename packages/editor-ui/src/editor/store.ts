@@ -1,5 +1,6 @@
 import {
   Connection,
+  CustomTypes,
   Graph,
   Node,
   type NodeIO,
@@ -96,6 +97,20 @@ export function createEditorStore() {
     if (!store.project) return;
 
     switch (event._tag) {
+      case "TypeDefinitionsUpdated":
+        setStore((store) => {
+          if (!store.project) return;
+          store.project.types = event.types;
+          store.packages = [
+            ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+            CustomTypes.packageModel(event.types),
+          ];
+          for (const [graphId, nodes] of Object.entries(event.nodeIO)) {
+            for (const [nodeId, io] of Object.entries(nodes))
+              (store.nodeIO[graphId] ??= {})[nodeId] = io;
+          }
+        });
+        break;
       case "GraphCreated":
         setStore((store) => {
           if (store.project) {
@@ -339,12 +354,21 @@ export function createEditorStore() {
         ),
       };
       store.nodeIO = structuredClone(nodeIO);
+      store.packages = [
+        ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+        CustomTypes.packageModel(project.types),
+      ];
     });
   }
 
   function setPackages(packages: Package.Model[]) {
     setStore((store) => {
-      store.packages = packages;
+      store.packages = store.project
+        ? [
+            ...packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+            CustomTypes.packageModel(store.project.types),
+          ]
+        : packages;
     });
   }
 

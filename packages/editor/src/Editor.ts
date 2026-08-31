@@ -3,6 +3,7 @@ import type * as Plugin from "@macrograph/plugin/Plugin";
 
 import {
   Connection,
+  CustomTypes,
   Graph,
   GraphId,
   IoId,
@@ -15,12 +16,13 @@ import {
   RenderedProject,
   ResourceConstant,
   SchemaId,
+  TypeDefinition,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DataType } from "@macrograph/plugin/DataType";
 import * as HttpEndpoint from "@macrograph/plugin/HttpEndpoint";
 import * as Registration from "@macrograph/plugin/Registration";
-import { Context, Effect, Fiber, Layer, Ref, Schema, Semaphore, Stream } from "effect";
+import { Clock, Context, Effect, Fiber, Layer, Ref, Schema, Semaphore, Stream } from "effect";
 
 import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
@@ -87,6 +89,27 @@ type NodeMutationError =
   | Graph.NotFoundError
   | Node.NotFoundError;
 
+type TypeMutationError =
+  | PersistenceError
+  | Project.NotFoundError
+  | TypeDefinition.InvalidError
+  | TypeDefinition.NotFoundError;
+
+const emptyNodeIO: NodeIO = {
+  dataInputs: [],
+  dataOutputs: [],
+  executionInputs: [],
+  executionOutputs: [],
+};
+
+// Exact canonical state, not a hash: no collision can authorize a stale proposal.
+const projectState = (value: unknown): string =>
+  JSON.stringify(value, (_key, item: unknown) =>
+    item !== null && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  );
+
 export class EngineNotRegistered extends Schema.TaggedError<EngineNotRegistered>()(
   "EngineNotRegistered",
   { pluginId: Schema.String },
@@ -108,6 +131,17 @@ export interface HostedResource {
 }
 
 export interface Interface {
+  readonly typeDefinition: {
+    readonly preview: (
+      change: TypeDefinition.Change,
+    ) => Effect.Effect<TypeDefinition.Impact, TypeMutationError>;
+    readonly confirm: (options: {
+      readonly token: string;
+    }) => Effect.Effect<
+      EditorEvent.TypeDefinitionsUpdated,
+      TypeMutationError | TypeDefinition.StalePreviewError
+    >;
+  };
   readonly project: {
     readonly get: () => Effect.Effect<Project.Model, Project.NotFoundError | PersistenceError>;
     readonly snapshot: () => Effect.Effect<
@@ -283,6 +317,20 @@ export const layer = Layer.effect(Service)(
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
     const lock = yield* Semaphore.make(1);
+    const initialProject = yield* persistence.loadProject().pipe(
+      Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(undefined)),
+      Effect.orDie,
+    );
+    yield* packages.setTypeDefinitions(initialProject?.types ?? {});
+    const previews = new Map<
+      string,
+      {
+        readonly state: string;
+        readonly change: TypeDefinition.Change;
+        readonly expires: number;
+        readonly packages: string;
+      }
+    >();
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
       new Map(),
@@ -299,6 +347,7 @@ export const layer = Layer.effect(Service)(
       persistedProperties: Readonly<Record<string, Schema.Json>>,
       constants?: Readonly<Record<string, ResourceConstant.Model>>,
     ) {
+      if (schemaRef.package === CustomTypes.packageId) return persistedProperties;
       const schema = yield* packages.getSchema(schemaRef);
       const properties: Record<string, unknown> = { ...persistedProperties };
       if (schema.properties.some((property) => "resource" in property)) {
@@ -319,9 +368,9 @@ export const layer = Layer.effect(Service)(
       }
       return properties;
     });
-    const getNodeIO = (node: Node.Model) =>
+    const getNodeIO = (node: Node.Model, definitions?: DataType.Definitions) =>
       resolveIOProperties(node.schema, node.properties).pipe(
-        Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties)),
+        Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties, definitions)),
       );
     const retainValidInputDefaults = Effect.fnUntraced(function* (
       io: NodeIO,
@@ -390,6 +439,160 @@ export const layer = Layer.effect(Service)(
         ? dataOutput === undefined && dataInput === undefined
         : DataType.equals(dataOutput.type, dataInput.type);
     };
+
+    const proposedTypes = Effect.fnUntraced(function* (
+      project: Project.Model,
+      change: TypeDefinition.Change,
+    ) {
+      if (change._tag === "Delete" && !Object.hasOwn(project.types, change.id))
+        return yield* new TypeDefinition.NotFoundError({ id: change.id });
+      const error = TypeDefinition.validateChange(project.types, change)[0];
+      if (error !== undefined) return yield* error;
+      const types = { ...project.types };
+      if (change._tag === "Delete") delete types[change.id];
+      else types[change.definition.id] = change.definition;
+      return types;
+    });
+
+    const typePreview = Effect.fn("Editor.typeDefinition.preview")(function* (
+      input: TypeDefinition.Change,
+    ) {
+      const change = yield* Schema.decodeUnknownEffect(TypeDefinition.Change, {
+        onExcessProperty: "error",
+      })(input).pipe(
+        Effect.catchTag(
+          "SchemaError",
+          () => new TypeDefinition.InvalidError({ id: "", reason: "Malformed type change" }),
+        ),
+      );
+      const project = yield* persistence.loadProject();
+      const types = yield* proposedTypes(project, change);
+      const definitionsChanged = projectState(project.types) !== projectState(types);
+      const id = change._tag === "Delete" ? change.id : change.definition.id;
+      const affectedTypes = TypeDefinition.affectedTypes(id, project.types, types);
+      const affected = new Set(affectedTypes);
+      const nodes: Array<TypeDefinition.Impact["nodes"][number]> = [];
+      for (const [graphId, graph] of Object.entries(project.graphs).sort(([a], [b]) =>
+        a.localeCompare(b),
+      )) {
+        const before: Record<string, NodeIO> = {};
+        const after: Record<string, NodeIO> = {};
+        const reasons = new Map<string, Set<string>>();
+        const add = (nodeId: string, reason: string) => {
+          const entry = reasons.get(nodeId) ?? new Set<string>();
+          entry.add(reason);
+          reasons.set(nodeId, entry);
+        };
+        for (const node of Object.values(graph.nodes)) {
+          const io =
+            node.schema.package === CustomTypes.packageId
+              ? (CustomTypes.nodeIO(node.schema, node.properties, project.types) ?? emptyNodeIO)
+              : yield* getNodeIO(node, project.types).pipe(
+                  Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+                );
+          before[node.id] = io;
+          const nextIO =
+            node.schema.package === CustomTypes.packageId
+              ? (CustomTypes.nodeIO(node.schema, node.properties, types) ?? emptyNodeIO)
+              : yield* getNodeIO(node, types).pipe(
+                  Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+                );
+          after[node.id] = nextIO;
+          if (!definitionsChanged) continue;
+          for (const port of [
+            ...io.dataInputs,
+            ...io.dataOutputs,
+            ...nextIO.dataInputs,
+            ...nextIO.dataOutputs,
+          ])
+            for (const ref of TypeDefinition.references(port.type))
+              if (affected.has(ref)) add(node.id, `Port ${port.id} uses affected type ${ref}`);
+          for (const ref of TypeDefinition.valueReferences(node.properties))
+            if (affected.has(ref)) add(node.id, `Property uses affected type ${ref}`);
+          for (const ref of TypeDefinition.valueReferences(node.inputDefaults))
+            if (affected.has(ref)) add(node.id, `Default uses affected type ${ref}`);
+          if (projectState(io) !== projectState(nextIO))
+            add(node.id, "Generated inputs or outputs change");
+          const previous = new Set(TypeDefinition.nodeDiagnostics(node, io, project.types));
+          for (const reason of TypeDefinition.nodeDiagnostics(node, nextIO, types))
+            if (!previous.has(reason) || reasons.has(node.id)) add(node.id, reason);
+        }
+        for (const wire of definitionsChanged ? graph.connections : []) {
+          const oldOut = before[wire.outNodeId] ?? emptyNodeIO;
+          const oldIn = before[wire.inNodeId] ?? emptyNodeIO;
+          const newOut = after[wire.outNodeId] ?? emptyNodeIO;
+          const newIn = after[wire.inNodeId] ?? emptyNodeIO;
+          const usesAffected = [
+            ...oldOut.dataOutputs.filter((p) => p.id === wire.outIoId),
+            ...oldIn.dataInputs.filter((p) => p.id === wire.inIoId),
+            ...newOut.dataOutputs.filter((p) => p.id === wire.outIoId),
+            ...newIn.dataInputs.filter((p) => p.id === wire.inIoId),
+          ].some((port) => TypeDefinition.references(port.type).some((ref) => affected.has(ref)));
+          const changedEndpoint =
+            projectState(oldOut) !== projectState(newOut) ||
+            projectState(oldIn) !== projectState(newIn);
+          if (usesAffected || changedEndpoint) {
+            const reason = isConnectionValid(wire, newOut, newIn)
+              ? `Connection ${wire.id} uses an affected endpoint`
+              : `Connection ${wire.id} will remain invalid: missing endpoint or incompatible types`;
+            if (graph.nodes[wire.outNodeId] !== undefined) add(wire.outNodeId, reason);
+            if (graph.nodes[wire.inNodeId] !== undefined) add(wire.inNodeId, reason);
+          }
+        }
+        for (const [nodeId, entries] of [...reasons].sort(([a], [b]) => a.localeCompare(b)))
+          nodes.push({ graphId, nodeId, reasons: [...entries].sort() });
+      }
+      const now = yield* Clock.currentTimeMillis;
+      for (const [token, preview] of previews) if (preview.expires <= now) previews.delete(token);
+      while (previews.size >= 128) previews.delete(previews.keys().next().value!);
+      const token = crypto.randomUUID();
+      // Clone the proposal so in-process callers cannot alter an already reviewed change.
+      previews.set(token, {
+        state: projectState(project),
+        change: structuredClone(change),
+        expires: now + 300_000,
+        packages: projectState(yield* packages.getPackages()),
+      });
+      return {
+        token,
+        change,
+        affectedTypes: definitionsChanged ? affectedTypes.filter((typeId) => typeId !== id) : [],
+        nodes,
+      };
+    }, lock.withPermit);
+
+    const typeConfirm = Effect.fn("Editor.typeDefinition.confirm")(function* ({
+      token,
+    }: {
+      readonly token: string;
+    }) {
+      const preview = previews.get(token);
+      if (preview === undefined) return yield* new TypeDefinition.StalePreviewError();
+      previews.delete(token);
+      const project = yield* persistence.loadProject();
+      if (
+        preview.expires <= (yield* Clock.currentTimeMillis) ||
+        preview.state !== projectState(project) ||
+        preview.packages !== projectState(yield* packages.getPackages())
+      )
+        return yield* new TypeDefinition.StalePreviewError();
+      const types = yield* proposedTypes(project, preview.change);
+      return yield* Effect.gen(function* () {
+        yield* packages.setTypeDefinitions(types);
+        const nodeIO: Record<string, Record<string, NodeIO>> = {};
+        for (const [graphId, graph] of Object.entries(project.graphs)) {
+          nodeIO[graphId] = {};
+          for (const node of Object.values(graph.nodes))
+            nodeIO[graphId][node.id] = yield* getNodeIO(node).pipe(
+              Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+            );
+        }
+        return yield* events.publish({ _tag: "TypeDefinitionsUpdated", types, nodeIO });
+      }).pipe(
+        Effect.onError(() => packages.setTypeDefinitions(project.types)),
+        Effect.uninterruptible,
+      );
+    }, lock.withPermit);
 
     const graphCreate = Effect.fn("Editor.graph.create")(function* (input: Graph.CreateInput) {
       const graphId = GraphId.make(Math.random().toString(36).slice(2));
@@ -532,7 +735,19 @@ export const layer = Layer.effect(Service)(
         properties,
       };
       const io = yield* getNodeIO(updated);
-      const inputDefaults = yield* retainValidInputDefaults(io, node.inputDefaults);
+      const definitions = (yield* persistence.loadProject()).types;
+      const oldIO = yield* getNodeIO(node);
+      const preservesTypeData =
+        node.schema.package === CustomTypes.packageId ||
+        [...oldIO.dataInputs, ...oldIO.dataOutputs, ...io.dataInputs, ...io.dataOutputs].some(
+          (port) => TypeDefinition.references(port.type).length > 0,
+        ) ||
+        TypeDefinition.valueReferences(node.properties).length > 0 ||
+        TypeDefinition.valueReferences(node.inputDefaults).length > 0 ||
+        TypeDefinition.nodeDiagnostics(node, oldIO, definitions).length > 0;
+      const inputDefaults = preservesTypeData
+        ? node.inputDefaults
+        : yield* retainValidInputDefaults(io, node.inputDefaults);
 
       const stale: Array<Connection.Model> = [];
       for (const connection of graph.connections) {
@@ -540,12 +755,18 @@ export const layer = Layer.effect(Service)(
         const outputNode = graph.nodes[connection.outNodeId];
         const inputNode = graph.nodes[connection.inNodeId];
         if (outputNode === undefined || inputNode === undefined) {
-          stale.push(connection);
           continue;
         }
         const outputIO = outputNode.id === node.id ? io : yield* getNodeIO(outputNode);
         const inputIO = inputNode.id === node.id ? io : yield* getNodeIO(inputNode);
-        if (!isConnectionValid(connection, outputIO, inputIO)) stale.push(connection);
+        const previousOutputIO = outputNode.id === node.id ? oldIO : outputIO;
+        const previousInputIO = inputNode.id === node.id ? oldIO : inputIO;
+        if (
+          !preservesTypeData &&
+          isConnectionValid(connection, previousOutputIO, previousInputIO) &&
+          !isConnectionValid(connection, outputIO, inputIO)
+        )
+          stale.push(connection);
       }
       return yield* events.publish({
         _tag: "NodePropertyUpdated",
@@ -594,10 +815,13 @@ export const layer = Layer.effect(Service)(
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
       const node = yield* Graph.getNode(graph, options.nodeID);
-      const io = yield* getNodeIO(node);
+      const io = Object.hasOwn(node.inputDefaults, options.input)
+        ? undefined
+        : yield* getNodeIO(node);
       if (
-        io.dataInputs.filter((port) => port.id === options.input).length !== 1 ||
-        io.executionInputs.some((port) => port.id === options.input)
+        io !== undefined &&
+        (io.dataInputs.filter((port) => port.id === options.input).length !== 1 ||
+          io.executionInputs.some((port) => port.id === options.input))
       ) {
         return yield* new Package.InvalidInputDefaultError({
           input: options.input,
@@ -708,11 +932,14 @@ export const layer = Layer.effect(Service)(
     }, lock.withPermit);
 
     const projectGet = Effect.fn("Editor.project.get")(function* () {
-      return yield* persistence.loadProject();
+      const project = yield* persistence.loadProject();
+      yield* packages.setTypeDefinitions(project.types);
+      return project;
     }, lock.withPermit);
 
     const projectSnapshot = Effect.fn("Editor.project.snapshot")(function* () {
       const project = yield* persistence.loadProject();
+      yield* packages.setTypeDefinitions(project.types);
       const generated: Record<string, Record<string, NodeIO>> = {};
       for (const [graphId, graph] of Object.entries(project.graphs)) {
         generated[graphId] = {};
@@ -728,17 +955,27 @@ export const layer = Layer.effect(Service)(
 
     const projectRendered = Effect.fn("Editor.project.rendered")(function* () {
       const project = yield* persistence.loadProject();
+      yield* packages.setTypeDefinitions(project.types);
       const graphs: Record<string, RenderedProject.Model["graphs"][string]> = {};
       for (const [graphId, graph] of Object.entries(project.graphs)) {
         const nodes: Record<string, RenderedProject.Model["graphs"][string]["nodes"][string]> = {};
         const schemas: Record<string, Record<string, Package.SchemaModel>> = {};
         for (const node of Object.values(graph.nodes)) {
-          const schema = yield* packages.getSchema(node.schema);
+          const schema = yield* packages
+            .getSchema(node.schema)
+            .pipe(
+              Effect.catchTag("SchemaNotFoundError", (error) =>
+                node.schema.package === CustomTypes.packageId
+                  ? Effect.succeed(undefined)
+                  : Effect.fail(error),
+              ),
+            );
           nodes[node.id] = {
             ...node,
             io: yield* getNodeIO(node),
           };
-          (schemas[node.schema.package] ??= {})[node.schema.schema] = schema;
+          if (schema !== undefined)
+            (schemas[node.schema.package] ??= {})[node.schema.schema] = schema;
         }
         graphs[graphId] = { ...graph, nodes, schemas };
       }
@@ -934,9 +1171,18 @@ export const layer = Layer.effect(Service)(
               );
           }
         }
-        const encodeValue = (type: DataType.Any, value: unknown): Schema.Json =>
+        const definitions = yield* persistence.loadProject().pipe(
+          Effect.map((project) => project.types),
+          Effect.catchTag("ProjectNotFoundError", () => Effect.succeed({})),
+          Effect.orDie,
+        );
+        const encodeValue = (
+          type: DataType.Any,
+          value: unknown,
+          definitions: DataType.Definitions,
+        ): Schema.Json =>
           Schema.decodeUnknownSync(Schema.Json)(
-            Schema.encodeUnknownSync(DataType.JsonValueSchema(type))(value),
+            Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(value),
           );
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
@@ -974,7 +1220,13 @@ export const layer = Layer.effect(Service)(
                     optional: property.optional,
                     ...(property.defaultValue === undefined
                       ? {}
-                      : { defaultValue: encodeValue(property.type, property.defaultValue) }),
+                      : {
+                          defaultValue: encodeValue(
+                            property.type,
+                            property.defaultValue,
+                            definitions,
+                          ),
+                        }),
                   },
             ),
             dataInputs: schema.dataInputs.map((input) => ({
@@ -983,7 +1235,7 @@ export const layer = Layer.effect(Service)(
               ...(input.name === undefined ? {} : { name: input.name }),
               ...(input.defaultValue === undefined
                 ? {}
-                : { defaultValue: encodeValue(input.type, input.defaultValue) }),
+                : { defaultValue: encodeValue(input.type, input.defaultValue, definitions) }),
               ...(input.suggestions === undefined ? {} : { suggestions: true }),
             })),
             dataOutputs: schema.dataOutputs.map((output) => ({
@@ -1008,20 +1260,33 @@ export const layer = Layer.effect(Service)(
               schema.id,
               {
                 declaresProperties: true,
-                getIO: (properties: Readonly<Record<string, unknown>>): NodeIO => {
+                getIO: (
+                  properties: Readonly<Record<string, unknown>>,
+                  definitions: DataType.Definitions,
+                ): NodeIO => {
                   const io = schema.generateIO(properties);
                   return {
-                    dataInputs: io.dataInputs.map((input) => ({
-                      id: IoId.make(input.id),
-                      type: input.type,
-                      ...(input.name === undefined ? {} : { name: input.name }),
-                      ...(input.defaultValue === undefined
-                        ? {}
-                        : {
-                            defaultValue: encodeValue(input.type, input.defaultValue),
-                          }),
-                      ...(input.suggestions === undefined ? {} : { suggestions: true }),
-                    })),
+                    dataInputs: io.dataInputs.map((input) => {
+                      // Invalid schema fallback defaults must not prevent rendering repairable nodes.
+                      // Persisted user defaults are separate and are never changed here.
+                      const encoded =
+                        input.defaultValue === undefined
+                          ? undefined
+                          : Schema.encodeUnknownResult(
+                              DataType.JsonValueSchema(input.type, definitions),
+                            )(input.defaultValue);
+                      return {
+                        id: IoId.make(input.id),
+                        type: input.type,
+                        ...(input.name === undefined ? {} : { name: input.name }),
+                        ...(encoded === undefined || encoded._tag === "Failure"
+                          ? {}
+                          : {
+                              defaultValue: encoded.success,
+                            }),
+                        ...(input.suggestions === undefined ? {} : { suggestions: true }),
+                      };
+                    }),
                     dataOutputs: io.dataOutputs.map((output) => ({
                       id: IoId.make(output.id),
                       type: output.type,
@@ -1062,6 +1327,7 @@ export const layer = Layer.effect(Service)(
       }).pipe(lock.withPermit);
 
     return Service.of({
+      typeDefinition: { preview: typePreview, confirm: typeConfirm },
       project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
       constant: {
         create: constantCreate,

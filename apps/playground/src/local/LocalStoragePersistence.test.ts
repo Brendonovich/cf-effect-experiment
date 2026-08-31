@@ -1,6 +1,7 @@
 import { Project } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { Effect } from "effect";
+import { DataType } from "@macrograph/plugin/DataType";
+import { Effect, Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -36,6 +37,66 @@ class MemoryStorage implements StorageLike {
 }
 
 describe("local browser project persistence", () => {
+  it("retains named types and intentionally invalid dependent defaults on browser reload", async () => {
+    const storage = new MemoryStorage();
+    const store = makeLocalProjectStore(storage);
+    const project = Schema.decodeUnknownSync(Project.Model)({
+      ...Project.empty(),
+      types: {
+        result: {
+          _tag: "Enum",
+          id: "result",
+          name: "Result",
+          variants: [
+            {
+              name: "Found",
+              fields: [
+                { name: "record", type: DataType.Custom(DataType.DefinitionId.make("deleted")) },
+              ],
+            },
+          ],
+        },
+      },
+      graphs: {
+        graph: {
+          id: "graph",
+          name: "Preserved",
+          connections: [],
+          nodes: {
+            node: {
+              id: "node",
+              name: "Invalid but retained",
+              schema: { package: "CustomTypes", schema: '["result","stringify"]' },
+              position: { x: 0, y: 0 },
+              properties: {},
+              inputDefaults: {
+                value: {
+                  _type: "result",
+                  _tag: "Found",
+                  record: { _type: "deleted", label: "keep" },
+                },
+                removed: "keep orphan",
+              },
+            },
+          },
+        },
+      },
+    });
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* (yield* Persistence.Service).saveProject(project);
+      }).pipe(Effect.provide(store.layer), Effect.scoped),
+    );
+    store.flush();
+    const reloaded = makeLocalProjectStore(storage);
+    expect(decodeLocalProject(reloaded.exportProject())).toEqual(project);
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        expect(yield* (yield* Persistence.Service).loadProject()).toEqual(project);
+      }).pipe(Effect.provide(reloaded.layer), Effect.scoped),
+    );
+  });
+
   it("round-trips a versioned project and exports/imports the same schema", async () => {
     const storage = new MemoryStorage();
     const store = makeLocalProjectStore(storage, { debounceMs: 1 });
