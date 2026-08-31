@@ -165,6 +165,7 @@ export function NodeCreationMenu(props: {
         schemas: rankedSearch(
           search(),
           pkg.schemas
+            .filter((schema) => !schema.internal)
             .filter((schema) => props.schemaFilter?.(schema) ?? true)
             .map((schema) => ({
               item: schema,

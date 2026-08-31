@@ -1,6 +1,12 @@
 import type { EditorEvent } from "@macrograph/editor";
 
-import { IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
+import {
+  FunctionGraph,
+  IoId,
+  type Graph,
+  type ResourceConstant,
+  type SchemaRef,
+} from "@macrograph/core";
 import { Effect, type Schema } from "effect";
 import { createSignal } from "solid-js";
 
@@ -39,6 +45,12 @@ export function createEditorCommands(
   const [editingName, setEditingName] = createSignal<
     { type: "graph"; id: string } | { type: "node"; id: string } | null
   >(null);
+  const [functionError, setFunctionError] = createSignal<string | null>(null);
+  const reportFunctionError = (error: unknown) =>
+    Effect.sync(() => {
+      if (typeof error === "object" && error !== null && "reason" in error)
+        setFunctionError(String(error.reason));
+    });
   const [positioningNodes, setPositioningNodes] = createSignal<
     ReadonlyArray<{ graphId: string; nodeId: string }>
   >([]);
@@ -86,6 +98,8 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
+    const node = selectedGraph()?.nodes[nodeId];
+    if (node && FunctionGraph.isBoundary(node)) return;
     runFork(
       applyMutation(c.DeleteNode({ graphId, nodeId })).pipe(
         Effect.tapError(Effect.log),
@@ -94,15 +108,38 @@ export function createEditorCommands(
     );
     setSelectedNodeIds((ids) => ids.filter((id) => id !== nodeId));
   };
-  const createGraph = () => {
+  const createGraph = (kind: "ordinary" | "function" = "ordinary") => {
     const c = client();
     if (!c || !canEdit()) return;
     runFork(
-      applyMutation(c.CreateGraph({ graph: {} })).pipe(
+      applyMutation(
+        c.CreateGraph({
+          graph: { kind, ...(kind === "function" ? { name: "New Function" } : {}) },
+        }),
+      ).pipe(
         Effect.tap((event) => Effect.sync(() => setSelectedGraphId(event.graph.id))),
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
+    );
+  };
+  const setFunctionSignature = (signature: Graph.FunctionSignature) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    setFunctionError(null);
+    runFork(
+      applyMutation(
+        c
+          .SetFunctionSignature({ graphId, signature })
+          .pipe(
+            Effect.catchTag("FunctionImpact", (impact) =>
+              window.confirm(impact.reason)
+                ? c.SetFunctionSignature({ graphId, signature, force: true })
+                : Effect.fail(impact),
+            ),
+          ),
+      ).pipe(Effect.tapError(reportFunctionError), Effect.catchCause(Effect.log)),
     );
   };
   const createNode = (
@@ -239,7 +276,18 @@ export function createEditorCommands(
     const c = client();
     if (!c || !canEdit()) return;
     runFork(
-      applyMutation(c.DeleteGraph({ graphId })).pipe(
+      applyMutation(
+        c
+          .DeleteGraph({ graphId })
+          .pipe(
+            Effect.catchTag("FunctionImpact", (impact) =>
+              window.confirm(impact.reason)
+                ? c.DeleteGraph({ graphId, force: true })
+                : Effect.fail(impact),
+            ),
+          ),
+      ).pipe(
+        Effect.tapError(reportFunctionError),
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
@@ -252,6 +300,7 @@ export function createEditorCommands(
     if (!c || !graphId || !nodeId || !canEdit()) return;
     runFork(
       applyMutation(c.SetNodeProperty({ graphId, nodeId, property, value })).pipe(
+        Effect.tapError(reportFunctionError),
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
@@ -334,6 +383,9 @@ export function createEditorCommands(
     selectConstant,
     deleteConstant,
     createGraph,
+    createFunction: () => createGraph("function"),
+    setFunctionSignature,
+    functionError,
     createNode,
     deleteNode,
     setNodeFoldPins,

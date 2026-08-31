@@ -151,6 +151,7 @@ describe("ProjectExecution", () => {
       );
 
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
+        "macrograph-functions",
         "obs",
         "twitch",
       ]);

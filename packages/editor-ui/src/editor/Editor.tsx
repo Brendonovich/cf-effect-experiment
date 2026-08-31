@@ -5,22 +5,19 @@ import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
+import { FunctionGraph } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,8 +25,12 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -514,7 +515,8 @@ function EditorContent(
                   onSectionChange={controller.layout.setNavSection}
                   onSearchChange={controller.catalog.setNavSearch}
                   onClose={() => controller.layout.setNavSection(null)}
-                  onCreateGraph={controller.commands.createGraph}
+                  onCreateGraph={() => controller.commands.createGraph()}
+                  onCreateFunction={controller.commands.createFunction}
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}
@@ -595,8 +597,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
@@ -888,6 +890,10 @@ function EditorContent(
                               <button
                                 type="button"
                                 sx={[styles.focusRing, styles.contextAction]}
+                                disabled={controller.layout.selectedNodeIds().every((id) => {
+                                  const node = controller.layout.selectedGraph()?.nodes[id];
+                                  return node !== undefined && FunctionGraph.isBoundary(node);
+                                })}
                                 onClick={() => {
                                   controller.layout
                                     .selectedNodeIds()
@@ -925,6 +931,14 @@ function EditorContent(
             >
               <Inspector
                 graph={controller.layout.selectedGraph()}
+                functions={Object.values(controller.editor.store.project?.graphs ?? {}).filter(
+                  (graph) => graph.kind === "function",
+                )}
+                onSetFunctionSignature={controller.commands.setFunctionSignature}
+                functionError={controller.commands.functionError()}
+                nodeIO={
+                  controller.editor.store.nodeIO[controller.layout.selectedGraph()?.id ?? ""] ?? {}
+                }
                 node={controller.layout.selectedNode()}
                 packages={controller.editor.store.packages}
                 constants={controller.editor.store.project?.constants ?? {}}
@@ -941,6 +955,8 @@ function EditorContent(
                 onRenameNode={controller.commands.renameNode}
                 onSetNodeProperty={controller.commands.setNodeProperty}
                 onClearNodeProperty={controller.commands.clearNodeProperty}
+                onClearInputDefault={controller.commands.clearInputDefault}
+                onDisconnectIo={controller.commands.disconnectIo}
               />
             </Sidebar>
           </div>

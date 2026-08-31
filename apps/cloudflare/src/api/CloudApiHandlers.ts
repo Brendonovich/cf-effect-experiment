@@ -66,7 +66,9 @@ export const projectHandlers = HttpApiBuilder.group(
         project.createGraph({ ...params, ...payload }),
       )
       .handle("getGraph", ({ params }) => project.getGraph(params))
-      .handle("deleteGraph", ({ params }) => project.deleteGraph(params).pipe(Effect.asVoid))
+      .handle("deleteGraph", ({ params, query }) =>
+        project.deleteGraph({ ...params, force: query.force === "true" }).pipe(Effect.asVoid),
+      )
       .handle("listSchemas", ({ params, query }) =>
         project.searchSchemas({ ...params, query: query.query, limit: query.limit }),
       )

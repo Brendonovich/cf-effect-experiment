@@ -93,6 +93,7 @@ export const connectionMiddlewareLayer = Layer.effect(ConnectionMiddleware)(
 const SnapshotErrors = Schema.Union([PersistenceError, Project.NotFoundError]);
 
 const PersistenceGraphAndNodeErrors = Schema.Union([
+  Graph.FunctionError,
   PersistenceError,
   Project.NotFoundError,
   Graph.NotFoundError,
@@ -110,7 +111,7 @@ const ConnectionErrors = Schema.Union([
 class CreateGraph extends Rpc.make("CreateGraph", {
   payload: { graph: Graph.CreateInput },
   success: EditorEvent.GraphCreated,
-  error: PersistenceError,
+  error: Schema.Union([PersistenceError, Graph.FunctionError]),
 }) {}
 
 class GetProject extends Rpc.make("GetProject", {
@@ -120,9 +121,30 @@ class GetProject extends Rpc.make("GetProject", {
 }) {}
 
 class DeleteGraph extends Rpc.make("DeleteGraph", {
-  payload: { graphId: Schema.String },
+  payload: { graphId: Schema.String, force: Schema.optional(Schema.Boolean) },
   success: EditorEvent.GraphDeleted,
-  error: PersistenceError,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Graph.FunctionError,
+    Graph.FunctionImpact,
+  ]),
+}) {}
+
+class SetFunctionSignature extends Rpc.make("SetFunctionSignature", {
+  payload: {
+    graphId: Schema.String,
+    signature: Graph.FunctionSignature,
+    force: Schema.optional(Schema.Boolean),
+  },
+  success: EditorEvent.FunctionSignatureChanged,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Graph.NotFoundError,
+    Graph.FunctionError,
+    Graph.FunctionImpact,
+  ]),
 }) {}
 
 class SetGraphName extends Rpc.make("SetGraphName", {
@@ -135,6 +157,7 @@ class CreateNode extends Rpc.make("CreateNode", {
   payload: { graphId: Schema.String, node: Node.CreateInput },
   success: EditorEvent.NodeCreated,
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -191,6 +214,7 @@ class SetNodeProperty extends Rpc.make("SetNodeProperty", {
   },
   success: EditorEvent.NodePropertyUpdated,
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -208,6 +232,7 @@ class ClearNodeProperty extends Rpc.make("ClearNodeProperty", {
   },
   success: EditorEvent.NodePropertyUpdated,
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -226,6 +251,7 @@ class SetInputDefault extends Rpc.make("SetInputDefault", {
   },
   success: EditorEvent.InputDefaultUpdated,
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -239,6 +265,7 @@ class ClearInputDefault extends Rpc.make("ClearInputDefault", {
   payload: { graphId: Schema.String, nodeId: Schema.String, input: Schema.String },
   success: EditorEvent.InputDefaultUpdated,
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -252,6 +279,7 @@ class GetInputSuggestions extends Rpc.make("GetInputSuggestions", {
   payload: { graphId: Schema.String, nodeId: Schema.String, input: Schema.String },
   success: Schema.Array(Schema.String),
   error: Schema.Union([
+    Graph.FunctionError,
     PersistenceError,
     Project.NotFoundError,
     Graph.NotFoundError,
@@ -390,6 +418,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.GraphCreated,
     EditorEvent.GraphDeleted,
     EditorEvent.GraphNameChanged,
+    EditorEvent.FunctionSignatureChanged,
     EditorEvent.NodeCreated,
     EditorEvent.NodeDeleted,
     EditorEvent.NodeNameChanged,
@@ -422,6 +451,7 @@ const PresenceStream = Rpc.make("PresenceStream", {
 
 export const EditorRpcs = RpcGroup.make(
   CreateGraph,
+  SetFunctionSignature,
   GetProject,
   DeleteGraph,
   SetGraphName,
@@ -469,6 +499,8 @@ export const handlerLayer = EditorRpcs.toLayer(
     const credentials = yield* Engine.Credentials;
     return EditorRpcs.of({
       CreateGraph: (payload) => editor.graph.create(payload.graph),
+      SetFunctionSignature: ({ graphId, signature, force }) =>
+        editor.graph.setSignature(graphId, signature, force),
       GetProject: () =>
         Effect.gen(function* () {
           const identity = yield* EditorAccess.Connection;
@@ -477,7 +509,10 @@ export const handlerLayer = EditorRpcs.toLayer(
         }),
       DeleteGraph: (payload) =>
         editor.graph
-          .delete({ graphID: payload.graphId })
+          .delete({
+            graphID: payload.graphId,
+            ...(payload.force === undefined ? {} : { force: payload.force }),
+          })
           .pipe(Effect.tap(() => presence.graphDeleted(payload.graphId))),
       SetGraphName: (payload) =>
         editor.graph.update({ graphID: payload.graphId, name: payload.name }),

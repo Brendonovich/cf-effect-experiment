@@ -3,11 +3,11 @@ import type { Graph, Package, Project, ResourceConstant } from "@macrograph/core
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, For, Show } from "solid-js";
 
-import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { colors } from "../../tokens.stylex.ts";
-import { Sidebar } from "../workspace/Layout";
-import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
+import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
@@ -301,6 +301,7 @@ export function NavigationSidebar(props: {
   onSearchChange: (search: string) => void;
   onClose: () => void;
   onCreateGraph: () => void;
+  onCreateFunction?: () => void;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -527,6 +528,17 @@ export function NavigationSidebar(props: {
             />
           </div>
           <Show when={props.section === "graphs"}>
+            <Show when={props.onCreateFunction && props.canEditGraphs}>
+              <button
+                type="button"
+                sx={[styles.focus, styles.newButton]}
+                aria-label="New function"
+                title="New function"
+                onClick={() => props.onCreateFunction?.()}
+              >
+                fn
+              </button>
+            </Show>
             <button
               type="button"
               sx={[styles.focus, styles.newButton]}
@@ -639,7 +651,7 @@ export function NavigationSidebar(props: {
           >
             {([id, graph]) => (
               <GraphNavigationOption
-                name={graph.name}
+                name={graph.kind === "function" ? `fn ${graph.name}` : graph.name}
                 selected={props.selectedPaneId === `graph:${id}`}
                 canEdit={props.canEditGraphs}
                 onSelect={() => props.onSelectGraph(id)}

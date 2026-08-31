@@ -185,6 +185,7 @@ describe("local browser runtime", () => {
           "json",
           "list",
           "logic",
+          "macrograph-functions",
           "math",
           "obs",
           "string",

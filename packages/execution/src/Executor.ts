@@ -1,4 +1,4 @@
-import { Graph, Node, Project, ResourceConstant } from "@macrograph/core";
+import { FunctionGraph, Graph, Node, Project, ResourceConstant } from "@macrograph/core";
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Engine from "@macrograph/plugin/Engine";
 import * as Plugin from "@macrograph/plugin/Plugin";
@@ -69,6 +69,7 @@ const isEngineClientUnavailable = (value: unknown): value is EngineClientUnavail
   value._tag === "EngineClientUnavailable";
 
 export type ExecutorError =
+  | Graph.FunctionError
   | PluginNotRegistered
   | SchemaNotRegistered
   | InvalidConnection
@@ -104,6 +105,26 @@ export interface Service {
     plugin: Plugin.Plugin<Definition>,
     event: Engine.EventOf<Definition>,
   ) => Effect.Effect<void, ExecutorError>;
+  readonly invokeFunction: (
+    graphId: string,
+    inputs: Readonly<Record<string, unknown>>,
+    options?: FunctionInvocationOptions,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
+}
+
+export interface FunctionInvocationOptions {
+  readonly executionPath?: string;
+  readonly queueLineage?: ReadonlyArray<string>;
+  readonly executionTraceId?: string;
+  readonly eventNodeId?: string;
+}
+
+export interface QueueInvocation {
+  readonly key: NodeExecutionKey;
+  readonly functionId: string;
+  readonly inputs: Readonly<Record<string, unknown>>;
+  readonly queueId: string;
+  readonly queueLineage: ReadonlyArray<string>;
 }
 
 export interface NodeExecutionKey {
@@ -136,6 +157,9 @@ export interface ExecutionDriver {
 }
 
 export interface MakeOptions {
+  readonly queueInvocation?: (
+    invocation: QueueInvocation,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly projectId?: string;
   readonly executionDriver?: ExecutionDriver;
   readonly engineClient?: (pluginId: string) => Effect.Effect<unknown>;
@@ -195,7 +219,48 @@ export const make = Effect.fnUntraced(function* (
   const getSchema = Effect.fnUntraced(function* (
     registeredPlugins: ReadonlyMap<string, RegisteredPlugin>,
     node: Node.Model,
+    currentProject?: Project.Model,
+    ownerGraph?: Graph.Model,
   ) {
+    if (FunctionGraph.isFunctionNode(node)) {
+      const target = node.properties.function;
+      const graph = FunctionGraph.isBoundary(node)
+        ? ownerGraph
+        : typeof target === "string"
+          ? currentProject?.graphs[target]
+          : undefined;
+      const model = FunctionGraph.pkg.schemas.find((schema) => schema.id === node.schema.schema);
+      if (model === undefined)
+        return yield* new SchemaNotRegistered({
+          pluginId: node.schema.package,
+          schemaId: node.schema.schema,
+        });
+      const io = FunctionGraph.io(node.schema.schema, graph?.signature);
+      const generated: Registration.RegisteredNodeIO = {
+        dataInputs: io.dataInputs.map(
+          (port) => new Registration.DataInputRef(port.id, port.type, port.name),
+        ),
+        dataOutputs: io.dataOutputs.map(
+          (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
+        ),
+        executionInputs: io.executionInputs.map(
+          (port) => new Registration.ExecutionInputRef(port.id),
+        ),
+        executionOutputs: io.executionOutputs.map(
+          (port) => new Registration.ExecutionOutputRef(port.id),
+        ),
+      };
+      return {
+        id: model.id,
+        name: model.name,
+        type: "exec",
+        properties: [],
+        ...generated,
+        generateIO: () => generated,
+        matches: () => Effect.succeed(false),
+        run: () => Effect.void,
+      } satisfies Registration.RegisteredSchema;
+    }
     const registeredPlugin = registeredPlugins.get(node.schema.package);
     if (registeredPlugin === undefined)
       return yield* new PluginNotRegistered({ pluginId: node.schema.package });
@@ -208,10 +273,18 @@ export const make = Effect.fnUntraced(function* (
     return schema;
   });
 
-  const handleEvent: Service["handleEvent"] = Effect.fnUntraced(function* (definition, event) {
+  const execute = Effect.fnUntraced(function* (
+    definition?: { readonly id: string },
+    event?: { readonly _tag: string },
+    invocation?: {
+      readonly graphId: string;
+      readonly inputs: Readonly<Record<string, unknown>>;
+      readonly options?: FunctionInvocationOptions;
+    },
+  ) {
     const currentProject = yield* Ref.get(project);
     const registeredPlugins = yield* Ref.get(plugins);
-    if (!registeredPlugins.has(definition.id))
+    if (definition !== undefined && !registeredPlugins.has(definition.id))
       return yield* new PluginNotRegistered({ pluginId: definition.id });
 
     const resolveProperties = Effect.fnUntraced(function* (
@@ -283,8 +356,14 @@ export const make = Effect.fnUntraced(function* (
       graph: Graph.Model,
       eventNode: Node.Model,
       eventSchema: Registration.RegisteredSchema,
-    ): Effect.fn.Return<void, ExecutorError> {
-      const executionTraceId = crypto.randomUUID();
+      functionInputs?: Readonly<Record<string, unknown>>,
+      callStack: ReadonlyArray<string> = [],
+      invocationPath?: string,
+      parentExecutionTraceId?: string,
+      rootEventNodeId?: string,
+    ): Effect.fn.Return<Readonly<Record<string, unknown>>, ExecutorError> {
+      let functionResult: Readonly<Record<string, unknown>> | undefined;
+      const executionTraceId = parentExecutionTraceId ?? crypto.randomUUID();
       const executionAttributes = {
         "macrograph.project.id": projectId,
         "macrograph.graph.id": graph.id,
@@ -325,15 +404,42 @@ export const make = Effect.fnUntraced(function* (
         };
         yield* Effect.annotateCurrentSpan(nodeAttributes);
         const registeredPlugin = registeredPlugins.get(node.schema.package);
-        if (registeredPlugin === undefined)
+        if (registeredPlugin === undefined && !FunctionGraph.isFunctionNode(node))
           return yield* new PluginNotRegistered({ pluginId: node.schema.package });
         if (
           schema.properties.some((property) => "resource" in property) &&
-          registeredPlugin.engineClient === undefined
+          registeredPlugin?.engineClient === undefined
         )
           return yield* new EngineClientUnavailable({ pluginId: node.schema.package });
         const resolvedProperties = yield* resolveProperties(node, schema);
         const nodeIO = schema.generateIO(resolvedProperties);
+        if (FunctionGraph.isCall(node)) {
+          const target = node.properties.function;
+          if (typeof target !== "string" || currentProject.graphs[target]?.kind !== "function")
+            return yield* new Graph.FunctionError({
+              graphId: graph.id,
+              reason: `Call ${node.id} has a missing function target`,
+            });
+          const staleDefault = Object.keys(node.inputDefaults).find(
+            (id) => !nodeIO.dataInputs.some((port) => port.id === id),
+          );
+          const staleConnection = graph.connections.find(
+            (connection) =>
+              (connection.inNodeId === node.id &&
+                ![...nodeIO.dataInputs, ...nodeIO.executionInputs].some(
+                  (port) => port.id === connection.inIoId,
+                )) ||
+              (connection.outNodeId === node.id &&
+                ![...nodeIO.dataOutputs, ...nodeIO.executionOutputs].some(
+                  (port) => port.id === connection.outIoId,
+                )),
+          );
+          if (staleDefault !== undefined || staleConnection !== undefined)
+            return yield* new Graph.FunctionError({
+              graphId: graph.id,
+              reason: `Call ${node.id} retains incompatible signature data; repair its defaults or connections before execution`,
+            });
+        }
         state.nodeIO.set(node.id, nodeIO);
         const inputs = new Map<string, unknown>();
         yield* Effect.forEach(
@@ -359,6 +465,73 @@ export const make = Effect.fnUntraced(function* (
         };
         const execute = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
+          if (FunctionGraph.isFunctionNode(node)) {
+            if (node.schema.schema === "input") {
+              for (const field of graph.signature?.inputs ?? []) {
+                if (functionInputs === undefined || !Object.hasOwn(functionInputs, field.id))
+                  return yield* new MissingInput({ nodeId: node.id, inputId: field.id });
+                outputs.push({ outputId: `gin:${field.id}`, value: functionInputs[field.id] });
+              }
+            } else if (node.schema.schema === "output") {
+              if (functionResult !== undefined)
+                return yield* new Graph.FunctionError({
+                  graphId: graph.id,
+                  reason: "Function returned more than once",
+                });
+              functionResult = Object.fromEntries(
+                (graph.signature?.outputs ?? []).map((field) => [
+                  field.id,
+                  inputs.get(`gout:${field.id}`),
+                ]),
+              );
+            } else {
+              const target = node.properties.function;
+              if (typeof target !== "string")
+                return yield* new Graph.FunctionError({
+                  graphId: graph.id,
+                  reason: "Call has no selected function",
+                });
+              const capturedInputs = Object.fromEntries(
+                [...inputs].map(([id, value]) => [id.slice(3), value]),
+              );
+              const queueId = node.properties.queue;
+              const result =
+                typeof queueId === "string"
+                  ? options?.queueInvocation === undefined
+                    ? yield* new Graph.FunctionError({
+                        graphId: graph.id,
+                        reason: "Queue invocation is not hosted",
+                      })
+                    : yield* options.queueInvocation({
+                        key: {
+                          projectId,
+                          graphId: graph.id,
+                          eventNodeId: rootEventNodeId ?? eventNode.id,
+                          nodeId: node.id,
+                          kind: "exec",
+                          executionPath,
+                          executionTraceId,
+                          traceId,
+                          ...(parentTraceId === undefined ? {} : { parentTraceId }),
+                        },
+                        functionId: target,
+                        inputs: capturedInputs,
+                        queueId,
+                        queueLineage: invocation?.options?.queueLineage ?? [],
+                      })
+                  : yield* invoke(
+                      target,
+                      capturedInputs,
+                      callStack,
+                      `${executionPath}/call:${encodeURIComponent(node.id)}:${encodeURIComponent(target)}`,
+                      executionTraceId,
+                      rootEventNodeId ?? eventNode.id,
+                    );
+              for (const [id, value] of Object.entries(result))
+                outputs.push({ outputId: `out:${id}`, value });
+            }
+            return { outputs, executionOutputId: node.schema.schema === "output" ? null : "exec" };
+          }
           const selected = selectOutput(
             nodeIO,
             yield* Effect.suspend(() =>
@@ -369,11 +542,11 @@ export const make = Effect.fnUntraced(function* (
                 },
                 properties: resolvedProperties,
                 event,
-                engine: registeredPlugin.engineClient,
+                engine: registeredPlugin?.engineClient,
                 execution: {
                   projectId,
                   graphId: graph.id,
-                  eventNodeId: eventNode.id,
+                  eventNodeId: rootEventNodeId ?? eventNode.id,
                   traceId: executionTraceId,
                 },
                 node: {
@@ -440,14 +613,15 @@ export const make = Effect.fnUntraced(function* (
         });
 
         const result =
-          schema.type === "pure"
+          // Calls orchestrate child steps inline, never inside another durable task.
+          schema.type === "pure" || FunctionGraph.isFunctionNode(node)
             ? yield* execute
             : yield* executionDriver
                 .executeNode(
                   {
                     projectId,
                     graphId: graph.id,
-                    eventNodeId: eventNode.id,
+                    eventNodeId: rootEventNodeId ?? eventNode.id,
                     nodeId: node.id,
                     kind: schema.type,
                     executionPath,
@@ -573,7 +747,7 @@ export const make = Effect.fnUntraced(function* (
           "macrograph.source.output.id": connection.outIoId,
         });
         const sourceNode = yield* Graph.getNode(graph, connection.outNodeId);
-        const sourceSchema = yield* getSchema(registeredPlugins, sourceNode);
+        const sourceSchema = yield* getSchema(registeredPlugins, sourceNode, currentProject, graph);
         if (sourceSchema.type === "pure")
           yield* runPureNode(
             sourceNode,
@@ -664,7 +838,7 @@ export const make = Effect.fnUntraced(function* (
 
             const nextNode = yield* Graph.getNode(graph, connection.inNodeId);
             if (path.has(nextNode.id)) return yield* new ExecutionCycle({ nodeId: nextNode.id });
-            const nextSchema = yield* getSchema(registeredPlugins, nextNode);
+            const nextSchema = yield* getSchema(registeredPlugins, nextNode, currentProject, graph);
             if (nextSchema.type !== "exec")
               return yield* new InvalidConnection({
                 connectionId: connection.id,
@@ -698,7 +872,7 @@ export const make = Effect.fnUntraced(function* (
           }
         });
 
-      const executionPath = `event:${eventNode.id}`;
+      const executionPath = invocationPath ?? `event:${eventNode.id}`;
       const eventResult = yield* runNode(eventNode, eventSchema, executionPath);
       if (eventResult.executionOutputId !== null) {
         yield* followExecution(
@@ -710,16 +884,75 @@ export const make = Effect.fnUntraced(function* (
           new Set([eventNode.id]),
         );
       }
+      if (functionInputs !== undefined && functionResult === undefined)
+        return yield* new Graph.FunctionError({
+          graphId: graph.id,
+          reason: "Function execution did not reach its Output boundary",
+        });
+      return functionResult ?? {};
     });
 
+    const invoke = Effect.fnUntraced(function* (
+      graphId: string,
+      inputs: Readonly<Record<string, unknown>>,
+      stack: ReadonlyArray<string>,
+      invocationPath = `function:${encodeURIComponent(graphId)}`,
+      executionTraceId?: string,
+      eventNodeId?: string,
+    ): Effect.fn.Return<Readonly<Record<string, unknown>>, ExecutorError> {
+      const graph = currentProject.graphs[graphId];
+      if (graph?.kind !== "function" || graph.signature === undefined)
+        return yield* new Graph.FunctionError({
+          graphId,
+          reason: "Function does not exist or has no signature",
+        });
+      if (stack.includes(graphId))
+        return yield* new Graph.FunctionError({
+          graphId,
+          reason: `Recursive function call is not supported: ${[...stack, graphId].join(" -> ")}`,
+        });
+      const boundaries = Object.values(graph.nodes).filter(FunctionGraph.isBoundary);
+      const input = boundaries.filter((node) => node.schema.schema === "input");
+      if (
+        input.length !== 1 ||
+        boundaries.filter((node) => node.schema.schema === "output").length !== 1
+      )
+        return yield* new Graph.FunctionError({
+          graphId,
+          reason: "Function requires exactly one Input and one Output boundary",
+        });
+      const schema = yield* getSchema(registeredPlugins, input[0]!, currentProject, graph);
+      return yield* executeEventNode(
+        graph,
+        input[0]!,
+        schema,
+        inputs,
+        [...stack, graphId],
+        invocationPath,
+        executionTraceId,
+        eventNodeId,
+      );
+    });
+
+    if (invocation !== undefined)
+      return yield* invoke(
+        invocation.graphId,
+        invocation.inputs,
+        [],
+        invocation.options?.executionPath,
+        invocation.options?.executionTraceId,
+        invocation.options?.eventNodeId,
+      );
+    if (definition === undefined || event === undefined) return {};
+
     yield* Effect.forEach(
-      Object.values(currentProject.graphs),
+      Object.values(currentProject.graphs).filter((graph) => graph.kind !== "function"),
       (graph) =>
         Effect.forEach(
           Object.values(graph.nodes).filter((node) => node.schema.package === definition.id),
           (node) =>
             Effect.gen(function* () {
-              const schema = yield* getSchema(registeredPlugins, node);
+              const schema = yield* getSchema(registeredPlugins, node, currentProject, graph);
               if (schema.type !== "event") return;
               const matches = yield* resolveProperties(node, schema).pipe(
                 Effect.flatMap((properties) => schema.matches(event, properties)),
@@ -742,15 +975,23 @@ export const make = Effect.fnUntraced(function* (
         ),
       { concurrency: "unbounded", discard: true },
     );
+    return {};
   });
 
   return {
     project: Ref.get(project),
     loadProject: (nextProject) => Ref.set(project, nextProject),
     plugin: registerPlugin,
+    invokeFunction: (graphId, inputs, invocationOptions) =>
+      execute(undefined, undefined, {
+        graphId,
+        inputs,
+        ...(invocationOptions === undefined ? {} : { options: invocationOptions }),
+      }),
     handleEvent: (plugin, event) => {
       const emittedEvent: { readonly _tag: string } = event;
-      return handleEvent(plugin, event).pipe(
+      return execute(plugin, emittedEvent).pipe(
+        Effect.asVoid,
         Effect.withSpan("Executor.handleEvent", {
           kind: "consumer",
           attributes: {

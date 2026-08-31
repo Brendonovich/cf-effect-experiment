@@ -1,4 +1,4 @@
-import { Graph, Node, Project } from "@macrograph/core";
+import { FunctionGraph, Graph, Node, Project } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Option, Ref, Schema } from "effect";
 
@@ -294,6 +294,8 @@ export const makeLocalProjectStore = (
     },
     importProject: (input) => {
       const project = decodeLocalProject(input);
+      const invalid = FunctionGraph.validateProject(project);
+      if (invalid !== undefined) throw new Error(invalid);
       const previous = Ref.getUnsafe(state);
       Effect.runSync(Ref.set(state, project));
       dirty = true;

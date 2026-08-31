@@ -12,6 +12,7 @@ const emptyNodeIO: NodeIO = {
 export const GraphCreated = Schema.TaggedStruct("GraphCreated", {
   actor,
   graph: Graph.Model,
+  nodeIO: Schema.optional(Schema.Record(Schema.String, NodeIO)),
 });
 export type GraphCreated = typeof GraphCreated.Type;
 
@@ -27,6 +28,14 @@ export const GraphNameChanged = Schema.TaggedStruct("GraphNameChanged", {
   name: Schema.String,
 });
 export type GraphNameChanged = typeof GraphNameChanged.Type;
+
+export const FunctionSignatureChanged = Schema.TaggedStruct("FunctionSignatureChanged", {
+  actor,
+  graphId: Schema.String,
+  signature: Graph.FunctionSignature,
+  nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
+});
+export type FunctionSignatureChanged = typeof FunctionSignatureChanged.Type;
 
 export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
   actor,
@@ -155,6 +164,7 @@ export type EditorEvent =
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged
+  | FunctionSignatureChanged
   | NodeCreated
   | NodeDeleted
   | NodeNameChanged

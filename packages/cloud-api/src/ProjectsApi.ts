@@ -29,6 +29,8 @@ export const CreateProjectRequest = Schema.Struct({
 });
 
 export const CreateGraphRequest = Schema.Struct({
+  kind: Schema.optional(Schema.Literals(["ordinary", "function"])),
+  signature: Schema.optional(Graph.FunctionSignature),
   name: Schema.optional(Schema.String.annotate({ description: "Display name for the new graph." })),
   nodes: Schema.optional(
     Schema.Record(Schema.String, Node.CreateInput).annotate({
@@ -93,12 +95,21 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
     }),
     error: [ProjectNotFound, HttpApiError.NotFound],
   })
-    .annotate(OpenApi.Description, "Get a graph, its nodes and connections, and resolved node ports.")
+    .annotate(
+      OpenApi.Description,
+      "Get a graph, its nodes and connections, and resolved node ports.",
+    )
     .middleware(Authentication),
   HttpApiEndpoint.delete("deleteGraph", "/api/projects/:projectId/graphs/:graphId", {
     params: { projectId: Schema.String, graphId: Schema.String },
+    query: { force: Schema.optional(Schema.Literal("true")) },
     success: Schema.Void,
-    error: [ProjectNotFound, HttpApiError.NotFound],
+    error: [
+      ProjectNotFound,
+      HttpApiError.NotFound,
+      Graph.FunctionImpact.pipe(HttpApiSchema.status(409)),
+      Graph.FunctionError.pipe(HttpApiSchema.status(400)),
+    ],
   })
     .annotate(OpenApi.Description, "Delete a graph and all of its nodes and connections.")
     .middleware(Authentication),
@@ -199,6 +210,9 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
     success: Schema.Struct({ project: ProjectRecord, userIds: Schema.Array(Schema.String) }),
     error: [ProjectNotFound, HttpApiError.Forbidden, HttpApiError.BadRequest],
   })
-    .annotate(OpenApi.Description, "Update a project's access mode and explicitly authorized users.")
+    .annotate(
+      OpenApi.Description,
+      "Update a project's access mode and explicitly authorized users.",
+    )
     .middleware(Authentication),
 ) {}
