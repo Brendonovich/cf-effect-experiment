@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { registerEditorShortcuts, shortcutLabel } from "../../src/editor/shortcuts";
+import {
+  editorShortcuts,
+  registerEditorShortcuts,
+  shortcutLabel,
+  shortcutLabels,
+} from "../../src/editor/shortcuts";
 
 let dispose = () => {};
 
@@ -148,6 +153,42 @@ describe("editor keymap", () => {
       expect(listener).toHaveBeenCalledOnce();
     } finally {
       window.removeEventListener("keydown", listener);
+    }
+  });
+
+  it("blocks every editor action while the shortcuts dialog is open, including body events", () => {
+    const { root, run } = setup();
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("data-editor-shortcuts", "");
+    dialog.open = true;
+    const button = document.createElement("button");
+    dialog.append(button);
+    root.append(dialog);
+    for (const target of [button, document.body]) {
+      expect(press("b", { metaKey: true }, target).defaultPrevented).toBe(false);
+      expect(press("Backspace", {}, target).defaultPrevented).toBe(false);
+      expect(press("Escape", {}, target).defaultPrevented).toBe(false);
+    }
+    expect(run).not.toHaveBeenCalled();
+    dialog.open = false;
+    press("b", { metaKey: true });
+    expect(run).toHaveBeenCalledExactlyOnceWith("toggle-navigation");
+  });
+
+  it("lists platform aliases without duplicate or non-Apple Command bindings", () => {
+    expect(shortcutLabels("toggle-inspector", true)).toEqual(["\u2318R", "\u2318I"]);
+    expect(shortcutLabels("close-tab", true)).toEqual(["Ctrl+W", "\u2318W"]);
+    expect(shortcutLabels("close-tab", false)).toEqual(["Ctrl+W"]);
+    expect(shortcutLabels("create-node", true)).toEqual(["\u2318.", "Ctrl+."]);
+    expect(shortcutLabels("create-node", false)).toEqual(["Ctrl+."]);
+    expect(shortcutLabels("delete-selection", false)).toEqual(["Backspace", "Delete"]);
+    expect(shortcutLabels("toggle-pane-zoom", false)).toEqual([
+      "Shift+Escape",
+      "Ctrl+Shift+Escape",
+    ]);
+    for (const { action } of editorShortcuts) {
+      expect(shortcutLabels(action, true).length).toBeGreaterThan(0);
+      expect(shortcutLabels(action, false).length).toBeGreaterThan(0);
     }
   });
 
