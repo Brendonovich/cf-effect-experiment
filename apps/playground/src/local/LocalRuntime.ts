@@ -74,7 +74,10 @@ export const makeLocalConnection = (
       : Layer.succeed(Engine.Credentials)(credentials.service),
   );
   const events = EditorEvents.layer.pipe(Layer.provideMerge(base));
-  const editor = Editor.layer.pipe(Layer.provideMerge(events));
+  const editor = Editor.layer.pipe(
+    Layer.provideMerge(events),
+    Layer.provide(Layer.succeed(Editor.CustomEventsEnabled, true)),
+  );
   const rpc = Layer.mergeAll(
     EditorRpc.handlerLayer,
     EditorRpc.connectionMiddlewareLayer,
@@ -88,9 +91,15 @@ export const makeLocalConnection = (
         const persistenceService = yield* Persistence.Service;
         const editorEvents = yield* EditorEvents.Service;
         const activity = yield* RuntimeActivity.Service;
+        const scope = yield* Effect.scope;
         const executor = activity.wrap(
           yield* Executor.make(yield* persistenceService.loadProject(), {
             projectId: store.projectId,
+            customEvents: {
+              scope,
+              track: (name, payload, handler) =>
+                activity.track("project-events", { _tag: name, payload }, handler),
+            },
             executionDriver: activity.executionDriver,
             engineClient: (pluginId) => engineClient(editorService, pluginId),
             resourceValues: ({ package: pluginId, resource }) =>

@@ -1,9 +1,9 @@
-import { Graph, Node, Project, ResourceConstant } from "@macrograph/core";
+import { CustomEvent, Graph, Node, Project, ResourceConstant } from "@macrograph/core";
 import { DataType } from "@macrograph/plugin/DataType";
 import * as Engine from "@macrograph/plugin/Engine";
 import * as Plugin from "@macrograph/plugin/Plugin";
 import * as Registration from "@macrograph/plugin/Registration";
-import { Cause, Effect, Ref, Schema } from "effect";
+import { Cause, Effect, Ref, Schema, type Scope } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
@@ -136,6 +136,14 @@ export interface ExecutionDriver {
 }
 
 export interface MakeOptions {
+  readonly customEvents?: {
+    readonly scope: Scope.Scope;
+    readonly track: (
+      name: string,
+      payload: Readonly<Record<string, unknown>>,
+      handler: Effect.Effect<void, ExecutorError>,
+    ) => Effect.Effect<void, ExecutorError>;
+  };
   readonly projectId?: string;
   readonly executionDriver?: ExecutionDriver;
   readonly engineClient?: (pluginId: string) => Effect.Effect<unknown>;
@@ -150,6 +158,14 @@ export const inlineExecutionDriver: ExecutionDriver = {
 
 const outputKey = (nodeId: string, outputId: string) =>
   NodeOutputKey.make(`${nodeId}\0${outputId}`);
+
+class ProjectEvent {
+  readonly _tag = "ProjectEvent";
+  constructor(
+    readonly id: string,
+    readonly payload: Readonly<Record<string, unknown>>,
+  ) {}
+}
 
 export const make = Effect.fnUntraced(function* (
   initialProject: Project.Model,
@@ -208,9 +224,63 @@ export const make = Effect.fnUntraced(function* (
     return schema;
   });
 
-  const handleEvent: Service["handleEvent"] = Effect.fnUntraced(function* (definition, event) {
-    const currentProject = yield* Ref.get(project);
-    const registeredPlugins = yield* Ref.get(plugins);
+  const handleEvent = Effect.fnUntraced(function* (
+    definition: { readonly id: string },
+    event: { readonly _tag: string },
+    snapshot?: Project.Model,
+  ): Effect.fn.Return<void, ExecutorError> {
+    const currentProject = snapshot ?? (yield* Ref.get(project));
+    const registeredPlugins = new Map(yield* Ref.get(plugins));
+    if (options?.customEvents !== undefined) {
+      const schemas = new Map<string, Registration.RegisteredSchema>();
+      for (const customEvent of Object.values(currentProject.customEvents)) {
+        for (const model of CustomEvent.schemas(customEvent)) {
+          const io: Registration.RegisteredNodeIO = {
+            dataInputs: model.dataInputs.map(
+              (port) => new Registration.DataInputRef(port.id, port.type, port.name),
+            ),
+            dataOutputs: model.dataOutputs.map(
+              (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
+            ),
+            executionInputs: model.executionInputs.map(
+              (port) => new Registration.ExecutionInputRef(port.id),
+            ),
+            executionOutputs: model.executionOutputs.map(
+              (port) => new Registration.ExecutionOutputRef(port.id),
+            ),
+          };
+          schemas.set(model.id, {
+            id: model.id,
+            name: model.name,
+            type: model.type,
+            ...io,
+            properties: [],
+            generateIO: () => io,
+            matches: (event) =>
+              Effect.succeed(event instanceof ProjectEvent && event.id === customEvent.id),
+            run: (context) =>
+              Effect.gen(function* () {
+                if (model.type === "event") {
+                  if (!(context.event instanceof ProjectEvent))
+                    return yield* Effect.die("Missing project event payload");
+                  for (const output of io.dataOutputs)
+                    context.output(output, context.event.payload[output.id]);
+                } else {
+                  const payload = Object.fromEntries(
+                    io.dataInputs.map((input) => [input.id, context.input(input)]),
+                  );
+                  yield* handleEvent(
+                    { id: CustomEvent.packageId },
+                    new ProjectEvent(customEvent.id, payload),
+                    currentProject,
+                  );
+                }
+              }),
+          });
+        }
+      }
+      registeredPlugins.set(CustomEvent.packageId, { schemas, engineClient: undefined });
+    }
     if (!registeredPlugins.has(definition.id))
       return yield* new PluginNotRegistered({ pluginId: definition.id });
 
@@ -736,7 +806,18 @@ export const make = Effect.fnUntraced(function* (
                   },
                 }),
               );
-              if (matches) yield* executeEventNode(graph, node, schema);
+              if (matches) {
+                const execution = executeEventNode(graph, node, schema);
+                if (event instanceof ProjectEvent && options?.customEvents !== undefined) {
+                  const name = currentProject.customEvents[event.id]?.name ?? event.id;
+                  yield* options.customEvents.track(name, event.payload, execution).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.logError(`Project event ${name} handler failed`, cause),
+                    ),
+                    Effect.forkIn(options.customEvents.scope),
+                  );
+                } else yield* execution;
+              }
             }),
           { concurrency: "unbounded", discard: true },
         ),

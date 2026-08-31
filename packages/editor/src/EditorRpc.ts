@@ -1,5 +1,6 @@
 import {
   Connection,
+  CustomEvent,
   Graph,
   Node,
   Package as PkgTypes,
@@ -111,6 +112,23 @@ class CreateGraph extends Rpc.make("CreateGraph", {
   payload: { graph: Graph.CreateInput },
   success: EditorEvent.GraphCreated,
   error: PersistenceError,
+}) {}
+
+class PutCustomEvent extends Rpc.make("PutCustomEvent", {
+  payload: { event: CustomEvent.Model },
+  success: EditorEvent.CustomEventsChanged,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, CustomEvent.InvalidError]),
+}) {}
+class DeleteCustomEvent extends Rpc.make("DeleteCustomEvent", {
+  payload: { id: Schema.String },
+  success: EditorEvent.CustomEventsChanged,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    CustomEvent.InvalidError,
+    CustomEvent.NotFoundError,
+    CustomEvent.InUseError,
+  ]),
 }) {}
 
 class GetProject extends Rpc.make("GetProject", {
@@ -405,6 +423,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.ResourceConstantUpdated,
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
+    EditorEvent.CustomEventsChanged,
   ]),
   stream: true,
 });
@@ -421,6 +440,8 @@ const PresenceStream = Rpc.make("PresenceStream", {
 });
 
 export const EditorRpcs = RpcGroup.make(
+  PutCustomEvent,
+  DeleteCustomEvent,
   CreateGraph,
   GetProject,
   DeleteGraph,
@@ -468,6 +489,8 @@ export const handlerLayer = EditorRpcs.toLayer(
     const presence = yield* Presence.Registry;
     const credentials = yield* Engine.Credentials;
     return EditorRpcs.of({
+      PutCustomEvent: ({ event }) => editor.customEvent.put(event),
+      DeleteCustomEvent: ({ id }) => editor.customEvent.delete(id),
       CreateGraph: (payload) => editor.graph.create(payload.graph),
       GetProject: () =>
         Effect.gen(function* () {

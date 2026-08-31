@@ -235,6 +235,7 @@ const ClientAuthRoutes = Layer.effectDiscard(
 );
 
 const EditorLayer = Editor.layer.pipe(
+  Layer.provide(Layer.succeed(Editor.CustomEventsEnabled, true)),
   Layer.provideMerge(EditorEvents.layer),
   Layer.provideMerge(Packages.defaultLayer),
   Layer.provideMerge(Presence.layer),

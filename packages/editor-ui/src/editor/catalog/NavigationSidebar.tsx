@@ -1,13 +1,15 @@
 import type { Graph, Package, Project, ResourceConstant } from "@macrograph/core";
+import type { ComponentProps } from "solid-js";
 
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, For, Show } from "solid-js";
 
-import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { colors } from "../../tokens.stylex.ts";
-import { Sidebar } from "../workspace/Layout";
-import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
+import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { Sidebar } from "../workspace/Layout";
+import { CustomEvents } from "./CustomEvents";
 import { GraphNavigationOption } from "./GraphNavigationOption";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
@@ -33,7 +35,7 @@ const styles = stylex.create({
   },
   tabGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
     height: "100%",
     width: "100%",
   },
@@ -286,9 +288,10 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "constants";
+export type NavigationSection = "graphs" | "packages" | "constants" | "events";
 
 export function NavigationSidebar(props: {
+  customEvents?: ComponentProps<typeof CustomEvents> | undefined;
   section: NavigationSection;
   search: string;
   selectedPaneId?: string | undefined;
@@ -488,7 +491,13 @@ export function NavigationSidebar(props: {
       <div style={{ "flex-shrink": "0" }}>
         <div sx={styles.topTabs}>
           <div sx={styles.tabGrid}>
-            <For each={["graphs", "packages", "constants"] as const}>
+            <For
+              each={
+                props.customEvents
+                  ? (["graphs", "packages", "constants", "events"] as const)
+                  : (["graphs", "packages", "constants"] as const)
+              }
+            >
               {(section) => (
                 <button
                   type="button"
@@ -504,7 +513,9 @@ export function NavigationSidebar(props: {
                     ? "Graphs"
                     : section === "packages"
                       ? "Plugins"
-                      : "Constants"}
+                      : section === "events"
+                        ? "Events"
+                        : "Constants"}
                 </button>
               )}
             </For>
@@ -520,7 +531,9 @@ export function NavigationSidebar(props: {
                   ? "Search Graphs"
                   : props.section === "packages"
                     ? "Search Plugins"
-                    : "Search Constants"
+                    : props.section === "events"
+                      ? "Search Events"
+                      : "Search Constants"
               }
               value={props.search}
               onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -628,6 +641,9 @@ export function NavigationSidebar(props: {
         </div>
       </div>
       <div sx={styles.scroll}>
+        <Show when={props.section === "events" ? props.customEvents : undefined}>
+          {(events) => <CustomEvents {...events()} />}
+        </Show>
         <Show when={props.section === "graphs"}>
           <For
             each={props.graphs}

@@ -1,5 +1,6 @@
 import {
   Connection,
+  CustomEvent,
   Graph,
   Node,
   type NodeIO,
@@ -22,6 +23,7 @@ type MutableProject = {
   graphs: Record<string, MutableGraph>;
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
+  customEvents: Record<string, CustomEvent.Model>;
 };
 
 type MutableEditorStore = {
@@ -43,9 +45,7 @@ export function createEditorStore() {
     events: [],
     resourceValues: {},
   });
-  const setStore = (
-    update: (store: MutableEditorStore) => MutableEditorStore | undefined | void,
-  ) =>
+  const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
     setStoreValue((current) => {
       const draft: MutableEditorStore = {
         project:
@@ -61,6 +61,7 @@ export function createEditorStore() {
                 ),
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
+                customEvents: { ...current.project.customEvents },
               },
         packages: [...current.packages],
         nodeIO: Object.fromEntries(
@@ -97,6 +98,21 @@ export function createEditorStore() {
     if (!store.project) return;
 
     switch (event._tag) {
+      case "CustomEventsChanged":
+        setStore((store) => {
+          if (!store.project) return;
+          store.project.customEvents = { ...event.customEvents };
+          for (const [id, graph] of Object.entries(event.graphs))
+            store.project.graphs[id] = {
+              ...graph,
+              nodes: { ...graph.nodes },
+              connections: [...graph.connections],
+            };
+          for (const [id, nodes] of Object.entries(event.nodeIO))
+            store.nodeIO[id] = { ...store.nodeIO[id], ...nodes };
+          store.packages = [...store.packages.filter((pkg) => pkg.id !== event.pkg.id), event.pkg];
+        });
+        break;
       case "GraphCreated":
         setStore((store) => {
           if (store.project) {

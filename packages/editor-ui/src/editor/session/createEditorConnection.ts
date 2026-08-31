@@ -1,6 +1,6 @@
-import type { Package } from "@macrograph/core";
 import type { Presence } from "@macrograph/editor";
 
+import { CustomEvent, type Package } from "@macrograph/core";
 import { Effect, Fiber, Schedule, Stream } from "effect";
 import { createSignal, onSettled } from "solid-js";
 
@@ -48,10 +48,12 @@ export function createEditorConnection(
   selfConnectionId: () => string | undefined;
   selfPresence: () => Presence.Client | undefined;
   canEdit: () => boolean;
+  customEventsEnabled: () => boolean;
   editorReady: () => boolean;
 } {
   const { store, applyEvent, setProject, setPackages } = editor;
   const [activeConnection, setActiveConnection] = createSignal<EditorConnection | null>(null);
+  const [customEventsEnabled, setCustomEventsEnabled] = createSignal(false);
   const client = () => activeConnection()?.client ?? null;
   let connectedClient: EditorRpcClient | null = null;
   const [connectionState, connectionActions] = createStateMachine(
@@ -143,6 +145,7 @@ export function createEditorConnection(
             ),
             Effect.gen(function* () {
               const packages = yield* activeClient.GetPackages({});
+              setCustomEventsEnabled(packages.some((pkg) => pkg.id === CustomEvent.packageId));
               setPackages(packages as Package.Model[]);
               connectionActions.packagesLoaded(activeClient);
               yield* Effect.promise(() => pluginData.connect(connected, packages));
@@ -222,6 +225,7 @@ export function createEditorConnection(
     selfConnectionId,
     selfPresence,
     canEdit,
+    customEventsEnabled,
     editorReady,
   };
 }

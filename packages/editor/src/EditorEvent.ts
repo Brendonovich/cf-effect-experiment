@@ -1,4 +1,13 @@
-import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant } from "@macrograph/core";
+import {
+  Actor,
+  Connection,
+  CustomEvent,
+  Graph,
+  Node,
+  NodeIO,
+  Package,
+  ResourceConstant,
+} from "@macrograph/core";
 import { Effect, Schema } from "effect";
 
 const actor = Actor.Model.pipe(Schema.withDecodingDefaultKey(Effect.succeed(Actor.system)));
@@ -151,7 +160,17 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 });
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
+export const CustomEventsChanged = Schema.TaggedStruct("CustomEventsChanged", {
+  actor,
+  customEvents: CustomEvent.Collection,
+  graphs: Schema.Record(Schema.String, Graph.Model),
+  nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
+  pkg: Package.Model,
+});
+export type CustomEventsChanged = typeof CustomEventsChanged.Type;
+
 export type EditorEvent =
+  | CustomEventsChanged
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged

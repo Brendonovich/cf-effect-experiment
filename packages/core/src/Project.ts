@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 
+import { CustomEvent } from "./CustomEvent.ts";
 import { Graph } from "./Graph.ts";
 import { Collection as ResourceConstants } from "./ResourceConstant.ts";
 
@@ -13,6 +14,7 @@ export const Model = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed({})),
   ),
   constants: ResourceConstants,
+  customEvents: CustomEvent.Collection,
 });
 export type Model = typeof Model.Type;
 
@@ -21,6 +23,7 @@ export const empty = (): Model => ({
   graphs: {},
   engines: {},
   constants: {},
+  customEvents: {},
 });
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(

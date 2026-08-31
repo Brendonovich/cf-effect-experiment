@@ -3,6 +3,7 @@ import type * as Plugin from "@macrograph/plugin/Plugin";
 
 import {
   Connection,
+  CustomEvent,
   Graph,
   GraphId,
   IoId,
@@ -108,6 +109,24 @@ export interface HostedResource {
 }
 
 export interface Interface {
+  readonly customEvent: {
+    readonly put: (
+      event: CustomEvent.Model,
+    ) => Effect.Effect<
+      EditorEvent.CustomEventsChanged,
+      PersistenceError | Project.NotFoundError | CustomEvent.InvalidError
+    >;
+    readonly delete: (
+      id: string,
+    ) => Effect.Effect<
+      EditorEvent.CustomEventsChanged,
+      | PersistenceError
+      | Project.NotFoundError
+      | CustomEvent.InvalidError
+      | CustomEvent.NotFoundError
+      | CustomEvent.InUseError
+    >;
+  };
   readonly project: {
     readonly get: () => Effect.Effect<Project.Model, Project.NotFoundError | PersistenceError>;
     readonly snapshot: () => Effect.Effect<
@@ -276,12 +295,24 @@ export interface Interface {
 /** Coordinates project editing, resource constants, plugin registration, and hosted engines. */
 export class Service extends Context.Service<Service, Interface>()("macrograph/Editor") {}
 
+export const CustomEventsEnabled = Context.Reference<boolean>("macrograph/CustomEventsEnabled", {
+  defaultValue: () => false,
+});
+
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const persistence = yield* Persistence.Service;
     const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
+    const customEventsEnabled = yield* CustomEventsEnabled;
+    if (customEventsEnabled) {
+      const project = yield* persistence.loadProject().pipe(
+        Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(Project.empty())),
+        Effect.orDie,
+      );
+      yield* packages.loadPackage(CustomEvent.packageModel(project.customEvents));
+    }
     const lock = yield* Semaphore.make(1);
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -399,6 +430,131 @@ export const layer = Layer.effect(Service)(
         connections: input.connections ?? [],
       };
       return yield* events.publish({ _tag: "GraphCreated", graph });
+    }, lock.withPermit);
+
+    const changeCustomEvents = Effect.fnUntraced(function* (
+      project: Project.Model,
+      customEvents: Project.Model["customEvents"],
+    ) {
+      const pkg = CustomEvent.packageModel(customEvents);
+      const schemas = new Map(pkg.schemas.map((schema) => [schema.id, schema]));
+      const previousSchemas = new Map(
+        CustomEvent.packageModel(project.customEvents).schemas.map((schema) => [schema.id, schema]),
+      );
+      const graphs: Record<string, Graph.Model> = {};
+      const nodeIO: Record<string, Record<string, NodeIO>> = {};
+      for (const graph of Object.values(project.graphs)) {
+        const affected = Object.values(graph.nodes).filter(
+          (node) => node.schema.package === CustomEvent.packageId,
+        );
+        if (affected.length === 0) continue;
+        const nodes = { ...graph.nodes };
+        const ioByNode: Record<string, NodeIO> = {};
+        for (const node of affected) {
+          const schema = schemas.get(node.schema.schema);
+          if (schema === undefined) continue;
+          ioByNode[node.id] = schema;
+          const previous = previousSchemas.get(node.schema.schema);
+          nodes[node.id] = {
+            ...node,
+            name: node.name === previous?.name ? schema.name : node.name,
+            inputDefaults: yield* retainValidInputDefaults(schema, node.inputDefaults),
+          };
+        }
+        const connections: Connection.Model[] = [];
+        for (const connection of graph.connections) {
+          if (
+            ioByNode[connection.outNodeId] === undefined &&
+            ioByNode[connection.inNodeId] === undefined
+          ) {
+            connections.push(connection);
+            continue;
+          }
+          const output = nodes[connection.outNodeId];
+          const input = nodes[connection.inNodeId];
+          if (!output || !input) continue;
+          const empty: NodeIO = {
+            dataInputs: [],
+            dataOutputs: [],
+            executionInputs: [],
+            executionOutputs: [],
+          };
+          const outputIO =
+            ioByNode[output.id] ??
+            (yield* getNodeIO(output).pipe(Effect.catchCause(() => Effect.succeed(empty))));
+          const inputIO =
+            ioByNode[input.id] ??
+            (yield* getNodeIO(input).pipe(Effect.catchCause(() => Effect.succeed(empty))));
+          if (isConnectionValid(connection, outputIO, inputIO)) connections.push(connection);
+        }
+        graphs[graph.id] = { ...graph, nodes, connections };
+        nodeIO[graph.id] = ioByNode;
+      }
+      const event = yield* events.publish({
+        _tag: "CustomEventsChanged",
+        customEvents,
+        graphs,
+        nodeIO,
+        pkg,
+      });
+      yield* packages.loadPackage(pkg);
+      return event;
+    });
+    const customEventPut = Effect.fn("Editor.customEvent.put")(function* (
+      input: CustomEvent.Model,
+    ) {
+      if (!customEventsEnabled)
+        return yield* new CustomEvent.InvalidError({
+          reason: "Custom events are not supported by this host",
+        });
+      const event = yield* Schema.decodeUnknownEffect(CustomEvent.Model)(input).pipe(
+        Effect.catchTag(
+          "SchemaError",
+          () => new CustomEvent.InvalidError({ reason: "Invalid event definition" }),
+        ),
+      );
+      const project = yield* persistence.loadProject();
+      if (
+        Object.values(project.customEvents).some(
+          (other) =>
+            other.id !== event.id &&
+            other.name.trim().toLowerCase() === event.name.trim().toLowerCase(),
+        )
+      )
+        return yield* new CustomEvent.InvalidError({
+          reason: "Event names must be unique in the project",
+        });
+      const normalized = {
+        ...event,
+        name: event.name.trim(),
+        fields: event.fields.map((field) => ({ ...field, name: field.name.trim() })),
+      };
+      return yield* changeCustomEvents(project, {
+        ...project.customEvents,
+        [event.id]: normalized,
+      });
+    }, lock.withPermit);
+    const customEventDelete = Effect.fn("Editor.customEvent.delete")(function* (id: string) {
+      if (!customEventsEnabled)
+        return yield* new CustomEvent.InvalidError({
+          reason: "Custom events are not supported by this host",
+        });
+      const project = yield* persistence.loadProject();
+      if (!project.customEvents[id]) return yield* new CustomEvent.NotFoundError({ id });
+      if (
+        Object.values(project.graphs).some((graph) =>
+          Object.values(graph.nodes).some(
+            (node) =>
+              node.schema.package === CustomEvent.packageId &&
+              (node.schema.schema === CustomEvent.schemaId(id, "emit") ||
+                node.schema.schema === CustomEvent.schemaId(id, "on")),
+          ),
+        )
+      )
+        return yield* new CustomEvent.InUseError({ id });
+      const customEvents = { ...project.customEvents };
+      delete customEvents[id];
+      return yield* changeCustomEvents(project, customEvents);
     }, lock.withPermit);
 
     const graphUpdate = Effect.fn("Editor.graph.update")(function* (options: GraphUpdateOptions) {
@@ -1058,6 +1214,7 @@ export const layer = Layer.effect(Service)(
       }).pipe(lock.withPermit);
 
     return Service.of({
+      customEvent: { put: customEventPut, delete: customEventDelete },
       project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
       constant: {
         create: constantCreate,

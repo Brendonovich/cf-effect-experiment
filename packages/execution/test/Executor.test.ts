@@ -75,6 +75,7 @@ describe("Executor", () => {
       const project: Project.Model = {
         name: "Resources",
         engines: {},
+        customEvents: {},
         constants: {
           account: {
             id: ResourceConstant.Id.make("account"),
@@ -146,6 +147,7 @@ describe("Executor", () => {
 
       yield* executor.loadProject({
         ...project,
+        customEvents: {},
         constants: {
           account: { ...project.constants.account!, value: "missing" },
         },
@@ -250,6 +252,7 @@ describe("Executor", () => {
       const project: Project.Model = {
         name: "Executor test",
         engines: {},
+        customEvents: {},
         constants: {},
         graphs: {
           [graphId]: {
@@ -476,6 +479,7 @@ describe("Executor", () => {
       const project: Project.Model = {
         name: "Dynamic execution",
         engines: {},
+        customEvents: {},
         constants: {},
         graphs: {
           [graphId]: {

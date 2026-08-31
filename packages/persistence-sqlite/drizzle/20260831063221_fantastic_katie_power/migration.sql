@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `custom_events` text DEFAULT '{}' NOT NULL;

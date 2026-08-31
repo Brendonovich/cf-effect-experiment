@@ -16,6 +16,7 @@ export const layer = Layer.effect(Service)(
     const editor = yield* Editor.Service;
     const events = yield* EditorEvents.Service;
     const activity = yield* RuntimeActivity.Service;
+    const scope = yield* Effect.scope;
     const project = yield* persistence.loadProject().pipe(
       Effect.catchTag("ProjectNotFoundError", () => {
         const project = { ...Project.empty(), name: "test" };
@@ -23,6 +24,11 @@ export const layer = Layer.effect(Service)(
       }),
     );
     const executor = yield* ProjectExecutor.make(project, {
+      customEvents: {
+        scope,
+        track: (name, payload, handler) =>
+          activity.track("project-events", { _tag: name, payload }, handler),
+      },
       executionDriver: activity.executionDriver,
       engineClient: (pluginId) =>
         Effect.succeed(

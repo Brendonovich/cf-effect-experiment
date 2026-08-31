@@ -10,17 +10,14 @@ import { createMemo, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { runPromise } from "../observability/browserTracing";
+import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
-import { colors } from "../tokens.stylex.ts";
-import { Inspector } from "./inspector/Inspector";
-import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
-import { NodeCreationMenu } from "./graph/NodeCreationMenu";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
-import { createEditorShortcuts } from "./createEditorShortcuts";
 import { GraphNode } from "./graph/GraphNode";
 import {
   connectedPortIds,
@@ -28,7 +25,11 @@ import {
   graphConnections,
   wireColor,
 } from "./graph/graphPresentation";
+import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Inspector } from "./inspector/Inspector";
+import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { shortcutLabel } from "./shortcuts";
+import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -502,6 +503,31 @@ function EditorContent(
             <Show when={!controller.layout.paneZoomed() ? controller.layout.navSection() : null}>
               {(section) => (
                 <NavigationSidebar
+                  customEvents={
+                    controller.connection.customEventsEnabled()
+                      ? {
+                          events: controller.editor.store.project?.customEvents ?? {},
+                          search: controller.catalog.navSearch(),
+                          canEdit: controller.connection.canEdit(),
+                          put: async (event) => {
+                            const client = controller.connection.client();
+                            if (!client || !controller.connection.canEdit())
+                              throw new Error("Editing is unavailable");
+                            controller.editor.applyEvent(
+                              await runPromise(client.PutCustomEvent({ event })),
+                            );
+                          },
+                          remove: async (id) => {
+                            const client = controller.connection.client();
+                            if (!client || !controller.connection.canEdit())
+                              throw new Error("Editing is unavailable");
+                            controller.editor.applyEvent(
+                              await runPromise(client.DeleteCustomEvent({ id })),
+                            );
+                          },
+                        }
+                      : undefined
+                  }
                   section={section()}
                   search={controller.catalog.navSearch()}
                   selectedPaneId={controller.layout.selectedPaneId()}
@@ -594,8 +620,8 @@ function EditorContent(
                             { capture: true },
                           );
                         }}
-                         sx={styles.canvas}
-                         data-active-graph-canvas={active() ? "" : undefined}
+                        sx={styles.canvas}
+                        data-active-graph-canvas={active() ? "" : undefined}
                         style={{
                           "background-position": `${-origin().x * scale() - grid().coarseSpacing / 2}px ${-origin().y * scale() - grid().coarseSpacing / 2}px`,
                           "background-size": `${grid().coarseSpacing}px ${grid().coarseSpacing}px`,
