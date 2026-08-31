@@ -265,6 +265,7 @@ describe("HTTP client plugin", () => {
           name: "HTTP",
           engines: {},
           constants: {},
+          types: {},
           graphs: {
             [graphId]: {
               id: graphId,

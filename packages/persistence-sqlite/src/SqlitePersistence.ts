@@ -30,7 +30,12 @@ export const layer = Layer.effect(
         db.transaction((tx) => {
           tx.delete(schema.projectMeta).run();
           tx.insert(schema.projectMeta)
-            .values({ name: project.name, engines: project.engines, constants: project.constants })
+            .values({
+              name: project.name,
+              engines: project.engines,
+              constants: project.constants,
+              types: project.types,
+            })
             .run();
 
           tx.delete(schema.connections).run();
@@ -149,7 +154,13 @@ export const layer = Layer.effect(
           );
         }
 
-        return { name: meta.name, graphs, engines: meta.engines, constants: meta.constants };
+        return {
+          name: meta.name,
+          graphs,
+          engines: meta.engines,
+          constants: meta.constants,
+          types: meta.types,
+        };
       });
 
       if (!result) {
@@ -161,6 +172,7 @@ export const layer = Layer.effect(
         graphs: result.graphs,
         engines: result.engines,
         constants: result.constants,
+        types: result.types,
       }).pipe(PersistenceError.refail);
     });
 

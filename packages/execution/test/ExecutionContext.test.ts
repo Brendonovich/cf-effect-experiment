@@ -107,6 +107,7 @@ describe("schema execution context", () => {
         name: "Context",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,

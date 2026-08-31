@@ -12,6 +12,18 @@ const stringPort = { kind: "data", id: "value", type: { _tag: "String" } } as co
 const intPort = { kind: "data", id: "value", type: { _tag: "Int" } } as const;
 
 describe("connection authoring", () => {
+  it("uses nominal identity inside custom List and Option ports", () => {
+    const port = (id: string) => ({
+      kind: "data" as const,
+      id: "value",
+      type: {
+        _tag: "List" as const,
+        item: { _tag: "Option" as const, inner: { _tag: "Custom" as const, id } },
+      },
+    });
+    expect(portsCompatible(port("a"), port("a"))).toBe(true);
+    expect(portsCompatible(port("a"), port("b"))).toBe(false);
+  });
   it("matches execution and structurally equal data ports only", () => {
     expect(portsCompatible(stringPort, { ...stringPort, id: "input" })).toBe(true);
     expect(portsCompatible(stringPort, intPort)).toBe(false);

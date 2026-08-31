@@ -458,7 +458,9 @@ export const make = Effect.fnUntraced(function* (
                   execute.pipe(
                     Effect.flatMap((result) =>
                       transformResult(result, (type, value) =>
-                        Schema.encodeUnknownEffect(DataType.JsonValueSchema(type))(value),
+                        Schema.encodeUnknownEffect(
+                          DataType.JsonValueSchema(type, currentProject.types),
+                        )(value),
                       ),
                     ),
                   ),
@@ -466,7 +468,9 @@ export const make = Effect.fnUntraced(function* (
                 .pipe(
                   Effect.flatMap((result) =>
                     transformResult(result, (type, value) =>
-                      Schema.decodeUnknownEffect(DataType.JsonValueSchema(type))(value),
+                      Schema.decodeUnknownEffect(
+                        DataType.JsonValueSchema(type, currentProject.types),
+                      )(value),
                     ),
                   ),
                 );
@@ -476,7 +480,7 @@ export const make = Effect.fnUntraced(function* (
           if (
             ports.length !== 1 ||
             nodeIO.executionOutputs.some((port) => port.id === output.outputId) ||
-            !DataType.isValue(ports[0]!.type, output.value)
+            !DataType.isValue(ports[0]!.type, output.value, currentProject.types)
           ) {
             return yield* new InvalidOutputValue({
               nodeId: node.id,
@@ -541,9 +545,9 @@ export const make = Effect.fnUntraced(function* (
                 : "missing",
           );
           if (Object.hasOwn(node.inputDefaults, input.id)) {
-            return yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type))(
-              node.inputDefaults[input.id],
-            ).pipe(
+            return yield* Schema.decodeUnknownEffect(
+              DataType.JsonValueSchema(input.type, currentProject.types),
+            )(node.inputDefaults[input.id]).pipe(
               Effect.catchTag(
                 "SchemaError",
                 () =>
@@ -556,7 +560,8 @@ export const make = Effect.fnUntraced(function* (
             );
           }
           if (input.defaultValue !== undefined) {
-            if (DataType.isValue(input.type, input.defaultValue)) return input.defaultValue;
+            if (DataType.isValue(input.type, input.defaultValue, currentProject.types))
+              return input.defaultValue;
             return yield* new InvalidInputValue({
               nodeId: node.id,
               inputId: input.id,
@@ -608,7 +613,7 @@ export const make = Effect.fnUntraced(function* (
             outputId: connection.outIoId,
           });
         const value = state.outputs.get(key);
-        if (!DataType.isValue(input.type, value))
+        if (!DataType.isValue(input.type, value, currentProject.types))
           return yield* new InvalidInputValue({
             nodeId: node.id,
             inputId: input.id,

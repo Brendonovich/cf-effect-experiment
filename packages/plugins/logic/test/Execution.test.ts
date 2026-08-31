@@ -105,6 +105,7 @@ describe("Logic execution", () => {
           name: "Defaults",
           engines: {},
           constants: {},
+          types: {},
           graphs: {
             [graphId]: {
               id: graphId,
@@ -200,6 +201,7 @@ describe("Logic execution", () => {
           name: "Logic",
           engines: {},
           constants: {},
+          types: {},
           graphs: { [graphId]: graph },
         };
         const executor = yield* Executor.make(project);

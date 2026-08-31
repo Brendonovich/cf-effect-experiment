@@ -17,6 +17,32 @@ const TestLayer = Layer.provideMerge(
 );
 
 describe("JsonPersistence", () => {
+  it.effect("preserves named recursive definitions across graph-only saves", () =>
+    Effect.gen(function* () {
+      const persistence = yield* Persistence.Service;
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
+        ...Project.empty(),
+        types: {
+          tree: {
+            _tag: "Struct",
+            id: "tree",
+            name: "Tree",
+            fields: [
+              { name: "children", type: { _tag: "List", item: { _tag: "Custom", id: "tree" } } },
+            ],
+          },
+        },
+      });
+      yield* persistence.saveProject(project);
+      yield* persistence.saveGraph({
+        id: GraphId.make("g"),
+        name: "Graph",
+        nodes: {},
+        connections: [],
+      });
+      expect((yield* persistence.loadProject()).types).toEqual(project.types);
+    }).pipe(Effect.provide(TestLayer)),
+  );
   it.effect("decodes projects written before resource constants were introduced", () =>
     Effect.gen(function* () {
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
@@ -25,6 +51,7 @@ describe("JsonPersistence", () => {
         engines: {},
       });
       expect(project.constants).toEqual({});
+      expect(project.types).toEqual({});
     }),
   );
 
@@ -57,6 +84,7 @@ describe("JsonPersistence", () => {
         graphs: { "graph-1": graph },
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
         constants: {},
+        types: {},
       };
       yield* persistence.saveProject(project);
 
@@ -85,6 +113,7 @@ describe("JsonPersistence", () => {
         graphs: {},
         engines: {},
         constants: {},
+        types: {},
       };
       yield* persistence.saveProject(project);
 
@@ -117,6 +146,7 @@ describe("JsonPersistence", () => {
         graphs: { "graph-1": graph },
         engines: {},
         constants: {},
+        types: {},
       };
       yield* persistence.saveProject(project);
 
@@ -190,6 +220,7 @@ describe("JsonPersistence", () => {
         graphs: { "graph-1": graph },
         engines: {},
         constants: {},
+        types: {},
       };
       yield* persistence.saveProject(project);
 

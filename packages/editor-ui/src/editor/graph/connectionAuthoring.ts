@@ -1,4 +1,5 @@
 import type { Package } from "@macrograph/core";
+import { DataType } from "@macrograph/plugin/DataType";
 
 import type { GraphPort } from "./GraphNode";
 
@@ -16,14 +17,7 @@ export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
 ): boolean => {
-  if (left._tag !== right._tag) return false;
-  if (left._tag === "List" && right._tag === "List") {
-    return dataTypesEqual(left.item, right.item);
-  }
-  if (left._tag === "Option" && right._tag === "Option") {
-    return dataTypesEqual(left.inner, right.inner);
-  }
-  return left._tag !== "List" && left._tag !== "Option";
+  return DataType.equals(left, right);
 };
 
 export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>

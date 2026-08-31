@@ -179,6 +179,8 @@ export const formatDataType = (type: DataType): string => {
       return `List<${formatDataType(type.item)}>`;
     case "Option":
       return `Option<${formatDataType(type.inner)}>`;
+    case "Custom":
+      return `Custom<${type.id}>`;
     default:
       return type._tag;
   }
@@ -202,6 +204,8 @@ const dataPinStyle = (type: DataType) => {
     case "Bool":
       return styles.boolPin;
     case "DateTime":
+      return styles.dateTimePin;
+    case "Custom":
       return styles.dateTimePin;
   }
 };

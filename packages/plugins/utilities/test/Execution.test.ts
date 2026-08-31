@@ -43,6 +43,7 @@ describe("Utilities execution", () => {
         name: "Utilities",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,

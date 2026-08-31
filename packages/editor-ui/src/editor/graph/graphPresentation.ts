@@ -200,6 +200,8 @@ export const wireColor = (type: DataType | undefined): string => {
       return "#dc2626";
     case "DateTime":
       return "#3b82f6";
+    case "Custom":
+      return "#a78bfa";
     case "List":
     case "Option":
       return wireColor(primary);

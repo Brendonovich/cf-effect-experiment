@@ -47,6 +47,7 @@ export class Service extends Context.Service<
 			properties: Readonly<Record<string, unknown>>,
 			input: string,
 			value: unknown,
+			definitions?: DataType.Definitions,
 		) => Effect.Effect<
 			Schema.Json,
 			Package.SchemaNotFoundError | Package.InvalidInputDefaultError
@@ -56,6 +57,7 @@ export class Service extends Context.Service<
 			properties: Readonly<Record<string, unknown>>,
 			inputDefaults: Readonly<Record<string, unknown>>,
 			input: string,
+			definitions?: DataType.Definitions,
 		) => Effect.Effect<
 			ReadonlyArray<string>,
 			Package.SchemaNotFoundError | Package.InvalidInputDefaultError
@@ -262,12 +264,15 @@ export const defaultLayer = Layer.effect(
 				properties: Readonly<Record<string, unknown>>,
 				input: string,
 				value: unknown,
+				definitions: DataType.Definitions = {},
 			) {
 				const port = yield* getDataInput(ref, properties, input);
-				const codec = DataType.JsonValueSchema(port.type);
+				const codec = DataType.JsonValueSchema(port.type, definitions);
 				const decoded = yield* Schema.decodeUnknownEffect(codec)(value).pipe(
 					Effect.catchTag("SchemaError", () =>
-						Schema.decodeUnknownEffect(DataType.ValueSchema(port.type))(value),
+						Schema.decodeUnknownEffect(
+							DataType.ValueSchema(port.type, definitions),
+						)(value),
 					),
 					Effect.catchTag(
 						"SchemaError",
@@ -306,6 +311,7 @@ export const defaultLayer = Layer.effect(
 			properties: Readonly<Record<string, unknown>>,
 			inputDefaults: Readonly<Record<string, unknown>>,
 			input: string,
+			definitions: DataType.Definitions = {},
 		) {
 			const port = yield* getDataInput(ref, properties, input);
 			if (!port.suggestions || port.type._tag !== "String") {
@@ -327,7 +333,7 @@ export const defaultLayer = Layer.effect(
 					continue;
 				}
 				decodedDefaults[id] = yield* Schema.decodeUnknownEffect(
-					DataType.JsonValueSchema(inputs[0]!.type),
+					DataType.JsonValueSchema(inputs[0]!.type, definitions),
 				)(value).pipe(
 					Effect.catchTag(
 						"SchemaError",

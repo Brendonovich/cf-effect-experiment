@@ -73,6 +73,7 @@ describe("Executor", () => {
       const eventNodeId = NodeId.make("resource-event");
       const actionNodeId = NodeId.make("resource-action");
       const project: Project.Model = {
+        types: {},
         name: "Resources",
         engines: {},
         constants: {
@@ -251,6 +252,7 @@ describe("Executor", () => {
         name: "Executor test",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,
@@ -477,6 +479,7 @@ describe("Executor", () => {
         name: "Dynamic execution",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,

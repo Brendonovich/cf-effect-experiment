@@ -328,12 +328,13 @@ export const layer = Layer.effect(Service)(
       defaults: Readonly<Record<string, Schema.Json>>,
     ) {
       const retained: Record<string, Schema.Json> = {};
+      const definitions = (yield* persistence.loadProject()).types;
       for (const input of Object.keys(defaults).sort()) {
         const ports = io.dataInputs.filter((port) => port.id === input);
         if (ports.length !== 1 || io.executionInputs.some((port) => port.id === input)) continue;
-        const valid = yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(ports[0]!.type))(
-          defaults[input],
-        ).pipe(
+        const valid = yield* Schema.decodeUnknownEffect(
+          DataType.JsonValueSchema(ports[0]!.type, definitions),
+        )(defaults[input]).pipe(
           Effect.as(true),
           Effect.catchTag("SchemaError", () => Effect.succeed(false)),
         );
@@ -432,6 +433,7 @@ export const layer = Layer.effect(Service)(
           ioProperties,
           input,
           value,
+          (yield* persistence.loadProject()).types,
         );
       }
       const nodeId = NodeId.make(Math.random().toString(36).slice(2));
@@ -576,6 +578,7 @@ export const layer = Layer.effect(Service)(
         ioProperties,
         options.input,
         options.value,
+        (yield* persistence.loadProject()).types,
       );
       return yield* events.publish({
         _tag: "InputDefaultUpdated",
@@ -615,11 +618,11 @@ export const layer = Layer.effect(Service)(
     const nodeGetInputSuggestions = Effect.fn("Editor.node.getInputSuggestions")(function* (
       options: NodeInputOptions,
     ) {
-      const { node, properties } = yield* Effect.gen(function* () {
+      const { node, properties, definitions } = yield* Effect.gen(function* () {
         const graph = yield* persistence.loadGraph(options.graphID);
         const node = yield* Graph.getNode(graph, options.nodeID);
         const properties = yield* resolveIOProperties(node.schema, node.properties);
-        return { node, properties };
+        return { node, properties, definitions: (yield* persistence.loadProject()).types };
       }).pipe(lock.withPermit);
       // Live resolvers can update engine storage, which also acquires the editor lock.
       return yield* packages.getSuggestions(
@@ -627,6 +630,7 @@ export const layer = Layer.effect(Service)(
         properties,
         node.inputDefaults,
         options.input,
+        definitions,
       );
     });
 

@@ -22,6 +22,7 @@ type MutableProject = {
   graphs: Record<string, MutableGraph>;
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
+  types: Project.Model["types"];
 };
 
 type MutableEditorStore = {
@@ -43,9 +44,7 @@ export function createEditorStore() {
     events: [],
     resourceValues: {},
   });
-  const setStore = (
-    update: (store: MutableEditorStore) => MutableEditorStore | undefined | void,
-  ) =>
+  const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
     setStoreValue((current) => {
       const draft: MutableEditorStore = {
         project:
@@ -329,7 +328,16 @@ export function createEditorStore() {
 
   function setProject(project: Project.Model, nodeIO: Record<string, Record<string, NodeIO>>) {
     setStore((store) => {
-      store.project = structuredClone(project) as MutableProject;
+      const cloned = structuredClone(project);
+      store.project = {
+        ...cloned,
+        graphs: Object.fromEntries(
+          Object.entries(cloned.graphs).map(([id, graph]) => [
+            id,
+            { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
+          ]),
+        ),
+      };
       store.nodeIO = structuredClone(nodeIO);
     });
   }
