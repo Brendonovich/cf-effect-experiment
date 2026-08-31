@@ -1,0 +1,79 @@
+name: OpenCode
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  authorize:
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      (startsWith(github.event.comment.body, '/opencode ') ||
+       startsWith(github.event.comment.body, '/oc '))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - name: Check Requester Permissions
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo, username: context.payload.comment.user.login,
+            });
+            if (!['admin', 'maintain', 'write'].includes(data.permission)) {
+              throw new Error('Only repository writers can invoke OpenCode');
+            }
+  run:
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    concurrency:
+      group: opencode-console-credentials
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: pnpm install --frozen-lockfile
+      - name: Install OpenCode V2
+        run: npm install --global @opencode-ai/cli@beta
+      - name: Configure Git Identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Refresh Console Credentials
+        run: node apps/opencode-bot/src/credentials.ts refresh
+        env:
+          GH_TOKEN: ${{ secrets.OPENCODE_VARIABLE_TOKEN }}
+          OPENCODE_CREDENTIAL_KEY: ${{ secrets.OPENCODE_CREDENTIAL_KEY }}
+      - name: Run OpenCode
+        run: node apps/opencode-bot/src/run.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENCODE_MODEL: ${{ secrets.OPENCODE_MODEL }}
+      - name: Report Failure
+        if: failure()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: `OpenCode failed. [View workflow logs](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}).`,
+            });

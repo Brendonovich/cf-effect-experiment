@@ -1,0 +1,28 @@
+name: OpenCode Console Login
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  enroll:
+    if: github.ref == 'refs/heads/main' && github.actor_id == '14191578'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: opencode-console-credentials
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Authorize Console Login (See Logs For Device Link)
+        run: node apps/opencode-bot/src/credentials.ts enroll
+        env:
+          GH_TOKEN: ${{ secrets.OPENCODE_VARIABLE_TOKEN }}
+          OPENCODE_CREDENTIAL_KEY: ${{ secrets.OPENCODE_CREDENTIAL_KEY }}

@@ -1,0 +1,13 @@
+{
+  "name": "@macrograph/opencode-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "enroll": "node src/credentials.ts enroll",
+    "test": "vp test run"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"
+  }
+}
