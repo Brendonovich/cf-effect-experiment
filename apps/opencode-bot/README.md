@@ -14,6 +14,7 @@ GitHub-hosted runner and asks it to respond using `gh`.
   Keep model identities out of repository files, comments, and artifacts. Agent
   output is suppressed in Actions logs because provider metadata can also identify
   unreleased models. Only generic execution status is logged.
+- Secret `OPENCODE_ORG_ID`: Console organization whose catalog supplies the model.
 
 For first enrollment, run `pnpm --filter @macrograph/opencode-bot enroll` while
 authenticated with `gh`. It generates the encryption secret and prints a Console
