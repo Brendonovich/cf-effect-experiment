@@ -30,6 +30,7 @@ import { Inspector } from "./inspector/Inspector";
 import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { shortcutLabel } from "./shortcuts";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
+import { ShortcutsHelp } from "./ShortcutsHelp";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
 const styles = stylex.create({
@@ -878,6 +879,7 @@ function EditorContent(
                                     name,
                                     menu.graph,
                                     menu.source,
+                                    menu.shiftKey,
                                   ),
                                 )
                               }
@@ -968,6 +970,7 @@ function EditorContent(
               />
             </Sidebar>
           </div>
+          <ShortcutsHelp />
         </Show>
       </div>
     </div>

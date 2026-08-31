@@ -1,15 +1,16 @@
 // @vitest-environment happy-dom
 
-import { Graph, IoId, Node, PackageId, Project, SchemaId } from "@macrograph/core";
+import { Actor, Graph, IoId, Node, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect } from "effect";
 import { createMemo, createRoot, createSignal, flush, untrack } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import type { EditorRpcClient } from "../../src/editor/Editor";
+
 import { createEditorController } from "../../src/editor/createEditorController";
-import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
+import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
 import { createEditorStore } from "../../src/editor/store";
+import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
 import {
   saveWorkspaceState,
   createWorkspaceState,
@@ -240,7 +241,7 @@ describe("editor concern hooks", () => {
       });
       flush();
       expect(untrack(dragging)).toEqual([false, false, false]);
-      const pointer = { pointerId: 1, button: 0, shiftKey: false, clientX: 10, clientY: 20 };
+      const pointer = { pointerId: 1, button: 0, clientX: 10, clientY: 20, shiftKey: true };
       canvas.onNodeMouseDown(
         Object.assign(new Event("pointerdown"), pointer) as PointerEvent,
         nodes[0]!,
@@ -276,8 +277,7 @@ describe("editor concern hooks", () => {
       expect(canvas.isDragging()).toBe(false);
       if (end === "pointerup")
         expect(publishPointer).toHaveBeenLastCalledWith({ x: 110, y: 220 }, true);
-      else if (end === "pointercancel")
-        expect(publishPointer).toHaveBeenLastCalledWith(null, true);
+      else if (end === "pointercancel") expect(publishPointer).toHaveBeenLastCalledWith(null, true);
       const calls = publishPointer.mock.calls.length;
       window.dispatchEvent(Object.assign(new Event("pointermove"), pointer));
       expect(publishPointer).toHaveBeenCalledTimes(calls);
@@ -417,6 +417,291 @@ describe("editor concern hooks", () => {
     expect(setNodePosition).toHaveBeenCalledWith({ graphId: "main", nodeId: "second", x: 6, y: 0 });
   });
 
+  it.each([0.5, 1, 2])(
+    "snaps the grabbed node at scale %s while preserving group offsets and live Shift",
+    async (scale) => {
+      const { canvas, editor, rpc } = createRoot((cleanup) => {
+        dispose = cleanup;
+        const editor = createEditorStore();
+        const nodes = [
+          { id: "first", position: { x: 13, y: -27 } },
+          { id: "second", position: { x: 76, y: 18 } },
+        ].map(
+          ({ id, position }): Node.Model => ({
+            id: Node.NodeId.make(id),
+            name: id,
+            schema: { package: PackageId.make("test"), schema: SchemaId.make("test") },
+            properties: {},
+            inputDefaults: {},
+            foldPins: false,
+            position,
+          }),
+        );
+        editor.setProject(
+          {
+            ...Project.empty(),
+            graphs: {
+              main: {
+                ...Graph.empty("main"),
+                nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
+              },
+            },
+          },
+          {},
+        );
+        const rpc = vi.fn((payload: Parameters<EditorRpcClient["SetNodePosition"]>[0]) =>
+          Effect.succeed({ _tag: "NodePositionChanged" as const, actor: Actor.system, ...payload }),
+        );
+        const canvas = createEditorCanvas({
+          editor,
+          client: () => ({ SetNodePosition: rpc }) as unknown as EditorRpcClient,
+          canEdit: () => true,
+          publishPointer: () => {},
+          selectedGraphId: () => "main",
+          selectedGraph: () => editor.store.project!.graphs.main!,
+          nodes: () => nodes,
+          selectedNodeIds: () => ["first", "second"],
+          setSelectedNodeIds: () => {},
+          canvasScale: () => scale,
+          setCanvasScale: () => {},
+          canvasOrigin: () => ({ x: 123, y: -456 }),
+          setCanvasOrigin: () => {},
+        });
+        return { canvas, editor, rpc };
+      });
+      flush();
+      const pointer = { pointerId: 1, button: 0, clientX: 100, clientY: 100, shiftKey: true };
+      const start = () => {
+        canvas.onNodeMouseDown(
+          Object.assign(new Event("pointerdown"), pointer) as PointerEvent,
+          editor.store.project!.graphs.main!.nodes.second!,
+        );
+        flush();
+      };
+      const positions = () =>
+        ["first", "second"].map((id) => editor.store.project!.graphs.main!.nodes[id]!.position);
+      start();
+      window.dispatchEvent(Object.assign(new Event("pointermove"), pointer));
+      window.dispatchEvent(Object.assign(new Event("pointerup"), pointer));
+      flush();
+      expect(positions()).toEqual([
+        { x: 13, y: -27 },
+        { x: 76, y: 18 },
+      ]);
+      expect(rpc).not.toHaveBeenCalled();
+
+      start();
+      const moved = { ...pointer, clientX: 100 + 31 * scale, clientY: 100 - 35 * scale };
+      window.dispatchEvent(Object.assign(new Event("pointermove"), { ...moved, shiftKey: false }));
+      flush();
+      expect(positions()).toEqual([
+        { x: 57, y: -45 },
+        { x: 120, y: 0 },
+      ]);
+      window.dispatchEvent(Object.assign(new Event("pointermove"), moved));
+      flush();
+      expect(positions()).toEqual([
+        { x: 44, y: -62 },
+        { x: 107, y: -17 },
+      ]);
+      // Release Shift without another move: the final placement must still snap.
+      window.dispatchEvent(Object.assign(new Event("pointerup"), { ...moved, shiftKey: false }));
+      await vi.waitFor(() =>
+        expect(rpc.mock.calls.filter(([payload]) => !payload.ephemeral)).toHaveLength(2),
+      );
+      flush();
+      expect(positions()).toEqual([
+        { x: 57, y: -45 },
+        { x: 120, y: 0 },
+      ]);
+
+      rpc.mockClear();
+      start();
+      window.dispatchEvent(Object.assign(new Event("pointermove"), { ...moved, shiftKey: false }));
+      window.dispatchEvent(Object.assign(new Event("pointerup"), moved));
+      await vi.waitFor(() =>
+        expect(rpc.mock.calls.filter(([payload]) => !payload.ephemeral)).toHaveLength(2),
+      );
+      flush();
+      expect(positions()).toEqual([
+        { x: 88, y: -80 },
+        { x: 151, y: -35 },
+      ]);
+      expect(rpc).toHaveBeenCalledWith({ graphId: "main", nodeId: "second", x: 151, y: -35 });
+    },
+  );
+
+  it.each([false, true])(
+    "integrates Shift clicks, jitter, and live snapping with group=%s",
+    async (group) => {
+      const { canvas, editor, rpc, selectedNodeIds } = createRoot((cleanup) => {
+        dispose = cleanup;
+        const editor = createEditorStore();
+        const nodes = [
+          { id: "first", position: { x: 13, y: -27 } },
+          { id: "second", position: { x: 76, y: 18 } },
+        ].map(
+          ({ id, position }): Node.Model => ({
+            id: Node.NodeId.make(id),
+            name: id,
+            schema: { package: PackageId.make("test"), schema: SchemaId.make("test") },
+            properties: {},
+            inputDefaults: {},
+            foldPins: false,
+            position,
+          }),
+        );
+        editor.setProject(
+          {
+            ...Project.empty(),
+            graphs: {
+              main: {
+                ...Graph.empty("main"),
+                nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
+              },
+            },
+          },
+          {},
+        );
+        const [selectedNodeIds, setSelectedNodeIds] = createSignal(
+          group ? ["first", "second"] : ["second"],
+        );
+        const rpc = vi.fn((payload: Parameters<EditorRpcClient["SetNodePosition"]>[0]) =>
+          Effect.succeed({ _tag: "NodePositionChanged" as const, actor: Actor.system, ...payload }),
+        );
+        const canvas = createEditorCanvas({
+          editor,
+          client: () => ({ SetNodePosition: rpc }) as unknown as EditorRpcClient,
+          canEdit: () => true,
+          publishPointer: () => {},
+          selectedGraphId: () => "main",
+          selectedGraph: () => editor.store.project!.graphs.main!,
+          nodes: () => nodes,
+          selectedNodeIds,
+          setSelectedNodeIds,
+          canvasScale: () => 0.5,
+          setCanvasScale: () => {},
+          canvasOrigin: () => ({ x: 123, y: -456 }),
+          setCanvasOrigin: () => {},
+        });
+        return { canvas, editor, rpc, selectedNodeIds };
+      });
+      flush();
+      const pointer = { pointerId: 1, button: 0, clientX: 100, clientY: 100, shiftKey: true };
+      const start = (shiftKey = true) => {
+        canvas.onNodeMouseDown(
+          Object.assign(new Event("pointerdown"), { ...pointer, shiftKey }) as PointerEvent,
+          editor.store.project!.graphs.main!.nodes.second!,
+        );
+        flush();
+      };
+      const dispatch = (type: string, overrides: Partial<typeof pointer> = {}) => {
+        window.dispatchEvent(Object.assign(new Event(type), pointer, overrides));
+        flush();
+      };
+      const positions = () =>
+        ["first", "second"].map((id) => editor.store.project!.graphs.main!.nodes[id]!.position);
+      const original = [
+        { x: 13, y: -27 },
+        { x: 76, y: 18 },
+      ];
+      const selection = group ? ["first", "second"] : ["second"];
+
+      start();
+      dispatch("pointerup");
+      expect(selectedNodeIds()).toEqual(group ? ["first"] : []);
+      expect(positions()).toEqual(original);
+      start();
+      dispatch("pointerup");
+      expect(selectedNodeIds()).toEqual(selection);
+      expect(positions()).toEqual(original);
+      expect(rpc).not.toHaveBeenCalled();
+
+      // Screen-space jitter must not snap even when zoom magnifies its graph-space delta.
+      start(false);
+      dispatch("pointermove", { clientX: 102, clientY: 103, shiftKey: false });
+      expect(positions()).toEqual(original);
+      dispatch("pointerup", { clientX: 102, clientY: 103, shiftKey: false });
+      expect(selectedNodeIds()).toEqual(selection);
+      expect(positions()).toEqual(original);
+      expect(rpc).not.toHaveBeenCalled();
+      start();
+      dispatch("pointermove", { clientX: 102, clientY: 103 });
+      dispatch("pointerup", { clientX: 102, clientY: 103 });
+      expect(selectedNodeIds()).toEqual(group ? ["first"] : []);
+      expect(positions()).toEqual(original);
+      expect(rpc).not.toHaveBeenCalled();
+      start();
+      dispatch("pointerup");
+
+      // Shift is already held on the selected node: dragging must not deselect it.
+      start();
+      const moved = { clientX: 115.5, clientY: 82.5 };
+      const free = [group ? { x: 44, y: -62 } : original[0], { x: 107, y: -17 }];
+      const snapped = [group ? { x: 57, y: -45 } : original[0], { x: 120, y: 0 }];
+      dispatch("pointermove", moved);
+      expect(selectedNodeIds()).toEqual(selection);
+      expect(positions()).toEqual(free);
+      dispatch("pointermove", { ...moved, shiftKey: false });
+      expect(positions()).toEqual(snapped);
+      dispatch("pointermove", moved);
+      expect(positions()).toEqual(free);
+      dispatch("pointerup", { ...moved, shiftKey: false });
+      await vi.waitFor(() =>
+        expect(rpc.mock.calls.filter(([payload]) => !payload.ephemeral)).toHaveLength(
+          group ? 2 : 1,
+        ),
+      );
+      flush();
+      expect(selectedNodeIds()).toEqual(selection);
+      expect(positions()).toEqual(snapped);
+      expect(canvas.isDragging()).toBe(false);
+      expect(rpc).toHaveBeenCalledWith({ graphId: "main", nodeId: "second", x: 120, y: 0 });
+    },
+  );
+
+  it.each([false, true])(
+    "retains placement gesture Shift=%s through the node menu",
+    async (shiftKey) => {
+      const canvas = createRoot((cleanup) => {
+        dispose = cleanup;
+        return createEditorCanvas({
+          editor: createEditorStore(),
+          client: () => null,
+          canEdit: () => true,
+          publishPointer: () => {},
+          selectedGraphId: () => "main",
+          selectedGraph: () => null,
+          nodes: () => [],
+          selectedNodeIds: () => [],
+          setSelectedNodeIds: () => {},
+          canvasScale: () => 2,
+          setCanvasScale: () => {},
+          canvasOrigin: () => ({ x: 20, y: -30 }),
+          setCanvasOrigin: () => {},
+        });
+      });
+      canvas.setGraphCanvas({
+        getBoundingClientRect: () => ({ left: 100, top: 80 }),
+      } as HTMLDivElement);
+      flush();
+      const pointer = { pointerId: 1, pointerType: "mouse", button: 2, clientX: 170, clientY: 130 };
+      canvas.onCanvasPointerDown(
+        Object.assign(new Event("pointerdown"), {
+          ...pointer,
+          shiftKey: !shiftKey,
+        }) as PointerEvent,
+      );
+      window.dispatchEvent(Object.assign(new Event("pointerup"), { ...pointer, shiftKey }));
+      flush();
+      await canvas.createNodeFromMenu((menu) => {
+        expect(menu.graph).toEqual({ x: 55, y: -5 });
+        expect(menu.shiftKey).toBe(shiftKey);
+        return Promise.resolve();
+      });
+    },
+  );
+
   it.each(["input", "output"] as const)(
     "retains a draft from an %s pin through the menu and async node creation",
     async (direction) => {
@@ -474,13 +759,19 @@ describe("editor concern hooks", () => {
         flush();
         expect(canvas.connectionPreview()?.source.position).toEqual({ x: 50, y: 50 });
       };
-      const release = () => {
+      const release = (shiftKey = false) => {
         window.dispatchEvent(
-          Object.assign(new Event("pointerup"), { ...pointer, clientX: 500, clientY: 400 }),
+          Object.assign(new Event("pointerup"), {
+            ...pointer,
+            clientX: 500,
+            clientY: 400,
+            shiftKey,
+          }),
         );
         flush();
         expect(canvas.connectionDrag()).toBeUndefined();
         expect(canvas.nodeMenu()?.source?.direction).toBe(direction);
+        expect(canvas.nodeMenu()?.shiftKey).toBe(shiftKey);
         expect(canvas.connectionPreview()?.pointer).toEqual({ x: 220, y: 190 });
       };
 
@@ -500,12 +791,15 @@ describe("editor concern hooks", () => {
       expect(canvas.connectionPreview()).toBeUndefined();
 
       start();
-      release();
+      release(true);
       let complete = () => {};
       const pending = new Promise<void>((resolve) => {
         complete = resolve;
       });
-      const creation = canvas.createNodeFromMenu(() => pending);
+      const creation = canvas.createNodeFromMenu((menu) => {
+        expect(menu.shiftKey).toBe(true);
+        return pending;
+      });
       canvas.setNodeMenu(undefined);
       flush();
       expect(canvas.nodeMenu()).toBeUndefined();
