@@ -7,6 +7,21 @@ if (!model) throw new Error("Set the OPENCODE_MODEL Actions secret to a Console 
 const lifetime = Number(process.env.OPENCODE_TOKEN_EXPIRES) - Date.now() - 60_000;
 if (!Number.isFinite(lifetime) || lifetime <= 0) throw new Error("Console access token expired");
 
+// Fetch the account catalog explicitly; environment keys lack OAuth connection metadata.
+const response = await fetch("https://opencode.ai/console/api/config", {
+  headers: { Authorization: `Bearer ${process.env.OPENCODE_API_KEY}` },
+  signal: AbortSignal.timeout(15_000),
+});
+if (!response.ok) throw new Error(`Console catalog request failed (HTTP ${response.status})`);
+const remote = await response.json();
+const separator = model.indexOf("/");
+const providerId = model.slice(0, separator);
+const modelId = model.slice(separator + 1).split("#")[0];
+const provider = remote.config?.provider?.[providerId];
+if (!provider || !modelId || !provider.models?.[modelId]) {
+  throw new Error("Selected model is unavailable in the Console account catalog");
+}
+
 const prompt = `You are responding to a maintainer's request in ${process.env.GITHUB_REPOSITORY}.
 Issue or PR: ${event.issue.html_url}
 Request comment: ${event.comment.html_url}
@@ -40,6 +55,13 @@ const result = spawnSync("opencode2", ["run", "--standalone", "--auto", "--model
       model,
       share: "disabled",
       mcp: { servers: { executor: { enabled: false } } },
+      // Console publishes legacy provider config, which OpenCode normalizes.
+      provider: {
+        [providerId]: {
+          ...provider,
+          options: { ...provider.options, apiKey: process.env.OPENCODE_API_KEY },
+        },
+      },
     }),
   },
 });

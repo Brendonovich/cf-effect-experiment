@@ -15,6 +15,7 @@ vi.mock("node:fs", () => ({
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -22,6 +23,9 @@ it("selects the confidential model explicitly without logging its identity", asy
   const model = "private-provider/private-model";
   vi.stubEnv("OPENCODE_MODEL", model);
   vi.stubEnv("OPENCODE_TOKEN_EXPIRES", String(Date.now() + 600_000));
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+    config: { provider: { "private-provider": { models: { "private-model": {} } } } },
+  })));
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   await import("../src/run.ts");
   expect(spawnSync).toHaveBeenCalledWith(
