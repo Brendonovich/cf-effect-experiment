@@ -5,8 +5,8 @@ import { Effect, type Schema } from "effect";
 import { createSignal } from "solid-js";
 
 import type { createEditorConnection } from "./session/createEditorConnection";
-import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 import type { createEditorStore } from "./store";
+import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 import { runFork, runPromise } from "../observability/browserTracing";
 import { portsCompatible, type PortEndpoint } from "./graph/connectionAuthoring";
@@ -15,6 +15,7 @@ import {
   graphNodeOutputs,
   graphNodeWidth,
   graphPortOffset,
+  snapGraphPosition,
 } from "./graph/graphPresentation";
 
 export function createEditorCommands(
@@ -109,12 +110,22 @@ export function createEditorCommands(
     name: string,
     position: { x: number; y: number },
     source?: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
+    shiftKey = false,
   ) => {
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
     return runPromise(
-      applyMutation(c.CreateNode({ graphId, node: { name, schema, position } })).pipe(
+      applyMutation(
+        c.CreateNode({
+          graphId,
+          node: {
+            name,
+            schema,
+            position: snapGraphPosition(position, shiftKey),
+          },
+        }),
+      ).pipe(
         Effect.flatMap((event) => {
           if (source === undefined) return Effect.void;
           const targetPorts =
@@ -137,7 +148,10 @@ export function createEditorCommands(
             source.direction === "output" ? "input" : "output",
             targetPorts.indexOf(targetPort),
           );
-          const alignedPosition = { x: position.x - offset.x, y: position.y - offset.y };
+          const alignedPosition = snapGraphPosition(
+            { x: position.x - offset.x, y: position.y - offset.y },
+            shiftKey,
+          );
           const positioning = { graphId, nodeId: event.node.id };
           setPositioningNodes((nodes) => [...nodes, positioning]);
           editor.updateNodePosition(graphId, event.node.id, alignedPosition.x, alignedPosition.y);
@@ -309,7 +323,9 @@ export function createEditorCommands(
 
   return {
     isNodePositioning: (nodeId: string) =>
-      positioningNodes().some((node) => node.graphId === selectedGraphId() && node.nodeId === nodeId),
+      positioningNodes().some(
+        (node) => node.graphId === selectedGraphId() && node.nodeId === nodeId,
+      ),
     setEditingName,
     editingGraphNameId,
     editingNodeNameId,

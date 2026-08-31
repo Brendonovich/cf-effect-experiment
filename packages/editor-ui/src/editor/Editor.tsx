@@ -852,6 +852,7 @@ function EditorContent(
                                     name,
                                     menu.graph,
                                     menu.source,
+                                    menu.shiftKey,
                                   ),
                                 )
                               }

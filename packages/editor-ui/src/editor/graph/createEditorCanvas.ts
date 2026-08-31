@@ -10,9 +10,12 @@ import type { createEditorStore } from "../store";
 import { runFork } from "../../observability/browserTracing";
 import { createPresence } from "../../ui/createPresence";
 import { createStateMachine } from "../../ui/createStateMachine";
+import { zoomOriginAt } from "../workspace/workspace";
 import { findSnapTarget, type PortDirection, type PortEndpoint } from "./connectionAuthoring";
 import {
   GRAPH_NODE_IO_SPACING,
+  GRAPH_GRID_SPACING,
+  snapGraphPosition,
   type GraphPort,
   connectedPortIds as graphConnectedPortIds,
   graphConnections as presentGraphConnections,
@@ -22,7 +25,6 @@ import {
   handlePosition as graphHandlePosition,
   visibleNodePorts as graphVisibleNodePorts,
 } from "./graphPresentation";
-import { zoomOriginAt } from "../workspace/workspace";
 
 export interface EditorCanvasOptions {
   readonly editor: ReturnType<typeof createEditorStore>;
@@ -70,7 +72,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     const level = -Math.log2(scale);
     const fineLevel = Math.floor(level);
     const levelProgress = level - fineLevel;
-    const fineSpacing = 40 * 2 ** fineLevel * scale;
+    const fineSpacing = GRAPH_GRID_SPACING * 2 ** fineLevel * scale;
     return {
       fineLevel,
       fineSpacing,
@@ -83,6 +85,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     screen: { x: number; y: number };
     graph: { x: number; y: number };
     source?: PortEndpoint;
+    shiftKey?: boolean;
   };
   type NodeContextMenu = {
     nodeId: string;
@@ -321,6 +324,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
         screen: { x: event.clientX, y: event.clientY },
         graph: pointer,
         source: drag.source,
+        shiftKey: event.shiftKey,
       });
       return;
     }
@@ -387,12 +391,13 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     graphId: string;
     startClientX: number;
     startClientY: number;
-    moved: boolean;
     deselectOnClick: string | undefined;
+    anchor: { x: number; y: number };
     items: Array<{ nodeId: string; origX: number; origY: number }>;
     lastSend: number;
     pending: Array<{ nodeId: string; x: number; y: number }> | null;
     current: Array<{ nodeId: string; x: number; y: number }>;
+    moved: boolean;
   };
   const [getDragState, setDragState] = createSignal<NodeDragState | null>(null);
 
@@ -432,20 +437,41 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     );
   };
 
-  const onDragMove = (e: PointerEvent) => {
-    const currentDrag = getDragState();
-    if (!currentDrag || currentDrag.pointerId !== e.pointerId) return;
-    publishDragPointer(e);
-    const dx = (e.clientX - currentDrag.startClientX) / canvasScale();
-    const dy = (e.clientY - currentDrag.startClientY) / canvasScale();
-    currentDrag.moved ||=
-      Math.hypot(e.clientX - currentDrag.startClientX, e.clientY - currentDrag.startClientY) > 5;
-    if (!currentDrag.moved) return;
-    const positions = currentDrag.items.map((item) => ({
+  const dragPositions = (drag: NodeDragState, event: PointerEvent) => {
+    let dx = (event.clientX - drag.startClientX) / canvasScale();
+    let dy = (event.clientY - drag.startClientY) / canvasScale();
+    // Snap the grabbed node, not each selected node, to preserve the group's layout.
+    if (dx !== 0 || dy !== 0) {
+      const anchor = snapGraphPosition(
+        { x: drag.anchor.x + dx, y: drag.anchor.y + dy },
+        event.shiftKey,
+      );
+      dx = anchor.x - drag.anchor.x;
+      dy = anchor.y - drag.anchor.y;
+    }
+    return drag.items.map((item) => ({
       nodeId: item.nodeId,
       x: item.origX + dx,
       y: item.origY + dy,
     }));
+  };
+
+  const onDragMove = (e: PointerEvent) => {
+    const currentDrag = getDragState();
+    if (!currentDrag || currentDrag.pointerId !== e.pointerId) return;
+    publishDragPointer(e);
+    currentDrag.moved ||=
+      Math.hypot(e.clientX - currentDrag.startClientX, e.clientY - currentDrag.startClientY) > 5;
+    if (!currentDrag.moved) return;
+    const positions = dragPositions(currentDrag, e);
+    if (
+      positions.every(
+        (position, index) =>
+          position.x === currentDrag.current[index]?.x &&
+          position.y === currentDrag.current[index]?.y,
+      )
+    )
+      return;
     positions.forEach((position) => {
       updateNodePosition(currentDrag.graphId, position.nodeId, position.x, position.y);
     });
@@ -478,14 +504,10 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
         selectNode(ds.deselectOnClick, true);
       return;
     }
-    const positions =
-      e.type === "pointercancel"
-        ? ds.current
-        : ds.items.map((item) => ({
-            nodeId: item.nodeId,
-            x: item.origX + (e.clientX - ds.startClientX) / canvasScale(),
-            y: item.origY + (e.clientY - ds.startClientY) / canvasScale(),
-          }));
+    const positions = e.type === "pointercancel" ? ds.current : dragPositions(ds, e);
+    positions.forEach((position) => {
+      updateNodePosition(ds.graphId, position.nodeId, position.x, position.y);
+    });
     const c = client();
     if (c) {
       positions.forEach((position) => {
@@ -540,15 +562,16 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
       graphId,
       startClientX: e.clientX,
       startClientY: e.clientY,
-      moved: false,
       // Shift-click toggles on release so holding Shift can still drag the selection.
       deselectOnClick: e.shiftKey && alreadySelected ? node.id : undefined,
+      anchor: { x: node.position.x, y: node.position.y },
       items: ids.flatMap((id) => {
         const item = graph?.nodes[id];
         return item ? [{ nodeId: id, origX: item.position.x, origY: item.position.y }] : [];
       }),
       lastSend: performance.now(),
       pending: null,
+      moved: false,
       current: ids.flatMap((id) => {
         const item = graph?.nodes[id];
         return item ? [{ nodeId: id, x: item.position.x, y: item.position.y }] : [];
@@ -718,7 +741,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
       timer: setTimeout(() => {
         if (!touchStart || touchStart.moved || touchPointers.size !== 1) return;
         touchStart.longPressed = true;
-        setNodeMenu({ screen: pointer, graph: touchStart.graph });
+        setNodeMenu({ screen: pointer, graph: touchStart.graph, shiftKey: event.shiftKey });
       }, 300),
     };
     window.addEventListener("pointermove", onTouchMove);
@@ -786,6 +809,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
         setNodeMenu({
           screen: { x: upEvent.clientX, y: upEvent.clientY },
           graph: canvasPosition(upEvent.clientX, upEvent.clientY),
+          shiftKey: upEvent.shiftKey,
         });
       }
     };
