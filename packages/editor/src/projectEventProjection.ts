@@ -14,6 +14,12 @@ export const apply = (
     case "GraphCreated":
       return persistence.saveGraph(event.graph);
 
+    case "FunctionSignatureChanged":
+      return Effect.gen(function* () {
+        const graph = yield* persistence.loadGraph(event.graphId);
+        yield* persistence.saveGraph({ ...graph, signature: event.signature });
+      }).pipe(PersistenceError.refail);
+
     case "GraphDeleted":
       return persistence.deleteGraph(event.graphId);
 

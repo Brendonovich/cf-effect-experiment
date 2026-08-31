@@ -3,6 +3,7 @@ import type * as Plugin from "@macrograph/plugin/Plugin";
 
 import {
   Connection,
+  FunctionGraph,
   Graph,
   GraphId,
   IoId,
@@ -82,6 +83,7 @@ export const ProjectSnapshot = Schema.Struct({
 export type ProjectSnapshot = typeof ProjectSnapshot.Type;
 
 type NodeMutationError =
+  | Graph.FunctionError
   | PersistenceError
   | Project.NotFoundError
   | Graph.NotFoundError
@@ -156,13 +158,29 @@ export interface Interface {
   readonly graph: {
     readonly create: (
       graph: Graph.CreateInput,
-    ) => Effect.Effect<EditorEvent.GraphCreated, PersistenceError>;
+    ) => Effect.Effect<EditorEvent.GraphCreated, PersistenceError | Graph.FunctionError>;
+    readonly setSignature: (
+      graphId: string,
+      signature: Graph.FunctionSignature,
+      force?: boolean,
+    ) => Effect.Effect<
+      EditorEvent.FunctionSignatureChanged,
+      | PersistenceError
+      | Project.NotFoundError
+      | Graph.NotFoundError
+      | Graph.FunctionError
+      | Graph.FunctionImpact
+    >;
     readonly update: (
       options: GraphUpdateOptions,
     ) => Effect.Effect<EditorEvent.GraphNameChanged, PersistenceError | Graph.NotFoundError>;
     readonly delete: (options: {
       readonly graphID: string;
-    }) => Effect.Effect<EditorEvent.GraphDeleted, PersistenceError>;
+      readonly force?: boolean;
+    }) => Effect.Effect<
+      EditorEvent.GraphDeleted,
+      PersistenceError | Project.NotFoundError | Graph.FunctionError | Graph.FunctionImpact
+    >;
   };
   readonly node: {
     readonly create: (
@@ -175,6 +193,7 @@ export interface Interface {
       | Package.SchemaNotFoundError
       | Package.InvalidPropertyError
       | Package.InvalidInputDefaultError
+      | Graph.FunctionError
     >;
     readonly update: (options: NodeUpdateOptions) => Effect.Effect<void, NodeMutationError>;
     readonly setFoldPins: (
@@ -282,6 +301,7 @@ export const layer = Layer.effect(Service)(
     const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
+    yield* packages.loadPackage(FunctionGraph.pkg);
     const lock = yield* Semaphore.make(1);
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -319,10 +339,48 @@ export const layer = Layer.effect(Service)(
       }
       return properties;
     });
-    const getNodeIO = (node: Node.Model) =>
-      resolveIOProperties(node.schema, node.properties).pipe(
+    const getNodeIO = Effect.fnUntraced(function* (node: Node.Model) {
+      if (FunctionGraph.isFunctionNode(node)) {
+        const project = yield* persistence.loadProject();
+        const target = node.properties.function;
+        const graph = FunctionGraph.isBoundary(node)
+          ? Object.values(project.graphs).find((graph) => graph.nodes[node.id] !== undefined)
+          : typeof target === "string"
+            ? project.graphs[target]
+            : undefined;
+        return FunctionGraph.io(node.schema.schema, graph?.signature);
+      }
+      return yield* resolveIOProperties(node.schema, node.properties).pipe(
         Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties)),
       );
+    });
+    const validateFunctionTarget = Effect.fnUntraced(function* (
+      node: Pick<Node.Model, "schema" | "properties">,
+    ) {
+      if (!FunctionGraph.isCall(node) || node.properties.function === undefined) return;
+      const target = node.properties.function;
+      const project = yield* persistence.loadProject();
+      if (typeof target !== "string" || project.graphs[target]?.kind !== "function")
+        return yield* new Package.InvalidPropertyError({
+          property: "function",
+          reason: "Selected function does not exist",
+        });
+    });
+    const validateSignature = (graphId: string, signature: Graph.FunctionSignature) => {
+      for (const fields of [signature.inputs, signature.outputs]) {
+        if (
+          fields.some((field) => field.id.length === 0 || field.name.trim().length === 0) ||
+          new Set(fields.map((field) => field.id)).size !== fields.length
+        )
+          return Effect.fail(
+            new Graph.FunctionError({
+              graphId,
+              reason: "Function fields require unique stable IDs and non-empty names",
+            }),
+          );
+      }
+      return Effect.void;
+    };
     const retainValidInputDefaults = Effect.fnUntraced(function* (
       io: NodeIO,
       defaults: Readonly<Record<string, Schema.Json>>,
@@ -392,13 +450,102 @@ export const layer = Layer.effect(Service)(
 
     const graphCreate = Effect.fn("Editor.graph.create")(function* (input: Graph.CreateInput) {
       const graphId = GraphId.make(Math.random().toString(36).slice(2));
-      const graph: Graph.Model = {
+      for (const node of Object.values(input.nodes ?? {})) {
+        const schema = yield* packages
+          .getSchema(node.schema)
+          .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
+        if (FunctionGraph.isBoundary(node) || schema?.internal)
+          return yield* new Graph.FunctionError({
+            graphId,
+            reason: "System-owned nodes cannot be imported or copied",
+          });
+        yield* validateFunctionTarget(node).pipe(
+          Effect.mapError((error) => new Graph.FunctionError({ graphId, reason: String(error) })),
+        );
+      }
+      if (
+        input.kind === "function" &&
+        (Object.keys(input.nodes ?? {}).length > 0 || (input.connections?.length ?? 0) > 0)
+      )
+        return yield* new Graph.FunctionError({
+          graphId,
+          reason: "Function boundaries are generated by the editor",
+        });
+      if (input.signature !== undefined) yield* validateSignature(graphId, input.signature);
+      const base: Graph.Model = {
         id: graphId,
         name: input.name ?? "New Graph",
+        kind: input.kind ?? "ordinary",
+        ...(input.kind === "function"
+          ? { signature: input.signature ?? { inputs: [], outputs: [] } }
+          : {}),
         nodes: input.nodes ?? {},
         connections: input.connections ?? [],
       };
-      return yield* events.publish({ _tag: "GraphCreated", graph });
+      const graph =
+        input.kind === "function" ? FunctionGraph.generate(base, () => crypto.randomUUID()) : base;
+      const nodeIO: Record<string, NodeIO> = {};
+      for (const node of Object.values(graph.nodes)) {
+        const io = FunctionGraph.isBoundary(node)
+          ? FunctionGraph.io(node.schema.schema, graph.signature)
+          : yield* getNodeIO(node).pipe(
+              Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
+              Effect.mapError(
+                (error) => new Graph.FunctionError({ graphId, reason: String(error) }),
+              ),
+            );
+        if (io !== undefined) nodeIO[node.id] = io;
+      }
+      return yield* events.publish({ _tag: "GraphCreated", graph, nodeIO });
+    }, lock.withPermit);
+
+    const setSignature = Effect.fn("Editor.graph.setSignature")(function* (
+      graphId: string,
+      signature: Graph.FunctionSignature,
+      force = false,
+    ) {
+      const graph = yield* persistence.loadGraph(graphId);
+      if (graph.kind !== "function")
+        return yield* new Graph.FunctionError({ graphId, reason: "Graph is not a function" });
+      yield* validateSignature(graphId, signature);
+      const previous = graph.signature ?? { inputs: [], outputs: [] };
+      const destructive = (["inputs", "outputs"] as const).some((side) =>
+        previous[side].some(
+          (field) =>
+            !signature[side].some(
+              (next) => next.id === field.id && DataType.equals(next.type, field.type),
+            ),
+        ),
+      );
+      const project = yield* persistence.loadProject();
+      const callers = Object.values(project.graphs)
+        .flatMap((graph) => Object.values(graph.nodes))
+        .filter((node) => FunctionGraph.isCall(node) && node.properties.function === graphId);
+      if (destructive && !force)
+        return yield* new Graph.FunctionImpact({
+          graphId,
+          callerNodeIds: callers.map((node) => node.id),
+          reason: `Removing or retyping fields affects ${callers.length} caller(s). Callers, connections, and defaults will be preserved and may become invalid. Force this change?`,
+        });
+      const nodeIO: Record<string, Record<string, NodeIO>> = {};
+      for (const candidate of Object.values(project.graphs)) {
+        for (const node of Object.values(candidate.nodes)) {
+          if (
+            (candidate.id === graphId && FunctionGraph.isBoundary(node)) ||
+            (FunctionGraph.isCall(node) && node.properties.function === graphId)
+          )
+            (nodeIO[candidate.id] ??= {})[node.id] = FunctionGraph.io(
+              node.schema.schema,
+              signature,
+            );
+        }
+      }
+      return yield* events.publish({
+        _tag: "FunctionSignatureChanged",
+        graphId,
+        signature,
+        nodeIO,
+      });
     }, lock.withPermit);
 
     const graphUpdate = Effect.fn("Editor.graph.update")(function* (options: GraphUpdateOptions) {
@@ -412,27 +559,74 @@ export const layer = Layer.effect(Service)(
 
     const graphDelete = Effect.fn("Editor.graph.delete")(function* (options: {
       readonly graphID: string;
+      readonly force?: boolean;
     }) {
+      const project = yield* persistence.loadProject();
+      const callers = Object.values(project.graphs)
+        .flatMap((graph) => Object.values(graph.nodes))
+        .filter(
+          (node) => FunctionGraph.isCall(node) && node.properties.function === options.graphID,
+        );
+      if (project.graphs[options.graphID]?.kind === "function" && !options.force)
+        return yield* new Graph.FunctionImpact({
+          graphId: options.graphID,
+          callerNodeIds: callers.map((node) => node.id),
+          reason: `Delete this function? ${callers.length} caller(s) will be preserved with a missing target. Force deletion?`,
+        });
       return yield* events.publish({ _tag: "GraphDeleted", graphId: options.graphID });
     }, lock.withPermit);
 
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
       yield* persistence.loadGraph(options.graphID);
       const schema = yield* packages.getSchema(options.node.schema);
+      if (schema.internal || FunctionGraph.isBoundary(options.node))
+        return yield* new Graph.FunctionError({
+          graphId: options.graphID,
+          reason: "System-owned nodes cannot be created or pasted",
+        });
       const properties = yield* packages.normalizeProperties(
         options.node.schema,
         options.node.properties ?? {},
       );
       yield* validateResourceBindings(options.node.schema, properties);
+      yield* validateFunctionTarget({ schema: options.node.schema, properties });
       const inputDefaults: Record<string, Schema.Json> = {};
       const ioProperties = yield* resolveIOProperties(options.node.schema, properties);
+      const functionIO = FunctionGraph.isFunctionNode(options.node)
+        ? FunctionGraph.io(
+            options.node.schema.schema,
+            typeof properties.function === "string"
+              ? (yield* persistence.loadProject()).graphs[properties.function]?.signature
+              : undefined,
+          )
+        : undefined;
       for (const [input, value] of Object.entries(options.node.inputDefaults ?? {})) {
-        inputDefaults[input] = yield* packages.validateInputDefault(
-          options.node.schema,
-          ioProperties,
-          input,
-          value,
-        );
+        if (functionIO !== undefined) {
+          const port = functionIO.dataInputs.find((port) => port.id === input);
+          if (port === undefined)
+            return yield* new Package.InvalidInputDefaultError({
+              input,
+              reason: "Input is not declared",
+            });
+          inputDefaults[input] = yield* Schema.decodeUnknownEffect(
+            DataType.JsonValueSchema(port.type),
+          )(value).pipe(
+            Effect.as(value),
+            Effect.mapError(
+              () =>
+                new Package.InvalidInputDefaultError({
+                  input,
+                  reason: "Invalid function argument default",
+                }),
+            ),
+          );
+        } else
+          inputDefaults[input] = yield* packages.validateInputDefault(
+            options.node.schema,
+            ioProperties,
+            input,
+            value,
+          );
       }
       const nodeId = NodeId.make(Math.random().toString(36).slice(2));
       const node: Node.Model = {
@@ -475,7 +669,15 @@ export const layer = Layer.effect(Service)(
 
     const nodeDelete = Effect.fn("Editor.node.delete")(function* (options: NodeDeleteOptions) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      yield* Graph.getNode(graph, options.nodeID);
+      const node = yield* Graph.getNode(graph, options.nodeID);
+      const schema = yield* packages
+        .getSchema(node.schema)
+        .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
+      if (FunctionGraph.isBoundary(node) || schema?.internal)
+        return yield* new Graph.FunctionError({
+          graphId: graph.id,
+          reason: "System-owned nodes cannot be deleted or cut",
+        });
       const connections = graph.connections
         .filter(
           (connection) =>
@@ -524,6 +726,12 @@ export const layer = Layer.effect(Service)(
       if (options.clear) delete candidate[options.property];
       else candidate[options.property] = options.value;
       const properties = yield* packages.normalizeProperties(node.schema, candidate);
+      if (FunctionGraph.isBoundary(node))
+        return yield* new Graph.FunctionError({
+          graphId: graph.id,
+          reason: "Boundary properties are system-owned",
+        });
+      yield* validateFunctionTarget({ ...node, properties });
       yield* validateResourceBindings(node.schema, properties);
       const updated: Node.Model = {
         ...node,
@@ -545,6 +753,16 @@ export const layer = Layer.effect(Service)(
         const inputIO = inputNode.id === node.id ? io : yield* getNodeIO(inputNode);
         if (!isConnectionValid(connection, outputIO, inputIO)) stale.push(connection);
       }
+      if (
+        FunctionGraph.isCall(node) &&
+        (stale.length > 0 ||
+          Object.keys(inputDefaults).length !== Object.keys(node.inputDefaults).length)
+      )
+        return yield* new Graph.FunctionError({
+          graphId: graph.id,
+          reason:
+            "Changing this function would remove connections or defaults; disconnect or clear them explicitly first",
+        });
       return yield* events.publish({
         _tag: "NodePropertyUpdated",
         graphId: options.graphID,
@@ -571,12 +789,33 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       const node = yield* Graph.getNode(graph, options.nodeID);
       const ioProperties = yield* resolveIOProperties(node.schema, node.properties);
-      const value = yield* packages.validateInputDefault(
-        node.schema,
-        ioProperties,
-        options.input,
-        options.value,
-      );
+      const functionIO = FunctionGraph.isFunctionNode(node) ? yield* getNodeIO(node) : undefined;
+      const port = functionIO?.dataInputs.find((port) => port.id === options.input);
+      if (functionIO !== undefined && port === undefined)
+        return yield* new Package.InvalidInputDefaultError({
+          input: options.input,
+          reason: "Input is not declared",
+        });
+      const value =
+        port !== undefined
+          ? yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(port.type))(
+              options.value,
+            ).pipe(
+              Effect.flatMap(() => Schema.decodeUnknownEffect(Schema.Json)(options.value)),
+              Effect.mapError(
+                () =>
+                  new Package.InvalidInputDefaultError({
+                    input: options.input,
+                    reason: "Invalid function input default",
+                  }),
+              ),
+            )
+          : yield* packages.validateInputDefault(
+              node.schema,
+              ioProperties,
+              options.input,
+              options.value,
+            );
       return yield* events.publish({
         _tag: "InputDefaultUpdated",
         graphId: options.graphID,
@@ -593,7 +832,10 @@ export const layer = Layer.effect(Service)(
       const node = yield* Graph.getNode(graph, options.nodeID);
       const io = yield* getNodeIO(node);
       if (
-        io.dataInputs.filter((port) => port.id === options.input).length !== 1 ||
+        (io.dataInputs.filter((port) => port.id === options.input).length !== 1 &&
+          !(
+            FunctionGraph.isFunctionNode(node) && Object.hasOwn(node.inputDefaults, options.input)
+          )) ||
         io.executionInputs.some((port) => port.id === options.input)
       ) {
         return yield* new Package.InvalidInputDefaultError({
@@ -1065,7 +1307,7 @@ export const layer = Layer.effect(Service)(
         select: constantSelect,
         delete: constantDelete,
       },
-      graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
+      graph: { create: graphCreate, update: graphUpdate, delete: graphDelete, setSignature },
       node: {
         create: nodeCreate,
         update: nodeUpdate,

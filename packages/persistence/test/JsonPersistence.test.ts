@@ -1,6 +1,15 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, describe, expect, it } from "@effect/vitest";
-import { GraphId, Node, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
+import {
+  FunctionGraph,
+  Graph,
+  GraphId,
+  Node,
+  NodeId,
+  PackageId,
+  Project,
+  SchemaId,
+} from "@macrograph/core";
 import { Effect, Layer, Schema } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
@@ -17,6 +26,33 @@ const TestLayer = Layer.provideMerge(
 );
 
 describe("JsonPersistence", () => {
+  it.effect("round-trips function kind, ordered signature, and stable boundary IDs", () =>
+    Effect.gen(function* () {
+      const persistence = yield* Persistence.Service;
+      const graph = FunctionGraph.generate(
+        {
+          ...Graph.empty("function"),
+          kind: "function",
+          signature: {
+            inputs: [{ id: "stable", name: "Value", type: { _tag: "String" } }],
+            outputs: [],
+          },
+        },
+        () => crypto.randomUUID(),
+      );
+      yield* persistence.saveProject({ ...Project.empty(), graphs: { function: graph } });
+      expect((yield* persistence.loadProject()).graphs.function).toEqual(graph);
+      yield* persistence.saveGraph({ ...graph, name: "Renamed" });
+      expect((yield* persistence.loadGraph(graph.id)).signature).toEqual(graph.signature);
+      const legacy = Schema.decodeUnknownSync(Graph.Model)({
+        id: "legacy",
+        name: "Legacy",
+        nodes: {},
+        connections: [],
+      });
+      expect(legacy.kind ?? "ordinary").toBe("ordinary");
+    }).pipe(Effect.provide(TestLayer)),
+  );
   it.effect("decodes projects written before resource constants were introduced", () =>
     Effect.gen(function* () {
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({

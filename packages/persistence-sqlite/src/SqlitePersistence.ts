@@ -38,7 +38,14 @@ export const layer = Layer.effect(
           tx.delete(schema.graphs).run();
 
           for (const [graphId, graph] of Object.entries(project.graphs)) {
-            tx.insert(schema.graphs).values({ id: graphId, name: graph.name }).run();
+            tx.insert(schema.graphs)
+              .values({
+                id: graphId,
+                name: graph.name,
+                kind: graph.kind ?? "ordinary",
+                signature: graph.signature ?? null,
+              })
+              .run();
 
             for (const [nodeId, node] of Object.entries(graph.nodes)) {
               tx.insert(schema.nodes)
@@ -112,6 +119,8 @@ export const layer = Layer.effect(
       return {
         id: GraphId.make(graphRow.id),
         name: graphRow.name,
+        kind: graphRow.kind,
+        ...(graphRow.signature === null ? {} : { signature: graphRow.signature }),
         nodes,
         connections,
       };
@@ -219,7 +228,14 @@ export const layer = Layer.effect(
           tx.delete(schema.connections).where(eq(schema.connections.graphId, graph.id)).run();
           tx.delete(schema.nodes).where(eq(schema.nodes.graphId, graph.id)).run();
           tx.delete(schema.graphs).where(eq(schema.graphs.id, graph.id)).run();
-          tx.insert(schema.graphs).values({ id: graph.id, name: graph.name }).run();
+          tx.insert(schema.graphs)
+            .values({
+              id: graph.id,
+              name: graph.name,
+              kind: graph.kind ?? "ordinary",
+              signature: graph.signature ?? null,
+            })
+            .run();
 
           for (const [nodeId, node] of Object.entries(graph.nodes)) {
             tx.insert(schema.nodes)
