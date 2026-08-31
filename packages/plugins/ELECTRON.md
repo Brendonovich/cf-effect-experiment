@@ -68,7 +68,7 @@ streaming semantics. See each plugin README for exact current schemas and limits
 | Electron Package        | Source Nodes | Current Coverage                                                                                                                                                                |
 | ----------------------- | -----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Audio                   |            5 | Deferred: playback, device selection, file references, and stopped events need an audio capability bridge.                                                                      |
-| Custom Events           |            2 | Deferred: project-defined event registry and dynamic typed fields.                                                                                                              |
+| Custom Events           |            2 | Implemented in browser/standalone: persisted project registry, dynamic typed Emit/On nodes, independent handlers. Cloudflare excluded.                                          |
 | Discord                 |            6 | Existing event, messaging, lookup, and webhook nodes; file attachments and upload progress remain absent.                                                                       |
 | ElevenLabs              |            1 | Existing TTS; audio is returned encoded, not written to an Electron-selected file.                                                                                              |
 | Filesystem              |            4 | Listing plus added UTF-8 read/write nodes. Writes require host opt-in.                                                                                                          |
@@ -98,7 +98,7 @@ streaming semantics. See each plugin README for exact current schemas and limits
 | WebSocket Server        |            4 | Existing connect/disconnect/receive/send/broadcast; selected server resources replace dynamic port routing.                                                                     |
 | Queue                   |            8 | Deferred: dedicated queue graphs, typed entries, pause/advance/iteration, and two internal execution schemas.                                                                   |
 | Function Queue          |            6 | Deferred: selected functions and typed return values require function execution/domain models.                                                                                  |
-| TikTok (Euler Stream)    |            6 | Added 19 event nodes including the source's six categories; provider transport differences are explicit in its README.                                                          |
+| TikTok (Euler Stream)   |            6 | Added 19 event nodes including the source's six categories; provider transport differences are explicit in its README.                                                          |
 | Variables               |            6 | Deferred: typed persisted graph/project definitions, changed events, and function-local scopes.                                                                                 |
 | Voicemod                |            3 | Existing voice/changer/hear-self controls; configured registration key replaces embedded legacy credentials.                                                                    |
 | Functions               |            3 | Deferred: reusable typed function graphs and nested execution, including two internal schemas.                                                                                  |
@@ -121,7 +121,7 @@ capabilities, not additional plugin menus.
 - Device/browser capabilities: Audio, Keyboard, global input, MIDI, Speech to Text,
   and browser-origin Localstorage. Do not silently substitute the server's devices
   or project database for the editor user's devices/storage.
-- Project domains: typed custom events, variables, functions, queues, function
+- Project domains: variables, functions, queues, function
   queues, startup events, and named return-event execution.
 - Type/execution extensions: native Map/Struct/Enum/wildcards, composite builders,
   Match/Break Scope, and scope-based loops. JSON substitutes do not implement these.

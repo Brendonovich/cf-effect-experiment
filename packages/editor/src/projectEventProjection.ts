@@ -11,6 +11,15 @@ export const apply = (
   event: EditorEvent.EditorEvent,
 ): Effect.Effect<void, ApplyError> => {
   switch (event._tag) {
+    case "CustomEventsChanged":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        yield* persistence.saveProject({
+          ...project,
+          customEvents: event.customEvents,
+          graphs: { ...project.graphs, ...event.graphs },
+        });
+      }).pipe(PersistenceError.refail);
     case "GraphCreated":
       return persistence.saveGraph(event.graph);
 

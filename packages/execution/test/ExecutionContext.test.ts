@@ -106,6 +106,7 @@ describe("schema execution context", () => {
       const project: Project.Model = {
         name: "Context",
         engines: {},
+        customEvents: {},
         constants: {},
         graphs: {
           [graphId]: {

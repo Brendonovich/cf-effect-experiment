@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
-import { PackageId, Project, SchemaId } from "@macrograph/core";
+import { CustomEvent, IoId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
-import { Engine, Plugin } from "@macrograph/plugin";
+import { DataType, Engine, Plugin } from "@macrograph/plugin";
 import OBSPlugin from "@macrograph/plugin-obs";
 import { OBSEngine } from "@macrograph/plugin-obs/Definition";
 import OBSDeployment from "@macrograph/plugin-obs/Deployment/WebSocket";
@@ -30,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import { ProjectExecution } from "../src/ProjectExecution.ts";
 
 const EditorLayer = Editor.layer.pipe(
+  Layer.provide(Layer.succeed(Editor.CustomEventsEnabled, true)),
   Layer.provideMerge(EditorEvents.layer),
   Layer.provideMerge(Packages.defaultLayer),
 );
@@ -41,6 +42,77 @@ const TestLayer = ProjectExecution.layer.pipe(
 );
 
 describe("ProjectExecution", () => {
+  it.effect("runs authored project events independently on the standalone host", () =>
+    Effect.gen(function* () {
+      class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", {}) {}
+      class TestEngine extends Engine.make({ events: [new Trigger()] }) {}
+      const received = yield* Deferred.make<string>();
+      const plugin = Plugin.make({
+        id: "custom-event-test",
+        engine: TestEngine,
+        effect: Effect.fnUntraced(function* (ctx) {
+          yield* ctx.schema.register({
+            id: "trigger",
+            type: "event",
+            event: () => Effect.succeed(true),
+            io: () => ({}),
+            run: () => Effect.void,
+          });
+          yield* ctx.schema.register({
+            id: "receive",
+            io: (io) => ({ text: io.data.in("text", DataType.String) }),
+            run: ({ io }) => Deferred.succeed(received, io.text).pipe(Effect.asVoid),
+          });
+        }),
+      });
+      const deployment = Engine.deployment(
+        plugin,
+        TestEngine.toLayer(() => Effect.die("unused")),
+      );
+      const editor = yield* Editor.Service;
+      const executor = yield* ProjectExecution.Service;
+      yield* editor.plugin(plugin, deployment);
+      yield* executor.plugin(plugin, deployment);
+      yield* editor.customEvent.put({
+        id: "event",
+        name: "Greeting",
+        fields: [{ id: "text", name: "Text", type: DataType.String }],
+      });
+      const { graph } = yield* editor.graph.create({ name: "Emit" });
+      const receiver = yield* editor.graph.create({ name: "Receive" });
+      const create = (graphID: string, pkg: string, schema: string, inputDefaults = {}) =>
+        editor.node.create({
+          graphID,
+          node: {
+            schema: { package: PackageId.make(pkg), schema: SchemaId.make(schema) },
+            inputDefaults,
+          },
+        });
+      const trigger = yield* create(graph.id, plugin.id, "trigger");
+      const emit = yield* create(graph.id, CustomEvent.packageId, "emit:event", {
+        "field:text": "standalone hello",
+      });
+      const on = yield* create(receiver.graph.id, CustomEvent.packageId, "on:event");
+      const receive = yield* create(receiver.graph.id, plugin.id, "receive");
+      for (const [graphID, from, out, to, input] of [
+        [graph.id, trigger.node.id, "exec", emit.node.id, "exec"],
+        [receiver.graph.id, on.node.id, "exec", receive.node.id, "exec"],
+        [receiver.graph.id, on.node.id, "field:text", receive.node.id, "text"],
+      ] as const)
+        yield* editor.connection.create({
+          graphID,
+          connection: {
+            outNodeId: from,
+            outIoId: IoId.make(out),
+            inNodeId: to,
+            inIoId: IoId.make(input),
+          },
+        });
+      yield* Effect.yieldNow;
+      yield* executor.handleEvent(plugin, new Trigger());
+      assert.strictEqual(yield* Deferred.await(received), "standalone hello");
+    }).pipe(Effect.provide(TestLayer)),
+  );
   it.effect("captures events and driver nodes and replays against current editor state", () =>
     Effect.gen(function* () {
       class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", { message: Schema.String }) {}
@@ -87,9 +159,7 @@ describe("ProjectExecution", () => {
       assert.strictEqual(event.nodes[0]?.status, "complete");
 
       nodeEffect = Effect.fail(new Error("node failed"));
-      assert.isTrue(
-        Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)),
-      );
+      assert.isTrue(Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)));
       assert.strictEqual((yield* activity.snapshot)[0]?.status, "failed");
       assert.strictEqual((yield* activity.snapshot)[0]?.nodes[0]?.status, "failed");
 
@@ -152,6 +222,7 @@ describe("ProjectExecution", () => {
 
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
         "obs",
+        "project-events",
         "twitch",
       ]);
 

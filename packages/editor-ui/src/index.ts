@@ -4,6 +4,7 @@ export { AccountMenu, type AccountMenuProps } from "./account/AccountMenu.tsx";
 export { Avatar, type AvatarProps } from "./account/Avatar.tsx";
 export { Button, type ButtonProps, ButtonLink, type ButtonLinkProps } from "./ui/Button.tsx";
 export { LoadingState } from "./ui/LoadingState.tsx";
+export { DataTypePicker, type DataTypePickerProps } from "./ui/DataTypePicker.tsx";
 export { createStateMachine } from "./ui/createStateMachine.ts";
 export {
   initializeBrowserTracing,

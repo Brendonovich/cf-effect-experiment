@@ -1,5 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
-import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
+import {
+  CustomEvent,
+  GraphId,
+  NodeId,
+  PackageId,
+  Project,
+  ResourceConstant,
+  SchemaId,
+} from "@macrograph/core";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { vi } from "vitest";
@@ -76,6 +84,58 @@ const obsAuthentication = async (password: string) => {
 };
 
 describe("local browser runtime", () => {
+  it.effect(
+    "authors custom events via RPC and restores stable generated nodes after localStorage reload",
+    () =>
+      Effect.gen(function* () {
+        const storage = new MemoryStorage();
+        const store = makeLocalProjectStore(storage);
+        const event: CustomEvent.Model = {
+          id: "greeting",
+          name: "Greeting",
+          fields: [{ id: "message", name: "Message", type: { _tag: "String" } }],
+        };
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const connection = yield* makeLocalConnection(store);
+            yield* connection.client.PutCustomEvent({ event });
+            const { graph } = yield* connection.client.CreateGraph({ graph: { name: "Events" } });
+            yield* connection.client.CreateNode({
+              graphId: graph.id,
+              node: {
+                schema: {
+                  package: CustomEvent.packageId,
+                  schema: CustomEvent.schemaId(event.id, "emit"),
+                },
+                inputDefaults: { "field:message": "hello" },
+              },
+            });
+            yield* connection.client.PutCustomEvent({
+              event: { ...event, name: "Renamed", fields: [{ ...event.fields[0]!, name: "Text" }] },
+            });
+            store.flush();
+          }),
+        );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const connection = yield* makeLocalConnection(makeLocalProjectStore(storage));
+            const project = yield* connection.client.GetProject({});
+            assert.strictEqual(project.customEvents.greeting?.name, "Renamed");
+            const schema = (yield* connection.client.GetPackages({}))
+              .find((pkg) => pkg.id === CustomEvent.packageId)!
+              .schemas.find((schema) => schema.id === "emit:greeting")!;
+            assert.deepStrictEqual(schema.dataInputs[0], {
+              id: CustomEvent.fieldId("message"),
+              name: "Text",
+              type: { _tag: "String" },
+            });
+            const node = Object.values(Object.values(project.graphs)[0]!.nodes)[0]!;
+            assert.strictEqual(node.schema.schema, "emit:greeting");
+            assert.deepStrictEqual(node.inputDefaults, { "field:message": "hello" });
+          }),
+        );
+      }),
+  );
   it.effect("exposes connected Twitch credentials in plugin settings and resources", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -187,6 +247,7 @@ describe("local browser runtime", () => {
           "logic",
           "math",
           "obs",
+          "project-events",
           "string",
           "twitch",
           "util",

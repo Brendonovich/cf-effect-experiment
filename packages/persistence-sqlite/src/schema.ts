@@ -1,9 +1,13 @@
-import type { ResourceConstant } from "@macrograph/core";
+import type { CustomEvent, ResourceConstant } from "@macrograph/core";
 import type { Schema } from "effect";
 
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
+  customEvents: text("custom_events", { mode: "json" })
+    .notNull()
+    .$type<Record<string, CustomEvent.Model>>()
+    .default({}),
   name: text("name").notNull(),
   engines: text("engines", { mode: "json" })
     .notNull()

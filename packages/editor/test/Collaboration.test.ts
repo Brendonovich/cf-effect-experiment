@@ -94,6 +94,16 @@ describe("collaboration", () => {
       yield* EditorRpc.authorize(identity("reader", "project", false), "UpdatePresence");
       yield* EditorRpc.authorize(identity("owner", "project"), "CreateNode");
       yield* EditorRpc.authorize(identity("member", "project"), "SetEngineState");
+      for (const operation of ["PutCustomEvent", "DeleteCustomEvent"]) {
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              EditorRpc.authorize(identity("reader", "project", false), operation),
+            ),
+          ),
+        );
+        yield* EditorRpc.authorize(identity("owner", "project"), operation);
+      }
       assert.isTrue(
         Exit.isFailure(
           yield* Effect.exit(

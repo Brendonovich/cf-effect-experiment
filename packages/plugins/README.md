@@ -24,28 +24,28 @@ Reusable engine builders accept `mg: Engine.ContextOf<typeof MyEngine>` directly
 
 ## Added plugins
 
-| Package            | Functionality                                                           | Runtime                            |
-| ------------------ | ----------------------------------------------------------------------- | ---------------------------------- |
-| `discord`          | Bot message events, sending messages, user/member/role lookup, webhooks | Server                             |
-| `elevenlabs`       | Text-to-speech with an API key                                          | Server and Cloudflare              |
-| `elgato-key-light` | Key Light state, power, brightness, and temperature controls            | Server with reachable Key Lights   |
-| `fs`               | File/folder listing and UTF-8 text reads and opt-in writes              | Server                             |
-| `goxlr`            | Mixer controls and status events                                        | Server with reachable GoXLR daemon |
-| `ikea-tradfri`     | TRADFRI gateway light control                                           | Server with reachable gateway      |
-| `json`             | JSON parsing, querying, typed extraction, and immutable object edits    | Server, browser, and Cloudflare    |
-| `lifx`             | LIFX LAN state, power, color, and brightness controls                   | Server with reachable LIFX lights  |
-| `list`             | Explicitly typed list creation, editing, lookup, and joining            | Server, browser, and Cloudflare    |
-| `logic`            | Boolean operations, branching, waiting, and typed conditionals          | Server, browser, and Cloudflare    |
-| `math`             | Numeric operations and conversions                                      | Server, browser, and Cloudflare    |
-| `openai`           | Chat completion and image generation with an API key                    | Server and Cloudflare              |
-| `shell`            | Opt-in shell command execution                                          | Server                             |
-| `speakerbot`       | Speech and queue controls                                               | Server with reachable SpeakerBot   |
-| `streamdeck`       | Key down/up events from a WebSocket forwarder                           | Server                             |
-| `streamlabs`       | Donation and YouTube membership/superchat Socket API events             | Server                             |
-| `string`           | String operations and conversions                                       | Server, browser, and Cloudflare    |
-| `tiktok-euler-stream` | TikTok (Euler Stream) LIVE events                                     | Server                             |
-| `voicemod`         | Voice selection, voice changer, and hear-self controls                  | Server with reachable Voicemod     |
-| `vtube-studio`     | Model, expression, and hotkey requests                                  | Server with reachable VTube Studio |
+| Package               | Functionality                                                           | Runtime                            |
+| --------------------- | ----------------------------------------------------------------------- | ---------------------------------- |
+| `discord`             | Bot message events, sending messages, user/member/role lookup, webhooks | Server                             |
+| `elevenlabs`          | Text-to-speech with an API key                                          | Server and Cloudflare              |
+| `elgato-key-light`    | Key Light state, power, brightness, and temperature controls            | Server with reachable Key Lights   |
+| `fs`                  | File/folder listing and UTF-8 text reads and opt-in writes              | Server                             |
+| `goxlr`               | Mixer controls and status events                                        | Server with reachable GoXLR daemon |
+| `ikea-tradfri`        | TRADFRI gateway light control                                           | Server with reachable gateway      |
+| `json`                | JSON parsing, querying, typed extraction, and immutable object edits    | Server, browser, and Cloudflare    |
+| `lifx`                | LIFX LAN state, power, color, and brightness controls                   | Server with reachable LIFX lights  |
+| `list`                | Explicitly typed list creation, editing, lookup, and joining            | Server, browser, and Cloudflare    |
+| `logic`               | Boolean operations, branching, waiting, and typed conditionals          | Server, browser, and Cloudflare    |
+| `math`                | Numeric operations and conversions                                      | Server, browser, and Cloudflare    |
+| `openai`              | Chat completion and image generation with an API key                    | Server and Cloudflare              |
+| `shell`               | Opt-in shell command execution                                          | Server                             |
+| `speakerbot`          | Speech and queue controls                                               | Server with reachable SpeakerBot   |
+| `streamdeck`          | Key down/up events from a WebSocket forwarder                           | Server                             |
+| `streamlabs`          | Donation and YouTube membership/superchat Socket API events             | Server                             |
+| `string`              | String operations and conversions                                       | Server, browser, and Cloudflare    |
+| `tiktok-euler-stream` | TikTok (Euler Stream) LIVE events                                       | Server                             |
+| `voicemod`            | Voice selection, voice changer, and hear-self controls                  | Server with reachable Voicemod     |
+| `vtube-studio`        | Model, expression, and hotkey requests                                  | Server with reachable VTube Studio |
 
 See integration package READMEs for protocol requirements and node details. Local apps
 must be reachable **from the runtime host**, not just the editor's browser. In a
@@ -132,7 +132,7 @@ through the Filesystem plugin on an opted-in server.
   explicit browser/desktop capability bridges.
 - Localstorage needs a defined client-side storage scope rather than substituting
   server project storage.
-- Variables and custom events need project/graph domain models and event registries.
+- Variables need project/graph domain models. [Project custom events](../core/CUSTOM_EVENTS.md) are supported in the browser and standalone server, not Cloudflare.
 - Generic Map, wildcard collections, struct/enum builders, and scope-based loops
   need type-system and execution-model extensions.
 - GitHub, Google, Patreon, and Spotify were OAuth settings shells with no graph

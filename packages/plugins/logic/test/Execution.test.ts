@@ -104,6 +104,7 @@ describe("Logic execution", () => {
         const project: Project.Model = {
           name: "Defaults",
           engines: {},
+          customEvents: {},
           constants: {},
           graphs: {
             [graphId]: {
@@ -199,6 +200,7 @@ describe("Logic execution", () => {
         const project: Project.Model = {
           name: "Logic",
           engines: {},
+          customEvents: {},
           constants: {},
           graphs: { [graphId]: graph },
         };

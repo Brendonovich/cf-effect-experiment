@@ -1,6 +1,6 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, describe, expect, it } from "@effect/vitest";
-import { GraphId, Node, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
+import { CustomEvent, GraphId, Node, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect, Layer, Schema } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
@@ -17,6 +17,25 @@ const TestLayer = Layer.provideMerge(
 );
 
 describe("JsonPersistence", () => {
+  it.effect("roundtrips custom events and preserves them through graph-only writes", () =>
+    Effect.gen(function* () {
+      const db = yield* Persistence.Service;
+      const event: CustomEvent.Model = {
+        id: "stable-event",
+        name: "Renamed event",
+        fields: [
+          {
+            id: "stable-field",
+            name: "Renamed field",
+            type: { _tag: "List", item: { _tag: "Option", inner: { _tag: "DateTime" } } },
+          },
+        ],
+      };
+      yield* db.saveProject({ ...Project.empty(), customEvents: { [event.id]: event } });
+      yield* db.saveGraph({ id: GraphId.make("graph"), name: "Graph", nodes: {}, connections: [] });
+      expect((yield* db.loadProject()).customEvents).toEqual({ [event.id]: event });
+    }).pipe(Effect.provide(TestLayer)),
+  );
   it.effect("decodes projects written before resource constants were introduced", () =>
     Effect.gen(function* () {
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
@@ -56,6 +75,7 @@ describe("JsonPersistence", () => {
         name: "My Project",
         graphs: { "graph-1": graph },
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
+        customEvents: {},
         constants: {},
       };
       yield* persistence.saveProject(project);
@@ -84,6 +104,7 @@ describe("JsonPersistence", () => {
         name: "Empty",
         graphs: {},
         engines: {},
+        customEvents: {},
         constants: {},
       };
       yield* persistence.saveProject(project);
@@ -116,6 +137,7 @@ describe("JsonPersistence", () => {
         name: "P",
         graphs: { "graph-1": graph },
         engines: {},
+        customEvents: {},
         constants: {},
       };
       yield* persistence.saveProject(project);
@@ -189,6 +211,7 @@ describe("JsonPersistence", () => {
         name: "P",
         graphs: { "graph-1": graph },
         engines: {},
+        customEvents: {},
         constants: {},
       };
       yield* persistence.saveProject(project);

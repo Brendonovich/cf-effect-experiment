@@ -264,6 +264,7 @@ describe("HTTP client plugin", () => {
         const project: Project.Model = {
           name: "HTTP",
           engines: {},
+          customEvents: {},
           constants: {},
           graphs: {
             [graphId]: {

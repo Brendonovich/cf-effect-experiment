@@ -42,6 +42,7 @@ describe("Utilities execution", () => {
       const project: Project.Model = {
         name: "Utilities",
         engines: {},
+        customEvents: {},
         constants: {},
         graphs: {
           [graphId]: {
