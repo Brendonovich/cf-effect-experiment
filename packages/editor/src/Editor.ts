@@ -463,9 +463,20 @@ export const layer = Layer.effect(Service)(
       return properties;
     });
     const getBaseNodeIO = (node: Node.Model, definitions?: DataType.Definitions) =>
-      resolveIOProperties(node.schema, node.properties).pipe(
-        Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties, definitions)),
-      );
+      GraphFunction.isCall(node)
+        ? persistence.loadProject().pipe(
+            Effect.map((project) => {
+              const target = node.properties.function;
+              return GraphFunction.callIO(
+                typeof target === "string" ? project.functions[target] : undefined,
+              );
+            }),
+          )
+        : resolveIOProperties(node.schema, node.properties).pipe(
+            Effect.flatMap((properties) =>
+              packages.getNodeIO(node.schema, properties, definitions),
+            ),
+          );
     const getNodeIO = Effect.fnUntraced(function* (
       node: Node.Model,
       definitions?: DataType.Definitions,

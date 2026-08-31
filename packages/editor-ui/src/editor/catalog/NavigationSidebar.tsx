@@ -1,16 +1,16 @@
-import { type Canvas, type Package, type Project, ResourceConstant } from "@macrograph/core";
-import { Portal } from "@solidjs/web";
+import type { Canvas, Package, Project } from "@macrograph/core";
+
+import { ResourceConstant } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
-import { AddButton } from "../../ui/AddButton";
 import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
-import { searchMarker } from "../markers.stylex.ts";
+import { resourceMarker, searchMarker, splitMarker } from "../markers.stylex.ts";
 import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
-import { SearchInput } from "./SearchInput";
+
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
   to: { opacity: 1, transform: "translateY(0) scale(1)" },
@@ -18,10 +18,6 @@ const enter = stylex.keyframes({
 const exit = stylex.keyframes({
   from: { opacity: 1, transform: "translateY(0) scale(1)" },
   to: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
-});
-const menuEnter = stylex.keyframes({
-  from: { opacity: 0, transform: "scale(.96)" },
-  to: { opacity: 1, transform: "scale(1)" },
 });
 const styles = stylex.create({
   focus: {
@@ -67,6 +63,7 @@ const styles = stylex.create({
     flexDirection: "row",
     height: 32,
   },
+  search: { alignItems: "stretch", display: "flex", flex: 1, flexDirection: "row", minWidth: 0 },
   searchIcon: {
     color: {
       default: colors.gray9,
@@ -89,20 +86,21 @@ const styles = stylex.create({
     paddingInline: 6,
     "::placeholder": { color: colors.gray9 },
   },
-  functionButton: {
+  newButton: {
     alignItems: "center",
     backgroundColor: { default: "transparent", ":hover": colors.gray6 },
     borderRadius: 4,
-    color: colors.gray11,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
     display: "flex",
     flexShrink: 0,
-    fontSize: 14,
     height: 20,
     justifyContent: "center",
-    margin: 6,
+    marginBlock: "auto",
+    marginInline: 6,
     padding: 2,
     width: 20,
   },
+  plusIcon: { flexShrink: 0, height: 16, width: 16 },
   createRoot: { display: "flex", flexShrink: 0, height: "100%" },
   dialog: {
     backgroundColor: colors.gray3,
@@ -165,6 +163,42 @@ const styles = stylex.create({
     },
   },
   scroll: { flex: 1, minHeight: 0, overflowY: "auto" },
+  sidebarContents: { display: "flex", flex: 1, flexDirection: "column", minHeight: 0 },
+  navigationPane: { display: "flex", flexDirection: "column", minHeight: 96 },
+  constantsPane: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
+    minHeight: 96,
+    overflow: "hidden",
+  },
+  splitHandle: {
+    alignItems: "center",
+    backgroundColor: "transparent",
+    cursor: "row-resize",
+    display: "flex",
+    flexShrink: 0,
+    height: 5,
+    outline: "none",
+  },
+  splitLine: {
+    backgroundColor: {
+      default: colors.gray5,
+      [stylex.when.ancestor(":hover", splitMarker)]: colors.focus,
+      [stylex.when.ancestor(":focus-visible", splitMarker)]: colors.focus,
+    },
+    height: 1,
+    pointerEvents: "none",
+    width: "100%",
+  },
+  constantsTitleBar: {
+    alignItems: "center",
+    display: "flex",
+    flexShrink: 0,
+    height: 32,
+    paddingLeft: 8,
+  },
+  constantsTitle: { color: colors.gray11, flex: 1, fontSize: 11, fontWeight: 600 },
   navOption: {
     display: "block",
     fontSize: 12,
@@ -234,13 +268,19 @@ const styles = stylex.create({
     gap: 4,
     padding: 4,
   },
-  defaultAccent: {
-    backgroundColor: colors.focus,
-    borderRadius: "50%",
+  defaultButton: {
+    alignItems: "center",
+    borderRadius: 2,
+    color: colors.gray10,
+    display: "flex",
     flexShrink: 0,
-    height: 4,
-    width: 4,
+    fontSize: 9,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
   },
+  defaultAccent: { color: colors.focus },
   row: { alignItems: "center", display: "flex", gap: 4 },
   nameButton: {
     borderRadius: 2,
@@ -274,79 +314,37 @@ const styles = stylex.create({
     outline: "none",
     paddingInline: 4,
   },
-  actionsButton: {
+  deleteButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
-    borderRadius: 4,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    borderRadius: 2,
+    color: colors.gray11,
     display: "flex",
     flexShrink: 0,
-    height: 20,
+    height: 22,
     justifyContent: "center",
-    padding: 2,
-    width: 20,
-  },
-  actionsIcon: { height: 14, width: 14 },
-  actionsMenu: {
-    animationName: {
-      default: menuEnter,
-      "@media (prefers-reduced-motion: reduce)": "none",
+    visibility: {
+      default: "hidden",
+      [stylex.when.ancestor(":hover", resourceMarker)]: "visible",
+      ":focus": "visible",
     },
-    animationDuration: "140ms",
-    animationTimingFunction: "cubic-bezier(.16, 1, .3, 1)",
-    animationFillMode: "both",
-    transformOrigin: "top right",
-    position: "fixed",
-    zIndex: 100,
-    backgroundColor: colors.gray2,
-    color: colors.gray12,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: colors.gray6,
-    boxShadow: "0 12px 32px rgb(0 0 0 / .35), 0 2px 6px rgb(0 0 0 / .2)",
-    borderRadius: 6,
-    maxHeight: "calc(100dvh - 16px)",
-    overflowY: "auto",
-    padding: 4,
-  },
-  menuAction: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    width: "100%",
-    borderRadius: 4,
-    paddingBlock: 4,
-    paddingInline: 8,
-    fontSize: 12,
-    textAlign: "left",
+    width: 22,
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.gray5,
-      ":focus-visible": colors.gray5,
-    },
-    outline: "none",
-    "@media (pointer: coarse)": { minHeight: 40 },
-  },
-  menuDivider: { height: 1, backgroundColor: colors.gray6, marginBlock: 3, marginInline: 4 },
-  disabledAction: { color: colors.gray10 },
-  dangerAction: {
-    color: colors.red11,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.red3,
-      ":focus-visible": colors.red3,
+      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
     },
   },
+  trash: { height: 14, width: 14 },
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "constants";
+export type NavigationSection = "graphs" | "packages" | "functions";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
   search: string;
   selectedPaneId?: string | undefined;
   graphs: ReadonlyArray<readonly [string, Canvas.Model]>;
+  functionIds: ReadonlySet<string>;
   packagesWithSettings: ReadonlyArray<Package.Model>;
   packagesWithoutSettings: ReadonlyArray<Package.Model>;
   allPackages: ReadonlyArray<Package.Model>;
@@ -355,14 +353,14 @@ export function NavigationSidebar(props: {
   onSearchChange: (search: string) => void;
   onClose: () => void;
   onCreateGraph: () => void;
-  onCreateFunction: () => void;
+  onCreateFunction?: () => void;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
   onDeleteGraph: (id: string) => void;
   onOpenPackage: (id: string) => void;
   onCreateConstant: (resource: ResourceConstant.ResourceRef) => void;
-  onRenameConstant: (id: string, name: string) => void | Promise<void>;
+  onRenameConstant: (id: string, name: string) => void;
   onSelectConstant: (id: string, value: ResourceConstant.LiveValue["id"]) => void;
   onSetDefaultConstant: (id: string) => void;
   canEditConstants: boolean;
@@ -372,35 +370,14 @@ export function NavigationSidebar(props: {
   ) => { pkg: Package.Model; definition: Package.ResourceDefinition } | undefined;
   valuesFor: (resource: ResourceConstant.ResourceRef) => ReadonlyArray<ResourceConstant.LiveValue>;
 }) {
+  let splitRoot: HTMLDivElement | undefined;
   let createMenuRoot: HTMLDivElement | undefined;
+  let createMenuTrigger: HTMLButtonElement | undefined;
   const isDefault = (constant: ResourceConstant.Model) =>
     ResourceConstant.getDefault(props.constants, constant.resource)?.id === constant.id;
-  let createMenuTrigger: HTMLButtonElement | undefined;
-  let actionsTrigger: HTMLButtonElement | undefined;
-  let actionsElement: HTMLDivElement | undefined;
-  const [actionsMenu, setActionsMenu] = createSignal<{ id: string; x: number; y: number } | null>(
-    null,
-  );
-  const closeActions = (restoreFocus = false) => {
-    setActionsMenu(null);
-    if (restoreFocus) actionsTrigger?.focus();
-  };
-  const openActions = (id: string, trigger: HTMLButtonElement) => {
-    if (!props.canEditConstants) return;
-    constantWorkflowActions.closePicker();
-    actionsTrigger = trigger;
-    const bounds = trigger.getBoundingClientRect();
-    setActionsMenu({ id, x: bounds.right, y: bounds.bottom + 4 });
-  };
-  const actionsPosition = () => {
-    const point = actionsMenu();
-    const width = Math.min(176, window.innerWidth - 16);
-    return {
-      width: `${width}px`,
-      left: `${Math.max(8, Math.min((point?.x ?? 8) - width, window.innerWidth - width - 8))}px`,
-      top: `${Math.max(8, Math.min(point?.y ?? 8, window.innerHeight - 100 - 8))}px`,
-    };
-  };
+  const [navigationPercent, setNavigationPercent] = createSignal(62);
+  const [splitPointer, setSplitPointer] = createSignal<number | null>(null);
+  const [constantSearch, setConstantSearch] = createSignal("");
   type ConstantWorkflow = {
     context: {
       search: string;
@@ -453,24 +430,8 @@ export function NavigationSidebar(props: {
       },
     },
   );
-  const [pendingRenames, setPendingRenames] = createSignal<Record<string, { name: string }>>({});
-  const constantName = (constant: ResourceConstant.Model) =>
-    pendingRenames()[constant.id]?.name ?? constant.name;
-  const renameConstant = async (id: string, name: string) => {
-    const pending = { name };
-    setPendingRenames((current) => ({ ...current, [id]: pending }));
-    try {
-      await props.onRenameConstant(id, name);
-    } finally {
-      setPendingRenames((current) => {
-        if (current[id] !== pending) return current;
-        const { [id]: completed, ...remaining } = current;
-        return remaining;
-      });
-    }
-  };
   const constantGroups = createMemo(() => {
-    const query = props.search.trim().toLowerCase();
+    const query = constantSearch().trim().toLowerCase();
     const groups = new Map<
       string,
       { resource: ResourceConstant.ResourceRef; constants: Array<ResourceConstant.Model> }
@@ -501,7 +462,7 @@ export function NavigationSidebar(props: {
         const selectedValue = values.find(
           (value) => JSON.stringify(value.id) === JSON.stringify(constant.value),
         );
-        return [constantName(constant), constant.id, selectedValue?.display].some(
+        return [constant.name, constant.id, selectedValue?.display].some(
           (field) => field?.toLowerCase().includes(query) === true,
         );
       });
@@ -522,49 +483,6 @@ export function NavigationSidebar(props: {
         ),
       }))
       .filter(({ resources }) => resources.length > 0);
-  });
-  const actionsConstant = createMemo(() => {
-    const menu = actionsMenu();
-    if (!menu || !props.canEditConstants || props.section !== "constants") return;
-    return constantGroups()
-      .flatMap((group) => group.constants)
-      .find((constant) => constant.id === menu.id);
-  });
-  createEffect(actionsConstant, (constant) => {
-    if (!constant) closeActions();
-  });
-  createEffect(actionsMenu, (menu) => {
-    if (!menu) return;
-    queueMicrotask(() => actionsElement?.querySelector<HTMLButtonElement>("button")?.focus());
-    const outside = (event: PointerEvent) => {
-      if (
-        event.target instanceof globalThis.Node &&
-        !actionsElement?.contains(event.target) &&
-        !actionsTrigger?.contains(event.target)
-      )
-        closeActions();
-    };
-    const dismiss = () => closeActions();
-    const scroll = (event: Event) => {
-      if (event.target instanceof globalThis.Node && actionsElement?.contains(event.target)) return;
-      closeActions();
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeActions(true);
-    };
-    window.addEventListener("pointerdown", outside);
-    window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", scroll, true);
-    window.addEventListener("keydown", escape, true);
-    return () => {
-      window.removeEventListener("pointerdown", outside);
-      window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", scroll, true);
-      window.removeEventListener("keydown", escape, true);
-    };
   });
   const createMenuOpen = () => constantWorkflow.mode === "present";
   const createMenuPosition = () => {
@@ -595,13 +513,6 @@ export function NavigationSidebar(props: {
   );
 
   createEffect(
-    () => props.section,
-    (section) => {
-      if (section !== "constants") constantWorkflowActions.closePicker();
-    },
-  );
-
-  createEffect(
     () => true,
     () => {
       const closeCreateMenuOnOutsideClick = (event: PointerEvent) => {
@@ -628,69 +539,202 @@ export function NavigationSidebar(props: {
 
   return (
     <Sidebar side="left" open onClose={props.onClose}>
-      <div style={{ "flex-shrink": "0" }}>
-        <div sx={styles.topTabs}>
-          <div sx={styles.tabGrid}>
-            <For each={["graphs", "packages", "constants"] as const}>
-              {(section) => (
+      <div ref={splitRoot} sx={styles.sidebarContents}>
+        <div sx={styles.navigationPane} style={{ height: `${navigationPercent()}%` }}>
+          <div style={{ "flex-shrink": "0" }}>
+            <div sx={styles.topTabs}>
+              <div sx={styles.tabGrid}>
+                <For each={["graphs", "packages", "functions"] as const}>
+                  {(section) => (
+                    <button
+                      type="button"
+                      sx={[
+                        styles.focus,
+                        styles.tab,
+                        props.section === section ? styles.activeTab : styles.inactiveTab,
+                      ]}
+                      aria-pressed={props.section === section ? "true" : "false"}
+                      onClick={() => props.onSectionChange(section)}
+                    >
+                      {section === "graphs"
+                        ? "Graphs"
+                        : section === "packages"
+                          ? "Modules"
+                          : "Functions"}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+            <div sx={styles.toolbar}>
+              <div sx={[searchMarker, styles.search]}>
+                <IconTablerSearch {...stylex.attrs(styles.searchIcon)} />
+                <input
+                  sx={styles.searchInput}
+                  placeholder={
+                    props.section === "graphs"
+                      ? "Search Graphs"
+                      : props.section === "packages"
+                        ? "Search Modules"
+                        : "Search Functions"
+                  }
+                  value={props.search}
+                  onInput={(event) => props.onSearchChange(event.currentTarget.value)}
+                />
+              </div>
+              <Show when={props.section === "graphs"}>
                 <button
                   type="button"
-                  sx={[
-                    styles.focus,
-                    styles.tab,
-                    props.section === section ? styles.activeTab : styles.inactiveTab,
-                  ]}
-                  aria-pressed={props.section === section ? "true" : "false"}
-                  onClick={() => props.onSectionChange(section)}
+                  sx={[styles.focus, styles.newButton]}
+                  aria-label="New graph"
+                  title="New graph"
+                  onClick={props.onCreateGraph}
                 >
-                  {section === "graphs"
-                    ? "Graphs"
-                    : section === "packages"
-                      ? "Modules"
-                      : "Constants"}
+                  <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
                 </button>
-              )}
-            </For>
+              </Show>
+              <Show when={props.section === "functions" && props.onCreateFunction}>
+                <button
+                  type="button"
+                  sx={[styles.focus, styles.newButton]}
+                  aria-label="New function"
+                  title="New function"
+                  disabled={!props.canEditGraphs}
+                  onClick={() => props.onCreateFunction?.()}
+                >
+                  <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
+                </button>
+              </Show>
+            </div>
+          </div>
+          <div sx={styles.scroll}>
+            <Show when={props.section === "graphs" || props.section === "functions"}>
+              <For
+                each={props.graphs.filter(([, graph]) =>
+                  props.section === "functions"
+                    ? props.functionIds.has(graph.id)
+                    : !props.functionIds.has(graph.id),
+                )}
+                fallback={
+                  <div sx={[styles.navOption, styles.noConstants]}>
+                    {props.section === "functions"
+                      ? props.search.trim() === ""
+                        ? "No functions yet."
+                        : "No functions found."
+                      : props.search.trim() === ""
+                        ? "No graphs yet."
+                        : "No graphs found."}
+                  </div>
+                }
+              >
+                {([id, graph]) => (
+                  <GraphNavigationOption
+                    name={graph.name}
+                    selected={props.selectedPaneId === `graph:${id}`}
+                    canEdit={props.canEditGraphs}
+                    onSelect={() => props.onSelectGraph(id)}
+                    onRename={(name) => props.onRenameGraph(id, name)}
+                    onDelete={() => props.onDeleteGraph(id)}
+                  />
+                )}
+              </For>
+            </Show>
+            <Show when={props.section === "packages"}>
+              <div sx={styles.packages}>
+                <Show
+                  when={
+                    props.packagesWithSettings.length + props.packagesWithoutSettings.length === 0
+                  }
+                >
+                  <div sx={[styles.navOption, styles.noConstants]}>
+                    {props.search.trim() === "" ? "No modules yet." : "No modules found."}
+                  </div>
+                </Show>
+                <div style={{ "padding-bottom": "4px" }}>
+                  <For each={props.packagesWithSettings}>
+                    {(pkg) => (
+                      <button
+                        type="button"
+                        sx={[
+                          styles.focus,
+                          styles.navOption,
+                          props.selectedPaneId === `package:${pkg.id}`
+                            ? styles.selected
+                            : styles.unselected,
+                        ]}
+                        onClick={() => props.onOpenPackage(pkg.id)}
+                      >
+                        {pkg.name}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <Show when={props.packagesWithoutSettings.length > 0}>
+                  <div sx={styles.separator}>
+                    <div sx={styles.separatorTitle}>No editor settings</div>
+                    <For each={props.packagesWithoutSettings}>
+                      {(pkg) => <div sx={styles.unavailablePackage}>{pkg.name}</div>}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            </Show>
           </div>
         </div>
-        <div sx={styles.toolbar}>
-          <SearchInput
-            placeholder={
-              props.section === "graphs"
-                ? "Search Graphs"
-                : props.section === "packages"
-                  ? "Search Modules"
-                  : "Search Constants"
-            }
-            value={props.search}
-            onChange={(value) => props.onSearchChange(value)}
-          />
-          <Show when={props.section === "graphs"}>
-            <AddButton
-              aria-label="New graph"
-              title="New graph"
-              onClick={props.onCreateGraph}
-            />
-            <button
-              type="button"
-              sx={[styles.focus, styles.functionButton]}
-              aria-label="New function"
-              title="New function"
-              onClick={props.onCreateFunction}
-            >
-              <span aria-hidden="true">ƒ</span>
-            </button>
-          </Show>
-          <Show when={props.section === "constants"}>
+        <div
+          role="separator"
+          aria-label="Resize navigation and constants"
+          aria-orientation="horizontal"
+          aria-valuemin="20"
+          aria-valuemax="80"
+          aria-valuenow={String(Math.round(navigationPercent()))}
+          tabindex="0"
+          sx={[splitMarker, styles.splitHandle]}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setSplitPointer(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (splitPointer() !== event.pointerId) return;
+            const bounds = splitRoot?.getBoundingClientRect();
+            if (bounds === undefined) return;
+            setNavigationPercent(
+              Math.max(20, Math.min(80, ((event.clientY - bounds.top) / bounds.height) * 100)),
+            );
+          }}
+          onPointerUp={(event) => {
+            if (splitPointer() !== event.pointerId) return;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+            setSplitPointer(null);
+          }}
+          onPointerCancel={() => setSplitPointer(null)}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            setNavigationPercent((current) =>
+              Math.max(20, Math.min(80, current + (event.key === "ArrowDown" ? 5 : -5))),
+            );
+          }}
+        >
+          <span sx={styles.splitLine} />
+        </div>
+        <section sx={styles.constantsPane} aria-label="Constants">
+          <div sx={styles.constantsTitleBar}>
+            <span sx={styles.constantsTitle}>Constants</span>
             <div ref={createMenuRoot} sx={styles.createRoot}>
-              <AddButton
+              <button
                 ref={createMenuTrigger}
+                type="button"
+                sx={[styles.focus, styles.newButton]}
                 aria-label="New constant"
                 title="New constant"
                 aria-haspopup="dialog"
                 aria-expanded={createMenuOpen() ? "true" : "false"}
+                disabled={!props.canEditConstants}
                 onClick={() => constantWorkflowActions.togglePicker()}
-              />
+              >
+                <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
+              </button>
               <Show when={constantWorkflow.mode !== "hidden"}>
                 <div
                   role="dialog"
@@ -764,282 +808,166 @@ export function NavigationSidebar(props: {
                 </div>
               </Show>
             </div>
-          </Show>
-        </div>
-      </div>
-      <div sx={styles.scroll}>
-        <Show when={props.section === "graphs"}>
-          <For
-            each={props.graphs}
-            fallback={
-              <div sx={[styles.navOption, styles.noConstants]}>
-                {props.search.trim() === "" ? "No graphs yet." : "No graphs found."}
-              </div>
-            }
-          >
-            {([id, graph]) => (
-              <GraphNavigationOption
-                name={graph.name}
-                selected={props.selectedPaneId === `graph:${id}`}
-                canEdit={props.canEditGraphs}
-                onSelect={() => props.onSelectGraph(id)}
-                onRename={(name) => props.onRenameGraph(id, name)}
-                onDelete={() => props.onDeleteGraph(id)}
-              />
-            )}
-          </For>
-        </Show>
-        <Show when={props.section === "packages"}>
-          <div sx={styles.packages}>
-            <Show
-              when={props.packagesWithSettings.length + props.packagesWithoutSettings.length === 0}
-            >
-              <div sx={[styles.navOption, styles.noConstants]}>
-                {props.search.trim() === "" ? "No modules yet." : "No modules found."}
-              </div>
-            </Show>
-            <div style={{ "padding-bottom": "4px" }}>
-              <For each={props.packagesWithSettings}>
-                {(pkg) => (
-                  <button
-                    type="button"
-                    sx={[
-                      styles.focus,
-                      styles.navOption,
-                      props.selectedPaneId === `package:${pkg.id}`
-                        ? styles.selected
-                        : styles.unselected,
-                    ]}
-                    onClick={() => props.onOpenPackage(pkg.id)}
-                  >
-                    {pkg.name}
-                  </button>
-                )}
-              </For>
-            </div>
-            <Show when={props.packagesWithoutSettings.length > 0}>
-              <div sx={styles.separator}>
-                <div sx={styles.separatorTitle}>No editor settings</div>
-                <For each={props.packagesWithoutSettings}>
-                  {(pkg) => <div sx={styles.unavailablePackage}>{pkg.name}</div>}
-                </For>
-              </div>
-            </Show>
           </div>
-        </Show>
-        <Show when={props.section === "constants"}>
-          <div sx={styles.constants}>
-            <div sx={styles.column}>
-              <For
-                each={constantGroups()}
-                fallback={
-                  <span sx={styles.noConstants}>
-                    {props.search.trim() === "" ? "No constants yet." : "No constants found."}
-                  </span>
-                }
-              >
-                {(group) => {
-                  const data = () => props.resourceDefinition(group.resource);
-                  return (
-                    <section sx={styles.constantSection}>
-                      <div sx={styles.constantHeader}>
-                        <span sx={styles.noShrink}>
-                          {data()?.definition.name ?? group.resource.resource}
-                        </span>
-                        <span sx={[styles.noShrink, styles.muted]}>·</span>
-                        <span
-                          sx={styles.truncate}
-                          title={data()?.pkg.name ?? group.resource.package}
-                        >
-                          {data()?.pkg.name ?? group.resource.package}
-                        </span>
-                      </div>
-                      <div sx={styles.constantList}>
-                        <For each={group.constants}>
-                          {(constant) => {
-                            const values = () => props.valuesFor(constant.resource);
-                            const valid = () =>
-                              constant.value !== undefined &&
-                              values().some(
-                                (value) =>
-                                  JSON.stringify(value.id) === JSON.stringify(constant.value),
-                              );
-                            return (
-                              <div sx={styles.constantCard}>
-                                <div sx={styles.row}>
-                                  <Show
-                                    when={constantWorkflow.context.editing === constant.id}
-                                    fallback={
-                                      <button
-                                        type="button"
-                                        sx={[styles.focus, styles.nameButton]}
-                                        title={constantName(constant)}
-                                        onClick={() => constantWorkflowActions.edit(constant.id)}
-                                      >
-                                        {constantName(constant)}
-                                      </button>
-                                    }
-                                  >
-                                    <input
-                                      ref={(input) =>
-                                        queueMicrotask(() => {
-                                          input.focus();
-                                          input.select();
-                                        })
+          <div sx={styles.toolbar}>
+            <div sx={[searchMarker, styles.search]}>
+              <IconTablerSearch {...stylex.attrs(styles.searchIcon)} />
+              <input
+                sx={styles.searchInput}
+                placeholder="Search Constants"
+                value={constantSearch()}
+                onInput={(event) => setConstantSearch(event.currentTarget.value)}
+              />
+            </div>
+          </div>
+          <div sx={styles.scroll}>
+            <div sx={styles.constants}>
+              <div sx={styles.column}>
+                <For
+                  each={constantGroups()}
+                  fallback={
+                    <span sx={styles.noConstants}>
+                      {constantSearch().trim() === "" ? "No constants yet." : "No constants found."}
+                    </span>
+                  }
+                >
+                  {(group) => {
+                    const data = () => props.resourceDefinition(group.resource);
+                    return (
+                      <section sx={styles.constantSection}>
+                        <div sx={styles.constantHeader}>
+                          <span sx={styles.noShrink}>
+                            {data()?.definition.name ?? group.resource.resource}
+                          </span>
+                          <span sx={[styles.noShrink, styles.muted]}>·</span>
+                          <span
+                            sx={styles.truncate}
+                            title={data()?.pkg.name ?? group.resource.package}
+                          >
+                            {data()?.pkg.name ?? group.resource.package}
+                          </span>
+                        </div>
+                        <div sx={styles.constantList}>
+                          <For each={group.constants}>
+                            {(constant) => {
+                              const values = () => props.valuesFor(constant.resource);
+                              const valid = () =>
+                                constant.value !== undefined &&
+                                values().some(
+                                  (value) =>
+                                    JSON.stringify(value.id) === JSON.stringify(constant.value),
+                                );
+                              return (
+                                <div sx={[resourceMarker, styles.constantCard]}>
+                                  <div sx={styles.row}>
+                                    <Show
+                                      when={constantWorkflow.context.editing === constant.id}
+                                      fallback={
+                                        <button
+                                          type="button"
+                                          sx={[styles.focus, styles.nameButton]}
+                                          title={constant.name}
+                                          onClick={() => {
+                                            if (props.canEditConstants)
+                                              constantWorkflowActions.edit(constant.id);
+                                          }}
+                                        >
+                                          {constant.name}
+                                        </button>
                                       }
-                                      sx={styles.nameInput}
-                                      value={constantName(constant)}
-                                      onBlur={(event) => {
-                                        const name = event.currentTarget.value;
-                                        constantWorkflowActions.finishEdit(constant.id);
-                                        if (name !== constantName(constant))
-                                          void renameConstant(constant.id, name).catch(
-                                            console.error,
-                                          );
-                                      }}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") event.currentTarget.blur();
-                                        if (event.key === "Escape") {
-                                          event.currentTarget.value = constantName(constant);
-                                          event.currentTarget.blur();
+                                    >
+                                      <input
+                                        ref={(input) =>
+                                          queueMicrotask(() => {
+                                            input.focus();
+                                            input.select();
+                                          })
                                         }
-                                      }}
-                                    />
-                                  </Show>
-                                  <Show when={isDefault(constant)}>
-                                    <span
-                                      sx={styles.defaultAccent}
-                                      role="img"
-                                      aria-label={`${constantName(constant)} is the default for new nodes`}
-                                      title="Default for new nodes"
-                                    />
-                                  </Show>
-                                  <Show when={props.canEditConstants}>
+                                        sx={styles.nameInput}
+                                        value={constant.name}
+                                        onBlur={(event) => {
+                                          props.onRenameConstant(
+                                            constant.id,
+                                            event.currentTarget.value,
+                                          );
+                                          constantWorkflowActions.finishEdit(constant.id);
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") event.currentTarget.blur();
+                                          if (event.key === "Escape") {
+                                            event.currentTarget.value = constant.name;
+                                            event.currentTarget.blur();
+                                          }
+                                        }}
+                                      />
+                                    </Show>
                                     <button
                                       type="button"
-                                      sx={[styles.focus, styles.actionsButton]}
-                                      aria-label={`Actions for ${constantName(constant)}`}
-                                      aria-haspopup="menu"
-                                      aria-expanded={
-                                        actionsMenu()?.id === constant.id ? "true" : "false"
+                                      sx={[
+                                        styles.focus,
+                                        styles.defaultButton,
+                                        isDefault(constant) ? styles.defaultAccent : null,
+                                      ]}
+                                      aria-label={
+                                        isDefault(constant)
+                                          ? `${constant.name} is the default`
+                                          : `Make ${constant.name} the default`
                                       }
-                                      title="Constant actions"
-                                      onClick={(event) => {
-                                        if (actionsMenu()?.id === constant.id) closeActions(true);
-                                        else openActions(constant.id, event.currentTarget);
-                                      }}
-                                      onKeyDown={(event) => {
-                                        if (event.key !== "ArrowDown") return;
-                                        event.preventDefault();
-                                        openActions(constant.id, event.currentTarget);
-                                      }}
+                                      title={
+                                        isDefault(constant)
+                                          ? "Default for new nodes"
+                                          : "Make default for new nodes"
+                                      }
+                                      disabled={!props.canEditConstants || isDefault(constant)}
+                                      onClick={() => props.onSetDefaultConstant(constant.id)}
                                     >
-                                      <IconMdiDotsHorizontal
-                                        aria-hidden="true"
-                                        {...stylex.attrs(styles.actionsIcon)}
-                                      />
+                                      ●
                                     </button>
-                                  </Show>
+                                    <button
+                                      type="button"
+                                      sx={[styles.focus, styles.deleteButton]}
+                                      aria-label={`Delete ${constant.name}`}
+                                      title="Delete"
+                                      disabled={!props.canEditConstants}
+                                      onClick={() => props.onDeleteConstant(constant.id)}
+                                    >
+                                      <IconTablerTrash {...stylex.attrs(styles.trash)} />
+                                    </button>
+                                  </div>
+                                  <Select
+                                    appearance={styles.constantValueAppearance}
+                                    options={values().map((value) => ({
+                                      id: JSON.stringify(value.id),
+                                      name: value.display,
+                                    }))}
+                                    value={
+                                      constant.value === undefined
+                                        ? ""
+                                        : JSON.stringify(constant.value)
+                                    }
+                                    valid={valid()}
+                                    placeholder="Select value"
+                                    unavailableLabel="Unavailable"
+                                    missingLabel="Previously selected (unavailable)"
+                                    disabled={!props.canEditConstants}
+                                    onChange={(value) => {
+                                      props.onSelectConstant(constant.id, JSON.parse(value));
+                                    }}
+                                  />
                                 </div>
-                                <Select
-                                  appearance={styles.constantValueAppearance}
-                                  options={values().map((value) => ({
-                                    id: JSON.stringify(value.id),
-                                    name: value.display,
-                                  }))}
-                                  value={
-                                    constant.value === undefined
-                                      ? ""
-                                      : JSON.stringify(constant.value)
-                                  }
-                                  valid={valid()}
-                                  placeholder="Select value"
-                                  unavailableLabel="Unavailable"
-                                  missingLabel="Previously selected (unavailable)"
-                                  onChange={(value) => {
-                                    props.onSelectConstant(constant.id, JSON.parse(value));
-                                  }}
-                                />
-                              </div>
-                            );
-                          }}
-                        </For>
-                      </div>
-                    </section>
-                  );
-                }}
-              </For>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      </section>
+                    );
+                  }}
+                </For>
+              </div>
             </div>
           </div>
-        </Show>
+        </section>
       </div>
-      <Show when={actionsConstant()}>
-        {(constant) => (
-          <Portal>
-            <div
-              ref={actionsElement}
-              role="menu"
-              aria-label={`Actions for ${constantName(constant())}`}
-              sx={styles.actionsMenu}
-              style={actionsPosition()}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                const buttons = Array.from(
-                  event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
-                );
-                const index = buttons.findIndex((button) => button === document.activeElement);
-                if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-                  event.preventDefault();
-                  const next =
-                    event.key === "Home"
-                      ? 0
-                      : event.key === "End"
-                        ? buttons.length - 1
-                        : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) %
-                          buttons.length;
-                  buttons[next]?.focus();
-                }
-                if (event.key === "Tab") closeActions(true);
-              }}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                tabindex={-1}
-                sx={[
-                  styles.focus,
-                  styles.menuAction,
-                  isDefault(constant()) && styles.disabledAction,
-                ]}
-                aria-disabled={isDefault(constant()) ? "true" : "false"}
-                title="Used by new nodes. Existing nodes keep their selections."
-                onClick={() => {
-                  if (isDefault(constant())) return;
-                  const id = constant().id;
-                  closeActions(true);
-                  props.onSetDefaultConstant(id);
-                }}
-              >
-                {isDefault(constant()) ? "Default for new nodes" : "Make default"}
-              </button>
-              <div role="separator" sx={styles.menuDivider} />
-              <button
-                type="button"
-                role="menuitem"
-                tabindex={-1}
-                sx={[styles.focus, styles.menuAction, styles.dangerAction]}
-                onClick={() => {
-                  const id = constant().id;
-                  closeActions(true);
-                  props.onDeleteConstant(id);
-                }}
-              >
-                Delete
-              </button>
-            </div>
-          </Portal>
-        )}
-      </Show>
     </Sidebar>
   );
 }

@@ -2,14 +2,14 @@ import { assert, describe, it } from "@effect/vitest";
 import { GraphId, IoId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
-import { Persistence } from "@macrograph/persistence";
-import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Engine, Module } from "@macrograph/module";
 import OBSModule from "@macrograph/module-obs";
 import { OBSEngine } from "@macrograph/module-obs/Definition";
 import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
 import TwitchModule from "@macrograph/module-twitch";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
+import { Persistence } from "@macrograph/persistence";
+import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import {
   Array,
   Context,
@@ -151,6 +151,7 @@ describe("ProjectExecution", () => {
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
         "CustomTypes",
         "Scopes",
+        "macrograph-functions",
         "obs",
         "twitch",
       ]);

@@ -181,6 +181,7 @@ export function Inspector(props: {
   onSaveDefault?: (nodeId: string, input: string, value: unknown) => Promise<unknown>;
   onRemoveDefault?: (nodeId: string, input: string) => Promise<unknown>;
   fn?: GraphFunction.Model | undefined;
+  functions?: ReadonlyArray<GraphFunction.Model>;
   canEdit: boolean;
   editingGraphNameId: string | null;
   onEditingGraphNameChange: (id: string | null) => void;
@@ -375,9 +376,12 @@ export function Inspector(props: {
                                     property={
                                       property as Extract<
                                         Package.PropertyDefinition,
-                                        { readonly type: unknown }
+                                        { readonly type: unknown } | { readonly function: true }
                                       >
                                     }
+                                    {...(props.functions === undefined
+                                      ? {}
+                                      : { functions: props.functions })}
                                     value={node().properties[property.id]}
                                     onSet={(value) => props.onSetNodeProperty(property.id, value)}
                                     onClear={() => props.onClearNodeProperty(property.id)}

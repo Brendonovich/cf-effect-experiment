@@ -575,6 +575,9 @@ function EditorContent(
                   search={controller.catalog.navSearch()}
                   selectedPaneId={controller.layout.selectedPaneId()}
                   graphs={controller.catalog.filteredGraphs()}
+                  functionIds={
+                    new Set(Object.keys(controller.editor.store.project?.functions ?? {}))
+                  }
                   packagesWithSettings={controller.catalog.filteredPackagesWithSettings()}
                   packagesWithoutSettings={controller.catalog.filteredPackagesWithoutSettings()}
                   allPackages={controller.editor.store.packages}
@@ -1141,6 +1144,7 @@ function EditorContent(
                     controller.layout.selectedGraphId() ?? ""
                   ]
                 }
+                functions={Object.values(controller.editor.store.project?.functions ?? {})}
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>

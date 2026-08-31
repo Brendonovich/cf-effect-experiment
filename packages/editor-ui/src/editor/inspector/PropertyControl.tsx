@@ -1,9 +1,10 @@
-import type { Package } from "@macrograph/core";
+import type { Function as GraphFunction, Package } from "@macrograph/core";
 
 import * as stylex from "@stylexjs/stylex";
 import { Show, createSignal } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { Select } from "../../ui/Select";
 
 const styles = stylex.create({
   field: { display: "flex", flexDirection: "column", gap: 2 },
@@ -43,7 +44,11 @@ const styles = stylex.create({
 });
 
 export function PropertyControl(props: {
-  property: Extract<Package.PropertyDefinition, { readonly type: unknown }>;
+  property: Extract<
+    Package.PropertyDefinition,
+    { readonly type: unknown } | { readonly function: true }
+  >;
+  functions?: ReadonlyArray<GraphFunction.Model>;
   value: unknown;
   onSet: (value: unknown) => void;
   onClear: () => void;
@@ -54,6 +59,7 @@ export function PropertyControl(props: {
   };
   const [draft, setDraft] = createSignal(formatValue);
   const commitNumber = () => {
+    if (!("type" in props.property)) return;
     const value = Number(draft());
     const valid =
       draft().trim() !== "" &&
@@ -76,7 +82,20 @@ export function PropertyControl(props: {
       <Show when={props.property.description}>
         {(description) => <span sx={styles.description}>{description()}</span>}
       </Show>
-      <Show when={props.property.type._tag === "String"}>
+      <Show when={"function" in props.property}>
+        <Select
+          options={(props.functions ?? []).map((fn) => ({
+            id: fn.canvas.id,
+            name: fn.canvas.name,
+          }))}
+          value={typeof props.value === "string" ? props.value : ""}
+          valid={(props.functions ?? []).some((fn) => fn.canvas.id === props.value)}
+          placeholder="Select function"
+          missingLabel="Missing function"
+          onChange={props.onSet}
+        />
+      </Show>
+      <Show when={"type" in props.property && props.property.type._tag === "String"}>
         <input
           sx={styles.input}
           value={draft()}
@@ -84,17 +103,22 @@ export function PropertyControl(props: {
           onChange={() => props.onSet(draft())}
         />
       </Show>
-      <Show when={props.property.type._tag === "Int" || props.property.type._tag === "Float"}>
+      <Show
+        when={
+          "type" in props.property &&
+          (props.property.type._tag === "Int" || props.property.type._tag === "Float")
+        }
+      >
         <input
           sx={styles.input}
           type="number"
-          step={props.property.type._tag === "Int" ? "1" : "any"}
+          step={"type" in props.property && props.property.type._tag === "Int" ? "1" : "any"}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onChange={commitNumber}
         />
       </Show>
-      <Show when={props.property.type._tag === "Bool"}>
+      <Show when={"type" in props.property && props.property.type._tag === "Bool"}>
         <input
           sx={styles.checkbox}
           type="checkbox"

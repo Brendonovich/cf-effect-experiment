@@ -26,6 +26,7 @@ const meta: Meta<typeof NavigationSidebar> = {
       [graph.id, graph],
       [secondaryGraph.id, secondaryGraph],
     ],
+    functionIds: new Set([secondaryGraph.id]),
     packagesWithSettings: [twitchPackage, obsPackage],
     packagesWithoutSettings: [utilityPackage],
     allPackages: packages,
@@ -74,7 +75,7 @@ export const Sections: Story = {
           [
             { label: "Graphs", section: "graphs", selectedPaneId: `graph:${graph.id}` },
             { label: "Packages", section: "packages", selectedPaneId: "package:twitch" },
-            { label: "Constants", section: "constants", selectedPaneId: undefined },
+            { label: "Functions", section: "functions", selectedPaneId: undefined },
           ] as const
         }
       >
@@ -96,7 +97,7 @@ export const Sections: Story = {
 };
 
 export const DefaultConstants: Story = {
-  args: { section: "constants" },
+  args: { section: "functions" },
   render: (args) => {
     const [items, setItems] = createSignal(() => args.constants);
     return (

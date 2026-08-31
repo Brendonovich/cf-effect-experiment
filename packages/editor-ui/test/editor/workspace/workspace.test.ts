@@ -74,7 +74,9 @@ describe("workspace reducer", () => {
 
   it("preserves state identity when focusing the focused pane", () => {
     const state = createWorkspaceState({ type: "settings" });
-    expect(workspaceReducer(state, { type: "focus-pane", paneId: state.focusedPaneId })).toBe(state);
+    expect(workspaceReducer(state, { type: "focus-pane", paneId: state.focusedPaneId })).toBe(
+      state,
+    );
   });
 
   it("builds recursive splits with independent copied graph views", () => {
@@ -366,6 +368,16 @@ describe("workspace storage", () => {
     expect(parseWorkspaceState(JSON.stringify({ ...state, navSection: "types" }))?.navSection).toBe(
       "graphs",
     );
+  });
+
+  it("migrates the former constants tab and preserves the functions tab", () => {
+    const state = createWorkspaceState({ type: "graph", graphId: "main" });
+    expect(
+      parseWorkspaceState(JSON.stringify({ ...state, navSection: "constants" }))?.navSection,
+    ).toBe("graphs");
+    expect(
+      parseWorkspaceState(JSON.stringify({ ...state, navSection: "functions" }))?.navSection,
+    ).toBe("functions");
   });
 
   it("rejects orphaned, duplicate, and inconsistent pane trees", () => {
