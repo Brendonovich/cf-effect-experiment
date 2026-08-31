@@ -27,8 +27,10 @@ ${event.comment.body.replace(/^\/(?:opencode|oc)\s+/, "")}`;
 console.log(
   "Starting OpenCode; agent output is suppressed to protect confidential model metadata.",
 );
-const result = spawnSync("opencode2", ["run", "--standalone", "--auto", prompt], {
-  stdio: "ignore",
+const result = spawnSync("opencode2", ["run", "--standalone", "--auto", "--model", model, prompt], {
+  stdio: ["ignore", "pipe", "pipe"],
+  encoding: "utf8",
+  maxBuffer: 16 * 1024 * 1024,
   timeout: Math.min(lifetime, 30 * 60_000),
   killSignal: "SIGKILL",
   env: {
@@ -42,6 +44,17 @@ const result = spawnSync("opencode2", ["run", "--standalone", "--auto", prompt],
   },
 });
 if (result.error || result.status !== 0) {
+  const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  const category = /model.*not found|model.*not available|ModelNotFound/i.test(output)
+    ? "model unavailable"
+    : /401|403|unauthorized|authentication/i.test(output)
+      ? "provider authentication"
+      : /config.*invalid|invalid.*config|ConfigInvalid/i.test(output)
+        ? "configuration"
+        : /permission|denied/i.test(output)
+          ? "permission"
+          : "startup or execution";
+  console.error(`Failure category: ${category}; exit code: ${result.status ?? "none"}.`);
   console.error("OpenCode failed or exceeded its time limit; detailed output is withheld.");
   process.exitCode = 1;
 } else {

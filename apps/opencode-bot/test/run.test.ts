@@ -18,7 +18,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("keeps confidential model identity out of arguments and logs", async () => {
+it("selects the confidential model explicitly without logging its identity", async () => {
   const model = "private-provider/private-model";
   vi.stubEnv("OPENCODE_MODEL", model);
   vi.stubEnv("OPENCODE_TOKEN_EXPIRES", String(Date.now() + 600_000));
@@ -26,9 +26,9 @@ it("keeps confidential model identity out of arguments and logs", async () => {
   await import("../src/run.ts");
   expect(spawnSync).toHaveBeenCalledWith(
     "opencode2",
-    expect.not.arrayContaining([model]),
+    expect.arrayContaining(["--model", model]),
     expect.objectContaining({
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       env: expect.objectContaining({ OPENCODE_CONFIG_CONTENT: expect.stringContaining(model) }),
     }),
   );
