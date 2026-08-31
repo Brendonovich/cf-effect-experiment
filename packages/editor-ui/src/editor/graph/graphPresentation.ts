@@ -8,6 +8,15 @@ type Position = { readonly x: number; readonly y: number };
 
 export const GRAPH_NODE_FIRST_IO_Y = 42;
 export const GRAPH_NODE_IO_SPACING = 28;
+export const GRAPH_GRID_SPACING = 40;
+
+export const snapGraphPosition = (position: Position, shiftKey = false): Position =>
+  shiftKey
+    ? position
+    : {
+        x: Math.round(position.x / GRAPH_GRID_SPACING) * GRAPH_GRID_SPACING,
+        y: Math.round(position.y / GRAPH_GRID_SPACING) * GRAPH_GRID_SPACING,
+      };
 
 export const graphPortOffset = (
   width: number,
