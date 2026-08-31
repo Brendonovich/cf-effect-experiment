@@ -16,6 +16,7 @@ import { colors } from "../tokens.stylex.ts";
 import { Inspector } from "./inspector/Inspector";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
+import { QueuesPanel } from "./catalog/QueuesPanel";
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { PluginSettingsView } from "./plugins/PluginSettingsView";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
@@ -515,6 +516,21 @@ function EditorContent(
                   onSearchChange={controller.catalog.setNavSearch}
                   onClose={() => controller.layout.setNavSection(null)}
                   onCreateGraph={controller.commands.createGraph}
+                  onCreateQueue={controller.commands.createQueue}
+                  queuesPanel={<QueuesPanel
+                    queues={controller.editor.store.project?.queues ?? {}}
+                    states={controller.connection.queueStates()}
+                    search={controller.catalog.navSearch()}
+                    canEdit={controller.connection.canEdit()}
+                    error={controller.commands.queueError()}
+                    functionName={(id) => controller.editor.store.project?.graphs[id]?.name ?? id}
+                    onRename={controller.commands.renameQueue}
+                    onDelete={controller.commands.deleteQueue}
+                    onPause={controller.commands.pauseQueue}
+                    onAdvance={controller.commands.advanceQueue}
+                    onClear={controller.commands.clearQueue}
+                    onRemove={controller.commands.removeQueueItem}
+                  />}
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}

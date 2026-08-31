@@ -1,4 +1,5 @@
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
+import { Queue } from "@macrograph/core";
 import { HttpEndpoint, HttpIngress } from "@macrograph/plugin";
 import kofiDeployment from "@macrograph/plugin-kofi/Deployment/Webhook";
 import twitchDeployment from "@macrograph/plugin-twitch/Deployment/Webhook";
@@ -13,6 +14,8 @@ import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../TwitchCredentials.ts";
 import { DurableObjectHttpEndpointHost } from "./DurableObjectHttpEndpointHost.ts";
+import * as FunctionQueueProtocol from "../execution/FunctionQueueProtocol.ts";
+import * as ProjectFunctionQueues from "../execution/ProjectFunctionQueues.ts";
 
 export interface IngressRequest {
   readonly projectId: string;
@@ -44,6 +47,7 @@ export interface DeployRequest {
   readonly publicOrigin: string;
   readonly engines: Readonly<Record<string, unknown>>;
   readonly utilitiesTickEnabled: boolean;
+  readonly queueIds?: ReadonlyArray<string>;
 }
 
 export interface PreviewRequest {
@@ -116,6 +120,23 @@ const isWorkflowBinding = (value: unknown): value is WorkflowBinding =>
 export const projectIngressImplementation = Effect.gen(function* () {
   const durableState = yield* Cloudflare.DurableObjectState;
   const workerEnvironment = yield* Cloudflare.WorkerEnvironment;
+  const functionQueues = yield* ProjectFunctionQueues.make({
+    load: durableState.storage.get(ProjectFunctionQueues.storageKey),
+    save: (metadata) => durableState.storage.put(ProjectFunctionQueues.storageKey, metadata),
+    wake: Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      yield* Cloudflare.Workers.scheduleEvent(ProjectFunctionQueues.alarmId, new Date(now + 5_000), {}, 5_000);
+    }),
+    sleep: Cloudflare.Workers.cancelEvent(ProjectFunctionQueues.alarmId),
+    send: (delivery) => Effect.tryPromise({
+      try: () => FunctionQueueProtocol.queueBinding(workerEnvironment?.FunctionWorkQueue).send(delivery),
+      catch: (error) => error,
+    }),
+    workflows: {
+      create: (options) => FunctionQueueProtocol.workflowBinding(workerEnvironment?.FunctionExecutionWorkflow).create(options),
+      get: (id) => FunctionQueueProtocol.workflowBinding(workerEnvironment?.FunctionExecutionWorkflow).get(id),
+    },
+  });
   let publicOrigin = "http://localhost:1338";
   let activeProjectId: string | undefined;
   const endpointHostLayer = DurableObjectHttpEndpointHost.layer({
@@ -392,6 +413,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
         endpoints: endpoints.filter((endpoint) => entryFor(desired, endpoint) !== undefined),
       };
       yield* durableState.storage.put(appliedDeploymentKey, deployed);
+      yield* functionQueues.configure({ projectId: request.projectId, deploymentId: request.deploymentId,
+        r2Key: request.r2Key }, request.queueIds ?? []);
       if (Option.isSome(preview)) {
         yield* durableState.storage.put(previewDeploymentKey, {
           ...preview.value,
@@ -506,6 +529,9 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const preview = yield* loadPreview();
       const previousProvider = yield* providerManifest(previous, preview).pipe(Effect.orDie);
       yield* durableState.storage.delete(appliedDeploymentKey);
+      if (Option.isSome(previous) && previous.value.projectId !== undefined) yield* functionQueues.stop({
+        projectId: previous.value.projectId, deploymentId: previous.value.deploymentId, r2Key: previous.value.r2Key,
+      });
       const desiredProvider = yield* providerManifest(Option.none(), preview).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
       yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
@@ -513,6 +539,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
 
     const alarm = Effect.gen(function* () {
       const events = yield* Cloudflare.Workers.processScheduledEvents;
+      if (events.some((event) => event.id === ProjectFunctionQueues.alarmId)) yield* functionQueues.reconcile;
       if (!events.some((event) => event.id === utilitiesTickEventId)) return;
       const deployment = yield* loadAppliedDeployment();
       if (Option.isNone(deployment) || deployment.value.projectId === undefined) {
@@ -602,6 +629,14 @@ export const projectIngressImplementation = Effect.gen(function* () {
       getEndpoint,
       lookupEndpoint,
       endpointSecret,
+      queueEnqueue: functionQueues.enqueue,
+      queueDeliver: functionQueues.deliver,
+      queueInspect: functionQueues.inspect,
+      queueSnapshot: functionQueues.snapshot,
+      queuePause: functionQueues.pause,
+      queueAdvance: functionQueues.advance,
+      queueRemove: functionQueues.remove,
+      queueClear: functionQueues.clear,
     };
   }).pipe(
     Effect.provide(endpointHostLayer),
@@ -610,7 +645,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
   );
 });
 
-type ProjectIngressShape = Effect.Success<Effect.Success<typeof projectIngressImplementation>>;
+export type ProjectIngressShape = Effect.Success<Effect.Success<typeof projectIngressImplementation>>;
 
 /**
  * Owns each project's webhooks and shared production/preview subscriptions.

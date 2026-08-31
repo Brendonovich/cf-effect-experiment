@@ -1,13 +1,14 @@
 import type { Graph, Package, Project, ResourceConstant } from "@macrograph/core";
+import type { JSX } from "@solidjs/web";
 
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, For, Show } from "solid-js";
 
-import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { colors } from "../../tokens.stylex.ts";
-import { Sidebar } from "../workspace/Layout";
-import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
+import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
@@ -33,7 +34,7 @@ const styles = stylex.create({
   },
   tabGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     height: "100%",
     width: "100%",
   },
@@ -286,7 +287,7 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "constants";
+export type NavigationSection = "graphs" | "packages" | "constants" | "queues";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
@@ -301,6 +302,8 @@ export function NavigationSidebar(props: {
   onSearchChange: (search: string) => void;
   onClose: () => void;
   onCreateGraph: () => void;
+  onCreateQueue?: () => void;
+  queuesPanel?: JSX.Element;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -488,7 +491,7 @@ export function NavigationSidebar(props: {
       <div style={{ "flex-shrink": "0" }}>
         <div sx={styles.topTabs}>
           <div sx={styles.tabGrid}>
-            <For each={["graphs", "packages", "constants"] as const}>
+            <For each={["graphs", "packages", "constants", "queues"] as const}>
               {(section) => (
                 <button
                   type="button"
@@ -504,7 +507,9 @@ export function NavigationSidebar(props: {
                     ? "Graphs"
                     : section === "packages"
                       ? "Plugins"
-                      : "Constants"}
+                      : section === "queues"
+                        ? "Queues"
+                        : "Constants"}
                 </button>
               )}
             </For>
@@ -520,7 +525,9 @@ export function NavigationSidebar(props: {
                   ? "Search Graphs"
                   : props.section === "packages"
                     ? "Search Plugins"
-                    : "Search Constants"
+                    : props.section === "queues"
+                      ? "Search Queues"
+                      : "Search Constants"
               }
               value={props.search}
               onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -533,6 +540,18 @@ export function NavigationSidebar(props: {
               aria-label="New graph"
               title="New graph"
               onClick={props.onCreateGraph}
+            >
+              <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
+            </button>
+          </Show>
+          <Show when={props.section === "queues"}>
+            <button
+              type="button"
+              sx={[styles.focus, styles.newButton]}
+              aria-label="New queue"
+              title="New queue"
+              disabled={!props.canEditGraphs}
+              onClick={() => props.onCreateQueue?.()}
             >
               <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
             </button>
@@ -628,6 +647,7 @@ export function NavigationSidebar(props: {
         </div>
       </div>
       <div sx={styles.scroll}>
+        <Show when={props.section === "queues"}>{props.queuesPanel}</Show>
         <Show when={props.section === "graphs"}>
           <For
             each={props.graphs}

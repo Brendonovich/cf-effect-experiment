@@ -91,6 +91,11 @@ describe("collaboration", () => {
       );
       assert.isTrue(Exit.isFailure(denied));
       yield* EditorRpc.authorize(identity("reader", "project", false), "GetProject");
+      yield* EditorRpc.authorize(identity("reader", "project", false), "QueueStateStream");
+      for (const operation of ["CreateQueue", "RenameQueue", "DeleteQueue", "SetQueuePaused", "AdvanceQueue", "RemoveQueueItem", "ClearQueue"]) {
+        assert.isTrue(Exit.isFailure(yield* EditorRpc.authorize(identity("reader", "project", false), operation).pipe(Effect.exit)));
+        yield* EditorRpc.authorize(identity("owner", "project"), operation);
+      }
       yield* EditorRpc.authorize(identity("reader", "project", false), "UpdatePresence");
       yield* EditorRpc.authorize(identity("owner", "project"), "CreateNode");
       yield* EditorRpc.authorize(identity("member", "project"), "SetEngineState");

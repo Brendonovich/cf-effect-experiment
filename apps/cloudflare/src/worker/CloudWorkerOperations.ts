@@ -179,6 +179,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
               r2Key: deployment.r2Key,
               publicOrigin: request.publicOrigin,
               engines: deployment.project.engines,
+              queueIds: Object.keys(deployment.project.queues),
               utilitiesTickEnabled: Object.values(deployment.project.graphs).some((graph) =>
                 Object.values(graph.nodes).some(
                   (node) =>

@@ -11,6 +11,20 @@ export const apply = (
   event: EditorEvent.EditorEvent,
 ): Effect.Effect<void, ApplyError> => {
   switch (event._tag) {
+    case "QueueUpdated":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        yield* persistence.saveProject({
+          ...project,
+          queues: { ...project.queues, [event.queue.id]: event.queue },
+        });
+      }).pipe(PersistenceError.refail);
+    case "QueueDeleted":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const { [event.queueId]: _, ...queues } = project.queues;
+        yield* persistence.saveProject({ ...project, queues });
+      }).pipe(PersistenceError.refail);
     case "GraphCreated":
       return persistence.saveGraph(event.graph);
 

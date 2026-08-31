@@ -12,6 +12,7 @@ import {
   Package,
   PackageId,
   Project,
+  Queue,
   RenderedProject,
   ResourceConstant,
   SchemaId,
@@ -108,6 +109,22 @@ export interface HostedResource {
 }
 
 export interface Interface {
+  readonly queue: {
+    readonly create: (name: string) => Effect.Effect<EditorEvent.QueueUpdated, PersistenceError>;
+    readonly rename: (
+      queueId: string,
+      name: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueUpdated,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
+    >;
+    readonly delete: (
+      queueId: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueDeleted,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
+    >;
+  };
   readonly project: {
     readonly get: () => Effect.Effect<Project.Model, Project.NotFoundError | PersistenceError>;
     readonly snapshot: () => Effect.Effect<
@@ -761,6 +778,27 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
+    const queueCreate = Effect.fn("Editor.queue.create")(function* (name: string) {
+      const id = Queue.QueueId.make(crypto.randomUUID());
+      return yield* events.publish({
+        _tag: "QueueUpdated",
+        queue: { id, name: name.trim() || "New Queue" },
+      });
+    }, lock.withPermit);
+    const queueRename = Effect.fn("Editor.queue.rename")(function* (queueId: string, name: string) {
+      const queue = (yield* persistence.loadProject()).queues[queueId];
+      if (queue === undefined) return yield* new Queue.NotFoundError({ id: queueId });
+      return yield* events.publish({
+        _tag: "QueueUpdated",
+        queue: { ...queue, name: name.trim() || "Queue" },
+      });
+    }, lock.withPermit);
+    const queueDelete = Effect.fn("Editor.queue.delete")(function* (queueId: string) {
+      if ((yield* persistence.loadProject()).queues[queueId] === undefined)
+        return yield* new Queue.NotFoundError({ id: queueId });
+      return yield* events.publish({ _tag: "QueueDeleted", queueId });
+    }, lock.withPermit);
+
     const getConstant = Effect.fnUntraced(function* (id: string) {
       const constant = (yield* persistence.loadProject()).constants[id];
       if (constant === undefined) return yield* new ResourceConstant.NotFoundError({ id });
@@ -1059,6 +1097,7 @@ export const layer = Layer.effect(Service)(
 
     return Service.of({
       project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
+      queue: { create: queueCreate, rename: queueRename, delete: queueDelete },
       constant: {
         create: constantCreate,
         rename: constantRename,

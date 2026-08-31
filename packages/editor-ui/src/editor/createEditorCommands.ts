@@ -1,7 +1,7 @@
 import type { EditorEvent } from "@macrograph/editor";
 
 import { IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
-import { Effect, type Schema } from "effect";
+import { Cause, Effect, type Schema } from "effect";
 import { createSignal } from "solid-js";
 
 import type { createEditorConnection } from "./session/createEditorConnection";
@@ -31,6 +31,43 @@ export function createEditorCommands(
   >,
 ) {
   const { client, canEdit } = connection;
+  const [queueError, setQueueError] = createSignal<string | null>(null);
+  const queueAction = <A, E>(effect: Effect.Effect<A, E>) => {
+    setQueueError(null);
+    runFork(
+      effect.pipe(
+        Effect.catchCause((cause) => Effect.sync(() => setQueueError(String(Cause.squash(cause))))),
+      ),
+    );
+  };
+  const createQueue = () => {
+    const c = client();
+    if (c && canEdit()) queueAction(applyMutation(c.CreateQueue({ name: "New Queue" })));
+  };
+  const renameQueue = (queueId: string, name: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(applyMutation(c.RenameQueue({ queueId, name })));
+  };
+  const deleteQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(applyMutation(c.DeleteQueue({ queueId })));
+  };
+  const pauseQueue = (queueId: string, paused: boolean) => {
+    const c = client();
+    if (c && canEdit()) queueAction(c.SetQueuePaused({ queueId, paused }));
+  };
+  const advanceQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(c.AdvanceQueue({ queueId }));
+  };
+  const clearQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(c.ClearQueue({ queueId }));
+  };
+  const removeQueueItem = (queueId: string, itemId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(c.RemoveQueueItem({ queueId, itemId }));
+  };
   const { selectedGraphId, selectedGraph, selectedNodeId, setSelectedGraphId, setSelectedNodeIds } =
     workspace;
   const applyMutation = <Event extends EditorEvent.EditorEvent, Error, Requirements>(
@@ -330,6 +367,14 @@ export function createEditorCommands(
     editingGraphNameId,
     editingNodeNameId,
     createConstant,
+    queueError,
+    createQueue,
+    renameQueue,
+    deleteQueue,
+    pauseQueue,
+    advanceQueue,
+    clearQueue,
+    removeQueueItem,
     renameConstant,
     selectConstant,
     deleteConstant,

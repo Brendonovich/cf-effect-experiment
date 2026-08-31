@@ -1,4 +1,4 @@
-import type { Package } from "@macrograph/core";
+import type { Package, Queue } from "@macrograph/core";
 import type { Presence } from "@macrograph/editor";
 
 import { Effect, Fiber, Schedule, Stream } from "effect";
@@ -49,6 +49,7 @@ export function createEditorConnection(
   selfPresence: () => Presence.Client | undefined;
   canEdit: () => boolean;
   editorReady: () => boolean;
+  queueStates: () => ReadonlyArray<Queue.State>;
 } {
   const { store, applyEvent, setProject, setPackages } = editor;
   const [activeConnection, setActiveConnection] = createSignal<EditorConnection | null>(null);
@@ -105,6 +106,7 @@ export function createEditorConnection(
   const pluginSettingsById = () => connectionState.context.pluginSettings;
   const [presenceClients, setPresenceClients] = createSignal<ReadonlyArray<Presence.Client>>([]);
   const [selfConnectionId, setSelfConnectionId] = createSignal<string>();
+  const [queueStates, setQueueStates] = createSignal<ReadonlyArray<Queue.State>>([]);
   const selfPresence = () =>
     presenceClients().find((entry) => entry.connectionId === selfConnectionId());
   const canEdit = () =>
@@ -123,6 +125,7 @@ export function createEditorConnection(
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             setPresenceClients([]);
+            setQueueStates([]);
             setSelfConnectionId(undefined);
             pluginData.disconnect(props.reconnect === true);
             connectionActions.disconnected(props.reconnect === true);
@@ -131,6 +134,9 @@ export function createEditorConnection(
 
         yield* Effect.all(
           [
+            activeClient
+              .QueueStateStream()
+              .pipe(Stream.runForEach((states) => Effect.sync(() => setQueueStates(states)))),
             activeClient.PresenceStream().pipe(
               Stream.runForEach((event) =>
                 Effect.sync(() => {
@@ -223,5 +229,6 @@ export function createEditorConnection(
     selfPresence,
     canEdit,
     editorReady,
+    queueStates,
   };
 }

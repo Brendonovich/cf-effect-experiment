@@ -10,6 +10,7 @@ import {
   EditorServer,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
@@ -296,6 +297,7 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provide(Layer.succeed(EditorAccess.Policy, accessPolicy)),
   Layer.provide(RpcSerialization.layerJsonRpc()),
   Layer.provide(ProjectExecutionLayer),
+  Layer.provide(QueueRuntime.layer),
   Layer.provide(RuntimeActivity.layer),
   Layer.provide(
     Layer.succeed(Engine.Credentials, {

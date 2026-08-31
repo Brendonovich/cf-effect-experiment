@@ -5,6 +5,7 @@ import {
   type NodeIO,
   Package,
   Project,
+  Queue,
   ResourceConstant,
 } from "@macrograph/core";
 import { EditorEvent } from "@macrograph/editor";
@@ -22,6 +23,7 @@ type MutableProject = {
   graphs: Record<string, MutableGraph>;
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
+  queues: Record<string, Queue.Model>;
 };
 
 type MutableEditorStore = {
@@ -61,6 +63,7 @@ export function createEditorStore() {
                 ),
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
+                queues: { ...current.project.queues },
               },
         packages: [...current.packages],
         nodeIO: Object.fromEntries(
@@ -97,6 +100,12 @@ export function createEditorStore() {
     if (!store.project) return;
 
     switch (event._tag) {
+      case "QueueUpdated":
+        setStore((store) => { store.project!.queues[event.queue.id] = event.queue; });
+        break;
+      case "QueueDeleted":
+        setStore((store) => { delete store.project!.queues[event.queueId]; });
+        break;
       case "GraphCreated":
         setStore((store) => {
           if (store.project) {
