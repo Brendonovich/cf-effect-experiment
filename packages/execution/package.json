@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./Executor": "./src/Executor.ts",
-    "./RuntimeActivity": "./src/RuntimeActivity.ts"
+    "./RuntimeActivity": "./src/RuntimeActivity.ts",
+    "./Queues": "./src/Queues.ts"
   },
   "scripts": {
     "build": "tsgo --build",

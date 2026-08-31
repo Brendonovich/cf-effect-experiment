@@ -263,6 +263,7 @@ describe("HTTP client plugin", () => {
         const recordId = NodeId.make("record");
         const project: Project.Model = {
           name: "HTTP",
+          queues: {},
           engines: {},
           constants: {},
           graphs: {

@@ -41,6 +41,7 @@ describe("Utilities execution", () => {
       const whenFalse = node("false", "Print", {}, { in: "false" });
       const project: Project.Model = {
         name: "Utilities",
+        queues: {},
         engines: {},
         constants: {},
         graphs: {

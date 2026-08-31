@@ -13,6 +13,7 @@ import {
   Package,
   PackageId,
   Project,
+  Queue,
   RenderedProject,
   ResourceConstant,
   SchemaId,
@@ -110,6 +111,22 @@ export interface HostedResource {
 }
 
 export interface Interface {
+  readonly queue: {
+    readonly create: (name: string) => Effect.Effect<EditorEvent.QueueUpdated, PersistenceError>;
+    readonly rename: (
+      queueId: string,
+      name: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueUpdated,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
+    >;
+    readonly delete: (
+      queueId: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueDeleted,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
+    >;
+  };
   readonly project: {
     readonly get: () => Effect.Effect<Project.Model, Project.NotFoundError | PersistenceError>;
     readonly snapshot: () => Effect.Effect<
@@ -302,6 +319,7 @@ export const layer = Layer.effect(Service)(
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
     yield* packages.loadPackage(FunctionGraph.pkg);
+    yield* packages.loadPackage(FunctionGraph.queuesPackage);
     const lock = yield* Semaphore.make(1);
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -357,6 +375,15 @@ export const layer = Layer.effect(Service)(
     const validateFunctionTarget = Effect.fnUntraced(function* (
       node: Pick<Node.Model, "schema" | "properties">,
     ) {
+      if (FunctionGraph.isQueuedCall(node) && node.properties.queue !== undefined) {
+        const queueId = node.properties.queue;
+        const project = yield* persistence.loadProject();
+        if (typeof queueId !== "string" || project.queues[queueId] === undefined)
+          return yield* new Package.InvalidPropertyError({
+            property: "queue",
+            reason: "Selected queue does not exist",
+          });
+      }
       if (!FunctionGraph.isCall(node) || node.properties.function === undefined) return;
       const target = node.properties.function;
       const project = yield* persistence.loadProject();
@@ -1003,6 +1030,27 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
+    const queueCreate = Effect.fn("Editor.queue.create")(function* (name: string) {
+      const id = Queue.QueueId.make(crypto.randomUUID());
+      return yield* events.publish({
+        _tag: "QueueUpdated",
+        queue: { id, name: name.trim() || "New Queue" },
+      });
+    }, lock.withPermit);
+    const queueRename = Effect.fn("Editor.queue.rename")(function* (queueId: string, name: string) {
+      const queue = (yield* persistence.loadProject()).queues[queueId];
+      if (queue === undefined) return yield* new Queue.NotFoundError({ id: queueId });
+      return yield* events.publish({
+        _tag: "QueueUpdated",
+        queue: { ...queue, name: name.trim() || "Queue" },
+      });
+    }, lock.withPermit);
+    const queueDelete = Effect.fn("Editor.queue.delete")(function* (queueId: string) {
+      if ((yield* persistence.loadProject()).queues[queueId] === undefined)
+        return yield* new Queue.NotFoundError({ id: queueId });
+      return yield* events.publish({ _tag: "QueueDeleted", queueId });
+    }, lock.withPermit);
+
     const getConstant = Effect.fnUntraced(function* (id: string) {
       const constant = (yield* persistence.loadProject()).constants[id];
       if (constant === undefined) return yield* new ResourceConstant.NotFoundError({ id });
@@ -1301,6 +1349,7 @@ export const layer = Layer.effect(Service)(
 
     return Service.of({
       project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
+      queue: { create: queueCreate, rename: queueRename, delete: queueDelete },
       constant: {
         create: constantCreate,
         rename: constantRename,

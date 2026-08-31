@@ -22,6 +22,8 @@ import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentSnapshotsBucket } from "../Storage.ts";
 import * as ExecutorPlugins from "./ExecutorPlugins.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
+import * as FunctionQueueTransport from "./FunctionQueueTransport.ts";
+import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
 
 const WorkflowNodeStepName = Schema.String.pipe(
 	Schema.brand("WorkflowNodeStepName"),
@@ -63,6 +65,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 	"GraphExecutionWorkflow",
 	Effect.gen(function* () {
 		const snapshotsResource = yield* DeploymentSnapshotsBucket;
+		const queueProjects = yield* ProjectIngressDO;
 		const database = yield* Database.Service;
 		const snapshots = yield* Cloudflare.R2.ReadBucket(snapshotsResource);
 
@@ -270,11 +273,16 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 				const engineClient = yield* WorkflowRuntime.make(project).pipe(
 					Effect.provide(FetchHttpClient.layer),
 				);
+				const enqueueFunction = yield* FunctionQueueTransport.make(queueProjects, input, input.executionId, project);
 				const executor = yield* ProjectExecutor.make(project, {
 					projectId: input.projectId,
 					executionDriver,
 					plugins: ExecutorPlugins.registry,
 					engineClient,
+					queueInvocation: (invocation) => enqueueFunction({
+						queueId: invocation.queueId, functionId: invocation.functionId, values: invocation.inputs,
+						queueLineage: invocation.queueLineage, executionPath: invocation.key.executionPath,
+					}).pipe(Effect.mapError((cause) => new Executor.NodeExecutionError({ nodeId: invocation.key.nodeId, cause }))),
 				});
 				yield* ExecutorPlugins.registry
 					.handle(executor, input.pluginId, event)

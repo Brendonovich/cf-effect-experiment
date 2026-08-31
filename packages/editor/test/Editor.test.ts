@@ -188,6 +188,7 @@ const SeedLayer = Layer.effectDiscard(
     db.saveProject({
       name: "test",
       graphs: {},
+      queues: {},
       engines: {},
       constants: {},
     }),
@@ -205,6 +206,18 @@ const makeEventPull = EditorEvents.Service.pipe(Effect.flatMap((events) => event
 
 it.layer(TestLayer)((it) => {
   describe("Editor", () => {
+    it.effect("persists queue definitions, renames them, and deletes only metadata", () => Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const created = yield* editor.queue.create("Notifications");
+      const id = created.queue.id;
+      assert.strictEqual((yield* editor.project.get()).queues[id]?.name, "Notifications");
+      yield* editor.queue.rename(id, "Deliveries");
+      assert.strictEqual((yield* editor.project.snapshot()).project.queues[id]?.name, "Deliveries");
+      yield* editor.queue.delete(id);
+      assert.isUndefined((yield* editor.project.get()).queues[id]);
+      const missing = yield* editor.queue.rename(id, "Missing").pipe(Effect.result);
+      assert.isTrue(Result.isFailure(missing));
+    }));
     it.effect("createGraph publishes event", () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;

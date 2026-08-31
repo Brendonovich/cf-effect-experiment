@@ -139,6 +139,7 @@ describe("Self-hosted plugins", () => {
           ...deployments.map((deployment) => deployment.pluginId),
           ...statelessPlugins.map((plugin) => plugin.id),
           "macrograph-functions",
+          "macrograph-queues",
         ].sort(),
       );
       for (const [id, count] of [

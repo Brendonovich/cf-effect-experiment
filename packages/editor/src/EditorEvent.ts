@@ -1,4 +1,4 @@
-import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant } from "@macrograph/core";
+import { Actor, Connection, Graph, Node, NodeIO, Queue, ResourceConstant } from "@macrograph/core";
 import { Effect, Schema } from "effect";
 
 const actor = Actor.Model.pipe(Schema.withDecodingDefaultKey(Effect.succeed(Actor.system)));
@@ -160,7 +160,14 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 });
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
+export const QueueUpdated = Schema.TaggedStruct("QueueUpdated", { actor, queue: Queue.Model });
+export type QueueUpdated = typeof QueueUpdated.Type;
+export const QueueDeleted = Schema.TaggedStruct("QueueDeleted", { actor, queueId: Schema.String });
+export type QueueDeleted = typeof QueueDeleted.Type;
+
 export type EditorEvent =
+  | QueueUpdated
+  | QueueDeleted
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged

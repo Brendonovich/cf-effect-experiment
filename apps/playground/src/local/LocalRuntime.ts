@@ -10,8 +10,9 @@ import {
   EditorRpc,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
-import { Executor, RuntimeActivity } from "@macrograph/execution";
+import { RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
 import HttpClientDeployment from "@macrograph/plugin-http-client/Deployment/Local";
 import JsonPlugin from "@macrograph/plugin-json";
@@ -29,6 +30,7 @@ import WebSocketClientDeployment from "@macrograph/plugin-websocket-client/Deplo
 import { settings as websocketSettings } from "@macrograph/plugin-websocket-client/Settings";
 import * as Engine from "@macrograph/plugin/Engine";
 import * as Resource from "@macrograph/plugin/Resource";
+import { ProjectQueues } from "@macrograph/project-host";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { PluginMount } from "@macrograph/project-host/PluginMount";
 import { Context, Effect, Layer, Stream, type Scope } from "effect";
@@ -69,6 +71,7 @@ export const makeLocalConnection = (
     Packages.defaultLayer,
     Presence.layer,
     RuntimeActivity.layer,
+    QueueRuntime.layer,
     credentials === undefined
       ? Engine.emptyCredentialsLayer
       : Layer.succeed(Engine.Credentials)(credentials.service),
@@ -88,15 +91,15 @@ export const makeLocalConnection = (
         const persistenceService = yield* Persistence.Service;
         const editorEvents = yield* EditorEvents.Service;
         const activity = yield* RuntimeActivity.Service;
-        const executor = activity.wrap(
-          yield* Executor.make(yield* persistenceService.loadProject(), {
-            projectId: store.projectId,
-            executionDriver: activity.executionDriver,
-            engineClient: (pluginId) => engineClient(editorService, pluginId),
-            resourceValues: ({ package: pluginId, resource }) =>
-              editorService.engine.getResourceValues(pluginId, resource).pipe(Effect.orDie),
-          }),
-        );
+        const projectRuntime = yield* ProjectQueues.make(yield* persistenceService.loadProject(), {
+          projectId: store.projectId,
+          executionDriver: activity.executionDriver,
+          engineClient: (pluginId) => engineClient(editorService, pluginId),
+          resourceValues: ({ package: pluginId, resource }) =>
+            editorService.engine.getResourceValues(pluginId, resource).pipe(Effect.orDie),
+        });
+        const executor = activity.wrap(projectRuntime.executor);
+        yield* (yield* QueueRuntime.Mount).set(projectRuntime.queues);
         yield* Stream.fromSubscription(yield* editorEvents.subscribe).pipe(
           Stream.runForEach(() =>
             persistenceService

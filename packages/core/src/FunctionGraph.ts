@@ -8,12 +8,15 @@ import { NodeId, type Node } from "./Node.ts";
 import { PackageId, SchemaId } from "./SchemaRef.ts";
 
 export const packageId = PackageId.make("macrograph-functions");
+export const queuePackageId = PackageId.make("macrograph-queues");
+export const isQueuedCall = (node: Pick<Node.Model, "schema">) =>
+  node.schema.package === queuePackageId && node.schema.schema === "add";
 export const isFunctionNode = (node: Pick<Node.Model, "schema">) =>
-  node.schema.package === packageId;
+  node.schema.package === packageId || isQueuedCall(node);
 export const isBoundary = (node: Pick<Node.Model, "schema">) =>
   isFunctionNode(node) && (node.schema.schema === "input" || node.schema.schema === "output");
 export const isCall = (node: Pick<Node.Model, "schema">) =>
-  isFunctionNode(node) && node.schema.schema === "call";
+  (node.schema.package === packageId && node.schema.schema === "call") || isQueuedCall(node);
 
 export const validateProject = (project: Project.Model): string | undefined => {
   for (const graph of Object.values(project.graphs)) {
@@ -41,24 +44,27 @@ export const validateProject = (project: Project.Model): string | undefined => {
   }
 };
 
-export const io = (schema: string, signature?: Graph.FunctionSignature): NodeIO => ({
-  executionInputs: schema === "input" ? [] : [{ id: IoId.make("exec") }],
-  executionOutputs: schema === "output" ? [] : [{ id: IoId.make("exec") }],
-  dataInputs:
-    (schema === "output" ? signature?.outputs : schema === "call" ? signature?.inputs : [])?.map(
-      (field) => ({
-        ...field,
-        id: IoId.make(`${schema === "output" ? "gout" : "in"}:${field.id}`),
-      }),
-    ) ?? [],
-  dataOutputs:
-    (schema === "input" ? signature?.inputs : schema === "call" ? signature?.outputs : [])?.map(
-      (field) => ({
-        ...field,
-        id: IoId.make(`${schema === "input" ? "gin" : "out"}:${field.id}`),
-      }),
-    ) ?? [],
-});
+export const io = (schemaId: string, signature?: Graph.FunctionSignature): NodeIO => {
+  const schema = schemaId === "add" ? "call" : schemaId;
+  return {
+    executionInputs: schema === "input" ? [] : [{ id: IoId.make("exec") }],
+    executionOutputs: schema === "output" ? [] : [{ id: IoId.make("exec") }],
+    dataInputs:
+      (schema === "output" ? signature?.outputs : schema === "call" ? signature?.inputs : [])?.map(
+        (field) => ({
+          ...field,
+          id: IoId.make(`${schema === "output" ? "gout" : "in"}:${field.id}`),
+        }),
+      ) ?? [],
+    dataOutputs:
+      (schema === "input" ? signature?.inputs : schema === "call" ? signature?.outputs : [])?.map(
+        (field) => ({
+          ...field,
+          id: IoId.make(`${schema === "input" ? "gin" : "out"}:${field.id}`),
+        }),
+      ) ?? [],
+  };
+};
 
 export const pkg: Package.Model = {
   id: packageId,
@@ -76,6 +82,24 @@ export const pkg: Package.Model = {
         : [],
     ...io(id),
   })),
+};
+
+export const queuesPackage: Package.Model = {
+  id: queuePackageId,
+  name: "Queues",
+  resources: [],
+  schemas: [
+    {
+      id: SchemaId.make("add"),
+      name: "Add to Queue",
+      type: "exec",
+      properties: [
+        { id: "queue", name: "Queue", type: { _tag: "String" }, optional: true },
+        { id: "function", name: "Function", type: { _tag: "String" }, optional: true },
+      ],
+      ...io("call"),
+    },
+  ],
 };
 
 export const generate = (graph: Graph.Model, newId: () => string): Graph.Model => {

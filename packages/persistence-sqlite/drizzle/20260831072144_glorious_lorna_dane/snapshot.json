@@ -1,0 +1,294 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "464de624-427f-4d24-8881-723dbe3052a7",
+  "prevIds": [
+    "baa11b3f-e353-481c-abfd-b52417fb2e2c"
+  ],
+  "ddl": [
+    {
+      "name": "connections",
+      "entityType": "tables"
+    },
+    {
+      "name": "graphs",
+      "entityType": "tables"
+    },
+    {
+      "name": "nodes",
+      "entityType": "tables"
+    },
+    {
+      "name": "project_meta",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "out_node_id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "out_io_id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "in_node_id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "in_io_id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "graph_id",
+      "entityType": "columns",
+      "table": "connections"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "graphs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "graphs"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'ordinary'",
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "graphs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "signature",
+      "entityType": "columns",
+      "table": "graphs"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "properties",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'{}'",
+      "generated": null,
+      "name": "input_defaults",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "name": "fold_pins",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schema_package",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schema_schema",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position_x",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "position_y",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "graph_id",
+      "entityType": "columns",
+      "table": "nodes"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "project_meta"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'{}'",
+      "generated": null,
+      "name": "queues",
+      "entityType": "columns",
+      "table": "project_meta"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'{}'",
+      "generated": null,
+      "name": "engines",
+      "entityType": "columns",
+      "table": "project_meta"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'{}'",
+      "generated": null,
+      "name": "constants",
+      "entityType": "columns",
+      "table": "project_meta"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "connections_pk",
+      "table": "connections",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "graphs_pk",
+      "table": "graphs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "nodes_pk",
+      "table": "nodes",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}

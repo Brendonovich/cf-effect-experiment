@@ -8,6 +8,7 @@ import {
   NodeId,
   PackageId,
   Project,
+  Queue,
   SchemaId,
 } from "@macrograph/core";
 import { Effect, Layer, Schema } from "effect";
@@ -61,6 +62,7 @@ describe("JsonPersistence", () => {
         engines: {},
       });
       expect(project.constants).toEqual({});
+      expect(project.queues).toEqual({});
     }),
   );
 
@@ -91,6 +93,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "My Project",
         graphs: { "graph-1": graph },
+        queues: { work: { id: Queue.QueueId.make("work"), name: "Work" } },
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
         constants: {},
       };
@@ -101,6 +104,7 @@ describe("JsonPersistence", () => {
       assert.ok(loaded.graphs["graph-1"]);
       assert.strictEqual(loaded.graphs["graph-1"].name, "My Graph");
       assert.deepStrictEqual(loaded.engines, project.engines);
+      assert.deepStrictEqual(loaded.queues, project.queues);
     }).pipe(Effect.provide(TestLayer)),
   );
 
@@ -119,6 +123,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "Empty",
         graphs: {},
+        queues: {},
         engines: {},
         constants: {},
       };
@@ -151,6 +156,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "P",
         graphs: { "graph-1": graph },
+        queues: {},
         engines: {},
         constants: {},
       };
@@ -224,6 +230,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "P",
         graphs: { "graph-1": graph },
+        queues: {},
         engines: {},
         constants: {},
       };
