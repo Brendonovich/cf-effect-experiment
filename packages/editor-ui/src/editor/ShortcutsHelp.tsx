@@ -101,7 +101,10 @@ export function ShortcutsHelp(props: { shortcuts: ReturnType<typeof createEditor
       "Toggle a node in selection",
       "Shift + click a node, including its name; ports and fields keep their own actions",
     ],
-    ["Move selected nodes", "Drag a node header"],
+    [
+      "Move selected nodes",
+      "Drag a node header; positions snap to the grid. Hold Shift while dragging for free placement",
+    ],
     ["Create node", "Right-click or long-press empty canvas"],
     ["Node actions", "Right-click a node"],
     ["Connect ports", "Drag between compatible ports; drop on empty canvas to create a node"],
