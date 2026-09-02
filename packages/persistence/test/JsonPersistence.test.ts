@@ -1,6 +1,14 @@
 import { NodePath } from "@effect/platform-node";
 import { assert, describe, expect, it } from "@effect/vitest";
-import { GraphId, Node, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
+import {
+  GraphId,
+  Node,
+  NodeId,
+  PackageId,
+  Project,
+  ResourceConstant,
+  SchemaId,
+} from "@macrograph/core";
 import { Effect, Layer, Schema } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
@@ -67,6 +75,64 @@ describe("JsonPersistence", () => {
       expect(node.inputDefaults).toEqual({});
       expect(node.foldPins).toBe(false);
     }),
+  );
+
+  it.effect("decodes resource constants written before default designation was introduced", () =>
+    Effect.gen(function* () {
+      const constant = {
+        id: "legacy",
+        name: "Legacy Account",
+        resource: { package: "pkg", resource: "account" },
+        value: "account-1",
+      };
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
+        name: "Legacy",
+        graphs: {},
+        engines: {},
+        constants: { legacy: constant },
+      });
+      expect(project.constants.legacy).toMatchObject(constant);
+      expect(project.constants.legacy?.isDefault ?? false).toBe(false);
+      expect(ResourceConstant.getDefault(project.constants, constant.resource)?.id).toBe("legacy");
+    }),
+  );
+
+  it.effect("round-trips resource constant default designation", () =>
+    Effect.gen(function* () {
+      const persistence = yield* Persistence.Service;
+      const constants = {
+        first: {
+          id: ResourceConstant.Id.make("first"),
+          name: "Default Account",
+          resource: { package: "pkg", resource: "account" },
+          value: "account-1",
+          isDefault: true,
+        },
+        second: {
+          id: ResourceConstant.Id.make("second"),
+          name: "Other Account",
+          resource: { package: "pkg", resource: "account" },
+          value: "account-2",
+          isDefault: false,
+        },
+      };
+      yield* persistence.saveProject({
+        name: "Resources",
+        graphs: {},
+        engines: {},
+        constants,
+        types: {},
+      });
+      const project = yield* persistence.loadProject();
+      expect(project.constants).toEqual(constants);
+      yield* persistence.saveProject({ ...project, constants: { second: constants.second } });
+      expect(
+        ResourceConstant.getDefault(
+          (yield* persistence.loadProject()).constants,
+          constants.second.resource,
+        ),
+      ).toEqual(constants.second);
+    }).pipe(Effect.provide(TestLayer)),
   );
 
   it.effect("saveProject then loadProject", () =>

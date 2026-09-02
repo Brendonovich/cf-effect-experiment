@@ -494,7 +494,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         props.selected && styles.selectedNode,
         !props.dragging && !props.positioning && styles.smoothPosition,
       ]}
-      data-graph-node={props.node.id}
+      data-graph-node-id={props.node.id}
       style={{
         width: `${graphNodeWidth(props.io, props.node.name)}px`,
         transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)`,

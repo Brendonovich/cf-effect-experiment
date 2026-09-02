@@ -289,14 +289,22 @@ export const constants: Project.Model["constants"] = {
   "main-channel": {
     id: ResourceConstant.Id.make("main-channel"),
     name: "Main Twitch channel",
+    isDefault: true,
     resource: { package: twitchPackageId, resource: "channel" },
     value: "macrograph",
   },
   "main-obs": {
     id: ResourceConstant.Id.make("main-obs"),
     name: "Streaming PC",
+    isDefault: true,
     resource: { package: obsPackageId, resource: "connection" },
     value: "studio-pc",
+  },
+  "backup-obs": {
+    id: ResourceConstant.Id.make("backup-obs"),
+    name: "Backup PC",
+    resource: { package: obsPackageId, resource: "connection" },
+    value: "streaming-laptop",
   },
 };
 

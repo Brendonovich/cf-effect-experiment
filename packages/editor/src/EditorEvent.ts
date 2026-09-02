@@ -47,6 +47,23 @@ export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
 });
 export type NodeCreated = typeof NodeCreated.Type;
 
+export const FragmentPasted = Schema.TaggedStruct("FragmentPasted", {
+  actor,
+  graphId: Schema.String,
+  nodes: Schema.Array(Node.Model),
+  connections: Schema.Array(Connection.Model),
+  nodeIO: Schema.Record(Schema.String, NodeIO),
+});
+export type FragmentPasted = typeof FragmentPasted.Type;
+
+export const FragmentDeleted = Schema.TaggedStruct("FragmentDeleted", {
+  actor,
+  graphId: Schema.String,
+  nodeIds: Schema.Array(Schema.String),
+  deletedConnectionIds: Schema.Array(Schema.String),
+});
+export type FragmentDeleted = typeof FragmentDeleted.Type;
+
 export const NodeDeleted = Schema.TaggedStruct("NodeDeleted", {
   actor,
   graphId: Schema.String,
@@ -136,6 +153,15 @@ export const ResourceConstantCreated = Schema.TaggedStruct("ResourceConstantCrea
 });
 export type ResourceConstantCreated = typeof ResourceConstantCreated.Type;
 
+export const ResourceConstantDefaultChanged = Schema.TaggedStruct(
+  "ResourceConstantDefaultChanged",
+  {
+    actor,
+    constants: Schema.Array(ResourceConstant.Model),
+  },
+);
+export type ResourceConstantDefaultChanged = typeof ResourceConstantDefaultChanged.Type;
+
 export const ResourceConstantUpdated = Schema.TaggedStruct("ResourceConstantUpdated", {
   actor,
   constant: ResourceConstant.Model,
@@ -164,6 +190,8 @@ export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
 export type EditorEvent =
   | TypeDefinitionsUpdated
+  | FragmentPasted
+  | FragmentDeleted
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged
@@ -179,6 +207,7 @@ export type EditorEvent =
   | EngineStateChanged
   | PluginClientStateDirty
   | ResourceConstantCreated
+  | ResourceConstantDefaultChanged
   | ResourceConstantUpdated
   | ResourceConstantDeleted
   | ResourceValuesUpdated;

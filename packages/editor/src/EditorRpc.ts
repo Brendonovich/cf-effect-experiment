@@ -1,4 +1,5 @@
 import {
+  Clipboard,
   Connection,
   Graph,
   Node,
@@ -29,6 +30,7 @@ export class ConnectionMiddleware extends RpcMiddleware.Service<
 >()("macrograph/EditorConnectionMiddleware", { error: EditorAccess.Forbidden }) {}
 
 const readOnlyRpcs = new Set([
+  "GetClipboardIdentity",
   "GetProject",
   "PreviewTypeDefinition",
   "GetInputSuggestions",
@@ -167,6 +169,33 @@ class DeleteNode extends Rpc.make("DeleteNode", {
   payload: { graphId: Schema.String, nodeId: Schema.String },
   success: EditorEvent.NodeDeleted,
   error: PersistenceGraphAndNodeErrors,
+}) {}
+
+class PasteFragment extends Rpc.make("PasteFragment", {
+  payload: {
+    graphId: Schema.String,
+    text: Schema.String,
+    position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
+    bindings: Schema.optional(Schema.Array(Clipboard.Binding)),
+    skipMissingSchemas: Schema.optional(Schema.Boolean),
+  },
+  success: EditorEvent.FragmentPasted,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Graph.NotFoundError,
+    Clipboard.InvalidError,
+    Clipboard.RebindRequired,
+    Clipboard.MissingSchemas,
+  ]),
+}) {}
+
+class GetClipboardIdentity extends Rpc.make("GetClipboardIdentity", { success: Schema.String }) {}
+
+class DeleteFragment extends Rpc.make("DeleteFragment", {
+  payload: { graphId: Schema.String, nodeIds: Schema.Array(Schema.String) },
+  success: EditorEvent.FragmentDeleted,
+  error: Schema.Union([PersistenceGraphAndNodeErrors, Clipboard.InvalidError]),
 }) {}
 
 class SetNodeName extends Rpc.make("SetNodeName", {
@@ -331,7 +360,11 @@ class GetPluginSettingsCapabilities extends Rpc.make("GetPluginSettingsCapabilit
 class CreateResourceConstant extends Rpc.make("CreateResourceConstant", {
   payload: { resource: ResourceConstant.ResourceRef },
   success: EditorEvent.ResourceConstantCreated,
-  error: Schema.Union([PersistenceError, ResourceConstant.InvalidResourceError]),
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    ResourceConstant.InvalidResourceError,
+  ]),
 }) {}
 
 class RenameResourceConstant extends Rpc.make("RenameResourceConstant", {
@@ -360,6 +393,12 @@ class DeleteResourceConstant extends Rpc.make("DeleteResourceConstant", {
     ResourceConstant.NotFoundError,
     ResourceConstant.InUseError,
   ]),
+}) {}
+
+class SetDefaultResourceConstant extends Rpc.make("SetDefaultResourceConstant", {
+  payload: { constantId: Schema.String },
+  success: EditorEvent.ResourceConstantDefaultChanged,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, ResourceConstant.NotFoundError]),
 }) {}
 
 class GetResourceValues extends Rpc.make("GetResourceValues", {
@@ -412,6 +451,8 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.GraphNameChanged,
     EditorEvent.NodeCreated,
     EditorEvent.NodeDeleted,
+    EditorEvent.FragmentPasted,
+    EditorEvent.FragmentDeleted,
     EditorEvent.NodeNameChanged,
     EditorEvent.NodePositionChanged,
     EditorEvent.NodeFoldPinsChanged,
@@ -422,6 +463,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.EngineStateChanged,
     EditorEvent.PluginClientStateDirty,
     EditorEvent.ResourceConstantCreated,
+    EditorEvent.ResourceConstantDefaultChanged,
     EditorEvent.ResourceConstantUpdated,
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
@@ -449,6 +491,9 @@ export const EditorRpcs = RpcGroup.make(
   SetGraphName,
   CreateNode,
   DeleteNode,
+  PasteFragment,
+  GetClipboardIdentity,
+  DeleteFragment,
   SetNodeName,
   SetNodePosition,
   SetNodeFoldPins,
@@ -469,6 +514,7 @@ export const EditorRpcs = RpcGroup.make(
   RenameResourceConstant,
   SelectResourceConstant,
   DeleteResourceConstant,
+  SetDefaultResourceConstant,
   GetResourceValues,
   ReloadResource,
   GetCredentialCatalog,
@@ -506,6 +552,23 @@ export const handlerLayer = EditorRpcs.toLayer(
       SetGraphName: (payload) =>
         editor.graph.update({ graphID: payload.graphId, name: payload.name }),
       CreateNode: (payload) => editor.node.create({ graphID: payload.graphId, node: payload.node }),
+      PasteFragment: (payload) =>
+        editor.fragment.paste({
+          graphID: payload.graphId,
+          text: payload.text,
+          position: payload.position,
+          bindings: payload.bindings ?? [],
+          skipMissingSchemas: payload.skipMissingSchemas ?? false,
+        }),
+      GetClipboardIdentity: () => editor.fragment.identity(),
+      DeleteFragment: (payload) =>
+        editor.fragment
+          .delete({ graphID: payload.graphId, nodeIds: payload.nodeIds })
+          .pipe(
+            Effect.tap((event) =>
+              Effect.forEach(event.nodeIds, (id) => presence.nodeDeleted(event.graphId, id)),
+            ),
+          ),
       DeleteNode: (payload) =>
         editor.node
           .delete({ graphID: payload.graphId, nodeID: payload.nodeId })
@@ -606,6 +669,7 @@ export const handlerLayer = EditorRpcs.toLayer(
       RenameResourceConstant: ({ constantId, name }) => editor.constant.rename(constantId, name),
       SelectResourceConstant: ({ constantId, value }) => editor.constant.select(constantId, value),
       DeleteResourceConstant: ({ constantId }) => editor.constant.delete(constantId),
+      SetDefaultResourceConstant: ({ constantId }) => editor.constant.setDefault(constantId),
       GetResourceValues: ({ package: pluginId, resource }) =>
         editor.engine.getResourceValues(pluginId, resource),
       ReloadResource: ({ package: pluginId, resource }) =>

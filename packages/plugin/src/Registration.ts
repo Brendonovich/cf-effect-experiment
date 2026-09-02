@@ -141,6 +141,7 @@ export type RunContext<IO, Definition extends Engine.AnyDef> = {
 
 type CommonSchema<IO, Definition extends Engine.AnyDef, Properties extends PropertyDefinitions> = {
   readonly id: string;
+  readonly internal?: boolean;
   readonly name?: string;
   readonly description?: string;
   readonly properties?: Properties;
@@ -201,6 +202,7 @@ export type RegisteredProperty = RegisteredScalarProperty | RegisteredResourcePr
 
 export interface RegisteredSchema {
   readonly id: string;
+  readonly internal?: boolean;
   readonly name: string;
   readonly description?: string;
   readonly type: "event" | "exec" | "pure";
@@ -324,6 +326,7 @@ const makeRegistered = <
 
   return {
     id: schema.id,
+    internal: schema.internal ?? false,
     name: schema.name ?? schema.id,
     ...(schema.description === undefined ? {} : { description: schema.description }),
     type,

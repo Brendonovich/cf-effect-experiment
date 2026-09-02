@@ -320,6 +320,17 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     const c = client();
     if (!c || !graphId || !canEdit()) return;
     if (target === undefined) {
+      const bounds = graphCanvas
+        ?.querySelector(`[data-graph-node-id="${CSS.escape(drag.source.nodeId)}"]`)
+        ?.getBoundingClientRect();
+      if (
+        bounds &&
+        event.clientX >= bounds.left &&
+        event.clientX <= bounds.right &&
+        event.clientY >= bounds.top &&
+        event.clientY <= bounds.bottom
+      )
+        return;
       setNodeMenu({
         screen: { x: event.clientX, y: event.clientY },
         graph: pointer,

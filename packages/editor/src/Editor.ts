@@ -2,6 +2,7 @@ import type * as Engine from "@macrograph/plugin/Engine";
 import type * as Plugin from "@macrograph/plugin/Plugin";
 
 import {
+  Clipboard,
   Connection,
   CustomTypes,
   Graph,
@@ -142,6 +143,28 @@ export interface Interface {
       TypeMutationError | TypeDefinition.StalePreviewError
     >;
   };
+  readonly fragment: {
+    readonly identity: () => Effect.Effect<string>;
+    readonly paste: (options: {
+      readonly graphID: string;
+      readonly text: string;
+      readonly position: { readonly x: number; readonly y: number };
+      readonly bindings?: ReadonlyArray<Clipboard.Binding>;
+      readonly skipMissingSchemas?: boolean;
+    }) => Effect.Effect<
+      EditorEvent.FragmentPasted,
+      | PersistenceError
+      | Graph.NotFoundError
+      | Project.NotFoundError
+      | Clipboard.InvalidError
+      | Clipboard.RebindRequired
+      | Clipboard.MissingSchemas
+    >;
+    readonly delete: (options: {
+      readonly graphID: string;
+      readonly nodeIds: ReadonlyArray<string>;
+    }) => Effect.Effect<EditorEvent.FragmentDeleted, NodeMutationError | Clipboard.InvalidError>;
+  };
   readonly project: {
     readonly get: () => Effect.Effect<Project.Model, Project.NotFoundError | PersistenceError>;
     readonly snapshot: () => Effect.Effect<
@@ -158,7 +181,7 @@ export interface Interface {
       resource: ResourceConstant.ResourceRef,
     ) => Effect.Effect<
       EditorEvent.ResourceConstantCreated,
-      PersistenceError | ResourceConstant.InvalidResourceError
+      PersistenceError | Project.NotFoundError | ResourceConstant.InvalidResourceError
     >;
     readonly rename: (
       id: string,
@@ -185,6 +208,12 @@ export interface Interface {
       | Project.NotFoundError
       | ResourceConstant.NotFoundError
       | ResourceConstant.InUseError
+    >;
+    readonly setDefault: (
+      id: string,
+    ) => Effect.Effect<
+      EditorEvent.ResourceConstantDefaultChanged,
+      PersistenceError | Project.NotFoundError | ResourceConstant.NotFoundError
     >;
   };
   readonly graph: {
@@ -331,6 +360,7 @@ export const layer = Layer.effect(Service)(
         readonly packages: string;
       }
     >();
+    const clipboardSession = crypto.randomUUID();
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
       new Map(),
@@ -654,9 +684,21 @@ export const layer = Layer.effect(Service)(
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
       yield* persistence.loadGraph(options.graphID);
       const schema = yield* packages.getSchema(options.node.schema);
+      const initialProperties = { ...options.node.properties };
+      if (schema.properties.some((property) => "resource" in property)) {
+        const constants = (yield* persistence.loadProject()).constants;
+        for (const property of schema.properties) {
+          if (!("resource" in property) || Object.hasOwn(initialProperties, property.id)) continue;
+          const constant = ResourceConstant.getDefault(constants, {
+            package: options.node.schema.package,
+            resource: property.resource,
+          });
+          if (constant !== undefined) initialProperties[property.id] = constant.id;
+        }
+      }
       const properties = yield* packages.normalizeProperties(
         options.node.schema,
-        options.node.properties ?? {},
+        initialProperties,
       );
       yield* validateResourceBindings(options.node.schema, properties);
       const inputDefaults: Record<string, Schema.Json> = {};
@@ -682,6 +724,271 @@ export const layer = Layer.effect(Service)(
       };
       const io = yield* getNodeIO(node);
       return yield* events.publish({ _tag: "NodeCreated", graphId: options.graphID, node, io });
+    }, lock.withPermit);
+
+    const fragmentPaste = Effect.fn("Editor.fragment.paste")(
+      function* (options: {
+        readonly graphID: string;
+        readonly text: string;
+        readonly position: { readonly x: number; readonly y: number };
+        readonly bindings?: ReadonlyArray<Clipboard.Binding>;
+        readonly skipMissingSchemas?: boolean;
+      }) {
+        const fragment = yield* Clipboard.decode(options.text);
+        if (!Clipboard.validPosition(options.position))
+          return yield* new Clipboard.InvalidError({ reason: "Invalid paste position" });
+        const graph = yield* persistence.loadGraph(options.graphID);
+        const project = yield* persistence.loadProject();
+        const sameProject = fragment.source?.session === clipboardSession;
+        const availablePackages = yield* packages.getPackages();
+        const requests: Array<Clipboard.RebindRequest> = [];
+        const resolved: Array<Node.Model> = [];
+        const missingNodeIds = new Set<string>();
+        const missingSchemas = new Map<string, Clipboard.MissingSchema>();
+        if ((options.bindings?.length ?? 0) > Clipboard.maxNodes * 20)
+          return yield* new Clipboard.InvalidError({ reason: "Too many rebindings" });
+        for (const original of fragment.nodes) {
+          const source = original;
+          const schema = yield* packages
+            .getSchema(source.schema)
+            .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
+          if (schema?.internal === true)
+            return yield* new Clipboard.InvalidError({
+              reason: `${source.name}: system-created nodes cannot be pasted`,
+            });
+          if (schema === undefined) {
+            const key = JSON.stringify([source.schema.package, source.schema.schema]);
+            missingNodeIds.add(source.id);
+            const names = fragment.nodeSchemas?.[source.id];
+            missingSchemas.set(key, {
+              ...source.schema,
+              pluginName:
+                names?.pluginName ??
+                availablePackages.find((candidate) => candidate.id === source.schema.package)
+                  ?.name ??
+                source.schema.package,
+              schemaName:
+                names?.schemaName ??
+                source.schema.schema
+                  .replace(/^(?:emit|on|call):/, "")
+                  .replace(/[-_:]+/g, " ")
+                  .replace(/\b\w/g, (character) => character.toUpperCase()),
+            });
+            continue;
+          }
+          const properties = { ...source.properties };
+          for (const definition of schema.properties) {
+            if (!("resource" in definition) || !Object.hasOwn(properties, definition.id)) continue;
+            const value = properties[definition.id];
+            const candidates = Object.values(project.constants).filter(
+              (constant) =>
+                constant.resource.package === source.schema.package &&
+                constant.resource.resource === definition.resource,
+            );
+            const binding = options.bindings?.find(
+              (binding) => binding.nodeId === source.id && binding.property === definition.id,
+            );
+            const target = candidates.find((constant) => constant.id === binding?.target);
+            if (binding && !target)
+              return yield* new Clipboard.InvalidError({
+                reason: "Resource rebind target is unavailable or incompatible",
+              });
+            if (target) properties[definition.id] = target.id;
+            else if (!sameProject || !candidates.some((constant) => constant.id === value))
+              requests.push({
+                nodeId: source.id,
+                property: definition.id,
+                label: `${source.name}: ${definition.name} (${String(value)})`,
+                kind: "resource",
+                candidates: candidates.map((constant) => ({
+                  id: constant.id,
+                  name: constant.name,
+                })),
+              });
+          }
+          resolved.push({ ...source, properties });
+        }
+        if (missingSchemas.size > 0 && !options.skipMissingSchemas)
+          return yield* new Clipboard.MissingSchemas({ schemas: [...missingSchemas.values()] });
+        if (requests.length > 0) return yield* new Clipboard.RebindRequired({ requests });
+        const nodes: Array<Node.Model> = [];
+        const nodeIO: Record<string, NodeIO> = {};
+        const remap = new Map<string, NodeId>();
+        const anchor = {
+          x: Math.min(...fragment.nodes.map((node) => node.position.x)),
+          y: Math.min(...fragment.nodes.map((node) => node.position.y)),
+        };
+        for (const source of resolved) {
+          const node = yield* Effect.gen(function* () {
+            const schema = yield* packages.getSchema(source.schema);
+            if (schema.internal === true)
+              return yield* new Clipboard.InvalidError({
+                reason: `${source.name}: system-created nodes cannot be pasted`,
+              });
+            for (const property of Object.keys(source.properties)) {
+              const definition = schema.properties.find((candidate) => candidate.id === property);
+              if (definition === undefined)
+                return yield* new Clipboard.InvalidError({
+                  reason: `${source.name}: undeclared property ${property}`,
+                });
+            }
+            const properties = yield* packages.normalizeProperties(
+              source.schema,
+              source.properties,
+            );
+            yield* validateResourceBindings(source.schema, properties);
+            const ioProperties = yield* resolveIOProperties(source.schema, properties);
+            const inputDefaults: Record<string, Schema.Json> = {};
+            for (const [input, value] of Object.entries(source.inputDefaults))
+              inputDefaults[input] = yield* packages.validateInputDefault(
+                source.schema,
+                ioProperties,
+                input,
+                value,
+              );
+            let id = NodeId.make(crypto.randomUUID());
+            while (Object.hasOwn(graph.nodes, id) || nodes.some((node) => node.id === id))
+              id = NodeId.make(crypto.randomUUID());
+            const position = {
+              x: options.position.x + source.position.x - anchor.x,
+              y: options.position.y + source.position.y - anchor.y,
+            };
+            if (!Clipboard.validPosition(position))
+              return yield* new Clipboard.InvalidError({
+                reason: "Pasted position exceeds limits",
+              });
+            const node: Node.Model = { ...source, id, properties, inputDefaults, position };
+            nodeIO[id] = yield* getNodeIO(node);
+            return node;
+          }).pipe(
+            Effect.catchTags({
+              SchemaNotFoundError: () =>
+                new Clipboard.InvalidError({
+                  reason: `${source.name}: schema ${source.schema.package}/${source.schema.schema} is unavailable; definitions are not imported`,
+                }),
+              InvalidPropertyError: (error) =>
+                new Clipboard.InvalidError({
+                  reason: `${source.name}: ${error.property}: ${error.reason}`,
+                }),
+              InvalidInputDefaultError: (error) =>
+                new Clipboard.InvalidError({
+                  reason: `${source.name}: ${error.input}: ${error.reason}`,
+                }),
+            }),
+          );
+          nodes.push(node);
+          remap.set(source.id, node.id);
+        }
+        const connections: Array<Connection.Model> = [];
+        const connectionIds = new Set(graph.connections.map((connection) => connection.id));
+        const external =
+          sameProject && fragment.source?.graphId === options.graphID
+            ? (fragment.externalConnections ?? [])
+            : [];
+        const occupied = new Set(
+          graph.connections.map((connection) =>
+            JSON.stringify([connection.inNodeId, connection.inIoId]),
+          ),
+        );
+        for (const original of [...fragment.connections, ...external]) {
+          if (missingNodeIds.has(original.outNodeId) || missingNodeIds.has(original.inNodeId))
+            continue;
+          const isExternal = external.includes(original);
+          const outNodeId = remap.get(original.outNodeId) ?? original.outNodeId;
+          const inNodeId = remap.get(original.inNodeId) ?? original.inNodeId;
+          const outputIO =
+            nodeIO[outNodeId] ??
+            (Object.hasOwn(graph.nodes, outNodeId)
+              ? yield* getNodeIO(graph.nodes[outNodeId]!).pipe(
+                  Effect.catchCause(() => Effect.succeed(undefined)),
+                )
+              : undefined);
+          const inputIO =
+            nodeIO[inNodeId] ??
+            (Object.hasOwn(graph.nodes, inNodeId)
+              ? yield* getNodeIO(graph.nodes[inNodeId]!).pipe(
+                  Effect.catchCause(() => Effect.succeed(undefined)),
+                )
+              : undefined);
+          if (outputIO === undefined || inputIO === undefined) {
+            if (isExternal) continue;
+            return yield* new Clipboard.InvalidError({
+              reason: `Connection ${original.id}: unavailable schema IO was not copied`,
+            });
+          }
+          const source = original;
+          const inputKey = JSON.stringify([inNodeId, source.inIoId]);
+          if (
+            isExternal &&
+            (occupied.has(inputKey) || !isConnectionValid(source, outputIO, inputIO))
+          )
+            continue;
+          if (occupied.has(inputKey) || !isConnectionValid(source, outputIO, inputIO))
+            return yield* new Clipboard.InvalidError({
+              reason: `Connection ${source.id}: missing, ambiguous or incompatible ports`,
+            });
+          let id = Connection.ConnectionId.make(crypto.randomUUID());
+          while (connectionIds.has(id)) id = Connection.ConnectionId.make(crypto.randomUUID());
+          connectionIds.add(id);
+          connections.push({ ...source, id, outNodeId, inNodeId });
+          occupied.add(inputKey);
+        }
+        return yield* events.publish({
+          _tag: "FragmentPasted",
+          graphId: options.graphID,
+          nodes,
+          connections,
+          nodeIO,
+        });
+      },
+      lock.withPermit,
+      Effect.catchDefect(
+        () =>
+          new Clipboard.InvalidError({
+            reason: "Destination schema could not validate this fragment; nothing was pasted",
+          }),
+      ),
+    );
+
+    const fragmentDelete = Effect.fn("Editor.fragment.delete")(function* (options: {
+      readonly graphID: string;
+      readonly nodeIds: ReadonlyArray<string>;
+    }) {
+      if (
+        options.nodeIds.length === 0 ||
+        options.nodeIds.length > Clipboard.maxNodes ||
+        new Set(options.nodeIds).size !== options.nodeIds.length
+      )
+        return yield* new Clipboard.InvalidError({ reason: "Invalid cut selection" });
+      const graph = yield* persistence.loadGraph(options.graphID);
+      for (const id of options.nodeIds) {
+        if (!Object.hasOwn(graph.nodes, id)) return yield* new Node.NotFoundError({ id });
+        const node = yield* Graph.getNode(graph, id);
+        const schema = yield* packages.getSchema(node.schema).pipe(
+          Effect.catchTag(
+            "SchemaNotFoundError",
+            () =>
+              new Clipboard.InvalidError({
+                reason: `${node.name}: cannot cut an unavailable schema`,
+              }),
+          ),
+        );
+        if (schema.internal === true)
+          return yield* new Clipboard.InvalidError({
+            reason: `${node.name}: system-created nodes cannot be cut`,
+          });
+      }
+      const selected = new Set(options.nodeIds);
+      return yield* events.publish({
+        _tag: "FragmentDeleted",
+        graphId: options.graphID,
+        nodeIds: options.nodeIds,
+        deletedConnectionIds: graph.connections
+          .filter(
+            (connection) => selected.has(connection.inNodeId) || selected.has(connection.outNodeId),
+          )
+          .map((connection) => connection.id),
+      });
     }, lock.withPermit);
 
     const nodeUpdate = Effect.fn("Editor.node.update")(function* (options: NodeUpdateOptions) {
@@ -1022,9 +1329,11 @@ export const layer = Layer.effect(Service)(
           reason: "Resource is not registered",
         });
       const id = ResourceConstant.Id.make(crypto.randomUUID());
+      const constants = (yield* persistence.loadProject()).constants;
+      const isDefault = ResourceConstant.getDefault(constants, resource) === undefined;
       return yield* events.publish({
         _tag: "ResourceConstantCreated",
-        constant: { id, name: `New ${definition.name}`, resource },
+        constant: { id, name: `New ${definition.name}`, resource, isDefault },
       });
     }, lock.withPermit);
 
@@ -1126,6 +1435,20 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
+    const constantSetDefault = Effect.fn("Editor.constant.setDefault")(function* (id: string) {
+      const project = yield* persistence.loadProject();
+      const selected = project.constants[id];
+      if (selected === undefined) return yield* new ResourceConstant.NotFoundError({ id });
+      const constants = Object.values(project.constants)
+        .filter(
+          (constant) =>
+            constant.resource.package === selected.resource.package &&
+            constant.resource.resource === selected.resource.resource,
+        )
+        .map((constant) => ({ ...constant, isDefault: constant.id === id }));
+      return yield* events.publish({ _tag: "ResourceConstantDefaultChanged", constants });
+    }, lock.withPermit);
+
     const constantDelete = Effect.fn("Editor.constant.delete")(function* (id: string) {
       yield* getConstant(id);
       const project = yield* persistence.loadProject();
@@ -1222,6 +1545,7 @@ export const layer = Layer.effect(Service)(
           })),
           schemas: schemas.map((schema) => ({
             id: SchemaId.make(schema.id),
+            internal: schema.internal ?? false,
             name: schema.name,
             ...(schema.description === undefined ? {} : { description: schema.description }),
             type: schema.type,
@@ -1352,13 +1676,19 @@ export const layer = Layer.effect(Service)(
           });
       }).pipe(lock.withPermit);
 
-    return Service.of({
-      typeDefinition: { preview: typePreview, confirm: typeConfirm },
-      project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
+      return Service.of({
+        typeDefinition: { preview: typePreview, confirm: typeConfirm },
+        fragment: {
+        identity: () => Effect.succeed(clipboardSession),
+        paste: fragmentPaste,
+          delete: fragmentDelete,
+        },
+        project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
       constant: {
         create: constantCreate,
         rename: constantRename,
         select: constantSelect,
+        setDefault: constantSetDefault,
         delete: constantDelete,
       },
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },

@@ -1,4 +1,5 @@
 export * as Node from "./Node.ts";
+export * as Clipboard from "./Clipboard.ts";
 export { NodeId } from "./Node.ts";
 export { Position } from "./Position.ts";
 export * as Graph from "./Graph.ts";

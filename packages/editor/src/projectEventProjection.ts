@@ -27,6 +27,31 @@ export const apply = (
         return yield* persistence.saveProject({ ...project, types: event.types, graphs });
       }).pipe(PersistenceError.refail);
 
+    case "FragmentPasted":
+    case "FragmentDeleted":
+      return Effect.gen(function* () {
+        const graph = yield* persistence.loadGraph(event.graphId);
+        const nodes = { ...graph.nodes };
+        if (event._tag === "FragmentPasted") {
+          for (const node of event.nodes) nodes[node.id] = node;
+          const existing = new Set(graph.connections.map((connection) => connection.id));
+          return yield* persistence.saveGraph({
+            ...graph,
+            nodes,
+            connections: [
+              ...graph.connections,
+              ...event.connections.filter((connection) => !existing.has(connection.id)),
+            ],
+          });
+        }
+        for (const id of event.nodeIds) delete nodes[id];
+        const deleted = new Set(event.deletedConnectionIds);
+        return yield* persistence.saveGraph({
+          ...graph,
+          nodes,
+          connections: graph.connections.filter((connection) => !deleted.has(connection.id)),
+        });
+      }).pipe(PersistenceError.refail);
     case "GraphCreated":
       return persistence.saveGraph(event.graph);
 
@@ -128,6 +153,14 @@ export const apply = (
           ...project,
           constants: { ...project.constants, [event.constant.id]: event.constant },
         });
+      }).pipe(PersistenceError.refail);
+
+    case "ResourceConstantDefaultChanged":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const constants = { ...project.constants };
+        for (const constant of event.constants) constants[constant.id] = constant;
+        return yield* persistence.saveProject({ ...project, constants });
       }).pipe(PersistenceError.refail);
 
     case "ResourceConstantUpdated":

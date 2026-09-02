@@ -5,6 +5,7 @@ import {
   type NodeIO,
   type Package,
   type Project,
+  ResourceConstant,
 } from "@macrograph/core";
 import { DataType } from "@macrograph/plugin/DataType";
 import * as stylex from "@stylexjs/stylex";
@@ -277,6 +278,11 @@ export function Inspector(props: {
                                     constant.resource.resource === resourceProperty().resource,
                                 );
                               const selected = () => node().properties[property.id];
+                              const defaultConstant = () =>
+                                ResourceConstant.getDefault(props.constants, {
+                                  package: node().schema.package,
+                                  resource: resourceProperty().resource,
+                                });
                               const selectedConstantId = () => {
                                 const value = selected();
                                 return typeof value === "string" ? value : "";
@@ -288,7 +294,13 @@ export function Inspector(props: {
                                 <label sx={styles.field}>
                                   <span sx={styles.fieldLabel}>{property.name}</span>
                                   <Select
-                                    options={constants()}
+                                    options={constants().map((constant) => ({
+                                      id: constant.id,
+                                      name:
+                                        constant.id === defaultConstant()?.id
+                                          ? `Default (${constant.name})`
+                                          : constant.name,
+                                    }))}
                                     value={selectedConstantId()}
                                     valid={valid()}
                                     placeholder="Missing constant"

@@ -30,6 +30,7 @@
     "@radix-ui/colors": "^3.0.0",
     "@solidjs/web": "2.0.0-rc.1",
     "@stylexjs/stylex": "catalog:",
+    "@tanstack/solid-query": "6.0.0-rc.0",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.1",
     "tailwindcss": "^4.0.0"

@@ -119,6 +119,30 @@ export function createEditorStore() {
           }
         });
         break;
+      case "FragmentPasted":
+      case "FragmentDeleted":
+        setStore((store) => {
+          const graph = store.project?.graphs[event.graphId];
+          if (graph === undefined) return;
+          if (event._tag === "FragmentPasted") {
+            for (const node of event.nodes) graph.nodes[node.id] = node;
+            store.nodeIO[event.graphId] = { ...store.nodeIO[event.graphId], ...event.nodeIO };
+            const existing = new Set(graph.connections.map((connection) => connection.id));
+            graph.connections.push(
+              ...event.connections.filter((connection) => !existing.has(connection.id)),
+            );
+          } else {
+            for (const id of event.nodeIds) {
+              delete graph.nodes[id];
+              delete store.nodeIO[event.graphId]?.[id];
+            }
+            const deleted = new Set(event.deletedConnectionIds);
+            graph.connections = graph.connections.filter(
+              (connection) => !deleted.has(connection.id),
+            );
+          }
+        });
+        break;
       case "GraphCreated":
         setStore((store) => {
           if (store.project) {
@@ -285,6 +309,12 @@ export function createEditorStore() {
       case "ResourceConstantCreated":
         setStore((store) => {
           if (store.project) store.project.constants[event.constant.id] = event.constant;
+        });
+        break;
+      case "ResourceConstantDefaultChanged":
+        setStore((store) => {
+          if (!store.project) return;
+          for (const constant of event.constants) store.project.constants[constant.id] = constant;
         });
         break;
       case "ResourceConstantUpdated":

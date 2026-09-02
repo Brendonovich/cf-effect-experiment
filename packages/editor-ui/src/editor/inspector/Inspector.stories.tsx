@@ -43,6 +43,14 @@ const meta: Meta<typeof Inspector> = {
 export default meta;
 type Story = StoryObj<typeof Inspector>;
 
+export const AutomaticDefault: Story = {
+  args: {
+    constants: Object.fromEntries(
+      Object.entries(constants).map(([id, constant]) => [id, { ...constant, isDefault: false }]),
+    ),
+  },
+};
+
 export const States: Story = {
   render: (args) => (
     <div class="storybook-showcase storybook-showcase--sidebars">

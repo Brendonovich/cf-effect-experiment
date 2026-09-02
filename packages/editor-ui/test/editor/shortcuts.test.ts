@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  capturedShortcut,
+  decodeShortcutOverrides,
   editorShortcuts,
   registerEditorShortcuts,
   shortcutLabel,
@@ -36,6 +38,103 @@ const press = (
 };
 
 describe("editor keymap", () => {
+  it("captures physical keys and safely decodes only supported single strokes", () => {
+    expect(
+      capturedShortcut(
+        new KeyboardEvent("keydown", {
+          key: "|",
+          code: "Backslash",
+          shiftKey: true,
+          ctrlKey: true,
+        }),
+      ),
+    ).toBe("ctrl+shift+\\");
+    expect(capturedShortcut(new KeyboardEvent("keydown", { key: "Shift" }))).toBeUndefined();
+    expect(capturedShortcut(new KeyboardEvent("keydown", { key: "Tab" }))).toBeUndefined();
+    expect(
+      capturedShortcut(new KeyboardEvent("keydown", { key: "k", isComposing: true })),
+    ).toBeUndefined();
+    for (const raw of ["{", "[]", "null", "42"]) expect(decodeShortcutOverrides(raw)).toEqual({});
+    expect(
+      decodeShortcutOverrides(
+        JSON.stringify({
+          "toggle-navigation": "ctrl+shift+k",
+          cancel: [],
+          "close-tab": "ctrl+k ctrl+w",
+          "next-tab": "shift+ctrl+k",
+          unknown: "k",
+        }),
+      ),
+    ).toEqual({ "toggle-navigation": "ctrl+shift+k" });
+    for (const key of ["\\", "[", "]", ".", ",", "/", ";", "'", "`", "-", "="])
+      expect(
+        decodeShortcutOverrides(JSON.stringify({ "create-node": `ctrl+shift+${key}` })),
+      ).toEqual({ "create-node": `ctrl+shift+${key}` });
+  });
+
+  it.each(["MacIntel", "Win32"])(
+    "uses library overrides and platform-aware conflict matching on %s",
+    (platform) => {
+      const { root, run } = setup(platform);
+      dispose();
+      const registration = registerEditorShortcuts(root, run);
+      dispose = registration;
+      const modifier = platform === "MacIntel" ? { metaKey: true } : { ctrlKey: true };
+      expect(
+        registration.conflict(
+          "toggle-navigation",
+          [platform === "MacIntel" ? "super+i" : "ctrl+i"],
+          {},
+        )?.action,
+      ).toBe("toggle-inspector");
+      registration.update({ "toggle-inspector": "ctrl+shift+k" });
+      expect(press("i", modifier).defaultPrevented).toBe(false);
+      expect(press("r", modifier).defaultPrevented).toBe(false);
+      expect(press("K", { code: "KeyK", ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(
+        true,
+      );
+      expect(run).toHaveBeenCalledExactlyOnceWith("toggle-inspector");
+      expect(
+        shortcutLabel("toggle-inspector", platform === "MacIntel", {
+          "toggle-inspector": "ctrl+shift+k",
+        }),
+      ).toBe("Ctrl+Shift+K");
+      expect(
+        registration.update({
+          "toggle-navigation": platform === "MacIntel" ? "super+i" : "ctrl+i",
+        }),
+      ).toEqual({});
+      press("i", modifier);
+      expect(run).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("isolates multiple editors and keeps remapped cancel out of editable fields", () => {
+    const { root, run } = setup();
+    const second = document.createElement("div");
+    const button = document.createElement("button");
+    second.append(button);
+    document.body.append(second);
+    const secondRun = vi.fn(() => true);
+    const registration = registerEditorShortcuts(second, secondRun, { cancel: "k" });
+    try {
+      press("b", { metaKey: true });
+      expect(run).not.toHaveBeenCalled();
+      expect(secondRun).not.toHaveBeenCalled();
+      button.focus();
+      press("b", { metaKey: true });
+      expect(run).not.toHaveBeenCalled();
+      expect(secondRun).toHaveBeenCalledExactlyOnceWith("toggle-navigation");
+      const input = document.createElement("input");
+      second.append(input);
+      press("k", {}, input);
+      expect(secondRun).toHaveBeenCalledOnce();
+      press("b", { metaKey: true }, root);
+      expect(run).toHaveBeenCalledOnce();
+    } finally {
+      registration();
+    }
+  });
   it.each([
     ["b", { metaKey: true }, "toggle-navigation"],
     ["r", { metaKey: true }, "toggle-inspector"],
@@ -156,23 +255,38 @@ describe("editor keymap", () => {
     }
   });
 
-  it("blocks every editor action while the shortcuts dialog is open, including body events", () => {
+  it("keeps workspace shortcuts available with a shortcuts pane open", () => {
     const { root, run } = setup();
-    const dialog = document.createElement("dialog");
-    dialog.setAttribute("data-editor-shortcuts", "");
-    dialog.open = true;
+    const pane = document.createElement("section");
+    pane.setAttribute("data-editor-shortcuts", "");
     const button = document.createElement("button");
-    dialog.append(button);
-    root.append(dialog);
+    pane.append(button);
+    root.append(pane);
+    for (const target of [button, document.body]) {
+      expect(press("b", { metaKey: true }, target).defaultPrevented).toBe(true);
+      expect(press("w", { ctrlKey: true }, target).defaultPrevented).toBe(true);
+    }
+    expect(run.mock.calls).toEqual([
+      ["toggle-navigation"],
+      ["close-tab"],
+      ["toggle-navigation"],
+      ["close-tab"],
+    ]);
+    run.mockClear();
+    pane.setAttribute("data-recording-shortcut", "");
+    button.focus();
     for (const target of [button, document.body]) {
       expect(press("b", { metaKey: true }, target).defaultPrevented).toBe(false);
-      expect(press("Backspace", {}, target).defaultPrevented).toBe(false);
+      expect(press("w", { ctrlKey: true }, target).defaultPrevented).toBe(false);
       expect(press("Escape", {}, target).defaultPrevented).toBe(false);
     }
     expect(run).not.toHaveBeenCalled();
-    dialog.open = false;
-    press("b", { metaKey: true });
+    const canvas = document.createElement("div");
+    root.append(canvas);
+    expect(press("b", { metaKey: true }, canvas).defaultPrevented).toBe(true);
     expect(run).toHaveBeenCalledExactlyOnceWith("toggle-navigation");
+    pane.removeAttribute("data-recording-shortcut");
+    expect(press("w", { ctrlKey: true }, button).defaultPrevented).toBe(true);
   });
 
   it("lists platform aliases without duplicate or non-Apple Command bindings", () => {
