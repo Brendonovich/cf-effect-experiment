@@ -29,7 +29,6 @@ import {
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Inspector } from "./inspector/Inspector";
 import { PluginSettingsView } from "./plugins/PluginSettingsView";
-import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
@@ -685,9 +684,7 @@ function EditorContent(
                                       }
                                       d={connectionPath(edge().from, edge().to)}
                                       fill="none"
-                                      stroke={edge().invalid ? "#ff9592" : wireColor(edge().type)}
-                                      stroke-dasharray={edge().invalid ? "6 4" : undefined}
-                                      data-invalid-wire={edge().invalid ? "" : undefined}
+                                      stroke={wireColor(edge().type)}
                                       stroke-width="2"
                                       opacity="0.75"
                                     />
@@ -962,7 +959,6 @@ function EditorContent(
                 }
                 onSaveDefault={controller.commands.setInputDefault}
                 onRemoveDefault={controller.commands.clearInputDefault}
-                onDisconnect={controller.commands.disconnectIo}
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>

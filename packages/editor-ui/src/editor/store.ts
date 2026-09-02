@@ -109,6 +109,14 @@ export function createEditorStore() {
             for (const [nodeId, io] of Object.entries(nodes))
               (store.nodeIO[graphId] ??= {})[nodeId] = io;
           }
+          for (const [graphId, connectionIds] of Object.entries(event.deletedConnectionIds)) {
+            const graph = store.project.graphs[graphId];
+            if (graph === undefined) continue;
+            const deleted = new Set(connectionIds);
+            graph.connections = graph.connections.filter(
+              (connection) => !deleted.has(connection.id),
+            );
+          }
         });
         break;
       case "GraphCreated":

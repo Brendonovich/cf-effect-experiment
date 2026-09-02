@@ -1,100 +1,63 @@
 import type { DataType } from "@macrograph/plugin/DataType";
 
 import * as stylex from "@stylexjs/stylex";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, Show } from "solid-js";
 
 import { colors } from "../tokens.stylex.ts";
+import { Select } from "./Select";
 import {
+  choiceKey,
+  choiceLabel,
   filterTypeChoices,
   replaceTypeSegment,
-  typeSegments,
-  choiceLabel,
   typeLabel,
-  type TypeChoice,
+  typeSegments,
 } from "./typeSelection";
 
 const styles = stylex.create({
   root: { minWidth: 0 },
   segments: {
-    display: "flex",
     alignItems: "center",
+    backgroundColor: "black",
+    borderRadius: 8,
+    display: "flex",
     flexWrap: "nowrap",
-    gap: 2,
+    fontFamily: "monospace",
+    fontSize: 14,
     overflowX: "auto",
-    padding: 2,
-    backgroundColor: colors.gray1,
-    borderRadius: 4,
-    borderColor: colors.gray6,
+    overflowY: "hidden",
+    paddingBlock: 1,
+  },
+  segmentFrame: {
+    alignItems: "center",
+    backgroundColor: "black",
+    borderColor: "#404040",
+    borderRadius: 8,
     borderStyle: "solid",
     borderWidth: 1,
+    display: "flex",
+    flexShrink: 0,
+    flexWrap: "nowrap",
+    cursor: "pointer",
+    marginBlock: -1,
+    paddingInline: 4,
   },
   segment: {
-    fontFamily: "monospace",
-    fontSize: 11,
-    borderRadius: 3,
-    borderColor: colors.gray6,
-    borderStyle: "solid",
-    borderWidth: 1,
-    height: 22,
-    paddingInline: 5,
-    backgroundColor: { default: colors.gray2, ":hover": colors.gray4 },
+    backgroundColor: "transparent",
     color: colors.gray12,
-    outline: "none",
     maxWidth: "100%",
-    flexShrink: 0,
-    ":focus-visible": { borderColor: colors.focus },
-    "@media (pointer: coarse)": { minHeight: 32 },
-  },
-  selected: {
-    borderColor: colors.focus,
-    backgroundColor: colors.gray4,
-  },
-  arrow: { color: colors.gray10, fontSize: 10, marginLeft: 5 },
-  menu: {
-    position: "fixed",
-    zIndex: 100,
-    backgroundColor: colors.gray2,
-    color: colors.gray12,
-    borderRadius: 5,
-    borderColor: colors.gray6,
-    borderStyle: "solid",
-    borderWidth: 1,
-    boxShadow: "0 12px 24px rgb(0 0 0 / .4)",
-    padding: 6,
-    display: "flex",
-    flexDirection: "column",
-    fontSize: 12,
-  },
-  search: {
-    width: "100%",
-    minWidth: 0,
-    borderColor: colors.gray6,
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderRadius: 3,
-    backgroundColor: colors.gray1,
-    color: colors.gray12,
-    padding: 7,
     outline: "none",
-    ":focus": { borderColor: colors.focus },
-  },
-  list: { overflowY: "auto", minHeight: 0 },
-  option: {
-    display: "block",
-    textAlign: "left",
-    width: "100%",
-    padding: 7,
-    borderRadius: 3,
-    fontFamily: "monospace",
     overflowWrap: "anywhere",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    padding: 4,
+    ":focus-visible": { color: colors.focus },
     "@media (pointer: coarse)": { minHeight: 36 },
   },
-  highlighted: { backgroundColor: colors.gray4, boxShadow: `inset 2px 0 ${colors.focus}` },
-  empty: { color: colors.gray10, padding: 10 },
+  hovered: {
+    backgroundColor: "color-mix(in srgb, var(--yellow-9, #eab308) 20%, black)",
+    borderColor: "#eab308",
+  },
 });
 
-let pickerSequence = 0;
 export interface DataTypePickerProps {
   readonly value: DataType.Any;
   readonly definitions?: DataType.Definitions;
@@ -104,210 +67,101 @@ export interface DataTypePickerProps {
 }
 
 export function DataTypePicker(props: DataTypePickerProps) {
-  const id = `data-type-picker-${++pickerSequence}`;
-  let root: HTMLDivElement | undefined;
-  let menu: HTMLDivElement | undefined;
-  let searchInput: HTMLInputElement | undefined;
-  let trigger: HTMLButtonElement | undefined;
-  const [depth, setDepth] = createSignal<number | null>(null);
-  const [search, setSearch] = createSignal("");
-  const [highlight, setHighlight] = createSignal(0);
-  const [position, setPosition] = createSignal({
-    left: "0px",
-    top: "0px",
-    width: "220px",
-    maxHeight: "320px",
-  });
+  const [hoveredDepth, setHoveredDepth] = createSignal<number | null>(null);
+  const [selectedDepth, setSelectedDepth] = createSignal<number | null>(null);
   const segments = createMemo(() => typeSegments(props.value));
-  const choices = createMemo(() => filterTypeChoices(search(), props.definitions));
+  const choices = createMemo(() => filterTypeChoices("", props.definitions));
+  const options = createMemo(() =>
+    choices().map((choice) => ({
+      id: choiceKey(choice),
+      name: choiceLabel(choice, props.definitions),
+      group:
+        typeof choice === "string"
+          ? choice === "List" || choice === "Option"
+            ? "Containers"
+            : "Primitives"
+          : props.definitions?.[choice.id]?._tag === "Enum"
+            ? "Enums"
+            : "Structs",
+    })),
+  );
   const segmentLabel = (index: number) => {
     const segment = segments()[index];
     return segment?._tag === "Custom" ? typeLabel(segment, props.definitions) : segment?._tag;
   };
-  const selectedChoice = (choice: TypeChoice) => {
-    const segment = segments()[depth() ?? 0];
-    return typeof choice === "string"
-      ? segment?._tag === choice
-      : segment?._tag === "Custom" && segment.id === choice.id;
-  };
-  createEffect(
-    () => highlight(),
-    (index) => {
-      menu
-        ?.querySelector<HTMLElement>(`[id="${id}-${index}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-    },
-  );
-  const open = (button: HTMLButtonElement, index: number) => {
-    if (props.disabled) return;
-    trigger = button;
-    setSearch("");
-    setHighlight(0);
-    const bounds = button.getBoundingClientRect();
-    const width = Math.min(280, innerWidth - 16);
-    const height = Math.min(340, innerHeight - 16);
-    setPosition({
-      left: `${Math.max(8, Math.min(bounds.left, innerWidth - width - 8))}px`,
-      top: `${Math.max(8, Math.min(bounds.bottom + 4, innerHeight - height - 8))}px`,
-      width: `${width}px`,
-      maxHeight: `${height}px`,
-    });
-    setDepth(index);
-    queueMicrotask(() => searchInput?.focus());
-  };
-  const close = (restore = false) => {
-    setDepth(null);
-    if (restore) trigger?.focus();
-  };
-  const select = (choice: TypeChoice) => {
-    const index = depth();
-    if (index === null || props.disabled) return;
-    props.onChange(replaceTypeSegment(props.value, index, choice));
-    close();
-    queueMicrotask(() =>
-      root?.querySelector<HTMLButtonElement>(`[data-type-depth="${index}"]`)?.focus(),
-    );
-  };
-  createEffect(
-    () => props.disabled,
-    (disabled) => {
-      if (disabled) close();
-    },
-  );
-  createEffect(
-    () => depth() !== null,
-    (isOpen) => {
-      if (!isOpen) return;
-      const outside = (event: PointerEvent) => {
-        if (!root?.contains(event.target as Node)) close();
-      };
-      const viewport = () => close(true);
-      const scroll = (event: Event) => {
-        if (!menu?.contains(event.target as Node)) close();
-      };
-      document.addEventListener("pointerdown", outside);
-      window.addEventListener("resize", viewport);
-      window.addEventListener("scroll", scroll, true);
-      return () => {
-        document.removeEventListener("pointerdown", outside);
-        window.removeEventListener("resize", viewport);
-        window.removeEventListener("scroll", scroll, true);
-      };
-    },
-  );
-  return (
-    <div
-      ref={root}
-      sx={styles.root}
-      data-component="data-type-picker"
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === "Escape" && depth() !== null) {
-          event.preventDefault();
-          close(true);
-        }
-      }}
-      onFocusOut={(event) => {
-        if (!root?.contains(event.relatedTarget as Node | null)) close();
-      }}
-    >
-      <div sx={styles.segments} role="group" aria-label={props.label ?? "Data type"}>
-        <For each={segments().map((_, index) => index)}>
-          {(index) => (
+
+  function Segment(segmentProps: { index: number }) {
+    const value = () => {
+      const segment = segments()[segmentProps.index];
+      return segment?._tag === "Custom" ? choiceKey(segment) : (segment?._tag ?? "");
+    };
+    return (
+      <div
+        sx={[
+          styles.segmentFrame,
+          hoveredDepth() === segmentProps.index || selectedDepth() === segmentProps.index
+            ? styles.hovered
+            : null,
+        ]}
+        onMouseMove={(event) => {
+          event.stopPropagation();
+          setHoveredDepth(segmentProps.index);
+        }}
+        onMouseLeave={(event) => {
+          event.stopPropagation();
+          setHoveredDepth(null);
+        }}
+      >
+        <Select
+          options={options()}
+          value={value()}
+          valid
+          disabled={props.disabled ?? false}
+          searchable
+          menuMinWidth={192}
+          placeholder="Select a data type"
+          onOpenChange={(open) => setSelectedDepth(open ? segmentProps.index : null)}
+          onChange={(id) => {
+            const choice = choices().find((choice) => choiceKey(choice) === id);
+            if (choice) props.onChange(replaceTypeSegment(props.value, segmentProps.index, choice));
+          }}
+          trigger={(trigger) => (
             <button
+              ref={trigger.ref}
               type="button"
-              disabled={props.disabled}
-              data-type-depth={index}
-              sx={[styles.segment, depth() === index ? styles.selected : null]}
-              aria-label={`${props.label ?? "Data type"}, ${index === 0 ? "outer" : `nested ${index}`}: ${segmentLabel(index)}`}
-              aria-haspopup="listbox"
-              aria-expanded={depth() === index ? "true" : "false"}
-              aria-controls={depth() === index ? id : undefined}
-              onClick={(event) =>
-                depth() === index ? close(true) : open(event.currentTarget, index)
+              disabled={trigger.disabled()}
+              data-type-depth={segmentProps.index}
+              sx={styles.segment}
+              aria-label={`${props.label ?? "Data type"}, ${segmentProps.index === 0 ? "outer" : `nested ${segmentProps.index}`}: ${segmentLabel(segmentProps.index)}`}
+              title={
+                segments()[segmentProps.index]?._tag === "Custom"
+                  ? choiceKey(segments()[segmentProps.index] as DataType.Custom)
+                  : undefined
               }
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  open(event.currentTarget, index);
-                }
-              }}
+              aria-haspopup="listbox"
+              aria-expanded={trigger.isOpen() ? "true" : "false"}
+              onClick={trigger.toggle}
             >
-              {segmentLabel(index)}
-              <span sx={styles.arrow} aria-hidden="true">
-                {segments()[index]?._tag === "List" || segments()[index]?._tag === "Option"
-                  ? ">"
-                  : "v"}
-              </span>
+              {segmentLabel(segmentProps.index)}
             </button>
           )}
-        </For>
+        />
+        <Show when={segmentProps.index + 1 < segments().length}>
+          <Segment index={segmentProps.index + 1} />
+        </Show>
       </div>
-      <Show when={depth() !== null}>
-        <div ref={menu} sx={styles.menu} style={position()}>
-          <input
-            ref={searchInput}
-            sx={styles.search}
-            role="combobox"
-            aria-label="Search data types"
-            aria-controls={id}
-            aria-expanded="true"
-            aria-autocomplete="list"
-            aria-activedescendant={choices()[highlight()] ? `${id}-${highlight()}` : undefined}
-            placeholder="Search data types"
-            value={search()}
-            onInput={(event) => {
-              setSearch(event.currentTarget.value);
-              setHighlight(0);
-            }}
-            onKeyDown={(event) => {
-              if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                setHighlight((current) =>
-                  Math.max(
-                    0,
-                    Math.min(choices().length - 1, current + (event.key === "ArrowDown" ? 1 : -1)),
-                  ),
-                );
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                const choice = choices()[highlight()];
-                if (choice) select(choice);
-              } else if (event.key === "Tab") {
-                trigger?.focus();
-                close();
-              }
-            }}
-          />
-          <div id={id} role="listbox" aria-label="Data types" sx={styles.list}>
-            <For
-              each={choices()}
-              fallback={
-                <div role="status" sx={styles.empty}>
-                  No data types found
-                </div>
-              }
-            >
-              {(choice, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  id={`${id}-${index()}`}
-                  tabindex={-1}
-                  aria-selected={selectedChoice(choice) ? "true" : "false"}
-                  sx={[styles.option, highlight() === index() ? styles.highlighted : null]}
-                  onPointerDown={(event) => event.preventDefault()}
-                  onPointerMove={() => setHighlight(index())}
-                  onClick={() => select(choice)}
-                >
-                  {choiceLabel(choice, props.definitions)}
-                </button>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
+    );
+  }
+
+  return (
+    <div
+      sx={styles.root}
+      data-component="data-type-picker"
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <div sx={styles.segments} role="group" aria-label={props.label ?? "Data type"}>
+        <Segment index={0} />
+      </div>
     </div>
   );
 }

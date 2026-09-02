@@ -534,7 +534,7 @@ export const layer = Layer.effect(Service)(
           if (usesAffected || changedEndpoint) {
             const reason = isConnectionValid(wire, newOut, newIn)
               ? `Connection ${wire.id} uses an affected endpoint`
-              : `Connection ${wire.id} will remain invalid: missing endpoint or incompatible types`;
+              : `Connection ${wire.id} will be removed: missing endpoint or incompatible types`;
             if (graph.nodes[wire.outNodeId] !== undefined) add(wire.outNodeId, reason);
             if (graph.nodes[wire.inNodeId] !== undefined) add(wire.inNodeId, reason);
           }
@@ -580,14 +580,45 @@ export const layer = Layer.effect(Service)(
       return yield* Effect.gen(function* () {
         yield* packages.setTypeDefinitions(types);
         const nodeIO: Record<string, Record<string, NodeIO>> = {};
+        const deletedConnectionIds: Record<string, Array<string>> = {};
         for (const [graphId, graph] of Object.entries(project.graphs)) {
           nodeIO[graphId] = {};
-          for (const node of Object.values(graph.nodes))
-            nodeIO[graphId][node.id] = yield* getNodeIO(node).pipe(
-              Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+          const resolved = new Set<string>();
+          for (const node of Object.values(graph.nodes)) {
+            const result = yield* getNodeIO(node).pipe(
+              Effect.map((io) => ({ io, resolved: true as const })),
+              Effect.catchTag("SchemaNotFoundError", () =>
+                Effect.succeed({ io: emptyNodeIO, resolved: false as const }),
+              ),
             );
+            nodeIO[graphId][node.id] = result.io;
+            if (result.resolved) resolved.add(node.id);
+          }
+          for (const connection of graph.connections) {
+            if (
+              graph.nodes[connection.outNodeId] === undefined ||
+              graph.nodes[connection.inNodeId] === undefined
+            ) {
+              (deletedConnectionIds[graphId] ??= []).push(connection.id);
+              continue;
+            }
+            if (!resolved.has(connection.outNodeId) || !resolved.has(connection.inNodeId)) continue;
+            if (
+              !isConnectionValid(
+                connection,
+                nodeIO[graphId][connection.outNodeId]!,
+                nodeIO[graphId][connection.inNodeId]!,
+              )
+            )
+              (deletedConnectionIds[graphId] ??= []).push(connection.id);
+          }
         }
-        return yield* events.publish({ _tag: "TypeDefinitionsUpdated", types, nodeIO });
+        return yield* events.publish({
+          _tag: "TypeDefinitionsUpdated",
+          types,
+          nodeIO,
+          deletedConnectionIds,
+        });
       }).pipe(
         Effect.onError(() => packages.setTypeDefinitions(project.types)),
         Effect.uninterruptible,
@@ -755,17 +786,12 @@ export const layer = Layer.effect(Service)(
         const outputNode = graph.nodes[connection.outNodeId];
         const inputNode = graph.nodes[connection.inNodeId];
         if (outputNode === undefined || inputNode === undefined) {
+          stale.push(connection);
           continue;
         }
         const outputIO = outputNode.id === node.id ? io : yield* getNodeIO(outputNode);
         const inputIO = inputNode.id === node.id ? io : yield* getNodeIO(inputNode);
-        const previousOutputIO = outputNode.id === node.id ? oldIO : outputIO;
-        const previousInputIO = inputNode.id === node.id ? oldIO : inputIO;
-        if (
-          !preservesTypeData &&
-          isConnectionValid(connection, previousOutputIO, previousInputIO) &&
-          !isConnectionValid(connection, outputIO, inputIO)
-        )
+        if (!isConnectionValid(connection, outputIO, inputIO))
           stale.push(connection);
       }
       return yield* events.publish({

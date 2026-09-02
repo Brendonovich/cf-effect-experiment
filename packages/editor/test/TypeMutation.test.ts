@@ -225,7 +225,8 @@ describe("type authoring preserve-invalid", () => {
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.nodeIO.second![push.id]).toEqual(proposedPushIO);
         const deleted = yield* editor.project.snapshot();
-        expect(deleted.project.graphs).toEqual(snapshot.project.graphs);
+        expect(deleted.project.graphs.first!.connections).toEqual([]);
+        expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
         expect(deleted.nodeIO).toEqual(event.nodeIO);
         expect(deleted.nodeIO.second![create.id]!.dataInputs[0]!.defaultValue).toBeUndefined();
         expect(
@@ -283,7 +284,7 @@ describe("type authoring preserve-invalid", () => {
   );
 
   it.effect(
-    "kind changes preserve incompatible nodes and required dependents when the authored type remains finite",
+    "kind changes preserve incompatible nodes and required dependents while removing invalid wires",
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
@@ -313,7 +314,7 @@ describe("type authoring preserve-invalid", () => {
         expect(impact.affectedTypes).toContain("required");
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.types.required).toEqual(dependent);
-        expect((yield* editor.project.get()).graphs).toEqual(seed.graphs);
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
         expect(TypeDefinition.validate(event.types)).toEqual([]);
         const unsafe: TypeDefinition.Change = {
@@ -404,7 +405,7 @@ describe("type authoring preserve-invalid", () => {
         expect(
           impact.nodes
             .find((n) => n.nodeId === "string")!
-            .reasons.some((r) => r.includes("will remain invalid")),
+            .reasons.some((r) => r.includes("will be removed")),
         ).toBe(true);
         expect(yield* (yield* Persistence.Service).loadProject()).toEqual(seed);
         expect(yield* packages.getPackages()).toEqual(before);
@@ -412,7 +413,7 @@ describe("type authoring preserve-invalid", () => {
   );
 
   it.effect(
-    "confirmation preserves every node/default/wire and emits attributable serializable collaboration IO",
+    "confirmation removes invalid wires and emits attributable serializable collaboration IO",
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
@@ -430,7 +431,8 @@ describe("type authoring preserve-invalid", () => {
           ),
         ).toEqual(event);
         const project = yield* editor.project.get();
-        expect(project.graphs).toEqual(seed.graphs);
+        expect(project.graphs.first!.connections).toEqual([]);
+        expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
         expect((yield* editor.project.snapshot()).nodeIO).toEqual(event.nodeIO);
         expect(
@@ -441,7 +443,7 @@ describe("type authoring preserve-invalid", () => {
           ).some((r) => r.includes("Invalid default")),
         ).toBe(true);
         yield* apply(yield* Persistence.Service, event);
-        expect((yield* editor.project.get()).graphs).toEqual(seed.graphs);
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
       }).pipe(Effect.provide(testLayer)),
   );
 
@@ -452,7 +454,7 @@ describe("type authoring preserve-invalid", () => {
         const editor = yield* Editor.Service;
         const event = yield* mutate(editor, { _tag: "Delete", id: personId });
         expect(Object.keys(event.types)).toEqual(["group", "team"]);
-        expect((yield* editor.project.get()).graphs).toEqual(seed.graphs);
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
         expect((yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs).toEqual(
           [],
         );
@@ -471,9 +473,7 @@ describe("type authoring preserve-invalid", () => {
         ).toBe(true);
         yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
         expect((yield* editor.project.get()).graphs.first!.nodes.make!.inputDefaults).toEqual({});
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual(
-          seed.graphs.first!.connections,
-        );
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
         yield* mutate(editor, fresh);
         yield* mutate(editor, { _tag: "Upsert", definition: person });
         const repaired = yield* editor.project.snapshot();
@@ -488,7 +488,7 @@ describe("type authoring preserve-invalid", () => {
   );
 
   it.effect(
-    "field type replacement retains defaults and mismatched connections until explicit repair",
+    "field type replacement retains defaults and removes mismatched connections",
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
@@ -496,7 +496,7 @@ describe("type authoring preserve-invalid", () => {
           _tag: "Upsert",
           definition: { ...person, fields: [{ name: "name", type: DataType.Int }] },
         });
-        expect((yield* editor.project.get()).graphs).toEqual(seed.graphs);
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
         expect(
           TypeDefinition.nodeDiagnostics(
             seed.graphs.first!.nodes.make!,
@@ -524,13 +524,11 @@ describe("type authoring preserve-invalid", () => {
             repaired.project.types,
           ),
         ).toEqual([]);
-        expect(repaired.project.graphs.first!.connections).toEqual(seed.graphs.first!.connections);
-        yield* editor.connection.delete({ graphID: "first", connectionId: "wire" });
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
+        expect(repaired.project.graphs.first!.connections).toEqual([]);
       }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("later property edits cannot silently prune already-invalid type data or wires", () =>
+  it.effect("later property edits retain invalid type data after wires are removed", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       yield* mutate(editor, removingField);
@@ -540,9 +538,7 @@ describe("type authoring preserve-invalid", () => {
         property: "label",
         value: "repair context",
       });
-      expect((yield* editor.project.get()).graphs.first!.connections).toEqual(
-        seed.graphs.first!.connections,
-      );
+      expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
       const event = yield* editor.node.setProperty({
         graphID: "second",
         nodeID: "property",
@@ -557,7 +553,7 @@ describe("type authoring preserve-invalid", () => {
   );
 
   it.effect(
-    "enum variant removal preserves construct nodes, match wires and obsolete payloads",
+    "enum variant removal preserves construct nodes and obsolete payloads while removing wires",
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
@@ -613,10 +609,9 @@ describe("type authoring preserve-invalid", () => {
           ),
         ).toBe(true);
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
-        expect((yield* editor.project.get()).graphs).toEqual(before.graphs);
-        expect((yield* editor.project.get()).graphs.second!.connections).toContainEqual(
-          wire.connection,
-        );
+        expect((yield* editor.project.get()).graphs.first).toEqual(before.graphs.first);
+        expect((yield* editor.project.get()).graphs.second!.connections).toEqual([]);
+        expect(event.deletedConnectionIds).toEqual({ second: [wire.connection.id] });
         expect(
           TypeDefinition.nodeDiagnostics(
             match.node,
@@ -792,7 +787,7 @@ describe("type authoring preserve-invalid", () => {
           { concurrency: "unbounded" },
         );
         expect(results.map((result) => result._tag).sort()).toEqual(["Failure", "Success"]);
-        expect((yield* editor.project.get()).graphs).toEqual(seed.graphs);
+        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
       }).pipe(Effect.provide(testLayer)),
   );
 
@@ -927,7 +922,7 @@ describe("type authoring preserve-invalid", () => {
         const results = yield* Fiber.join(stream);
         expect(results[0]!._tag).toBe("ProjectSnapshot");
         expect(results[1]).toEqual(event);
-        expect((yield* client.GetProject({})).graphs).toEqual(seed.graphs);
+        expect((yield* client.GetProject({})).graphs.first!.connections).toEqual([]);
       }).pipe(
         Effect.scoped,
         Effect.provide(
@@ -1006,7 +1001,7 @@ describe("type authoring preserve-invalid", () => {
         yield* Effect.gen(function* () {
           const editor = yield* Editor.Service;
           const snapshot = yield* editor.project.snapshot();
-          expect(snapshot.project.graphs).toEqual(seed.graphs);
+          expect(snapshot.project.graphs.first!.connections).toEqual([]);
           expect(snapshot.nodeIO.first!.make!.dataInputs).toEqual([]);
           yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
         }).pipe(

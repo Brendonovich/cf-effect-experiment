@@ -14,6 +14,9 @@ export const TypeDefinitionsUpdated = Schema.TaggedStruct("TypeDefinitionsUpdate
   actor,
   types: DataType.Definitions,
   nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
+  deletedConnectionIds: Schema.Record(Schema.String, Schema.Array(Schema.String)).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({})),
+  ),
 });
 export type TypeDefinitionsUpdated = typeof TypeDefinitionsUpdated.Type;
 

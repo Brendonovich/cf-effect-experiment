@@ -66,7 +66,7 @@ const ioByNode: Record<string, NodeIO> = {
 };
 
 describe("graph presentation", () => {
-  it("shows orphan defaults even without wires and marks nominally incompatible wires", () => {
+  it("shows orphan defaults without wires and omits nominally incompatible wires", () => {
     expect(retainedPorts([], new Set(), ["removed"])).toEqual([
       {
         kind: "data",
@@ -80,9 +80,9 @@ describe("graph presentation", () => {
       ...ioByNode.target!,
       dataInputs: [{ id: inputId, type: { _tag: "Custom", id: "person" } }],
     };
-    expect(
-      graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))[0]?.invalid,
-    ).toBe("Nominal data types do not match");
+    expect(graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))).toEqual(
+      [],
+    );
     expect(wireColor({ _tag: "Custom", id: "person" })).not.toBe(
       wireColor({ _tag: "Custom", id: "other" }),
     );
@@ -166,12 +166,9 @@ describe("graph presentation", () => {
     },
   );
 
-  it("retains missing ports but ignores missing nodes and duplicate port IDs", () => {
+  it("ignores missing ports, missing nodes, and duplicate port IDs", () => {
     expect(graphConnections({ ...graph, nodes: {} }, (id) => ioByNode[id])).toEqual([]);
-    const retained = graphConnections(graph, () => undefined);
-    expect(retained).toHaveLength(1);
-    expect(retained[0]?.invalid).toBe("Missing wire endpoint");
-    expect(retained[0]?.from).toEqual({ x: 15 + 104 - 30, y: 42 });
+    expect(graphConnections(graph, () => undefined)).toEqual([]);
     for (const nodeId of ["source", "target"]) {
       const io = ioByNode[nodeId]!;
       const duplicateIO: NodeIO = {

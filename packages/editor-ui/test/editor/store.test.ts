@@ -59,13 +59,14 @@ describe("editor store", () => {
         actor: Actor.system,
         types: {},
         nodeIO: { graph: { node: emptyIO } },
+        deletedConnectionIds: { graph: ["wire"] },
       });
       expect(editor.store.project?.types).toEqual({});
       expect(editor.store.nodeIO.graph?.node).toEqual(emptyIO);
       expect(editor.store.project?.graphs.graph?.nodes.node?.inputDefaults).toEqual({
         old: "kept",
       });
-      expect(editor.store.project?.graphs.graph?.connections).toEqual([connection]);
+      expect(editor.store.project?.graphs.graph?.connections).toEqual([]);
       expect(
         editor.store.packages.find((pkg) => pkg.id === CustomTypes.packageId)?.schemas,
       ).toEqual([]);

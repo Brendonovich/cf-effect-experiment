@@ -107,8 +107,7 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
               <path
                 d={connectionPath(edge.from, edge.to)}
                 fill="none"
-                stroke={edge.invalid ? "#ff9592" : wireColor(edge.type)}
-                stroke-dasharray={edge.invalid ? "6 4" : undefined}
+                stroke={wireColor(edge.type)}
                 stroke-width="2"
                 opacity="0.75"
               />

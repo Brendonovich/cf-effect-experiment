@@ -11,12 +11,10 @@ import * as stylex from "@stylexjs/stylex";
 import { For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
-import { Button } from "../../ui/Button";
 import { DataTypePicker } from "../../ui/DataTypePicker";
 import { Select } from "../../ui/Select";
 import { StructuredDefault } from "../../ui/StructuredDefault";
 import { parseListType, typeLabel } from "../../ui/typeSelection";
-import { graphConnections } from "../graph/graphPresentation";
 import { PropertyControl } from "./PropertyControl";
 import { SchemaInfoButton } from "./SchemaInfoButton";
 
@@ -81,7 +79,6 @@ export function Inspector(props: {
   nodeIO?: Readonly<Record<string, NodeIO>>;
   onSaveDefault?: (nodeId: string, input: string, value: unknown) => Promise<unknown>;
   onRemoveDefault?: (nodeId: string, input: string) => Promise<unknown>;
-  onDisconnect?: (direction: "input" | "output", nodeId: string, input: string) => void;
   canEdit: boolean;
   editingGraphNameId: string | null;
   onEditingGraphNameChange: (id: string | null) => void;
@@ -164,15 +161,6 @@ export function Inspector(props: {
             io() ?? { executionInputs: [], executionOutputs: [], dataInputs: [], dataOutputs: [] },
             props.definitions ?? {},
           );
-        const invalidWires = () =>
-          props.graph
-            ? graphConnections(props.graph, (id) => props.nodeIO?.[id]).filter(
-                (edge) =>
-                  edge.invalid &&
-                  (edge.connection.inNodeId === node().id ||
-                    edge.connection.outNodeId === node().id),
-              )
-            : [];
         return (
           <div sx={styles.panel}>
             <span sx={styles.title}>Node Info</span>
@@ -183,33 +171,6 @@ export function Inspector(props: {
             </Show>
             <For each={diagnostics()}>
               {(diagnostic) => <span sx={styles.warning}>{diagnostic}</span>}
-            </For>
-            <For each={invalidWires()}>
-              {(edge) => (
-                <div sx={styles.field}>
-                  <span sx={styles.warning}>
-                    Invalid wire: {edge.connection.outIoId} to {edge.connection.inIoId}.{" "}
-                    {edge.invalid}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={!props.canEdit}
-                    onClick={() =>
-                      props.onDisconnect?.(
-                        edge.connection.inNodeId === node().id ? "input" : "output",
-                        node().id,
-                        edge.connection.inNodeId === node().id
-                          ? edge.connection.inIoId
-                          : edge.connection.outIoId,
-                      )
-                    }
-                  >
-                    Remove invalid wire
-                  </Button>
-                </div>
-              )}
             </For>
             <div sx={styles.field}>
               <span sx={styles.fieldLabel}>Name</span>

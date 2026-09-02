@@ -227,13 +227,13 @@ export const graphConnections = (graph: Graph.Model, ioForNode: NodeIOFor) => {
               !Types.equals(from.port.type, to.port.type)
             ? "Nominal data types do not match"
             : undefined;
+    if (invalid !== undefined) return [];
     return [
       {
         connection,
         from: from.position,
         to: to.position,
         type: from.port.kind === "data" ? from.port.type : undefined,
-        invalid,
       },
     ];
   });
