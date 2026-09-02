@@ -369,9 +369,18 @@ export function Select(props: {
 
   return (
     <span ref={root} sx={styles.root} onKeyDown={onKeyDown}>
-      <Show
-        when={props.trigger}
-        fallback={
+      {() => {
+        const render = props.trigger;
+        return render ? (
+          render({
+            ref: (element) => {
+              trigger = element;
+            },
+            isOpen,
+            disabled,
+            toggle,
+          })
+        ) : (
           <button
             ref={trigger}
             type="button"
@@ -402,19 +411,8 @@ export function Select(props: {
               <path d="m4 6 4 4 4-4" />
             </svg>
           </button>
-        }
-      >
-        {(render) =>
-          render()({
-            ref: (element) => {
-              trigger = element;
-            },
-            isOpen,
-            disabled,
-            toggle,
-          })
-        }
-      </Show>
+        );
+      }}
       <Show when={menuPresence.present()}>
         <div
           ref={setMenu}
