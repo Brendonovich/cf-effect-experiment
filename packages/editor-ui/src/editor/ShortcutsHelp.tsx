@@ -153,12 +153,6 @@ export function ShortcutsHelp(props: { shortcuts: ReturnType<typeof createEditor
           Each key combination is an alternative. Some browser shortcuts may be reserved. Change
           replaces all alternatives for an action. Conflicts are rejected, not reassigned.
         </p>
-        <p sx={styles.note}>
-          Node clipboard uses the system clipboard and requires browser permission. Paste preserves
-          relative spacing. System-created nodes are skipped. Missing schemas require confirmation
-          and can be pasted without importing them. Valid external links reconnect only in the
-          source graph; missing endpoints and occupied inputs are skipped.
-        </p>
         <button
           type="button"
           sx={styles.button}
