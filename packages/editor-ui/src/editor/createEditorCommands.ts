@@ -1,8 +1,9 @@
 import type { EditorEvent } from "@macrograph/editor";
 
-import { IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
-import { Effect, type Schema } from "effect";
-import { createSignal } from "solid-js";
+import { Clipboard, IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
+import { QueryClient, useMutation } from "@tanstack/solid-query";
+import { Effect, Result, type Schema } from "effect";
+import { createSignal, onCleanup } from "solid-js";
 
 import type { createEditorConnection } from "./session/createEditorConnection";
 import type { createEditorStore } from "./store";
@@ -39,6 +40,176 @@ export function createEditorCommands(
   const [editingName, setEditingName] = createSignal<
     { type: "graph"; id: string } | { type: "node"; id: string } | null
   >(null);
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { networkMode: "always" } },
+  });
+  onCleanup(() => queryClient.clear());
+  const clipboardMutation = useMutation(
+    () => ({
+      mutationFn: (operation: () => Promise<void>) => operation(),
+      // Do not replay clipboard writes or editor mutations automatically.
+      retry: false,
+    }),
+    () => queryClient,
+  );
+  const [clipboardRebind, setClipboardRebind] =
+    createSignal<ReadonlyArray<Clipboard.RebindRequest>>();
+  const [clipboardMissingSchemas, setClipboardMissingSchemas] =
+    createSignal<ReadonlyArray<Clipboard.MissingSchema>>();
+  let resolveRebind: ((bindings: ReadonlyArray<Clipboard.Binding> | undefined) => void) | undefined;
+  let resolveMissingSchemas: ((force: boolean) => void) | undefined;
+  const finishClipboardRebind = (bindings?: ReadonlyArray<Clipboard.Binding>) => {
+    setClipboardRebind(undefined);
+    resolveRebind?.(bindings);
+    resolveRebind = undefined;
+  };
+  const finishClipboardMissingSchemas = (force: boolean) => {
+    setClipboardMissingSchemas(undefined);
+    resolveMissingSchemas?.(force);
+    resolveMissingSchemas = undefined;
+  };
+  onCleanup(() => {
+    finishClipboardRebind();
+    finishClipboardMissingSchemas(false);
+  });
+  const copyNodes = async (nodeIds: ReadonlyArray<string>, cut = false) => {
+    const graph = selectedGraph();
+    const graphId = selectedGraphId();
+    const c = client();
+    if (clipboardMutation.isPending || !graph || !graphId || (cut && (!c || !canEdit()))) return;
+    const nodes = nodeIds.flatMap((id) => {
+      const node = graph.nodes[id];
+      if (!node) return [];
+      const schema = editor.store.packages
+        .find((pkg) => pkg.id === node.schema.package)
+        ?.schemas.find((schema) => schema.id === node.schema.schema);
+      return schema?.internal === true ? [] : [node];
+    });
+    const ids = new Set(nodes.map((node) => String(node.id)));
+    const capturedIO = Object.fromEntries(
+      nodes.flatMap((node) => {
+        const io = editor.store.nodeIO[graphId]?.[node.id];
+        return io === undefined ? [] : [[node.id, io]];
+      }),
+    );
+    const capturedSchemas = Object.fromEntries(
+      nodes.flatMap((node) => {
+        const plugin = editor.store.packages.find(
+          (candidate) => candidate.id === node.schema.package,
+        );
+        const schema = plugin?.schemas.find((candidate) => candidate.id === node.schema.schema);
+        return plugin === undefined || schema === undefined
+          ? []
+          : [[node.id, { pluginName: plugin.name, schemaName: schema.name }]];
+      }),
+    );
+    const externalConnections = graph.connections.filter(
+      (connection) => ids.has(connection.inNodeId) !== ids.has(connection.outNodeId),
+    );
+    const internalConnections = graph.connections.filter(
+      (connection) => ids.has(connection.inNodeId) && ids.has(connection.outNodeId),
+    );
+    return clipboardMutation
+      .mutateAsync(async () => {
+        try {
+          if (nodes.length === 0) return;
+          const session = c ? await runPromise(c.GetClipboardIdentity()) : undefined;
+          const text = JSON.stringify({
+            format: "macrograph/nodes",
+            version: 1,
+            nodes,
+            connections: internalConnections,
+            externalConnections,
+            nodeIO: capturedIO,
+            nodeSchemas: capturedSchemas,
+            ...(session === undefined ? {} : { source: { session, graphId } }),
+          });
+          await runPromise(Clipboard.decode(text));
+          await navigator.clipboard.writeText(text);
+          // Graph, client and IDs were captured before awaiting clipboard permission.
+          if (cut && c) {
+            if (!canEdit() || client() !== c)
+              throw new Error("Editor connection changed; source nodes were not cut");
+            await runPromise(applyMutation(c.DeleteFragment({ graphId, nodeIds: [...ids] })));
+            if (selectedGraphId() === graphId)
+              setSelectedNodeIds((selected) => selected.filter((id) => !ids.has(id)));
+          }
+        } catch (error) {
+          throw new Error(
+            `${cut ? "Cut" : "Copy"} failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      })
+      .catch(() => {}); // Errors are rendered from the mutation state.
+  };
+  const pasteNodes = async (position: { x: number; y: number }) => {
+    const graphId = selectedGraphId();
+    const c = client();
+    if (clipboardMutation.isPending || !graphId || !c || !canEdit()) return;
+    const anchor = snapGraphPosition(position, false);
+    return clipboardMutation
+      .mutateAsync(async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          await runPromise(Clipboard.decode(text));
+          if (!canEdit() || client() !== c)
+            throw new Error("Editor connection changed; nothing was pasted");
+          let bindings: ReadonlyArray<Clipboard.Binding> = [];
+          let skipMissingSchemas = false;
+          let result = await runPromise(
+            c
+              .PasteFragment({ graphId, text, position: anchor, bindings, skipMissingSchemas })
+              .pipe(Effect.result),
+          );
+          while (Result.isFailure(result)) {
+            if (result.failure._tag === "ClipboardMissingSchemas") {
+              setClipboardMissingSchemas(result.failure.schemas);
+              skipMissingSchemas = await new Promise<boolean>((resolve) => {
+                resolveMissingSchemas = resolve;
+              });
+              if (!skipMissingSchemas) return;
+            } else if (result.failure._tag === "ClipboardRebindRequired") {
+              setClipboardRebind(result.failure.requests);
+              const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
+                (resolve) => {
+                  resolveRebind = resolve;
+                },
+              );
+              if (chosen === undefined) return;
+              bindings = [
+                ...bindings.filter(
+                  (binding) =>
+                    !chosen.some(
+                      (next) =>
+                        next.nodeId === binding.nodeId && next.property === binding.property,
+                    ),
+                ),
+                ...chosen,
+              ];
+            } else break;
+            if (!canEdit() || client() !== c)
+              throw new Error("Editor connection changed; nothing was pasted");
+            result = await runPromise(
+              c
+                .PasteFragment({ graphId, text, position: anchor, bindings, skipMissingSchemas })
+                .pipe(Effect.result),
+            );
+          }
+          if (Result.isFailure(result))
+            throw new Error(
+              "reason" in result.failure ? String(result.failure.reason) : result.failure._tag,
+            );
+          const event = result.success;
+          editor.applyEvent(event);
+          if (selectedGraphId() === graphId) setSelectedNodeIds(event.nodes.map((node) => node.id));
+        } catch (error) {
+          throw new Error(
+            `Paste failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      })
+      .catch(() => {}); // Errors are rendered from the mutation state.
+  };
   const [positioningNodes, setPositioningNodes] = createSignal<
     ReadonlyArray<{ graphId: string; nodeId: string }>
   >([]);
@@ -329,6 +500,17 @@ export function createEditorCommands(
   };
 
   return {
+    copyNodes,
+    pasteNodes,
+    clipboardMutation,
+    clipboardError: () => clipboardMutation.error?.message,
+    clipboardRebind,
+    finishClipboardRebind,
+    clipboardMissingSchemas,
+    finishClipboardMissingSchemas,
+    dismissClipboardError: () => {
+      if (!clipboardMutation.isPending) clipboardMutation.reset();
+    },
     isNodePositioning: (nodeId: string) =>
       positioningNodes().some(
         (node) => node.graphId === selectedGraphId() && node.nodeId === nodeId,

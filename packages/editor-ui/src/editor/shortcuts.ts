@@ -11,6 +11,9 @@ import {
 } from "@opentui/keymap/html";
 
 export type ShortcutAction =
+  | "copy-nodes"
+  | "cut-nodes"
+  | "paste-nodes"
   | "toggle-navigation"
   | "toggle-inspector"
   | "previous-tab"
@@ -34,6 +37,9 @@ export interface ShortcutDefinition {
 }
 
 export const editorShortcuts: ReadonlyArray<ShortcutDefinition> = [
+  { action: "copy-nodes", keys: ["mod+c"], label: "Copy selected nodes" },
+  { action: "cut-nodes", keys: ["mod+x"], label: "Cut selected nodes" },
+  { action: "paste-nodes", keys: ["mod+v"], label: "Paste nodes at pointer or canvas center" },
   { action: "toggle-navigation", keys: ["mod+b"], label: "Toggle navigation" },
   { action: "toggle-inspector", keys: ["mod+r", "mod+i"], label: "Toggle inspector" },
   { action: "previous-tab", keys: ["mod+left"], label: "Previous tab" },

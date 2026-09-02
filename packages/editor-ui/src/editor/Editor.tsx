@@ -14,6 +14,8 @@ import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
+import { ClipboardMissingSchemas } from "./ClipboardMissingSchemas";
+import { ClipboardRebind } from "./ClipboardRebind";
 import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
 import { createEditorCanvas } from "./graph/createEditorCanvas";
@@ -485,6 +487,32 @@ function EditorContent(
 
   return (
     <div ref={editorRoot} sx={styles.editor}>
+      <Show when={controller.commands.clipboardRebind()}>
+        {(requests) => (
+          <ClipboardRebind
+            requests={requests()}
+            finish={controller.commands.finishClipboardRebind}
+          />
+        )}
+      </Show>
+      <Show when={controller.commands.clipboardMissingSchemas()}>
+        {(schemas) => (
+          <ClipboardMissingSchemas
+            schemas={schemas()}
+            finish={controller.commands.finishClipboardMissingSchemas}
+          />
+        )}
+      </Show>
+      <Show when={controller.commands.clipboardError()}>
+        {(message) => (
+          <div role="alert">
+            {message()}
+            <Button type="button" onClick={controller.commands.dismissClipboardError}>
+              Dismiss
+            </Button>
+          </div>
+        )}
+      </Show>
       <div
         sx={[
           styles.loadingOverlay,

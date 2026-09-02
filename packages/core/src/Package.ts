@@ -38,6 +38,7 @@ export type PropertyDefinition = typeof PropertyDefinition.Type;
 
 export const SchemaModel = Schema.Struct({
   id: SchemaId,
+  internal: Schema.optional(Schema.Boolean),
   name: Schema.String,
   description: Schema.optional(Schema.String),
   type: Schema.Literals(["event", "exec", "pure"]),

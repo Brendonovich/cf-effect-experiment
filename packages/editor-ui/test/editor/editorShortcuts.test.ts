@@ -106,6 +106,12 @@ const setup = (
     });
     canvas.setGraphCanvas(activeCanvas);
     const commands = {
+      copyNodes: vi
+        .fn<(nodeIds: ReadonlyArray<string>, cut?: boolean) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      pasteNodes: vi
+        .fn<(position: { x: number; y: number }) => Promise<void>>()
+        .mockResolvedValue(undefined),
       deleteNode: vi.fn<(nodeId: string) => void>(),
       setNodeFoldPins: vi.fn<(nodeId: string, foldPins: boolean) => void>(),
     };
@@ -117,6 +123,31 @@ const setup = (
 };
 
 describe("createEditorShortcuts", () => {
+  it("dispatches clipboard actions and leaves native editable clipboard shortcuts untouched", () => {
+    const { layout, commands } = setup();
+    layout.setSelectedGraphId("main");
+    layout.setSelectedNodeIds(["folded"]);
+    flush();
+    expect(press("KeyC", "c", { metaKey: true }).defaultPrevented).toBe(true);
+    expect(commands.copyNodes).toHaveBeenCalledWith(["folded"], false);
+    press("KeyX", "x", { metaKey: true });
+    expect(commands.copyNodes).toHaveBeenCalledWith(["folded"], true);
+    press("KeyV", "v", { metaKey: true });
+    expect(commands.pasteNodes).toHaveBeenCalledTimes(1);
+    const input = document.createElement("input");
+    document.body.append(input);
+    const event = new KeyboardEvent("keydown", {
+      code: "KeyC",
+      key: "c",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(commands.copyNodes).toHaveBeenCalledTimes(2);
+  });
+
   it("opens and restores shortcuts without losing graph view or running graph actions", async () => {
     const { layout, commands } = setup();
     const snapshot = { ...Project.empty(), graphs: { main: Graph.empty("main") } };

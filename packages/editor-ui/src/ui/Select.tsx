@@ -4,8 +4,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import { colors } from "../tokens.stylex.ts";
 import { createPresence } from "./createPresence";
 import { createStateMachine } from "./createStateMachine.ts";
-
-const searchMarker = stylex.defineMarker();
+import { searchMarker } from "./Select.stylex.ts";
 
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px)" },

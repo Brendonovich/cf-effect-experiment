@@ -52,6 +52,11 @@ The Effect v4 monorepo is checked in as a git submodule at `lib/effect-smol` (ef
 
 - **Don't extract private `make` functions**. Inline the implementation directly in `Layer.effect(Service, Effect.gen(function* () { ... }))` unless the `make` function is exported.
 
+## Client Async State
+
+- **Use TanStack Query `useMutation` to track client async actions**. Derive pending/error state from the mutation instead of maintaining manual busy flags or error signals.
+- **Set `defaultOptions.mutations.networkMode` to `"always"` on QueryClients**. Handle connectivity in the transport/service layer, not by pausing mutations based on browser online status.
+
 ## Verification
 
 - **Always run `pnpm typecheck` after making changes** to ensure types are correct.
