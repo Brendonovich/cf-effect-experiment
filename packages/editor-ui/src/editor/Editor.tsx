@@ -29,6 +29,7 @@ import {
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Inspector } from "./inspector/Inspector";
 import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
