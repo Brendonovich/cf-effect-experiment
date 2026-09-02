@@ -7,6 +7,7 @@ import {
   Policy,
   Project,
   ResourceConstant,
+  TypeDefinition,
 } from "@macrograph/core";
 import { PersistenceError } from "@macrograph/persistence";
 import { Credential } from "@macrograph/plugin/Credential";
@@ -31,6 +32,7 @@ export class ConnectionMiddleware extends RpcMiddleware.Service<
 const readOnlyRpcs = new Set([
   "GetClipboardIdentity",
   "GetProject",
+  "PreviewTypeDefinition",
   "GetInputSuggestions",
   "GetPackages",
   "GetIngressEndpoints",
@@ -93,6 +95,23 @@ export const connectionMiddlewareLayer = Layer.effect(ConnectionMiddleware)(
 );
 
 const SnapshotErrors = Schema.Union([PersistenceError, Project.NotFoundError]);
+
+const TypeDefinitionErrors = [
+  PersistenceError,
+  Project.NotFoundError,
+  TypeDefinition.InvalidError,
+  TypeDefinition.NotFoundError,
+] as const;
+class PreviewTypeDefinition extends Rpc.make("PreviewTypeDefinition", {
+  payload: { change: TypeDefinition.Change },
+  success: TypeDefinition.Impact,
+  error: Schema.Union(TypeDefinitionErrors),
+}) {}
+class ConfirmTypeDefinition extends Rpc.make("ConfirmTypeDefinition", {
+  payload: { token: Schema.String },
+  success: EditorEvent.TypeDefinitionsUpdated,
+  error: Schema.Union([...TypeDefinitionErrors, TypeDefinition.StalePreviewError]),
+}) {}
 
 const PersistenceGraphAndNodeErrors = Schema.Union([
   PersistenceError,
@@ -427,6 +446,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
   success: Schema.Union([
     Schema.TaggedStruct("ProjectSnapshot", { snapshot: Editor.ProjectSnapshot }),
     EditorEvent.GraphCreated,
+    EditorEvent.TypeDefinitionsUpdated,
     EditorEvent.GraphDeleted,
     EditorEvent.GraphNameChanged,
     EditorEvent.NodeCreated,
@@ -463,6 +483,8 @@ const PresenceStream = Rpc.make("PresenceStream", {
 });
 
 export const EditorRpcs = RpcGroup.make(
+  PreviewTypeDefinition,
+  ConfirmTypeDefinition,
   CreateGraph,
   GetProject,
   DeleteGraph,
@@ -514,6 +536,8 @@ export const handlerLayer = EditorRpcs.toLayer(
     const presence = yield* Presence.Registry;
     const credentials = yield* Engine.Credentials;
     return EditorRpcs.of({
+      PreviewTypeDefinition: ({ change }) => editor.typeDefinition.preview(change),
+      ConfirmTypeDefinition: (payload) => editor.typeDefinition.confirm(payload),
       CreateGraph: (payload) => editor.graph.create(payload.graph),
       GetProject: () =>
         Effect.gen(function* () {

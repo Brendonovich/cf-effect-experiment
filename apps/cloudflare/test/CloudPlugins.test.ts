@@ -72,10 +72,10 @@ describe("Cloud plugins", () => {
             const context = yield* Layer.build(CloudPlugins.editorLayer);
             const editor = yield* Editor.Service;
             const packages = yield* Packages.Service;
-            assert.deepStrictEqual(
-              (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              newIds,
-            );
+            assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
+              "CustomTypes",
+              ...newIds,
+            ]);
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
               configured: false,
@@ -119,10 +119,10 @@ describe("Cloud plugins", () => {
             yield* Layer.build(CloudPlugins.editorLayer);
             const editor = yield* Editor.Service;
             const packages = yield* Packages.Service;
-            assert.deepStrictEqual(
-              (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              newIds,
-            );
+            assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
+              "CustomTypes",
+              ...newIds,
+            ]);
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, saved);
             const node = Object.values(saved.graphs[graphId]!.nodes)[0]!;

@@ -87,9 +87,7 @@ describe("ProjectExecution", () => {
       assert.strictEqual(event.nodes[0]?.status, "complete");
 
       nodeEffect = Effect.fail(new Error("node failed"));
-      assert.isTrue(
-        Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)),
-      );
+      assert.isTrue(Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)));
       assert.strictEqual((yield* activity.snapshot)[0]?.status, "failed");
       assert.strictEqual((yield* activity.snapshot)[0]?.nodes[0]?.status, "failed");
 
@@ -151,6 +149,7 @@ describe("ProjectExecution", () => {
       );
 
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
+        "CustomTypes",
         "obs",
         "twitch",
       ]);

@@ -195,6 +195,7 @@ const SeedLayer = Layer.effectDiscard(
       graphs: {},
       engines: {},
       constants: {},
+      types: {},
     }),
   ),
 );

@@ -1,9 +1,11 @@
 import type { ResourceConstant } from "@macrograph/core";
+import type { DataType } from "@macrograph/plugin/DataType";
 import type { Schema } from "effect";
 
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
+  types: text("types", { mode: "json" }).notNull().$type<DataType.Definitions>().default({}),
   name: text("name").notNull(),
   engines: text("engines", { mode: "json" })
     .notNull()

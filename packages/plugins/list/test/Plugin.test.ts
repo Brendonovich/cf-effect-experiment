@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/plugin";
 import { DataType } from "@macrograph/plugin/DataType";
-import { Effect, Option, Random, Result } from "effect";
+import { DateTime, Effect, Option, Random, Result } from "effect";
 
 import ListPlugin from "../src/Plugin.ts";
 
@@ -15,13 +15,14 @@ const run = (
   registered: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>> = {},
   properties: Readonly<Record<string, unknown>> = {},
+  definitions: DataType.Definitions = {},
 ) => {
   const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(ref.type, value), ref.id);
+        assert.isTrue(DataType.isValue(ref.type, value, definitions), ref.id);
         outputs.set(ref.id, value);
       },
       properties,
@@ -45,6 +46,116 @@ const run = (
 };
 
 describe("List plugin", () => {
+  it.effect(
+    "supports nested/custom selectors across creation, edits, lookup, membership and utilities",
+    () =>
+      Effect.gen(function* () {
+        const registered = yield* schemas;
+        const id = DataType.DefinitionId.make("item");
+        const custom = DataType.Custom(id);
+        const definitions: DataType.Definitions = {
+          item: {
+            _tag: "Struct",
+            id,
+            name: "Item",
+            fields: [{ name: "count", type: DataType.Int }],
+          },
+        };
+        const item = Object.freeze({ _type: id, count: 1 });
+        const cases = [
+          { type: custom, a: item, b: { _type: id, count: 2 }, equal: { _type: id, count: 1 } },
+          { type: DataType.List(custom), a: [item], b: [], equal: [{ _type: id, count: 1 }] },
+          {
+            type: DataType.Option(DataType.List(custom)),
+            a: Option.some([item]),
+            b: Option.none(),
+            equal: Option.some([{ _type: id, count: 1 }]),
+          },
+          {
+            type: DataType.DateTime,
+            a: DateTime.makeUnsafe("2026-08-31T00:00:00Z"),
+            b: DateTime.makeUnsafe("2026-09-01T00:00:00Z"),
+            equal: DateTime.makeUnsafe("2026-08-31T00:00:00Z"),
+          },
+        ];
+        for (const { type, a, b, equal } of cases) {
+          const properties = { type: JSON.stringify(type) };
+          const list = Object.freeze([a, b]);
+          const execute = (
+            id: string,
+            inputs: Readonly<Record<string, unknown>> = {},
+            extra = {},
+          ) => run(schema(registered, id), inputs, { ...properties, ...extra }, definitions);
+          for (const operation of registered.filter((schema) => schema.id !== "JoinStringList")) {
+            for (const ref of [
+              ...operation.generateIO(properties).dataInputs,
+              ...operation.generateIO(properties).dataOutputs,
+            ]) {
+              if (
+                ref.type._tag === "List" &&
+                !["value", "input"].includes(ref.id) &&
+                !ref.id.startsWith("value-")
+              )
+                assert.deepStrictEqual(ref.type.item, type);
+            }
+          }
+          assert.deepStrictEqual(
+            (yield* execute("ListCreate", { "value-0": a, "value-1": b }, { number: 2 })).get(
+              "out",
+            ),
+            list,
+          );
+          assert.deepStrictEqual(
+            (yield* execute("PushListValue", { list, value: a })).get("outList"),
+            [a, b, a],
+          );
+          assert.deepStrictEqual(
+            (yield* execute("InsertListValue", { list, value: a, index: 1 })).get("outList"),
+            [a, a, b],
+          );
+          assert.deepStrictEqual(
+            (yield* execute("SetListValue", { list, value: a, index: -1 })).get("outList"),
+            [a, a],
+          );
+          assert.deepStrictEqual(
+            (yield* execute("GetListValue", { list, index: 0 })).get("return"),
+            Option.some(a),
+          );
+          assert.deepStrictEqual(
+            (yield* execute("RemoveListValue", { list, index: 0 })).get("returnValue"),
+            Option.some(a),
+          );
+          assert.deepStrictEqual(
+            (yield* execute("GetRandomListItem", { list: [a] })).get("return"),
+            Option.some(a),
+          );
+          assert.strictEqual(
+            (yield* execute("ListIncludes", { list, input: equal })).get("output"),
+            true,
+          );
+          assert.strictEqual((yield* execute("ListLength", { list })).get("output"), 2);
+          assert.deepStrictEqual((yield* execute("SliceList", { list, start: 1 })).get("output"), [
+            b,
+          ]);
+          assert.deepStrictEqual(list, [a, b]);
+        }
+        for (const name of ["PushListValue", "ListCreate"]) {
+          const io = schema(registered, name).generateIO({ type: JSON.stringify(custom) });
+          assert.isUndefined(
+            io.dataInputs.find((input) => input.type._tag === "Custom")?.defaultValue,
+          );
+        }
+        assert.strictEqual(
+          (yield* run(
+            schema(registered, "ListIncludes"),
+            { list: [item], input: { _type: "other", count: 1 } },
+            { type: JSON.stringify(custom) },
+            definitions,
+          )).get("output"),
+          false,
+        );
+      }),
+  );
   it.effect(
     "defaults all list inputs to empty lists and scalar inputs to typed legacy values",
     () =>

@@ -73,6 +73,7 @@ describe("Executor", () => {
       const eventNodeId = NodeId.make("resource-event");
       const actionNodeId = NodeId.make("resource-action");
       const project: Project.Model = {
+        types: {},
         name: "Resources",
         engines: {},
         constants: {
@@ -150,12 +151,21 @@ describe("Executor", () => {
           account: { ...project.constants.account!, value: "missing" },
         },
       });
-      const invalid = yield* executor
+      yield* executor.handleEvent(plugin, new Ping({ message: "go" }));
+      assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
+
+      const staleResource = yield* Executor.make(project, {
+        engineClient: () => Effect.succeed(runtime),
+        resourceValues: () => Effect.succeed([]),
+      });
+      yield* staleResource.plugin(plugin, deployment);
+      const invalid = yield* staleResource
         .handleEvent(plugin, new Ping({ message: "go" }))
         .pipe(Effect.result);
       assert(invalid._tag === "Failure");
       if (invalid._tag === "Failure")
         assert.strictEqual(invalid.failure._tag, "ResourceResolutionError");
+      assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
     }),
   );
 
@@ -251,6 +261,7 @@ describe("Executor", () => {
         name: "Executor test",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,
@@ -477,6 +488,7 @@ describe("Executor", () => {
         name: "Dynamic execution",
         engines: {},
         constants: {},
+        types: {},
         graphs: {
           [graphId]: {
             id: graphId,

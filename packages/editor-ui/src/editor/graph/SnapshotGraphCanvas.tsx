@@ -3,14 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { For, createMemo, createSignal, type Component } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
-import { GraphNode } from "./GraphNode.tsx";
-import {
-  connectedPortIds,
-  connectionPath,
-  graphConnections,
-  wireColor,
-} from "./graphPresentation";
 import { zoomOriginAt } from "../workspace/workspace";
+import { GraphNode } from "./GraphNode.tsx";
+import { connectedPortIds, connectionPath, graphConnections, wireColor } from "./graphPresentation";
 
 interface SnapshotGraphCanvasProps {
   readonly graph: Graph.Model | RenderedGraph.Model;
@@ -21,9 +16,8 @@ const noSuggestions = async (): Promise<ReadonlyArray<string>> => [];
 const isRenderedNode = (
   node: Graph.Model["nodes"][string] | RenderedGraph.Node,
 ): node is RenderedGraph.Node => "io" in node;
-const isRenderedGraph = (
-  graph: Graph.Model | RenderedGraph.Model,
-): graph is RenderedGraph.Model => "schemas" in graph;
+const isRenderedGraph = (graph: Graph.Model | RenderedGraph.Model): graph is RenderedGraph.Model =>
+  "schemas" in graph;
 
 export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) => {
   const initialOrigin = createMemo(() => {
@@ -55,7 +49,8 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
           .filter((connection) => connection.inNodeId === node.id)
           .filter(
             (connection, index, connections) =>
-              connections.findIndex((candidate) => candidate.inIoId === connection.inIoId) === index,
+              connections.findIndex((candidate) => candidate.inIoId === connection.inIoId) ===
+              index,
           )
           .map((connection) => ({ id: connection.inIoId })),
         executionOutputs: props.graph.connections

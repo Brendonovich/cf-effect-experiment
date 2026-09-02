@@ -1,5 +1,6 @@
 import {
   Connection,
+  CustomTypes,
   Graph,
   Node,
   type NodeIO,
@@ -22,6 +23,7 @@ type MutableProject = {
   graphs: Record<string, MutableGraph>;
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
+  types: Project.Model["types"];
 };
 
 type MutableEditorStore = {
@@ -95,6 +97,28 @@ export function createEditorStore() {
     if (!store.project) return;
 
     switch (event._tag) {
+      case "TypeDefinitionsUpdated":
+        setStore((store) => {
+          if (!store.project) return;
+          store.project.types = event.types;
+          store.packages = [
+            ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+            CustomTypes.packageModel(event.types),
+          ];
+          for (const [graphId, nodes] of Object.entries(event.nodeIO)) {
+            for (const [nodeId, io] of Object.entries(nodes))
+              (store.nodeIO[graphId] ??= {})[nodeId] = io;
+          }
+          for (const [graphId, connectionIds] of Object.entries(event.deletedConnectionIds)) {
+            const graph = store.project.graphs[graphId];
+            if (graph === undefined) continue;
+            const deleted = new Set(connectionIds);
+            graph.connections = graph.connections.filter(
+              (connection) => !deleted.has(connection.id),
+            );
+          }
+        });
+        break;
       case "FragmentPasted":
       case "FragmentDeleted":
         setStore((store) => {
@@ -357,14 +381,32 @@ export function createEditorStore() {
 
   function setProject(project: Project.Model, nodeIO: Record<string, Record<string, NodeIO>>) {
     setStore((store) => {
-      store.project = structuredClone(project) as MutableProject;
+      const cloned = structuredClone(project);
+      store.project = {
+        ...cloned,
+        graphs: Object.fromEntries(
+          Object.entries(cloned.graphs).map(([id, graph]) => [
+            id,
+            { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
+          ]),
+        ),
+      };
       store.nodeIO = structuredClone(nodeIO);
+      store.packages = [
+        ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+        CustomTypes.packageModel(project.types),
+      ];
     });
   }
 
   function setPackages(packages: Package.Model[]) {
     setStore((store) => {
-      store.packages = packages;
+      store.packages = store.project
+        ? [
+            ...packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
+            CustomTypes.packageModel(store.project.types),
+          ]
+        : packages;
     });
   }
 

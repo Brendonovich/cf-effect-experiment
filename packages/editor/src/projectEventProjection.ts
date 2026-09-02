@@ -11,6 +11,22 @@ export const apply = (
   event: EditorEvent.EditorEvent,
 ): Effect.Effect<void, ApplyError> => {
   switch (event._tag) {
+    case "TypeDefinitionsUpdated":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const graphs = { ...project.graphs };
+        for (const [graphId, connectionIds] of Object.entries(event.deletedConnectionIds)) {
+          const graph = graphs[graphId];
+          if (graph === undefined) continue;
+          const deleted = new Set(connectionIds);
+          graphs[graphId] = {
+            ...graph,
+            connections: graph.connections.filter((connection) => !deleted.has(connection.id)),
+          };
+        }
+        return yield* persistence.saveProject({ ...project, types: event.types, graphs });
+      }).pipe(PersistenceError.refail);
+
     case "FragmentPasted":
     case "FragmentDeleted":
       return Effect.gen(function* () {

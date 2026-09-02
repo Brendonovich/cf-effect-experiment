@@ -1,3 +1,5 @@
+import type { JSX } from "@solidjs/web";
+
 import * as stylex from "@stylexjs/stylex";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
@@ -64,6 +66,7 @@ const styles = stylex.create({
     color: colors.gray12,
     display: "flex",
     flexDirection: "column",
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
     fontSize: 11,
     maxHeight: 200,
     overflow: "hidden",
@@ -103,11 +106,28 @@ const styles = stylex.create({
     paddingInline: 6,
     "::placeholder": { color: colors.gray11 },
   },
+  searchClear: {
+    color: { default: colors.gray9, ":hover": colors.gray11 },
+    display: "grid",
+    flexShrink: 0,
+    height: 20,
+    marginRight: 6,
+    placeItems: "center",
+    width: 20,
+  },
+  searchClearIcon: { height: 12, width: 12 },
   options: {
     minHeight: 0,
     overflowY: "auto",
     overscrollBehaviorY: "contain",
     position: "relative",
+  },
+  group: {
+    color: colors.gray11,
+    fontSize: 11,
+    fontWeight: 500,
+    paddingBlock: 3,
+    paddingInline: 4,
   },
   empty: { color: colors.gray11, padding: "8px 6px" },
   showing: {
@@ -132,19 +152,37 @@ const styles = stylex.create({
   highlighted: { backgroundColor: "#2563eb" },
 });
 
+export interface SelectOption {
+  readonly id: string;
+  readonly name: string;
+  readonly group?: string;
+}
+
+export interface SelectTriggerProps {
+  readonly ref: (element: HTMLButtonElement) => void;
+  readonly isOpen: () => boolean;
+  readonly disabled: () => boolean;
+  readonly toggle: () => void;
+}
+
 export function Select(props: {
   appearance?: stylex.StyleXStyles;
-  options: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  options: ReadonlyArray<SelectOption>;
   value: string;
   valid: boolean;
   placeholder: string;
   unavailableLabel?: string;
   missingLabel?: string;
+  disabled?: boolean;
+  searchable?: boolean;
+  menuMinWidth?: number;
+  trigger?: (props: SelectTriggerProps) => JSX.Element;
+  onOpenChange?: (open: boolean) => void;
   onChange: (value: string) => void;
 }) {
   let root: HTMLSpanElement | undefined;
   let trigger: HTMLButtonElement | undefined;
-  const searchable = () => props.options.length > 10;
+  const searchable = () => props.searchable ?? props.options.length > 10;
   const [search, setSearch] = createSignal("");
   const options = createMemo(() => {
     const query = searchable() ? search().trim().toLowerCase() : "";
@@ -162,7 +200,7 @@ export function Select(props: {
     },
     {
       open(state) {
-        if (props.options.length === 0) return;
+        if (props.disabled || props.options.length === 0) return;
         setSearch("");
         state.context.highlightedIndex = Math.max(
           0,
@@ -177,7 +215,7 @@ export function Select(props: {
         if (state.mode === "open") state.context.highlightedIndex = index;
       },
       move(state, direction: -1 | 1) {
-        if (props.options.length === 0) {
+        if (props.disabled || props.options.length === 0) {
           state.mode = "closed";
           return;
         }
@@ -198,7 +236,8 @@ export function Select(props: {
       },
     },
   );
-  const isOpen = () => menuState.mode === "open" && props.options.length > 0;
+  const disabled = () => !!props.disabled || props.options.length === 0;
+  const isOpen = () => menuState.mode === "open" && !disabled();
   const [menu, setMenu] = createSignal<HTMLDivElement | null>(null);
   const menuPresence = createPresence({
     show: isOpen,
@@ -223,14 +262,19 @@ export function Select(props: {
   const position = () => {
     const bounds = trigger?.getBoundingClientRect();
     if (bounds === undefined) return {};
-    const height = Math.min(200, props.options.length * 24 + 4);
+    const width = Math.min(innerWidth - 16, Math.max(bounds.width, props.menuMinWidth ?? 0));
+    const height = Math.min(200, props.options.length * 24 + (searchable() ? 30 : 0) + 4);
     const top =
       bounds.bottom + 4 + height > innerHeight ? bounds.top - height - 4 : bounds.bottom + 4;
-    return { left: `${bounds.left}px`, top: `${top}px`, width: `${bounds.width}px` };
+    return {
+      left: `${Math.max(8, Math.min(bounds.left, innerWidth - width - 8))}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+    };
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.isComposing) return;
+    if (event.isComposing || disabled()) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       move(event.key === "ArrowDown" ? 1 : -1);
@@ -245,6 +289,7 @@ export function Select(props: {
       close();
     }
   };
+  const toggle = () => (isOpen() ? close() : open());
 
   createEffect(
     () => ({ options: options(), search: search(), value: props.value }),
@@ -293,6 +338,13 @@ export function Select(props: {
   );
 
   createEffect(
+    () => isOpen(),
+    (open) => {
+      props.onOpenChange?.(open);
+    },
+  );
+
+  createEffect(
     () => true,
     () => {
       const closeOnOutsideClick = (event: PointerEvent) => {
@@ -317,36 +369,50 @@ export function Select(props: {
 
   return (
     <span ref={root} sx={styles.root} onKeyDown={onKeyDown}>
-      <button
-        ref={trigger}
-        type="button"
-        disabled={props.options.length === 0}
-        sx={[
-          styles.focus,
-          styles.trigger,
-          props.appearance,
-          props.valid ? styles.valid : styles.invalid,
-        ]}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen() ? "true" : "false"}
-        onClick={() => (isOpen() ? close() : open())}
-      >
-        <span sx={[styles.label, selected() ? null : styles.placeholder]}>{label()}</span>
-        <svg
-          sx={[
-            styles.chevron,
-            isOpen() ? styles.rotated : null,
-            props.options.length === 0 ? styles.disabled : null,
-          ]}
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          aria-hidden="true"
-        >
-          <path d="m4 6 4 4 4-4" />
-        </svg>
-      </button>
+      {() => {
+        const render = props.trigger;
+        return render ? (
+          render({
+            ref: (element) => {
+              trigger = element;
+            },
+            isOpen,
+            disabled,
+            toggle,
+          })
+        ) : (
+          <button
+            ref={trigger}
+            type="button"
+            disabled={disabled()}
+            sx={[
+              styles.focus,
+              styles.trigger,
+              props.appearance,
+              props.valid ? styles.valid : styles.invalid,
+            ]}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen() ? "true" : "false"}
+            onClick={toggle}
+          >
+            <span sx={[styles.label, selected() ? null : styles.placeholder]}>{label()}</span>
+            <svg
+              sx={[
+                styles.chevron,
+                isOpen() ? styles.rotated : null,
+                disabled() ? styles.disabled : null,
+              ]}
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+            >
+              <path d="m4 6 4 4 4-4" />
+            </svg>
+          </button>
+        );
+      }}
       <Show when={menuPresence.present()}>
         <div
           ref={setMenu}
@@ -361,7 +427,7 @@ export function Select(props: {
             <div sx={[searchMarker, styles.search]}>
               <IconTablerSearch aria-hidden="true" {...stylex.attrs(styles.searchIcon)} />
               <input
-                type="search"
+                type="text"
                 aria-label="Search options"
                 placeholder="Search..."
                 autocomplete="off"
@@ -370,29 +436,46 @@ export function Select(props: {
                 value={search()}
                 onInput={(event) => setSearch(event.currentTarget.value)}
               />
+              <Show when={search()}>
+                <button
+                  type="button"
+                  sx={styles.searchClear}
+                  aria-label="Clear search"
+                  onClick={() => setSearch("")}
+                >
+                  <IconBiX aria-hidden="true" {...stylex.attrs(styles.searchClearIcon)} />
+                </button>
+              </Show>
             </div>
           </Show>
           <div role="listbox" sx={styles.options}>
             <For each={options()}>
               {(option, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={option.id === props.value ? "true" : "false"}
-                  sx={[
-                    styles.option,
-                    props.appearance,
-                    menuState.context.highlightedIndex === index() ? styles.highlighted : null,
-                  ]}
-                  onPointerEnter={() => highlight(index())}
-                  onClick={() => {
-                    props.onChange(option.id);
-                    close();
-                    trigger?.focus();
-                  }}
-                >
-                  {option.name}
-                </button>
+                <>
+                  <Show when={option.group && options()[index() - 1]?.group !== option.group}>
+                    <div role="presentation" sx={styles.group}>
+                      {option.group}
+                    </div>
+                  </Show>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={option.id === props.value ? "true" : "false"}
+                    sx={[
+                      styles.option,
+                      props.appearance,
+                      menuState.context.highlightedIndex === index() ? styles.highlighted : null,
+                    ]}
+                    onPointerEnter={() => highlight(index())}
+                    onClick={() => {
+                      props.onChange(option.id);
+                      close();
+                      trigger?.focus();
+                    }}
+                  >
+                    {option.name}
+                  </button>
+                </>
               )}
             </For>
           </div>

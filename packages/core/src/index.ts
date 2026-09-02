@@ -17,3 +17,5 @@ export * as Policy from "./Policy.ts";
 export { ConnectionId } from "./Connection.ts";
 export { defaultPackage } from "./defaultPackage.ts";
 export * as ResourceConstant from "./ResourceConstant.ts";
+export * as TypeDefinition from "./TypeDefinition.ts";
+export * as CustomTypes from "./CustomTypes.ts";

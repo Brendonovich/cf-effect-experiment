@@ -136,6 +136,7 @@ describe("Self-hosted plugins", () => {
       assert.deepStrictEqual(
         catalog.map((plugin) => plugin.id).sort(),
         [
+          "CustomTypes",
           ...deployments.map((deployment) => deployment.pluginId),
           ...statelessPlugins.map((plugin) => plugin.id),
         ].sort(),

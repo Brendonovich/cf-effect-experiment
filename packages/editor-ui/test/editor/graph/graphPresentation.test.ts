@@ -9,7 +9,12 @@ import {
 } from "@macrograph/core";
 import { describe, expect, it, vi } from "vitest";
 
-import { graphConnections, handlePosition, wireColor } from "../../../src/editor/graph/graphPresentation";
+import {
+  graphConnections,
+  handlePosition,
+  retainedPorts,
+  wireColor,
+} from "../../../src/editor/graph/graphPresentation";
 
 const outputId = IoId.make("output");
 const inputId = IoId.make("connected");
@@ -61,6 +66,27 @@ const ioByNode: Record<string, NodeIO> = {
 };
 
 describe("graph presentation", () => {
+  it("shows orphan defaults without wires and omits nominally incompatible wires", () => {
+    expect(retainedPorts([], new Set(), ["removed"])).toEqual([
+      {
+        kind: "data",
+        id: "removed",
+        name: "Missing: removed",
+        type: { _tag: "String" },
+        invalid: true,
+      },
+    ]);
+    const mismatched: NodeIO = {
+      ...ioByNode.target!,
+      dataInputs: [{ id: inputId, type: { _tag: "Custom", id: "person" } }],
+    };
+    expect(graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))).toEqual(
+      [],
+    );
+    expect(wireColor({ _tag: "Custom", id: "person" })).not.toBe(
+      wireColor({ _tag: "Custom", id: "other" }),
+    );
+  });
   it("positions connected ports using the folded node's visible rows", () => {
     const [connection] = graphConnections(graph, (nodeId) => ioByNode[nodeId]);
 
@@ -140,7 +166,7 @@ describe("graph presentation", () => {
     },
   );
 
-  it("ignores missing nodes, missing ports, and duplicate port IDs", () => {
+  it("ignores missing ports, missing nodes, and duplicate port IDs", () => {
     expect(graphConnections({ ...graph, nodes: {} }, (id) => ioByNode[id])).toEqual([]);
     expect(graphConnections(graph, () => undefined)).toEqual([]);
     for (const nodeId of ["source", "target"]) {

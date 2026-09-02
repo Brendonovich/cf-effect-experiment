@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `types` text DEFAULT '{}' NOT NULL;

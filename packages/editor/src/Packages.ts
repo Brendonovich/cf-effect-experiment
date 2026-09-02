@@ -1,4 +1,10 @@
-import { NodeIO, Package, PackageId, SchemaRef } from "@macrograph/core";
+import {
+	CustomTypes,
+	NodeIO,
+	Package,
+	PackageId,
+	SchemaRef,
+} from "@macrograph/core";
 import { DataType } from "@macrograph/plugin/DataType";
 import { Context, Effect, Layer, Ref, Schema } from "effect";
 
@@ -7,6 +13,7 @@ type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
 
 export type IOCalculator = (
 	properties: Readonly<Record<string, unknown>>,
+	definitions: DataType.Definitions,
 ) => NodeIO;
 
 export interface SchemaRuntime {
@@ -23,6 +30,9 @@ export interface SchemaRuntime {
 export class Service extends Context.Service<
 	Service,
 	{
+		readonly setTypeDefinitions: (
+			definitions: DataType.Definitions,
+		) => Effect.Effect<void>;
 		readonly loadPackage: (
 			pkg: Package.Model,
 			runtimes?: ReadonlyMap<string, SchemaRuntime>,
@@ -34,6 +44,7 @@ export class Service extends Context.Service<
 		readonly getNodeIO: (
 			ref: SchemaRef,
 			properties: Readonly<Record<string, unknown>>,
+			definitions?: DataType.Definitions,
 		) => Effect.Effect<NodeIO, Package.SchemaNotFoundError>;
 		readonly normalizeProperties: (
 			ref: SchemaRef,
@@ -47,6 +58,7 @@ export class Service extends Context.Service<
 			properties: Readonly<Record<string, unknown>>,
 			input: string,
 			value: unknown,
+			definitions?: DataType.Definitions,
 		) => Effect.Effect<
 			Schema.Json,
 			Package.SchemaNotFoundError | Package.InvalidInputDefaultError
@@ -56,6 +68,7 @@ export class Service extends Context.Service<
 			properties: Readonly<Record<string, unknown>>,
 			inputDefaults: Readonly<Record<string, unknown>>,
 			input: string,
+			definitions?: DataType.Definitions,
 		) => Effect.Effect<
 			ReadonlyArray<string>,
 			Package.SchemaNotFoundError | Package.InvalidInputDefaultError
@@ -69,9 +82,11 @@ export const defaultLayer = Layer.effect(
 		const calculatorKey = (ref: SchemaRef) =>
 			SchemaRuntimeKey.make(`${ref.package}\0${ref.schema}`);
 		const state = yield* Ref.make<{
+			readonly definitions: DataType.Definitions;
 			readonly packages: Map<PackageId, Package.Model>;
 			readonly runtimes: Map<SchemaRuntimeKey, SchemaRuntime>;
 		}>({
+			definitions: {},
 			packages: new Map(),
 			runtimes: new Map(),
 		});
@@ -101,11 +116,42 @@ export const defaultLayer = Layer.effect(
 					);
 				}
 				return {
+					...current,
 					packages: new Map(current.packages).set(pkg.id, pkg),
 					runtimes,
 				};
 			});
 		});
+
+		const setTypeDefinitions = Effect.fn("Packages.setTypeDefinitions")(
+			function* (definitions: DataType.Definitions) {
+				const model = CustomTypes.packageModel(definitions);
+				yield* Ref.update(state, (current) => {
+					const runtimes = new Map(current.runtimes);
+					for (const key of runtimes.keys())
+						if (key.startsWith(`${CustomTypes.packageId}\0`))
+							runtimes.delete(key);
+					for (const schema of model.schemas)
+						runtimes.set(
+							calculatorKey({ package: model.id, schema: schema.id }),
+							{
+								declaresProperties: true,
+								getIO: () => ({
+									dataInputs: schema.dataInputs,
+									dataOutputs: schema.dataOutputs,
+									executionInputs: schema.executionInputs,
+									executionOutputs: schema.executionOutputs,
+								}),
+							},
+						);
+					return {
+						definitions,
+						runtimes,
+						packages: new Map(current.packages).set(model.id, model),
+					};
+				});
+			},
+		);
 
 		const getPackages = Effect.fn("Packages.getPackages")(function* () {
 			return Array.from((yield* Ref.get(state)).packages.values());
@@ -128,8 +174,22 @@ export const defaultLayer = Layer.effect(
 		const getNodeIO = Effect.fn("Packages.getNodeIO")(function* (
 			ref: SchemaRef,
 			properties: Readonly<Record<string, unknown>>,
+			definitions?: DataType.Definitions,
 		) {
 			const current = yield* Ref.get(state);
+			if (ref.package === CustomTypes.packageId)
+				return (
+					(definitions === undefined
+						? current.runtimes
+								.get(calculatorKey(ref))
+								?.getIO(properties, current.definitions)
+						: CustomTypes.nodeIO(ref, properties, definitions)) ?? {
+						dataInputs: [],
+						dataOutputs: [],
+						executionInputs: [],
+						executionOutputs: [],
+					}
+				);
 			const schema = current.packages
 				.get(ref.package)
 				?.schemas.find((candidate) => candidate.id === ref.schema);
@@ -138,7 +198,7 @@ export const defaultLayer = Layer.effect(
 			const runtime = current.runtimes.get(calculatorKey(ref));
 			if (runtime === undefined)
 				return yield* new Package.SchemaNotFoundError({ ref });
-			return runtime.getIO(properties);
+			return runtime.getIO(properties, definitions ?? current.definitions);
 		});
 
 		const normalizeProperties = Effect.fn("Packages.normalizeProperties")(
@@ -262,12 +322,17 @@ export const defaultLayer = Layer.effect(
 				properties: Readonly<Record<string, unknown>>,
 				input: string,
 				value: unknown,
+				providedDefinitions?: DataType.Definitions,
 			) {
+				const definitions =
+					providedDefinitions ?? (yield* Ref.get(state)).definitions;
 				const port = yield* getDataInput(ref, properties, input);
-				const codec = DataType.JsonValueSchema(port.type);
+				const codec = DataType.JsonValueSchema(port.type, definitions);
 				const decoded = yield* Schema.decodeUnknownEffect(codec)(value).pipe(
 					Effect.catchTag("SchemaError", () =>
-						Schema.decodeUnknownEffect(DataType.ValueSchema(port.type))(value),
+						Schema.decodeUnknownEffect(
+							DataType.ValueSchema(port.type, definitions),
+						)(value),
 					),
 					Effect.catchTag(
 						"SchemaError",
@@ -306,7 +371,10 @@ export const defaultLayer = Layer.effect(
 			properties: Readonly<Record<string, unknown>>,
 			inputDefaults: Readonly<Record<string, unknown>>,
 			input: string,
+			providedDefinitions?: DataType.Definitions,
 		) {
+			const definitions =
+				providedDefinitions ?? (yield* Ref.get(state)).definitions;
 			const port = yield* getDataInput(ref, properties, input);
 			if (!port.suggestions || port.type._tag !== "String") {
 				return yield* new Package.InvalidInputDefaultError({
@@ -327,7 +395,7 @@ export const defaultLayer = Layer.effect(
 					continue;
 				}
 				decodedDefaults[id] = yield* Schema.decodeUnknownEffect(
-					DataType.JsonValueSchema(inputs[0]!.type),
+					DataType.JsonValueSchema(inputs[0]!.type, definitions),
 				)(value).pipe(
 					Effect.catchTag(
 						"SchemaError",
@@ -367,6 +435,7 @@ export const defaultLayer = Layer.effect(
 		});
 
 		return Service.of({
+			setTypeDefinitions,
 			loadPackage,
 			getPackages,
 			getSchema,

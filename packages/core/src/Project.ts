@@ -1,3 +1,4 @@
+import { DataType } from "@macrograph/plugin/DataType";
 import { Effect, Schema } from "effect";
 
 import { Graph } from "./Graph.ts";
@@ -13,6 +14,7 @@ export const Model = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed({})),
   ),
   constants: ResourceConstants,
+  types: DataType.Definitions.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
 });
 export type Model = typeof Model.Type;
 
@@ -21,6 +23,7 @@ export const empty = (): Model => ({
   graphs: {},
   engines: {},
   constants: {},
+  types: {},
 });
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(

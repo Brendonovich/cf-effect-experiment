@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Project } from "@macrograph/core";
+import { CustomTypes, Project } from "@macrograph/core";
 import {
   Editor,
   EditorAccess,
@@ -101,7 +101,7 @@ describe("workspace runtime activity access", () => {
             assert.strictEqual(calls, 1);
             assert.deepStrictEqual(yield* activity.snapshot, [original]);
           }
-          assert.deepStrictEqual(yield* client.GetPackages({}), []);
+          assert.deepStrictEqual(yield* client.GetPackages({}), [CustomTypes.packageModel({})]);
           const presence = yield* client.PresenceStream().pipe(Stream.runHead);
           assert.isTrue(Option.isSome(presence));
         }).pipe(

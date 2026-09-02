@@ -1,6 +1,12 @@
 import type { EditorEvent } from "@macrograph/editor";
 
-import { Clipboard, IoId, type ResourceConstant, type SchemaRef } from "@macrograph/core";
+import {
+  Clipboard,
+  IoId,
+  type ResourceConstant,
+  type SchemaRef,
+  type TypeDefinition,
+} from "@macrograph/core";
 import { QueryClient, useMutation } from "@tanstack/solid-query";
 import { Effect, Result, type Schema } from "effect";
 import { createSignal, onCleanup } from "solid-js";
@@ -450,24 +456,16 @@ export function createEditorCommands(
   const setInputDefault = (nodeId: string, input: string, value: unknown) => {
     const c = client();
     const graphId = selectedGraphId();
-    if (!c || !graphId || !canEdit()) return;
-    runFork(
-      applyMutation(c.SetInputDefault({ graphId, nodeId, input, value })).pipe(
-        Effect.tapError(Effect.log),
-        Effect.tapDefect(Effect.log),
-      ),
-    );
+    if (!c || !graphId || !canEdit())
+      return Promise.reject(new Error("Editor is read only or disconnected"));
+    return runPromise(applyMutation(c.SetInputDefault({ graphId, nodeId, input, value })));
   };
   const clearInputDefault = (nodeId: string, input: string) => {
     const c = client();
     const graphId = selectedGraphId();
-    if (!c || !graphId || !canEdit()) return;
-    runFork(
-      applyMutation(c.ClearInputDefault({ graphId, nodeId, input })).pipe(
-        Effect.tapError(Effect.log),
-        Effect.tapDefect(Effect.log),
-      ),
-    );
+    if (!c || !graphId || !canEdit())
+      return Promise.reject(new Error("Editor is read only or disconnected"));
+    return runPromise(applyMutation(c.ClearInputDefault({ graphId, nodeId, input })));
   };
   const getInputSuggestions = (nodeId: string, input: string) => {
     const c = client();
@@ -500,6 +498,16 @@ export function createEditorCommands(
   };
 
   return {
+    previewTypeDefinition: (change: TypeDefinition.Change) => {
+      const c = client();
+      if (!c || !canEdit()) return Promise.reject(new Error("Editor is read only or disconnected"));
+      return runPromise(c.PreviewTypeDefinition({ change }));
+    },
+    confirmTypeDefinition: (token: string) => {
+      const c = client();
+      if (!c || !canEdit()) return Promise.reject(new Error("Editor is read only or disconnected"));
+      return runPromise(applyMutation(c.ConfirmTypeDefinition({ token })));
+    },
     copyNodes,
     pasteNodes,
     clipboardMutation,

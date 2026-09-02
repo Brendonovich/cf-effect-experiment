@@ -1,5 +1,7 @@
 import type { Package } from "@macrograph/core";
 
+import { DataType } from "@macrograph/plugin/DataType";
+
 import type { GraphPort } from "./GraphNode";
 
 export type PortDirection = "input" | "output";
@@ -16,27 +18,24 @@ export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
 ): boolean => {
-  if (left._tag !== right._tag) return false;
-  if (left._tag === "List" && right._tag === "List") {
-    return dataTypesEqual(left.item, right.item);
-  }
-  if (left._tag === "Option" && right._tag === "Option") {
-    return dataTypesEqual(left.inner, right.inner);
-  }
-  return left._tag !== "List" && left._tag !== "Option";
+  return DataType.equals(left, right);
 };
 
 export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
-  left.kind === "execution" && right.kind === "execution"
-    ? true
-    : left.kind === "data" && right.kind === "data" && dataTypesEqual(left.type, right.type);
+  (left.kind === "data" && left.invalid) || (right.kind === "data" && right.invalid)
+    ? false
+    : left.kind === "execution" && right.kind === "execution"
+      ? true
+      : left.kind === "data" && right.kind === "data" && dataTypesEqual(left.type, right.type);
 
 export const visiblePorts = (
   ports: ReadonlyArray<GraphPort>,
   folded: boolean,
   connectedIds: ReadonlySet<string>,
 ): ReadonlyArray<GraphPort> =>
-  folded ? ports.filter((port) => connectedIds.has(port.id)) : ports;
+  folded
+    ? ports.filter((port) => connectedIds.has(port.id) || (port.kind === "data" && port.invalid))
+    : ports;
 
 export const foldSelectedPins = (states: ReadonlyArray<boolean>): boolean =>
   states.some((folded) => !folded);

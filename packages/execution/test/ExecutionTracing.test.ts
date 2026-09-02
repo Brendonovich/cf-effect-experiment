@@ -168,7 +168,7 @@ describe("execution tracing", () => {
     }),
   );
 
-  it.effect("captures missing-input failure in the input and consuming node spans", () =>
+  it.effect("captures missing-input failure before any consuming node executes", () =>
     Effect.gen(function* () {
       const { spans, dispatch } = yield* setup(Effect.die("run must not be reached"), true);
       const exit = yield* Effect.exit(dispatch);
@@ -179,11 +179,13 @@ describe("execution tracing", () => {
           new Executor.MissingInput({ nodeId, inputId: "value" }),
         );
       }
-      for (const name of executionSpanNames) assertSpanExit(spans, name, exit);
-      const inputSpan = assertSpanExit(spans, "Executor.resolveInput", exit);
-      const nodeSpan = spans.find((span) => span.name === "Executor.runNode");
-      assert.strictEqual(Option.getOrUndefined(inputSpan.parent), nodeSpan);
-      assert.strictEqual(inputSpan.traceId, nodeSpan!.traceId);
+      assertSpanExit(spans, "Executor.executeEventNode", exit);
+      assertSpanExit(spans, "Executor.handleEvent", exit);
+      assert.isFalse(
+        spans.some(
+          (span) => span.name === "Executor.runNode" || span.name === "Executor.resolveInput",
+        ),
+      );
       assert.isFalse(spans.some((span) => span.name.startsWith("Schema.run ")));
     }),
   );
