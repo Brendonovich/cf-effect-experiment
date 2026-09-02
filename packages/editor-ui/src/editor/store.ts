@@ -287,6 +287,12 @@ export function createEditorStore() {
           if (store.project) store.project.constants[event.constant.id] = event.constant;
         });
         break;
+      case "ResourceConstantDefaultChanged":
+        setStore((store) => {
+          if (!store.project) return;
+          for (const constant of event.constants) store.project.constants[constant.id] = constant;
+        });
+        break;
       case "ResourceConstantUpdated":
         setStore((store) => {
           if (!store.project) return;

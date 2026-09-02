@@ -737,9 +737,13 @@ describe("editor concern hooks", () => {
           setCanvasOrigin: () => {},
         });
       });
-      canvas.setGraphCanvas({
-        getBoundingClientRect: () => ({ left: 100, top: 80 }),
-      } as HTMLDivElement);
+      const canvasElement = document.createElement("div");
+      vi.spyOn(canvasElement, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 80, 800, 600));
+      const sourceNode = document.createElement("div");
+      sourceNode.dataset.graphNodeId = "source";
+      vi.spyOn(sourceNode, "getBoundingClientRect").mockReturnValue(new DOMRect(140, 100, 200, 100));
+      canvasElement.append(sourceNode);
+      canvas.setGraphCanvas(canvasElement);
       flush();
       const pointer = { pointerId: 1, clientX: 160, clientY: 120 };
       const start = () => {
@@ -774,6 +778,19 @@ describe("editor concern hooks", () => {
         expect(canvas.nodeMenu()?.shiftKey).toBe(shiftKey);
         expect(canvas.connectionPreview()?.pointer).toEqual({ x: 220, y: 190 });
       };
+
+      for (const position of [
+        { clientX: 160, clientY: 120 },
+        { clientX: 240, clientY: 150 },
+        { clientX: 340, clientY: 200 },
+      ]) {
+        start();
+        window.dispatchEvent(Object.assign(new Event("pointerup"), { ...pointer, ...position }));
+        flush();
+        expect(canvas.connectionDrag()).toBeUndefined();
+        expect(canvas.nodeMenu()).toBeUndefined();
+        expect(canvas.connectionPreview()).toBeUndefined();
+      }
 
       start();
       release();

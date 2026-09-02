@@ -29,7 +29,6 @@ import {
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Inspector } from "./inspector/Inspector";
 import { PluginSettingsView } from "./plugins/PluginSettingsView";
-import { shortcutLabel } from "./shortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
@@ -77,6 +76,22 @@ const styles = stylex.create({
   },
   errorActions: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 20 },
   tabIcon: { width: 14, height: 14, flexShrink: 0 },
+  footer: {
+    display: "flex",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    borderTop: `1px solid ${colors.gray5}`,
+    backgroundColor: colors.gray2,
+    paddingInline: 8,
+  },
+  shortcutsButton: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    borderRadius: 4,
+    color: colors.gray12,
+    fontSize: 12,
+    minHeight: { default: 44, "@media (min-width: 768px)": 32 },
+    paddingInline: 12,
+  },
   editor: {
     "--gray-1": "#111111",
     "--gray-2": "#191919",
@@ -412,7 +427,12 @@ function EditorContent(
     canvasOrigin: controller.layout.canvasOrigin,
     setCanvasOrigin: controller.layout.setCanvasOrigin,
   });
-  createEditorShortcuts(() => editorRoot, controller.layout, canvas, controller.commands);
+  const shortcuts = createEditorShortcuts(
+    () => editorRoot,
+    controller.layout,
+    canvas,
+    controller.commands,
+  );
 
   const workspaceTabTitle = (tab: WorkspaceTab) => {
     if (tab.type === "graph")
@@ -428,6 +448,7 @@ function EditorContent(
           tab.packageId,
         description: "Plugin",
       };
+    if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
     return {
       id: tab.id,
       title: "Settings",
@@ -436,6 +457,7 @@ function EditorContent(
   };
 
   const renderWorkspacePreview = (tab: WorkspaceTab) => {
+    if (tab.type === "shortcuts") return <ShortcutsHelp shortcuts={shortcuts} />;
     if (tab.type === "package") {
       const pkg = () =>
         controller.editor.store.packages.find((candidate) => candidate.id === tab.packageId);
@@ -551,6 +573,8 @@ function EditorContent(
                   onCreateConstant={controller.commands.createConstant}
                   onRenameConstant={controller.commands.renameConstant}
                   onSelectConstant={controller.commands.selectConstant}
+                  onSetDefaultConstant={controller.commands.setDefaultConstant}
+                  canEditConstants={controller.connection.canEdit()}
                   onDeleteConstant={controller.commands.deleteConstant}
                   resourceDefinition={controller.catalog.resourceDefinition}
                   valuesFor={controller.catalog.valuesFor}
@@ -562,7 +586,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.leftPill]}
-                title={`Toggle navigation (${shortcutLabel("toggle-navigation")})`}
+                title={`Toggle navigation (${shortcuts.label("toggle-navigation")})`}
                 onClick={controller.layout.toggleNavigation}
               >
                 Browse
@@ -571,6 +595,7 @@ function EditorContent(
 
             <main sx={[styles.main, controller.layout.paneZoomed() ? styles.zoomedMain : null]}>
               <WorkspacePanes
+                shortcutLabel={shortcuts.label}
                 state={controller.layout.workspace()}
                 mobile={controller.layout.isMobile()}
                 title={workspaceTabTitle}
@@ -939,7 +964,7 @@ function EditorContent(
               <button
                 type="button"
                 sx={[styles.focusRing, styles.mobilePill, styles.rightPill]}
-                title={`Toggle inspector (${shortcutLabel("toggle-inspector")})`}
+                title={`Toggle inspector (${shortcuts.label("toggle-inspector")})`}
                 onClick={() => controller.layout.setInspectorOpen(true)}
               >
                 Inspect
@@ -972,7 +997,15 @@ function EditorContent(
               />
             </Sidebar>
           </div>
-          <ShortcutsHelp />
+          <footer sx={styles.footer}>
+            <button
+              type="button"
+              sx={[styles.focusRing, styles.shortcutsButton]}
+              onClick={controller.layout.openShortcuts}
+            >
+              Shortcuts
+            </button>
+          </footer>
         </Show>
       </div>
     </div>

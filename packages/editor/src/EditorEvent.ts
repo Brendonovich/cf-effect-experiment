@@ -142,6 +142,15 @@ export const ResourceConstantCreated = Schema.TaggedStruct("ResourceConstantCrea
 });
 export type ResourceConstantCreated = typeof ResourceConstantCreated.Type;
 
+export const ResourceConstantDefaultChanged = Schema.TaggedStruct(
+  "ResourceConstantDefaultChanged",
+  {
+    actor,
+    constants: Schema.Array(ResourceConstant.Model),
+  },
+);
+export type ResourceConstantDefaultChanged = typeof ResourceConstantDefaultChanged.Type;
+
 export const ResourceConstantUpdated = Schema.TaggedStruct("ResourceConstantUpdated", {
   actor,
   constant: ResourceConstant.Model,
@@ -186,6 +195,7 @@ export type EditorEvent =
   | EngineStateChanged
   | PluginClientStateDirty
   | ResourceConstantCreated
+  | ResourceConstantDefaultChanged
   | ResourceConstantUpdated
   | ResourceConstantDeleted
   | ResourceValuesUpdated;

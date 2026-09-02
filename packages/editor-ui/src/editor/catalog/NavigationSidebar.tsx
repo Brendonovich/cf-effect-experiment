@@ -1,13 +1,13 @@
-import type { Graph, Package, Project, ResourceConstant } from "@macrograph/core";
-
+import { type Graph, type Package, type Project, ResourceConstant } from "@macrograph/core";
+import { Portal } from "@solidjs/web";
 import * as stylex from "@stylexjs/stylex";
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
-import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { colors } from "../../tokens.stylex.ts";
-import { Sidebar } from "../workspace/Layout";
-import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
+import { searchMarker } from "../markers.stylex.ts";
+import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
@@ -16,6 +16,10 @@ const enter = stylex.keyframes({
 const exit = stylex.keyframes({
   from: { opacity: 1, transform: "translateY(0) scale(1)" },
   to: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
+});
+const menuEnter = stylex.keyframes({
+  from: { opacity: 0, transform: "scale(.96)" },
+  to: { opacity: 1, transform: "scale(1)" },
 });
 const styles = stylex.create({
   focus: {
@@ -230,6 +234,13 @@ const styles = stylex.create({
     gap: 4,
     padding: 4,
   },
+  defaultAccent: {
+    backgroundColor: colors.focus,
+    borderRadius: "50%",
+    flexShrink: 0,
+    height: 4,
+    width: 4,
+  },
   row: { alignItems: "center", display: "flex", gap: 4 },
   nameButton: {
     borderRadius: 2,
@@ -263,26 +274,69 @@ const styles = stylex.create({
     outline: "none",
     paddingInline: 4,
   },
-  deleteButton: {
+  actionsButton: {
     alignItems: "center",
-    borderRadius: 2,
-    color: colors.gray11,
+    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    borderRadius: 4,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
     display: "flex",
     flexShrink: 0,
-    height: 22,
+    height: 20,
     justifyContent: "center",
-    visibility: {
-      default: "hidden",
-      [stylex.when.ancestor(":hover", resourceMarker)]: "visible",
-      ":focus": "visible",
+    padding: 2,
+    width: 20,
+  },
+  actionsIcon: { height: 14, width: 14 },
+  actionsMenu: {
+    animationName: {
+      default: menuEnter,
+      "@media (prefers-reduced-motion: reduce)": "none",
     },
-    width: 22,
+    animationDuration: "140ms",
+    animationTimingFunction: "cubic-bezier(.16, 1, .3, 1)",
+    animationFillMode: "both",
+    transformOrigin: "top right",
+    position: "fixed",
+    zIndex: 100,
+    backgroundColor: colors.gray2,
+    color: colors.gray12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: colors.gray6,
+    boxShadow: "0 12px 32px rgb(0 0 0 / .35), 0 2px 6px rgb(0 0 0 / .2)",
+    borderRadius: 6,
+    maxHeight: "calc(100dvh - 16px)",
+    overflowY: "auto",
+    padding: 4,
+  },
+  menuAction: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    borderRadius: 4,
+    paddingBlock: 4,
+    paddingInline: 8,
+    fontSize: 12,
+    textAlign: "left",
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": colors.gray5,
+      ":focus-visible": colors.gray5,
+    },
+    outline: "none",
+    "@media (pointer: coarse)": { minHeight: 40 },
+  },
+  menuDivider: { height: 1, backgroundColor: colors.gray6, marginBlock: 3, marginInline: 4 },
+  disabledAction: { color: colors.gray10 },
+  dangerAction: {
+    color: colors.red11,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": colors.red3,
+      ":focus-visible": colors.red3,
     },
   },
-  trash: { height: 14, width: 14 },
   constantValueAppearance: { fontSize: 12 },
 });
 
@@ -307,8 +361,10 @@ export function NavigationSidebar(props: {
   onDeleteGraph: (id: string) => void;
   onOpenPackage: (id: string) => void;
   onCreateConstant: (resource: ResourceConstant.ResourceRef) => void;
-  onRenameConstant: (id: string, name: string) => void;
+  onRenameConstant: (id: string, name: string) => void | Promise<void>;
   onSelectConstant: (id: string, value: ResourceConstant.LiveValue["id"]) => void;
+  onSetDefaultConstant: (id: string) => void;
+  canEditConstants: boolean;
   onDeleteConstant: (id: string) => void;
   resourceDefinition: (
     resource: ResourceConstant.ResourceRef,
@@ -316,7 +372,34 @@ export function NavigationSidebar(props: {
   valuesFor: (resource: ResourceConstant.ResourceRef) => ReadonlyArray<ResourceConstant.LiveValue>;
 }) {
   let createMenuRoot: HTMLDivElement | undefined;
+  const isDefault = (constant: ResourceConstant.Model) =>
+    ResourceConstant.getDefault(props.constants, constant.resource)?.id === constant.id;
   let createMenuTrigger: HTMLButtonElement | undefined;
+  let actionsTrigger: HTMLButtonElement | undefined;
+  let actionsElement: HTMLDivElement | undefined;
+  const [actionsMenu, setActionsMenu] = createSignal<{ id: string; x: number; y: number } | null>(
+    null,
+  );
+  const closeActions = (restoreFocus = false) => {
+    setActionsMenu(null);
+    if (restoreFocus) actionsTrigger?.focus();
+  };
+  const openActions = (id: string, trigger: HTMLButtonElement) => {
+    if (!props.canEditConstants) return;
+    constantWorkflowActions.closePicker();
+    actionsTrigger = trigger;
+    const bounds = trigger.getBoundingClientRect();
+    setActionsMenu({ id, x: bounds.right, y: bounds.bottom + 4 });
+  };
+  const actionsPosition = () => {
+    const point = actionsMenu();
+    const width = Math.min(176, window.innerWidth - 16);
+    return {
+      width: `${width}px`,
+      left: `${Math.max(8, Math.min((point?.x ?? 8) - width, window.innerWidth - width - 8))}px`,
+      top: `${Math.max(8, Math.min(point?.y ?? 8, window.innerHeight - 100 - 8))}px`,
+    };
+  };
   type ConstantWorkflow = {
     context: {
       search: string;
@@ -369,6 +452,22 @@ export function NavigationSidebar(props: {
       },
     },
   );
+  const [pendingRenames, setPendingRenames] = createSignal<Record<string, { name: string }>>({});
+  const constantName = (constant: ResourceConstant.Model) =>
+    pendingRenames()[constant.id]?.name ?? constant.name;
+  const renameConstant = async (id: string, name: string) => {
+    const pending = { name };
+    setPendingRenames((current) => ({ ...current, [id]: pending }));
+    try {
+      await props.onRenameConstant(id, name);
+    } finally {
+      setPendingRenames((current) => {
+        if (current[id] !== pending) return current;
+        const { [id]: completed, ...remaining } = current;
+        return remaining;
+      });
+    }
+  };
   const constantGroups = createMemo(() => {
     const query = props.search.trim().toLowerCase();
     const groups = new Map<
@@ -401,7 +500,7 @@ export function NavigationSidebar(props: {
         const selectedValue = values.find(
           (value) => JSON.stringify(value.id) === JSON.stringify(constant.value),
         );
-        return [constant.name, constant.id, selectedValue?.display].some(
+        return [constantName(constant), constant.id, selectedValue?.display].some(
           (field) => field?.toLowerCase().includes(query) === true,
         );
       });
@@ -422,6 +521,49 @@ export function NavigationSidebar(props: {
         ),
       }))
       .filter(({ resources }) => resources.length > 0);
+  });
+  const actionsConstant = createMemo(() => {
+    const menu = actionsMenu();
+    if (!menu || !props.canEditConstants || props.section !== "constants") return;
+    return constantGroups()
+      .flatMap((group) => group.constants)
+      .find((constant) => constant.id === menu.id);
+  });
+  createEffect(actionsConstant, (constant) => {
+    if (!constant) closeActions();
+  });
+  createEffect(actionsMenu, (menu) => {
+    if (!menu) return;
+    queueMicrotask(() => actionsElement?.querySelector<HTMLButtonElement>("button")?.focus());
+    const outside = (event: PointerEvent) => {
+      if (
+        event.target instanceof globalThis.Node &&
+        !actionsElement?.contains(event.target) &&
+        !actionsTrigger?.contains(event.target)
+      )
+        closeActions();
+    };
+    const dismiss = () => closeActions();
+    const scroll = (event: Event) => {
+      if (event.target instanceof globalThis.Node && actionsElement?.contains(event.target)) return;
+      closeActions();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeActions(true);
+    };
+    window.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", scroll, true);
+    window.addEventListener("keydown", escape, true);
+    return () => {
+      window.removeEventListener("pointerdown", outside);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", scroll, true);
+      window.removeEventListener("keydown", escape, true);
+    };
   });
   const createMenuOpen = () => constantWorkflow.mode === "present";
   const createMenuPosition = () => {
@@ -725,7 +867,7 @@ export function NavigationSidebar(props: {
                                   JSON.stringify(value.id) === JSON.stringify(constant.value),
                               );
                             return (
-                              <div sx={[resourceMarker, styles.constantCard]}>
+                              <div sx={styles.constantCard}>
                                 <div sx={styles.row}>
                                   <Show
                                     when={constantWorkflow.context.editing === constant.id}
@@ -733,10 +875,10 @@ export function NavigationSidebar(props: {
                                       <button
                                         type="button"
                                         sx={[styles.focus, styles.nameButton]}
-                                        title={constant.name}
+                                        title={constantName(constant)}
                                         onClick={() => constantWorkflowActions.edit(constant.id)}
                                       >
-                                        {constant.name}
+                                        {constantName(constant)}
                                       </button>
                                     }
                                   >
@@ -748,32 +890,58 @@ export function NavigationSidebar(props: {
                                         })
                                       }
                                       sx={styles.nameInput}
-                                      value={constant.name}
+                                      value={constantName(constant)}
                                       onBlur={(event) => {
-                                        props.onRenameConstant(
-                                          constant.id,
-                                          event.currentTarget.value,
-                                        );
+                                        const name = event.currentTarget.value;
                                         constantWorkflowActions.finishEdit(constant.id);
+                                        if (name !== constantName(constant))
+                                          void renameConstant(constant.id, name).catch(
+                                            console.error,
+                                          );
                                       }}
                                       onKeyDown={(event) => {
                                         if (event.key === "Enter") event.currentTarget.blur();
                                         if (event.key === "Escape") {
-                                          event.currentTarget.value = constant.name;
+                                          event.currentTarget.value = constantName(constant);
                                           event.currentTarget.blur();
                                         }
                                       }}
                                     />
                                   </Show>
-                                  <button
-                                    type="button"
-                                    sx={[styles.focus, styles.deleteButton]}
-                                    aria-label={`Delete ${constant.name}`}
-                                    title="Delete"
-                                    onClick={() => props.onDeleteConstant(constant.id)}
-                                  >
-                                    <IconTablerTrash {...stylex.attrs(styles.trash)} />
-                                  </button>
+                                  <Show when={isDefault(constant)}>
+                                    <span
+                                      sx={styles.defaultAccent}
+                                      role="img"
+                                      aria-label={`${constantName(constant)} is the default for new nodes`}
+                                      title="Default for new nodes"
+                                    />
+                                  </Show>
+                                  <Show when={props.canEditConstants}>
+                                    <button
+                                      type="button"
+                                      sx={[styles.focus, styles.actionsButton]}
+                                      aria-label={`Actions for ${constantName(constant)}`}
+                                      aria-haspopup="menu"
+                                      aria-expanded={
+                                        actionsMenu()?.id === constant.id ? "true" : "false"
+                                      }
+                                      title="Constant actions"
+                                      onClick={(event) => {
+                                        if (actionsMenu()?.id === constant.id) closeActions(true);
+                                        else openActions(constant.id, event.currentTarget);
+                                      }}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== "ArrowDown") return;
+                                        event.preventDefault();
+                                        openActions(constant.id, event.currentTarget);
+                                      }}
+                                    >
+                                      <IconMdiDotsHorizontal
+                                        aria-hidden="true"
+                                        {...stylex.attrs(styles.actionsIcon)}
+                                      />
+                                    </button>
+                                  </Show>
                                 </div>
                                 <Select
                                   appearance={styles.constantValueAppearance}
@@ -807,6 +975,73 @@ export function NavigationSidebar(props: {
           </div>
         </Show>
       </div>
+      <Show when={actionsConstant()}>
+        {(constant) => (
+          <Portal>
+            <div
+              ref={actionsElement}
+              role="menu"
+              aria-label={`Actions for ${constantName(constant())}`}
+              sx={styles.actionsMenu}
+              style={actionsPosition()}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                const buttons = Array.from(
+                  event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
+                );
+                const index = buttons.findIndex((button) => button === document.activeElement);
+                if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  const next =
+                    event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? buttons.length - 1
+                        : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) %
+                          buttons.length;
+                  buttons[next]?.focus();
+                }
+                if (event.key === "Tab") closeActions(true);
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                tabindex={-1}
+                sx={[
+                  styles.focus,
+                  styles.menuAction,
+                  isDefault(constant()) && styles.disabledAction,
+                ]}
+                aria-disabled={isDefault(constant()) ? "true" : "false"}
+                title="Used by new nodes. Existing nodes keep their selections."
+                onClick={() => {
+                  if (isDefault(constant())) return;
+                  const id = constant().id;
+                  closeActions(true);
+                  props.onSetDefaultConstant(id);
+                }}
+              >
+                {isDefault(constant()) ? "Default for new nodes" : "Make default"}
+              </button>
+              <div role="separator" sx={styles.menuDivider} />
+              <button
+                type="button"
+                role="menuitem"
+                tabindex={-1}
+                sx={[styles.focus, styles.menuAction, styles.dangerAction]}
+                onClick={() => {
+                  const id = constant().id;
+                  closeActions(true);
+                  props.onDeleteConstant(id);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </Portal>
+        )}
+      </Show>
     </Sidebar>
   );
 }

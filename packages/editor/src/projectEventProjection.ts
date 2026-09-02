@@ -139,6 +139,14 @@ export const apply = (
         });
       }).pipe(PersistenceError.refail);
 
+    case "ResourceConstantDefaultChanged":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const constants = { ...project.constants };
+        for (const constant of event.constants) constants[constant.id] = constant;
+        return yield* persistence.saveProject({ ...project, constants });
+      }).pipe(PersistenceError.refail);
+
     case "ResourceConstantUpdated":
       return Effect.gen(function* () {
         const project = yield* persistence.loadProject();

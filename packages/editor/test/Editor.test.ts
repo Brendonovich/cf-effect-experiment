@@ -8,6 +8,7 @@ import {
   Package,
   PackageId,
   RenderedProject,
+  ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
@@ -149,6 +150,10 @@ const ResourceDeployment = Engine.deployment(
   ResourcePlugin,
   ResourceEngine.toLayer(() => Effect.die("not hosted in editor unit test")),
 );
+const resourceSchemaRef = {
+  package: PackageId.make("resource-plugin"),
+  schema: SchemaId.make("action"),
+};
 
 const TestPackage = {
   id: PackageId.make("pkg"),
@@ -202,6 +207,265 @@ const TestLayer = Editor.defaultLayer.pipe(
 );
 
 const makeEventPull = EditorEvents.Service.pipe(Effect.flatMap((events) => events.subscribe));
+
+describe("Resource defaults", () => {
+  it.effect("uses a type-scoped fallback for existing constants without a designated default", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const persistence = yield* Persistence.Service;
+      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+      const legacy = ResourceConstant.Model.make({
+        id: ResourceConstant.Id.make("legacy"),
+        name: "Legacy account",
+        resource: { package: "resource-plugin", resource: "account" },
+        value: "account-1",
+      });
+      const otherPackage = {
+        ...legacy,
+        id: ResourceConstant.Id.make("other-package"),
+        resource: { ...legacy.resource, package: "other" },
+      };
+      const otherResource = {
+        ...legacy,
+        id: ResourceConstant.Id.make("other-resource"),
+        resource: { ...legacy.resource, resource: "channel" },
+      };
+      const second = {
+        ...legacy,
+        id: ResourceConstant.Id.make("second"),
+        value: "account-2",
+        isDefault: false,
+      };
+      yield* persistence.saveProject({
+        ...(yield* editor.project.get()),
+        constants: {
+          [otherPackage.id]: otherPackage,
+          [otherResource.id]: otherResource,
+          [legacy.id]: legacy,
+          [second.id]: second,
+        },
+      });
+      const graph = yield* editor.graph.create({});
+      const node = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef, inputDefaults: { "account-1": "saved" } },
+      });
+      expect(node.node.properties).toEqual({ account: legacy.id });
+      expect(node.io.dataInputs.map((input) => input.id)).toEqual(["account-1"]);
+      expect(node.node.inputDefaults).toEqual({ "account-1": "saved" });
+      const added = yield* editor.constant.create(legacy.resource);
+      expect(added.constant.isDefault).toBe(false);
+      expect(
+        ResourceConstant.getDefault((yield* editor.project.get()).constants, legacy.resource)?.id,
+      ).toBe(legacy.id);
+      yield* editor.constant.setDefault(second.id);
+      yield* editor.constant.delete(added.constant.id);
+      const constants = (yield* editor.project.get()).constants;
+      expect(ResourceConstant.getDefault(constants, legacy.resource)?.id).toBe(second.id);
+      expect(ResourceConstant.getDefault(constants, otherPackage.resource)?.id).toBe(
+        otherPackage.id,
+      );
+      expect(ResourceConstant.getDefault(constants, otherResource.resource)?.id).toBe(
+        otherResource.id,
+      );
+    }).pipe(Effect.provide(TestLayer)),
+  );
+
+  it.effect("binds omitted properties before IO validation and changes only future nodes", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+      yield* editor.engine.hostResource("resource-plugin", "account", {
+        values: Effect.succeed([
+          { id: "account-1", display: "Streamer" },
+          { id: "account-2", display: "Moderator" },
+        ]),
+        reload: Effect.void,
+        changes: Stream.empty,
+      });
+      const graph = yield* editor.graph.create({});
+      const unbound = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef },
+      });
+      expect(unbound.node.properties).toEqual({});
+
+      const first = yield* editor.constant.create({
+        package: "resource-plugin",
+        resource: "account",
+      });
+      const second = yield* editor.constant.create(first.constant.resource);
+      expect(first.constant.isDefault).toBe(true);
+      expect(second.constant.isDefault ?? false).toBe(false);
+      yield* editor.constant.select(first.constant.id, "account-1");
+      yield* editor.constant.select(second.constant.id, "account-2");
+
+      const automatic = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef, inputDefaults: { "account-1": "saved" } },
+      });
+      expect(automatic.node.properties).toEqual({ account: first.constant.id });
+      expect(automatic.io.dataInputs.map((input) => input.id)).toEqual(["account-1"]);
+      expect(automatic.node.inputDefaults).toEqual({ "account-1": "saved" });
+      for (const inputDefaults of [{ account: "wrong port" }, { "account-1": 42 }]) {
+        const invalid = yield* Effect.flip(
+          editor.node.create({
+            graphID: graph.graph.id,
+            node: { schema: resourceSchemaRef, inputDefaults },
+          }),
+        );
+        expect(invalid._tag).toBe("InvalidInputDefaultError");
+      }
+      const explicit = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: {
+          schema: resourceSchemaRef,
+          properties: { account: second.constant.id },
+          inputDefaults: { "account-2": "override" },
+        },
+      });
+      expect(explicit.node.properties).toEqual({ account: second.constant.id });
+      expect(explicit.io.dataInputs.map((input) => input.id)).toEqual(["account-2"]);
+
+      const events = yield* makeEventPull;
+      const changed = yield* editor.constant.setDefault(second.constant.id);
+      expect(changed._tag).toBe("ResourceConstantDefaultChanged");
+      expect(changed.actor).toEqual(Actor.system);
+      expect(yield* PubSub.take(events)).toEqual(changed);
+      expect(changed.constants).toHaveLength(2);
+      expect(changed.constants).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: first.constant.id, isDefault: false }),
+          expect.objectContaining({ id: second.constant.id, isDefault: true }),
+        ]),
+      );
+      const future = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef, properties: {} },
+      });
+      expect(future.node.properties).toEqual({ account: second.constant.id });
+      expect(future.io.dataInputs.map((input) => input.id)).toEqual(["account-2"]);
+      const snapshot = yield* editor.project.snapshot();
+      expect(snapshot.project.graphs[graph.graph.id]?.nodes[unbound.node.id]?.properties).toEqual(
+        {},
+      );
+      expect(snapshot.project.graphs[graph.graph.id]?.nodes[automatic.node.id]).toEqual(
+        automatic.node,
+      );
+      expect(snapshot.nodeIO[graph.graph.id]?.[automatic.node.id]).toEqual(automatic.io);
+      expect(snapshot.project.graphs[graph.graph.id]?.nodes[explicit.node.id]).toEqual(
+        explicit.node,
+      );
+
+      yield* editor.node.clearProperty({
+        graphID: graph.graph.id,
+        nodeID: future.node.id,
+        property: "account",
+      });
+      expect(
+        (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[future.node.id]?.properties,
+      ).toEqual({});
+    }).pipe(Effect.provide(TestLayer)),
+  );
+
+  it.effect(
+    "scopes default designation to the exact package and resource and rejects unknown IDs",
+    () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const packages = yield* Packages.Service;
+        for (const id of ["defaults-a", "defaults-b"]) {
+          yield* packages.loadPackage({
+            id: PackageId.make(id),
+            name: id,
+            resources: [
+              { id: "account", name: "Account" },
+              { id: "channel", name: "Channel" },
+            ],
+            schemas: [],
+          });
+        }
+        const first = yield* editor.constant.create({ package: "defaults-a", resource: "account" });
+        const second = yield* editor.constant.create(first.constant.resource);
+        const otherPackage = yield* editor.constant.create({
+          package: "defaults-b",
+          resource: "account",
+        });
+        const otherResource = yield* editor.constant.create({
+          package: "defaults-a",
+          resource: "channel",
+        });
+        expect(first.constant.isDefault).toBe(true);
+        expect(second.constant.isDefault ?? false).toBe(false);
+        expect(otherPackage.constant.isDefault).toBe(true);
+        expect(otherResource.constant.isDefault).toBe(true);
+
+        const changed = yield* editor.constant.setDefault(second.constant.id);
+        expect(changed.constants.map((constant) => constant.id).sort()).toEqual(
+          [first.constant.id, second.constant.id].sort(),
+        );
+        const project = yield* editor.project.get();
+        expect(project.constants[first.constant.id]?.isDefault).toBe(false);
+        expect(project.constants[second.constant.id]?.isDefault).toBe(true);
+        expect(project.constants[otherPackage.constant.id]).toEqual(otherPackage.constant);
+        expect(project.constants[otherResource.constant.id]).toEqual(otherResource.constant);
+        expect(yield* Effect.flip(editor.constant.setDefault("missing"))).toMatchObject({
+          _tag: "ResourceConstantNotFoundError",
+          id: "missing",
+        });
+        expect(yield* editor.project.get()).toEqual(project);
+      }).pipe(Effect.provide(TestLayer)),
+  );
+
+  it.effect("falls back after default deletion until there are no constants left", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+      const first = yield* editor.constant.create({
+        package: "resource-plugin",
+        resource: "account",
+      });
+      const second = yield* editor.constant.create(first.constant.resource);
+      yield* editor.constant.delete(first.constant.id);
+      const third = yield* editor.constant.create(first.constant.resource);
+      const project = yield* editor.project.get();
+      expect(project.constants[first.constant.id]).toBeUndefined();
+      expect(ResourceConstant.getDefault(project.constants, first.constant.resource)?.id).toBe(
+        second.constant.id,
+      );
+      expect(third.constant.isDefault ?? false).toBe(false);
+      const graph = yield* editor.graph.create({});
+      const node = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef },
+      });
+      expect(node.node.properties).toEqual({ account: second.constant.id });
+      expect(node.io.dataInputs.map((input) => input.id)).toEqual([second.constant.id]);
+      yield* editor.node.delete({ graphID: graph.graph.id, nodeID: node.node.id });
+      yield* editor.constant.delete(second.constant.id);
+      expect(
+        ResourceConstant.getDefault(
+          (yield* editor.project.get()).constants,
+          first.constant.resource,
+        )?.id,
+      ).toBe(third.constant.id);
+      yield* editor.constant.delete(third.constant.id);
+      expect(
+        ResourceConstant.getDefault(
+          (yield* editor.project.get()).constants,
+          first.constant.resource,
+        ),
+      ).toBeUndefined();
+      const unbound = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: { schema: resourceSchemaRef },
+      });
+      expect(unbound.node.properties).toEqual({});
+      const recreated = yield* editor.constant.create(first.constant.resource);
+      expect(recreated.constant.isDefault).toBe(true);
+    }).pipe(Effect.provide(TestLayer)),
+  );
+});
 
 it.layer(TestLayer)((it) => {
   describe("Editor", () => {

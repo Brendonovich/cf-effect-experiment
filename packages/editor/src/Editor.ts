@@ -147,7 +147,7 @@ export interface Interface {
       resource: ResourceConstant.ResourceRef,
     ) => Effect.Effect<
       EditorEvent.ResourceConstantCreated,
-      PersistenceError | ResourceConstant.InvalidResourceError
+      PersistenceError | Project.NotFoundError | ResourceConstant.InvalidResourceError
     >;
     readonly rename: (
       id: string,
@@ -174,6 +174,12 @@ export interface Interface {
       | Project.NotFoundError
       | ResourceConstant.NotFoundError
       | ResourceConstant.InUseError
+    >;
+    readonly setDefault: (
+      id: string,
+    ) => Effect.Effect<
+      EditorEvent.ResourceConstantDefaultChanged,
+      PersistenceError | Project.NotFoundError | ResourceConstant.NotFoundError
     >;
   };
   readonly graph: {
@@ -443,9 +449,21 @@ export const layer = Layer.effect(Service)(
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
       yield* persistence.loadGraph(options.graphID);
       const schema = yield* packages.getSchema(options.node.schema);
+      const initialProperties = { ...options.node.properties };
+      if (schema.properties.some((property) => "resource" in property)) {
+        const constants = (yield* persistence.loadProject()).constants;
+        for (const property of schema.properties) {
+          if (!("resource" in property) || Object.hasOwn(initialProperties, property.id)) continue;
+          const constant = ResourceConstant.getDefault(constants, {
+            package: options.node.schema.package,
+            resource: property.resource,
+          });
+          if (constant !== undefined) initialProperties[property.id] = constant.id;
+        }
+      }
       const properties = yield* packages.normalizeProperties(
         options.node.schema,
-        options.node.properties ?? {},
+        initialProperties,
       );
       yield* validateResourceBindings(options.node.schema, properties);
       const inputDefaults: Record<string, Schema.Json> = {};
@@ -1048,9 +1066,11 @@ export const layer = Layer.effect(Service)(
           reason: "Resource is not registered",
         });
       const id = ResourceConstant.Id.make(crypto.randomUUID());
+      const constants = (yield* persistence.loadProject()).constants;
+      const isDefault = ResourceConstant.getDefault(constants, resource) === undefined;
       return yield* events.publish({
         _tag: "ResourceConstantCreated",
-        constant: { id, name: `New ${definition.name}`, resource },
+        constant: { id, name: `New ${definition.name}`, resource, isDefault },
       });
     }, lock.withPermit);
 
@@ -1150,6 +1170,20 @@ export const layer = Layer.effect(Service)(
         inputDefaults,
         deletedConnectionIds,
       });
+    }, lock.withPermit);
+
+    const constantSetDefault = Effect.fn("Editor.constant.setDefault")(function* (id: string) {
+      const project = yield* persistence.loadProject();
+      const selected = project.constants[id];
+      if (selected === undefined) return yield* new ResourceConstant.NotFoundError({ id });
+      const constants = Object.values(project.constants)
+        .filter(
+          (constant) =>
+            constant.resource.package === selected.resource.package &&
+            constant.resource.resource === selected.resource.resource,
+        )
+        .map((constant) => ({ ...constant, isDefault: constant.id === id }));
+      return yield* events.publish({ _tag: "ResourceConstantDefaultChanged", constants });
     }, lock.withPermit);
 
     const constantDelete = Effect.fn("Editor.constant.delete")(function* (id: string) {
@@ -1362,6 +1396,7 @@ export const layer = Layer.effect(Service)(
         create: constantCreate,
         rename: constantRename,
         select: constantSelect,
+        setDefault: constantSetDefault,
         delete: constantDelete,
       },
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
