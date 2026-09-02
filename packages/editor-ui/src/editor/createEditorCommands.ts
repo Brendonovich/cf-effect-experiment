@@ -54,13 +54,24 @@ export function createEditorCommands(
   );
   const [clipboardRebind, setClipboardRebind] =
     createSignal<ReadonlyArray<Clipboard.RebindRequest>>();
+  const [clipboardMissingSchemas, setClipboardMissingSchemas] =
+    createSignal<ReadonlyArray<Clipboard.MissingSchema>>();
   let resolveRebind: ((bindings: ReadonlyArray<Clipboard.Binding> | undefined) => void) | undefined;
+  let resolveMissingSchemas: ((force: boolean) => void) | undefined;
   const finishClipboardRebind = (bindings?: ReadonlyArray<Clipboard.Binding>) => {
     setClipboardRebind(undefined);
     resolveRebind?.(bindings);
     resolveRebind = undefined;
   };
-  onCleanup(() => finishClipboardRebind());
+  const finishClipboardMissingSchemas = (force: boolean) => {
+    setClipboardMissingSchemas(undefined);
+    resolveMissingSchemas?.(force);
+    resolveMissingSchemas = undefined;
+  };
+  onCleanup(() => {
+    finishClipboardRebind();
+    finishClipboardMissingSchemas(false);
+  });
   const copyNodes = async (nodeIds: ReadonlyArray<string>, cut = false) => {
     const graph = selectedGraph();
     const graphId = selectedGraphId();
@@ -132,30 +143,44 @@ export function createEditorCommands(
           if (!canEdit() || client() !== c)
             throw new Error("Editor connection changed; nothing was pasted");
           let bindings: ReadonlyArray<Clipboard.Binding> = [];
+          let forceMissingSchemas = false;
           let result = await runPromise(
-            c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
+            c
+              .PasteFragment({ graphId, text, position: anchor, bindings, forceMissingSchemas })
+              .pipe(Effect.result),
           );
-          while (Result.isFailure(result) && result.failure._tag === "ClipboardRebindRequired") {
-            setClipboardRebind(result.failure.requests);
-            const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
-              (resolve) => {
-                resolveRebind = resolve;
-              },
-            );
-            if (chosen === undefined) return;
-            bindings = [
-              ...bindings.filter(
-                (binding) =>
-                  !chosen.some(
-                    (next) => next.nodeId === binding.nodeId && next.property === binding.property,
-                  ),
-              ),
-              ...chosen,
-            ];
+          while (Result.isFailure(result)) {
+            if (result.failure._tag === "ClipboardMissingSchemas") {
+              setClipboardMissingSchemas(result.failure.schemas);
+              forceMissingSchemas = await new Promise<boolean>((resolve) => {
+                resolveMissingSchemas = resolve;
+              });
+              if (!forceMissingSchemas) return;
+            } else if (result.failure._tag === "ClipboardRebindRequired") {
+              setClipboardRebind(result.failure.requests);
+              const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
+                (resolve) => {
+                  resolveRebind = resolve;
+                },
+              );
+              if (chosen === undefined) return;
+              bindings = [
+                ...bindings.filter(
+                  (binding) =>
+                    !chosen.some(
+                      (next) =>
+                        next.nodeId === binding.nodeId && next.property === binding.property,
+                    ),
+                ),
+                ...chosen,
+              ];
+            } else break;
             if (!canEdit() || client() !== c)
               throw new Error("Editor connection changed; nothing was pasted");
             result = await runPromise(
-              c.PasteFragment({ graphId, text, position: anchor, bindings }).pipe(Effect.result),
+              c
+                .PasteFragment({ graphId, text, position: anchor, bindings, forceMissingSchemas })
+                .pipe(Effect.result),
             );
           }
           if (Result.isFailure(result))
@@ -462,6 +487,8 @@ export function createEditorCommands(
     clipboardError: () => clipboardMutation.error?.message,
     clipboardRebind,
     finishClipboardRebind,
+    clipboardMissingSchemas,
+    finishClipboardMissingSchemas,
     dismissClipboardError: () => {
       if (!clipboardMutation.isPending) clipboardMutation.reset();
     },

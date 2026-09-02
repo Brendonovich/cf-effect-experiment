@@ -25,15 +25,15 @@ export class InvalidError extends Schema.TaggedError<InvalidError>()("InvalidCli
 
 export const Binding = Schema.Struct({
   nodeId: Schema.String,
-  property: Schema.optional(Schema.String),
+  property: Schema.String,
   target: Schema.String,
 });
 export type Binding = typeof Binding.Type;
 export const RebindRequest = Schema.Struct({
   nodeId: Schema.String,
-  property: Schema.optional(Schema.String),
+  property: Schema.String,
   label: Schema.String,
-  kind: Schema.Literals(["resource", "schema"]),
+  kind: Schema.Literal("resource"),
   candidates: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
 });
 export type RebindRequest = typeof RebindRequest.Type;
@@ -42,6 +42,16 @@ export class RebindRequired extends Schema.TaggedError<RebindRequired>()(
   {
     requests: Schema.Array(RebindRequest),
   },
+) {}
+
+export const MissingSchema = Schema.Struct({
+  package: Schema.String,
+  schema: Schema.String,
+});
+export type MissingSchema = typeof MissingSchema.Type;
+export class MissingSchemas extends Schema.TaggedError<MissingSchemas>()(
+  "ClipboardMissingSchemas",
+  { schemas: Schema.Array(MissingSchema) },
 ) {}
 
 export const validPosition = (position: { readonly x: number; readonly y: number }) =>

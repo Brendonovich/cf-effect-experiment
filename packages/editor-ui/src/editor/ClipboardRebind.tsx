@@ -56,16 +56,13 @@ export function ClipboardRebind(props: {
     >
       <h2>Rebind clipboard references</h2>
       <p>
-        Choose compatible destination definitions. Nothing is pasted until every reference is
-        resolved. Missing connections are skipped.
+        Choose compatible destination resources. Nothing is pasted until every reference is
+        resolved.
       </p>
       <For each={props.requests}>
         {(request) => (
           <label sx={styles.row}>
-            <span>
-              {request.kind === "resource" ? "Resource constant" : "Node definition"}:{" "}
-              {request.label}
-            </span>
+            <span>Resource constant: {request.label}</span>
             <select
               sx={styles.select}
               value={choices()[key(request)] ?? ""}
@@ -78,8 +75,8 @@ export function ClipboardRebind(props: {
             >
               <option value="">
                 {request.candidates.length === 0
-                  ? "No compatible destination definitions"
-                  : "Choose a definition"}
+                  ? "No compatible destination resources"
+                  : "Choose a resource"}
               </option>
               <For each={request.candidates}>
                 {(candidate) => <option value={candidate.id}>{candidate.name}</option>}
@@ -100,7 +97,7 @@ export function ClipboardRebind(props: {
             props.finish(
               props.requests.map((request) => ({
                 nodeId: request.nodeId,
-                ...(request.property === undefined ? {} : { property: request.property }),
+                property: request.property,
                 target: choices()[key(request)]!,
               })),
             )

@@ -20,17 +20,17 @@ This intentionally avoids trusting coincidentally equal project/graph/node IDs.
 
 Resource references use constant IDs and exact `{ package, resource }` compatibility.
 Foreign or missing resource references require explicit compatible-constant choices.
-Missing schemas prompt for compatible schemas in the same package. Project-defined
-packages use the `project-` namespace and require explicit choices across sessions.
-Compatibility checks generated IO directions, kinds, field labels/order and types.
-Confirmed schema rebinding remaps input defaults and connection port IDs. Every
-retry revalidates against current destination state; cancel inserts nothing.
+Schemas are never rebound. Missing schemas are listed for confirmation and can be
+force-inserted with their original references. Captured IO preserves validated ports
+and connections for the live session, but is not persisted; unavailable nodes render
+without ports after reconnect. Every retry revalidates against current destination
+state; cancel inserts nothing.
 
-Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`),
-which this resolver supports at the package/IO contract level, including differing
-field IDs. That PR is not merged into this branch; actual event-runtime integration
-must be verified after combining the branches. Function definitions require their
-package's generated schema/IO contract; system entry/return nodes must be internal.
+Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`).
+Missing event definitions can be force-inserted but are not rebound to other events.
+That PR is not merged into this branch; actual event-runtime integration must be
+verified after combining the branches. Function definitions require their package's
+generated schema/IO contract; system entry/return nodes must be internal.
 Custom type descriptors from unmerged PR #15 are not supported by the base descriptor
 codec, so foreign custom-type payloads fail safely rather than nominally binding IDs.
 No definitions are imported and no same-name binding occurs without confirmation.

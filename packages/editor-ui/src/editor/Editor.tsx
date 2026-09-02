@@ -14,6 +14,7 @@ import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
+import { ClipboardMissingSchemas } from "./ClipboardMissingSchemas";
 import { ClipboardRebind } from "./ClipboardRebind";
 import { createEditorShortcuts } from "./createEditorShortcuts";
 import { compatibleSchemaPorts } from "./graph/connectionAuthoring";
@@ -469,6 +470,14 @@ function EditorContent(
           <ClipboardRebind
             requests={requests()}
             finish={controller.commands.finishClipboardRebind}
+          />
+        )}
+      </Show>
+      <Show when={controller.commands.clipboardMissingSchemas()}>
+        {(schemas) => (
+          <ClipboardMissingSchemas
+            schemas={schemas()}
+            finish={controller.commands.finishClipboardMissingSchemas}
           />
         )}
       </Show>

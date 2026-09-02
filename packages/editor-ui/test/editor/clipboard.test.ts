@@ -346,3 +346,33 @@ it("rebind cancellation never inserts nodes and confirmation sends explicit mapp
   });
   expect(state.selected()).toEqual(["fresh"]);
 });
+
+it("cancels or force-inserts fragments with missing schemas", async () => {
+  const schemas: Clipboard.MissingSchema[] = [{ package: "missing", schema: "node" }];
+  const requireConfirmation = () => Effect.fail(new Clipboard.MissingSchemas({ schemas }));
+
+  const cancelled = setup();
+  cancelled.pasteFragment.mockImplementationOnce(
+    requireConfirmation as unknown as typeof cancelled.pasteFragment,
+  );
+  const cancel = cancelled.commands.pasteNodes({ x: 0, y: 0 });
+  await vi.waitFor(() => expect(cancelled.commands.clipboardMissingSchemas()).toEqual(schemas));
+  cancelled.commands.finishClipboardMissingSchemas(false);
+  await cancel;
+  expect(cancelled.pasteFragment).toHaveBeenCalledTimes(1);
+
+  const confirmed = setup();
+  confirmed.pasteFragment.mockImplementationOnce(
+    requireConfirmation as unknown as typeof confirmed.pasteFragment,
+  );
+  const confirm = confirmed.commands.pasteNodes({ x: 0, y: 0 });
+  await vi.waitFor(() => expect(confirmed.commands.clipboardMissingSchemas()).toEqual(schemas));
+  confirmed.commands.finishClipboardMissingSchemas(true);
+  await confirm;
+  expect(confirmed.pasteFragment).toHaveBeenCalledTimes(2);
+  expect(confirmed.pasteFragment.mock.calls[1]![0]).toMatchObject({
+    bindings: [],
+    forceMissingSchemas: true,
+  });
+  expect(confirmed.selected()).toEqual(["fresh"]);
+});

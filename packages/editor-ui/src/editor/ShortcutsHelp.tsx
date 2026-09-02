@@ -144,8 +144,8 @@ export function ShortcutsHelp() {
             Each key combination is an alternative. Some browser shortcuts may be reserved. Node
             clipboard uses the system clipboard and requires browser permission. Paste snaps the
             group's top-left anchor to the grid, preserving relative spacing. System-created nodes
-            are skipped when copying or cutting. Missing definitions require explicit rebinding;
-            they are never imported. Valid external links reconnect only in the source graph;
+            are skipped when copying or cutting. Missing schemas require confirmation and can be
+            pasted without importing them. Valid external links reconnect only in the source graph;
             missing endpoints and occupied inputs are skipped.
           </p>
           <dl sx={styles.list}>

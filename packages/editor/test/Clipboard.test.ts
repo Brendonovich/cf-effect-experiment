@@ -202,7 +202,7 @@ it.layer(TestLayer)((it) => {
   );
 
   it.effect(
-    "rebinds project event schemas and remaps differing field IDs, defaults and wires",
+    "lists missing schemas and force-inserts their nodes with captured IO, defaults and wires",
     () =>
       Effect.gen(function* () {
         const editor = yield* setup;
@@ -245,17 +245,39 @@ it.layer(TestLayer)((it) => {
         const result = yield* editor.fragment
           .paste({ graphID: "destination", text: eventText, position: { x: 0, y: 0 } })
           .pipe(Effect.result);
-        expect(Result.isFailure(result) && result.failure._tag).toBe("ClipboardRebindRequired");
+        expect(
+          Result.isFailure(result) &&
+            result.failure._tag === "ClipboardMissingSchemas" &&
+            result.failure.schemas,
+        ).toEqual([{ package: "project-events", schema: "emit:old" }]);
         expect(yield* editor.project.get()).toEqual(before);
         const pasted = yield* editor.fragment.paste({
           graphID: "destination",
           text: eventText,
           position: { x: 0, y: 0 },
-          bindings: [{ nodeId: "event", target: "emit:new" }],
+          forceMissingSchemas: true,
         });
-        expect(pasted.nodes[1]!.schema.schema).toBe("emit:new");
-        expect(pasted.nodes[1]!.inputDefaults).toEqual({ "field:new": "preserved" });
-        expect(pasted.connections[0]!.inIoId).toBe("field:new");
+        expect(pasted.nodes[1]!.schema.schema).toBe("emit:old");
+        expect(pasted.nodes[1]!.inputDefaults).toEqual({ "field:old": "preserved" });
+        expect(pasted.nodeIO[pasted.nodes[1]!.id]).toEqual(sourceIO);
+        expect(pasted.connections[0]!.inIoId).toBe("field:old");
+
+        const beforeUnverifiable = yield* editor.project.get();
+        const withoutIO = JSON.parse(eventText) as Record<string, unknown>;
+        delete withoutIO.nodeIO;
+        expect(
+          Result.isFailure(
+            yield* editor.fragment
+              .paste({
+                graphID: "destination",
+                text: JSON.stringify(withoutIO),
+                position: { x: 0, y: 0 },
+                forceMissingSchemas: true,
+              })
+              .pipe(Effect.result),
+          ),
+        ).toBe(true);
+        expect(yield* editor.project.get()).toEqual(beforeUnverifiable);
       }),
   );
   it.effect(
@@ -362,9 +384,11 @@ it.layer(TestLayer)((it) => {
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result))
           expect(result.failure._tag).toBe(
-            name === "resources" || name === "missing schema"
+            name === "resources"
               ? "ClipboardRebindRequired"
-              : "InvalidClipboardFragment",
+              : name === "missing schema"
+                ? "ClipboardMissingSchemas"
+                : "InvalidClipboardFragment",
           );
         expect(yield* editor.project.get()).toEqual(before);
       }),

@@ -116,6 +116,7 @@ export interface Interface {
       readonly text: string;
       readonly position: { readonly x: number; readonly y: number };
       readonly bindings?: ReadonlyArray<Clipboard.Binding>;
+      readonly forceMissingSchemas?: boolean;
     }) => Effect.Effect<
       EditorEvent.FragmentPasted,
       | PersistenceError
@@ -123,6 +124,7 @@ export interface Interface {
       | Project.NotFoundError
       | Clipboard.InvalidError
       | Clipboard.RebindRequired
+      | Clipboard.MissingSchemas
     >;
     readonly delete: (options: {
       readonly graphID: string;
@@ -476,6 +478,7 @@ export const layer = Layer.effect(Service)(
         readonly text: string;
         readonly position: { readonly x: number; readonly y: number };
         readonly bindings?: ReadonlyArray<Clipboard.Binding>;
+        readonly forceMissingSchemas?: boolean;
       }) {
         const fragment = yield* Clipboard.decode(options.text);
         if (!Clipboard.validPosition(options.position))
@@ -483,99 +486,31 @@ export const layer = Layer.effect(Service)(
         const graph = yield* persistence.loadGraph(options.graphID);
         const project = yield* persistence.loadProject();
         const sameProject = fragment.source?.session === clipboardSession;
-        const available = yield* packages.getPackages();
         const requests: Array<Clipboard.RebindRequest> = [];
         const resolved: Array<Node.Model> = [];
+        const missingNodeIds = new Set<string>();
+        const missingSchemas = new Map<string, Clipboard.MissingSchema>();
         if ((options.bindings?.length ?? 0) > Clipboard.maxNodes * 20)
           return yield* new Clipboard.InvalidError({ reason: "Too many rebindings" });
         for (const original of fragment.nodes) {
-          let source = original;
-          let schema = yield* packages
+          const source = original;
+          const schema = yield* packages
             .getSchema(source.schema)
             .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
           if (schema?.internal === true)
             return yield* new Clipboard.InvalidError({
               reason: `${source.name}: system-created nodes cannot be pasted`,
             });
-          // Project-defined schemas are scoped by the editor session, not their names or IDs.
-          const projectDefined = source.schema.package.startsWith("project-");
-          if (schema === undefined || (projectDefined && !sameProject)) {
-            const sourceIO = fragment.nodeIO?.[source.id];
-            const candidates: Array<Package.SchemaModel> = [];
-            for (const candidate of available
-              .filter((pkg) => pkg.id === source.schema.package)
-              .flatMap((pkg) => pkg.schemas)) {
-              if (candidate.internal === true || sourceIO === undefined) continue;
-              if (
-                projectDefined &&
-                candidate.id.split(":")[0] !== source.schema.schema.split(":")[0]
-              )
-                continue;
-              const candidateIO = yield* packages
-                .getNodeIO({ ...source.schema, schema: candidate.id }, source.properties)
-                .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
-              if (!candidateIO) continue;
-              const compatible = (
-                ["dataInputs", "dataOutputs", "executionInputs", "executionOutputs"] as const
-              ).every((direction) => {
-                const before = sourceIO[direction];
-                const after = candidateIO[direction];
-                return (
-                  before.length === after.length &&
-                  before.every((port, index) => {
-                    const other = after[index]!;
-                    return (
-                      (port.name ?? port.id) === (other.name ?? other.id) &&
-                      ("type" in port && "type" in other
-                        ? Schema.is(DataType.Descriptor)(port.type) &&
-                          Schema.is(DataType.Descriptor)(other.type) &&
-                          DataType.equals(port.type, other.type)
-                        : !("type" in port) && !("type" in other))
-                    );
-                  })
-                );
-              });
-              if (compatible) candidates.push({ ...candidate, ...candidateIO });
-            }
-            const binding = options.bindings?.find(
-              (binding) => binding.nodeId === source.id && binding.property === undefined,
-            );
-            const target = candidates.find((candidate) => candidate.id === binding?.target);
-            if (binding && !target)
-              return yield* new Clipboard.InvalidError({
-                reason: "Schema rebind target is unavailable or incompatible",
-              });
-            if (!target) {
-              requests.push({
-                nodeId: source.id,
-                label: `${source.name}: ${source.schema.package}/${source.schema.schema}`,
-                kind: "schema",
-                candidates: candidates.map((candidate) => ({
-                  id: candidate.id,
-                  name: candidate.name,
-                })),
-              });
-              continue;
-            }
-            schema = target;
-            source = { ...source, schema: { ...source.schema, schema: target.id } };
-            const defaults: Record<string, Schema.Json> = {};
-            for (const [input, value] of Object.entries(source.inputDefaults)) {
-              const index = sourceIO!.dataInputs.findIndex((port) => port.id === input);
-              if (index < 0)
-                return yield* new Clipboard.InvalidError({
-                  reason: "Rebound input is unavailable",
-                });
-              defaults[target.dataInputs[index]!.id] = value;
-            }
-            source = { ...source, inputDefaults: defaults };
+          if (schema === undefined) {
+            const key = JSON.stringify([source.schema.package, source.schema.schema]);
+            missingSchemas.set(key, source.schema);
+            if (!options.forceMissingSchemas) continue;
+            missingNodeIds.add(source.id);
+            resolved.push(source);
+            continue;
           }
-          if (schema!.internal === true)
-            return yield* new Clipboard.InvalidError({
-              reason: `${source.name}: system-created nodes cannot be pasted`,
-            });
           const properties = { ...source.properties };
-          for (const definition of schema!.properties) {
+          for (const definition of schema.properties) {
             if (!("resource" in definition) || !Object.hasOwn(properties, definition.id)) continue;
             const value = properties[definition.id];
             const candidates = Object.values(project.constants).filter(
@@ -606,6 +541,8 @@ export const layer = Layer.effect(Service)(
           }
           resolved.push({ ...source, properties });
         }
+        if (missingSchemas.size > 0 && !options.forceMissingSchemas)
+          return yield* new Clipboard.MissingSchemas({ schemas: [...missingSchemas.values()] });
         if (requests.length > 0) return yield* new Clipboard.RebindRequired({ requests });
         const nodes: Array<Node.Model> = [];
         const nodeIO: Record<string, NodeIO> = {};
@@ -615,6 +552,25 @@ export const layer = Layer.effect(Service)(
           y: Math.min(...fragment.nodes.map((node) => node.position.y)),
         };
         for (const source of resolved) {
+          if (missingNodeIds.has(source.id)) {
+            let id = NodeId.make(crypto.randomUUID());
+            while (Object.hasOwn(graph.nodes, id) || nodes.some((node) => node.id === id))
+              id = NodeId.make(crypto.randomUUID());
+            const position = {
+              x: options.position.x + source.position.x - anchor.x,
+              y: options.position.y + source.position.y - anchor.y,
+            };
+            if (!Clipboard.validPosition(position))
+              return yield* new Clipboard.InvalidError({
+                reason: "Pasted position exceeds limits",
+              });
+            const node = { ...source, id, position };
+            nodes.push(node);
+            remap.set(source.id, node.id);
+            const capturedIO = fragment.nodeIO?.[source.id];
+            if (capturedIO !== undefined) nodeIO[node.id] = capturedIO;
+            continue;
+          }
           const node = yield* Effect.gen(function* () {
             const schema = yield* packages.getSchema(source.schema);
             if (schema.internal === true)
@@ -704,27 +660,13 @@ export const layer = Layer.effect(Service)(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
               : undefined);
-          if (outputIO === undefined || inputIO === undefined) continue;
-          const mapPort = (nodeId: string, id: IoId, direction: "output" | "input") => {
-            const source = fragment.nodes.find((node) => node.id === nodeId);
-            const target = resolved.find((node) => node.id === nodeId);
-            if (!source || !target || source.schema.schema === target.schema.schema) return id;
-            const before = fragment.nodeIO?.[nodeId];
-            const after = nodeIO[remap.get(nodeId)!];
-            if (!before || !after) return id;
-            for (const kind of direction === "output"
-              ? (["dataOutputs", "executionOutputs"] as const)
-              : (["dataInputs", "executionInputs"] as const)) {
-              const index = before[kind].findIndex((port) => port.id === id);
-              if (index >= 0) return after[kind][index]?.id ?? id;
-            }
-            return id;
-          };
-          const source = {
-            ...original,
-            outIoId: mapPort(original.outNodeId, original.outIoId, "output"),
-            inIoId: mapPort(original.inNodeId, original.inIoId, "input"),
-          };
+          if (outputIO === undefined || inputIO === undefined) {
+            if (isExternal) continue;
+            return yield* new Clipboard.InvalidError({
+              reason: `Connection ${original.id}: unavailable schema IO was not copied`,
+            });
+          }
+          const source = original;
           const inputKey = JSON.stringify([inNodeId, source.inIoId]);
           if (
             isExternal &&
