@@ -92,6 +92,17 @@ export function createEditorCommands(
         return io === undefined ? [] : [[node.id, io]];
       }),
     );
+    const capturedSchemas = Object.fromEntries(
+      nodes.flatMap((node) => {
+        const plugin = editor.store.packages.find(
+          (candidate) => candidate.id === node.schema.package,
+        );
+        const schema = plugin?.schemas.find((candidate) => candidate.id === node.schema.schema);
+        return plugin === undefined || schema === undefined
+          ? []
+          : [[node.id, { pluginName: plugin.name, schemaName: schema.name }]];
+      }),
+    );
     const externalConnections = graph.connections.filter(
       (connection) => ids.has(connection.inNodeId) !== ids.has(connection.outNodeId),
     );
@@ -110,6 +121,7 @@ export function createEditorCommands(
             connections: internalConnections,
             externalConnections,
             nodeIO: capturedIO,
+            nodeSchemas: capturedSchemas,
             ...(session === undefined ? {} : { source: { session, graphId } }),
           });
           await runPromise(Clipboard.decode(text));
@@ -143,19 +155,19 @@ export function createEditorCommands(
           if (!canEdit() || client() !== c)
             throw new Error("Editor connection changed; nothing was pasted");
           let bindings: ReadonlyArray<Clipboard.Binding> = [];
-          let forceMissingSchemas = false;
+          let skipMissingSchemas = false;
           let result = await runPromise(
             c
-              .PasteFragment({ graphId, text, position: anchor, bindings, forceMissingSchemas })
+              .PasteFragment({ graphId, text, position: anchor, bindings, skipMissingSchemas })
               .pipe(Effect.result),
           );
           while (Result.isFailure(result)) {
             if (result.failure._tag === "ClipboardMissingSchemas") {
               setClipboardMissingSchemas(result.failure.schemas);
-              forceMissingSchemas = await new Promise<boolean>((resolve) => {
+              skipMissingSchemas = await new Promise<boolean>((resolve) => {
                 resolveMissingSchemas = resolve;
               });
-              if (!forceMissingSchemas) return;
+              if (!skipMissingSchemas) return;
             } else if (result.failure._tag === "ClipboardRebindRequired") {
               setClipboardRebind(result.failure.requests);
               const chosen = await new Promise<ReadonlyArray<Clipboard.Binding> | undefined>(
@@ -179,7 +191,7 @@ export function createEditorCommands(
               throw new Error("Editor connection changed; nothing was pasted");
             result = await runPromise(
               c
-                .PasteFragment({ graphId, text, position: anchor, bindings, forceMissingSchemas })
+                .PasteFragment({ graphId, text, position: anchor, bindings, skipMissingSchemas })
                 .pipe(Effect.result),
             );
           }

@@ -158,7 +158,7 @@ class PasteFragment extends Rpc.make("PasteFragment", {
     text: Schema.String,
     position: Schema.Struct({ x: Schema.Number, y: Schema.Number }),
     bindings: Schema.optional(Schema.Array(Clipboard.Binding)),
-    forceMissingSchemas: Schema.optional(Schema.Boolean),
+    skipMissingSchemas: Schema.optional(Schema.Boolean),
   },
   success: EditorEvent.FragmentPasted,
   error: Schema.Union([
@@ -534,7 +534,7 @@ export const handlerLayer = EditorRpcs.toLayer(
           text: payload.text,
           position: payload.position,
           bindings: payload.bindings ?? [],
-          forceMissingSchemas: payload.forceMissingSchemas ?? false,
+          skipMissingSchemas: payload.skipMissingSchemas ?? false,
         }),
       GetClipboardIdentity: () => editor.fragment.identity(),
       DeleteFragment: (payload) =>

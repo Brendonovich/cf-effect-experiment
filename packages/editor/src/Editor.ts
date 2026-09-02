@@ -116,7 +116,7 @@ export interface Interface {
       readonly text: string;
       readonly position: { readonly x: number; readonly y: number };
       readonly bindings?: ReadonlyArray<Clipboard.Binding>;
-      readonly forceMissingSchemas?: boolean;
+      readonly skipMissingSchemas?: boolean;
     }) => Effect.Effect<
       EditorEvent.FragmentPasted,
       | PersistenceError
@@ -496,7 +496,7 @@ export const layer = Layer.effect(Service)(
         readonly text: string;
         readonly position: { readonly x: number; readonly y: number };
         readonly bindings?: ReadonlyArray<Clipboard.Binding>;
-        readonly forceMissingSchemas?: boolean;
+        readonly skipMissingSchemas?: boolean;
       }) {
         const fragment = yield* Clipboard.decode(options.text);
         if (!Clipboard.validPosition(options.position))
@@ -504,6 +504,7 @@ export const layer = Layer.effect(Service)(
         const graph = yield* persistence.loadGraph(options.graphID);
         const project = yield* persistence.loadProject();
         const sameProject = fragment.source?.session === clipboardSession;
+        const availablePackages = yield* packages.getPackages();
         const requests: Array<Clipboard.RebindRequest> = [];
         const resolved: Array<Node.Model> = [];
         const missingNodeIds = new Set<string>();
@@ -521,10 +522,22 @@ export const layer = Layer.effect(Service)(
             });
           if (schema === undefined) {
             const key = JSON.stringify([source.schema.package, source.schema.schema]);
-            missingSchemas.set(key, source.schema);
-            if (!options.forceMissingSchemas) continue;
             missingNodeIds.add(source.id);
-            resolved.push(source);
+            const names = fragment.nodeSchemas?.[source.id];
+            missingSchemas.set(key, {
+              ...source.schema,
+              pluginName:
+                names?.pluginName ??
+                availablePackages.find((candidate) => candidate.id === source.schema.package)
+                  ?.name ??
+                source.schema.package,
+              schemaName:
+                names?.schemaName ??
+                source.schema.schema
+                  .replace(/^(?:emit|on|call):/, "")
+                  .replace(/[-_:]+/g, " ")
+                  .replace(/\b\w/g, (character) => character.toUpperCase()),
+            });
             continue;
           }
           const properties = { ...source.properties };
@@ -559,7 +572,7 @@ export const layer = Layer.effect(Service)(
           }
           resolved.push({ ...source, properties });
         }
-        if (missingSchemas.size > 0 && !options.forceMissingSchemas)
+        if (missingSchemas.size > 0 && !options.skipMissingSchemas)
           return yield* new Clipboard.MissingSchemas({ schemas: [...missingSchemas.values()] });
         if (requests.length > 0) return yield* new Clipboard.RebindRequired({ requests });
         const nodes: Array<Node.Model> = [];
@@ -570,25 +583,6 @@ export const layer = Layer.effect(Service)(
           y: Math.min(...fragment.nodes.map((node) => node.position.y)),
         };
         for (const source of resolved) {
-          if (missingNodeIds.has(source.id)) {
-            let id = NodeId.make(crypto.randomUUID());
-            while (Object.hasOwn(graph.nodes, id) || nodes.some((node) => node.id === id))
-              id = NodeId.make(crypto.randomUUID());
-            const position = {
-              x: options.position.x + source.position.x - anchor.x,
-              y: options.position.y + source.position.y - anchor.y,
-            };
-            if (!Clipboard.validPosition(position))
-              return yield* new Clipboard.InvalidError({
-                reason: "Pasted position exceeds limits",
-              });
-            const node = { ...source, id, position };
-            nodes.push(node);
-            remap.set(source.id, node.id);
-            const capturedIO = fragment.nodeIO?.[source.id];
-            if (capturedIO !== undefined) nodeIO[node.id] = capturedIO;
-            continue;
-          }
           const node = yield* Effect.gen(function* () {
             const schema = yield* packages.getSchema(source.schema);
             if (schema.internal === true)
@@ -661,6 +655,8 @@ export const layer = Layer.effect(Service)(
           ),
         );
         for (const original of [...fragment.connections, ...external]) {
+          if (missingNodeIds.has(original.outNodeId) || missingNodeIds.has(original.inNodeId))
+            continue;
           const isExternal = external.includes(original);
           const outNodeId = remap.get(original.outNodeId) ?? original.outNodeId;
           const inNodeId = remap.get(original.inNodeId) ?? original.inNodeId;

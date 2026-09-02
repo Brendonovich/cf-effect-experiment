@@ -158,6 +158,10 @@ it("copies ordinary event nodes and internal edges, skipping only internal schem
     version: 1,
     nodes: [{ id: "a" }, { id: "b" }],
     connections: [edge],
+    nodeSchemas: {
+      a: { pluginName: "Test", schemaName: "normal" },
+      b: { pluginName: "Test", schemaName: "normal" },
+    },
   });
   await state.commands.copyNodes(["a"], true);
   await state.commands.pasteNodes({ x: 13, y: 27 });
@@ -347,8 +351,15 @@ it("rebind cancellation never inserts nodes and confirmation sends explicit mapp
   expect(state.selected()).toEqual(["fresh"]);
 });
 
-it("cancels or force-inserts fragments with missing schemas", async () => {
-  const schemas: Clipboard.MissingSchema[] = [{ package: "missing", schema: "node" }];
+it("cancels or skips nodes with missing schemas", async () => {
+  const schemas: Clipboard.MissingSchema[] = [
+    {
+      package: "missing",
+      schema: "emit:node",
+      pluginName: "Missing Plugin",
+      schemaName: "Node Created",
+    },
+  ];
   const requireConfirmation = () => Effect.fail(new Clipboard.MissingSchemas({ schemas }));
 
   const cancelled = setup();
@@ -372,7 +383,7 @@ it("cancels or force-inserts fragments with missing schemas", async () => {
   expect(confirmed.pasteFragment).toHaveBeenCalledTimes(2);
   expect(confirmed.pasteFragment.mock.calls[1]![0]).toMatchObject({
     bindings: [],
-    forceMissingSchemas: true,
+    skipMissingSchemas: true,
   });
   expect(confirmed.selected()).toEqual(["fresh"]);
 });

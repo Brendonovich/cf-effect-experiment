@@ -202,7 +202,7 @@ it.layer(TestLayer)((it) => {
   );
 
   it.effect(
-    "lists missing schemas and force-inserts their nodes with captured IO, defaults and wires",
+    "lists missing schemas by name and skips their nodes and connections on confirmation",
     () =>
       Effect.gen(function* () {
         const editor = yield* setup;
@@ -239,6 +239,9 @@ it.layer(TestLayer)((it) => {
           ...fragment,
           nodes: [node("a", 0), eventNode],
           nodeIO: { event: sourceIO },
+          nodeSchemas: {
+            event: { pluginName: "Project Events", schemaName: "Stream Started" },
+          },
           connections: [{ ...fragment.connections[0], inNodeId: "event", inIoId: "field:old" }],
         });
         const before = yield* editor.project.get();
@@ -249,35 +252,27 @@ it.layer(TestLayer)((it) => {
           Result.isFailure(result) &&
             result.failure._tag === "ClipboardMissingSchemas" &&
             result.failure.schemas,
-        ).toEqual([{ package: "project-events", schema: "emit:old" }]);
+        ).toEqual([
+          {
+            package: "project-events",
+            schema: "emit:old",
+            pluginName: "Project Events",
+            schemaName: "Stream Started",
+          },
+        ]);
         expect(yield* editor.project.get()).toEqual(before);
         const pasted = yield* editor.fragment.paste({
           graphID: "destination",
           text: eventText,
           position: { x: 0, y: 0 },
-          forceMissingSchemas: true,
+          skipMissingSchemas: true,
         });
-        expect(pasted.nodes[1]!.schema.schema).toBe("emit:old");
-        expect(pasted.nodes[1]!.inputDefaults).toEqual({ "field:old": "preserved" });
-        expect(pasted.nodeIO[pasted.nodes[1]!.id]).toEqual(sourceIO);
-        expect(pasted.connections[0]!.inIoId).toBe("field:old");
-
-        const beforeUnverifiable = yield* editor.project.get();
-        const withoutIO = JSON.parse(eventText) as Record<string, unknown>;
-        delete withoutIO.nodeIO;
-        expect(
-          Result.isFailure(
-            yield* editor.fragment
-              .paste({
-                graphID: "destination",
-                text: JSON.stringify(withoutIO),
-                position: { x: 0, y: 0 },
-                forceMissingSchemas: true,
-              })
-              .pipe(Effect.result),
-          ),
-        ).toBe(true);
-        expect(yield* editor.project.get()).toEqual(beforeUnverifiable);
+        expect(pasted.nodes).toHaveLength(1);
+        expect(pasted.nodes[0]!.schema).toEqual(ref);
+        expect(pasted.connections).toEqual([]);
+        expect(Object.values((yield* editor.project.get()).graphs.destination!.nodes)).toEqual(
+          pasted.nodes,
+        );
       }),
   );
   it.effect(

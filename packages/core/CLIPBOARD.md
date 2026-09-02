@@ -21,13 +21,12 @@ This intentionally avoids trusting coincidentally equal project/graph/node IDs.
 Resource references use constant IDs and exact `{ package, resource }` compatibility.
 Foreign or missing resource references require explicit compatible-constant choices.
 Schemas are never rebound. Missing schemas are listed for confirmation and can be
-force-inserted with their original references. Captured IO preserves validated ports
-and connections for the live session, but is not persisted; unavailable nodes render
-without ports after reconnect. Every retry revalidates against current destination
-state; cancel inserts nothing.
+removed along with their connections before the available fragment is pasted. Copied
+schema metadata provides plugin and schema display names for this confirmation. Every
+retry revalidates against current destination state; cancel inserts nothing.
 
 Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`).
-Missing event definitions can be force-inserted but are not rebound to other events.
+Missing event definitions are removed rather than rebound to other events.
 That PR is not merged into this branch; actual event-runtime integration must be
 verified after combining the branches. Function definitions require their package's
 generated schema/IO contract; system entry/return nodes must be internal.

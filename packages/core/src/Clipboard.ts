@@ -16,6 +16,12 @@ export const Fragment = Schema.Struct({
   source: Schema.optional(Schema.Struct({ session: Schema.String, graphId: Schema.String })),
   externalConnections: Schema.optional(Schema.Array(Connection.Model)),
   nodeIO: Schema.optional(Schema.Record(Schema.String, NodeIO)),
+  nodeSchemas: Schema.optional(
+    Schema.Record(
+      Schema.String,
+      Schema.Struct({ pluginName: Schema.String, schemaName: Schema.String }),
+    ),
+  ),
 });
 export type Fragment = typeof Fragment.Type;
 
@@ -47,6 +53,8 @@ export class RebindRequired extends Schema.TaggedError<RebindRequired>()(
 export const MissingSchema = Schema.Struct({
   package: Schema.String,
   schema: Schema.String,
+  pluginName: Schema.String,
+  schemaName: Schema.String,
 });
 export type MissingSchema = typeof MissingSchema.Type;
 export class MissingSchemas extends Schema.TaggedError<MissingSchemas>()(

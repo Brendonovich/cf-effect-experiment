@@ -45,26 +45,25 @@ export function ClipboardMissingSchemas(props: {
       onCancel={() => props.finish(false)}
     >
       <h2>Missing node schemas</h2>
-      <p>The following schemas are not available in this project:</p>
+      <p>The following node schemas are not available in this project:</p>
       <ul sx={styles.list}>
         <For each={props.schemas}>
           {(schema) => (
             <li>
-              {schema.package}/{schema.schema}
+              {schema.pluginName}: {schema.schemaName}
             </li>
           )}
         </For>
       </ul>
       <p>
-        You can paste these nodes anyway, but they cannot run or be fully validated until their
-        schemas are available.
+        Nodes using these schemas and their connections will be removed from the pasted fragment.
       </p>
       <div sx={styles.actions}>
         <Button type="button" onClick={() => props.finish(false)}>
           Cancel paste
         </Button>
         <Button type="button" variant="primary" onClick={() => props.finish(true)}>
-          Paste anyway
+          Paste available nodes
         </Button>
       </div>
     </dialog>
