@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
-import { For } from "solid-js";
+import { createSignal, For } from "solid-js";
 
 import {
   constants,
@@ -42,6 +42,8 @@ const meta: Meta<typeof NavigationSidebar> = {
     onCreateConstant: noop,
     onRenameConstant: noop,
     onSelectConstant: noop,
+    onSetDefaultConstant: noop,
+    canEditConstants: true,
     onDeleteConstant: noop,
     resourceDefinition: (resource) => {
       const pkg = packages.find((candidate) => candidate.id === resource.package);
@@ -90,4 +92,45 @@ export const Sections: Story = {
       </For>
     </div>
   ),
+};
+
+export const DefaultConstants: Story = {
+  args: { section: "constants" },
+  render: (args) => {
+    const [items, setItems] = createSignal(() => args.constants);
+    return (
+      <NavigationSidebar
+        {...args}
+        constants={items()}
+        onRenameConstant={async (id, name) => {
+          await new Promise<void>((resolve) => setTimeout(resolve, 500));
+          setItems((current) => {
+            const constant = current[id];
+            return constant ? { ...current, [id]: { ...constant, name } } : current;
+          });
+        }}
+        onDeleteConstant={(id) => {
+          setItems((current) => {
+            const { [id]: removed, ...remaining } = current;
+            return remaining;
+          });
+        }}
+        onSetDefaultConstant={(id) => {
+          const selected = items()[id];
+          if (!selected) return;
+          setItems((current) =>
+            Object.fromEntries(
+              Object.entries(current).map(([key, constant]) => [
+                key,
+                constant.resource.package === selected.resource.package &&
+                constant.resource.resource === selected.resource.resource
+                  ? { ...constant, isDefault: key === id }
+                  : constant,
+              ]),
+            ),
+          );
+        }}
+      />
+    );
+  },
 };

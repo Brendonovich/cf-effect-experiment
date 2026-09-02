@@ -1,9 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
+import { colors } from "../tokens.stylex.ts";
 import { createPresence } from "./createPresence";
 import { createStateMachine } from "./createStateMachine.ts";
-import { colors } from "../tokens.stylex.ts";
 
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px)" },
@@ -61,13 +61,36 @@ const styles = stylex.create({
     borderRadius: 4,
     boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
     color: colors.gray12,
+    display: "flex",
+    flexDirection: "column",
     fontSize: 11,
     maxHeight: 200,
-    overflowY: "auto",
+    overflow: "hidden",
     padding: 2,
     position: "fixed",
     zIndex: 50,
   },
+  search: {
+    backgroundColor: colors.gray4,
+    border: 0,
+    borderRadius: 2,
+    color: colors.gray12,
+    flexShrink: 0,
+    fontSize: 11,
+    height: 28,
+    marginBottom: 2,
+    minWidth: 0,
+    paddingInline: 6,
+    width: "100%",
+    "::placeholder": { color: colors.gray11 },
+  },
+  options: {
+    minHeight: 0,
+    overflowY: "auto",
+    overscrollBehaviorY: "contain",
+    position: "relative",
+  },
+  empty: { color: colors.gray11, padding: "8px 6px" },
   showing: {
     animationDuration: { default: "150ms", "@media (prefers-reduced-motion: reduce)": "1ms" },
     animationName: enter,
@@ -102,6 +125,17 @@ export function Select(props: {
 }) {
   let root: HTMLSpanElement | undefined;
   let trigger: HTMLButtonElement | undefined;
+  const searchable = () => props.options.length > 10;
+  const [search, setSearch] = createSignal("");
+  const options = createMemo(() => {
+    const query = searchable() ? search().trim().toLowerCase() : "";
+    return query === ""
+      ? props.options
+      : props.options.filter(
+          (option) =>
+            option.name.toLowerCase().includes(query) || option.id.toLowerCase().includes(query),
+        );
+  });
   const [menuState, { open, close, highlight, move }] = createStateMachine(
     {
       context: { highlightedIndex: 0 },
@@ -110,6 +144,7 @@ export function Select(props: {
     {
       open(state) {
         if (props.options.length === 0) return;
+        setSearch("");
         state.context.highlightedIndex = Math.max(
           0,
           props.options.findIndex((option) => option.id === props.value),
@@ -128,6 +163,7 @@ export function Select(props: {
           return;
         }
         if (state.mode === "closed") {
+          setSearch("");
           state.context.highlightedIndex = Math.max(
             0,
             props.options.findIndex((option) => option.id === props.value),
@@ -135,8 +171,9 @@ export function Select(props: {
           state.mode = "open";
           return;
         }
+        if (options().length === 0) return;
         state.context.highlightedIndex = Math.min(
-          props.options.length - 1,
+          options().length - 1,
           Math.max(0, state.context.highlightedIndex + direction),
         );
       },
@@ -158,7 +195,7 @@ export function Select(props: {
   };
   const selectHighlighted = () => {
     if (menuState.mode === "closed") return;
-    const option = props.options[menuState.context.highlightedIndex];
+    const option = options()[menuState.context.highlightedIndex];
     if (option === undefined) return;
     props.onChange(option.id);
     close();
@@ -172,6 +209,62 @@ export function Select(props: {
       bounds.bottom + 4 + height > innerHeight ? bounds.top - height - 4 : bounds.bottom + 4;
     return { left: `${bounds.left}px`, top: `${top}px`, width: `${bounds.width}px` };
   };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.isComposing) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      move(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Enter" && isOpen()) {
+      event.preventDefault();
+      selectHighlighted();
+    } else if (event.key === "Escape" && isOpen()) {
+      event.preventDefault();
+      close();
+      trigger?.focus();
+    } else if (event.key === "Tab") {
+      close();
+    }
+  };
+
+  createEffect(
+    () => ({ options: options(), search: search(), value: props.value }),
+    ({ options, search, value }) => {
+      highlight(
+        search.trim()
+          ? 0
+          : Math.max(
+              0,
+              options.findIndex((option) => option.id === value),
+            ),
+      );
+    },
+  );
+  createEffect(
+    () => isOpen() && searchable() && menu(),
+    (element) => {
+      if (element) element.querySelector("input")?.focus({ preventScroll: true });
+    },
+  );
+  createEffect(
+    () => ({
+      open: isOpen(),
+      element: menu(),
+      index: menuState.context.highlightedIndex,
+      options: options(),
+    }),
+    ({ open, element, index }) => {
+      if (!open) return;
+      const list = element?.querySelector<HTMLElement>('[role="listbox"]');
+      const option = list?.querySelectorAll<HTMLElement>('[role="option"]')[index];
+      if (!list || !option) return;
+      const top = option.offsetTop;
+      const bottom = top + option.offsetHeight;
+      if (top < list.scrollTop) list.scrollTop = top;
+      else if (bottom > list.scrollTop + list.clientHeight)
+        list.scrollTop = bottom - list.clientHeight;
+    },
+  );
 
   createEffect(
     () => props.options.length,
@@ -188,19 +281,23 @@ export function Select(props: {
           close();
         }
       };
+      const closeOnOutsideScroll = (event: Event) => {
+        if (event.target instanceof globalThis.Node && menu()?.contains(event.target)) return;
+        close();
+      };
       window.addEventListener("pointerdown", closeOnOutsideClick);
       window.addEventListener("resize", close);
-      window.addEventListener("scroll", close, true);
+      window.addEventListener("scroll", closeOnOutsideScroll, true);
       return () => {
         window.removeEventListener("pointerdown", closeOnOutsideClick);
         window.removeEventListener("resize", close);
-        window.removeEventListener("scroll", close, true);
+        window.removeEventListener("scroll", closeOnOutsideScroll, true);
       };
     },
   );
 
   return (
-    <span ref={root} sx={styles.root}>
+    <span ref={root} sx={styles.root} onKeyDown={onKeyDown}>
       <button
         ref={trigger}
         type="button"
@@ -214,18 +311,6 @@ export function Select(props: {
         aria-haspopup="listbox"
         aria-expanded={isOpen() ? "true" : "false"}
         onClick={() => (isOpen() ? close() : open())}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            move(event.key === "ArrowDown" ? 1 : -1);
-          } else if (event.key === "Enter" && isOpen()) {
-            event.preventDefault();
-            selectHighlighted();
-          } else if (event.key === "Escape" && isOpen()) {
-            event.preventDefault();
-            close();
-          }
-        }}
       >
         <span sx={[styles.label, selected() ? null : styles.placeholder]}>{label()}</span>
         <svg
@@ -246,7 +331,6 @@ export function Select(props: {
       <Show when={menuPresence.present()}>
         <div
           ref={setMenu}
-          role="listbox"
           sx={[
             styles.menu,
             props.appearance,
@@ -254,28 +338,47 @@ export function Select(props: {
           ]}
           style={position()}
         >
-          <For each={props.options}>
-            {(option, index) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={option.id === props.value ? "true" : "false"}
-                sx={[
-                  styles.option,
-                  props.appearance,
-                  menuState.context.highlightedIndex === index() ? styles.highlighted : null,
-                ]}
-                onPointerEnter={() => highlight(index())}
-                onClick={() => {
-                  props.onChange(option.id);
-                  close();
-                  trigger?.focus();
-                }}
-              >
-                {option.name}
-              </button>
-            )}
-          </For>
+          <Show when={searchable()}>
+            <input
+              type="search"
+              aria-label="Search options"
+              placeholder="Search..."
+              autocomplete="off"
+              spellcheck={false}
+              sx={[styles.search, styles.focus]}
+              value={search()}
+              onInput={(event) => setSearch(event.currentTarget.value)}
+            />
+          </Show>
+          <div role="listbox" sx={styles.options}>
+            <For each={options()}>
+              {(option, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={option.id === props.value ? "true" : "false"}
+                  sx={[
+                    styles.option,
+                    props.appearance,
+                    menuState.context.highlightedIndex === index() ? styles.highlighted : null,
+                  ]}
+                  onPointerEnter={() => highlight(index())}
+                  onClick={() => {
+                    props.onChange(option.id);
+                    close();
+                    trigger?.focus();
+                  }}
+                >
+                  {option.name}
+                </button>
+              )}
+            </For>
+          </div>
+          <Show when={options().length === 0}>
+            <div role="status" sx={styles.empty}>
+              No matching options
+            </div>
+          </Show>
         </div>
       </Show>
     </span>

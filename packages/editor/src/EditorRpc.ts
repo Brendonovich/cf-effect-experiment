@@ -312,7 +312,11 @@ class GetPluginSettingsCapabilities extends Rpc.make("GetPluginSettingsCapabilit
 class CreateResourceConstant extends Rpc.make("CreateResourceConstant", {
   payload: { resource: ResourceConstant.ResourceRef },
   success: EditorEvent.ResourceConstantCreated,
-  error: Schema.Union([PersistenceError, ResourceConstant.InvalidResourceError]),
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    ResourceConstant.InvalidResourceError,
+  ]),
 }) {}
 
 class RenameResourceConstant extends Rpc.make("RenameResourceConstant", {
@@ -341,6 +345,12 @@ class DeleteResourceConstant extends Rpc.make("DeleteResourceConstant", {
     ResourceConstant.NotFoundError,
     ResourceConstant.InUseError,
   ]),
+}) {}
+
+class SetDefaultResourceConstant extends Rpc.make("SetDefaultResourceConstant", {
+  payload: { constantId: Schema.String },
+  success: EditorEvent.ResourceConstantDefaultChanged,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, ResourceConstant.NotFoundError]),
 }) {}
 
 class GetResourceValues extends Rpc.make("GetResourceValues", {
@@ -402,6 +412,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.EngineStateChanged,
     EditorEvent.PluginClientStateDirty,
     EditorEvent.ResourceConstantCreated,
+    EditorEvent.ResourceConstantDefaultChanged,
     EditorEvent.ResourceConstantUpdated,
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
@@ -447,6 +458,7 @@ export const EditorRpcs = RpcGroup.make(
   RenameResourceConstant,
   SelectResourceConstant,
   DeleteResourceConstant,
+  SetDefaultResourceConstant,
   GetResourceValues,
   ReloadResource,
   GetCredentialCatalog,
@@ -582,6 +594,7 @@ export const handlerLayer = EditorRpcs.toLayer(
       RenameResourceConstant: ({ constantId, name }) => editor.constant.rename(constantId, name),
       SelectResourceConstant: ({ constantId, value }) => editor.constant.select(constantId, value),
       DeleteResourceConstant: ({ constantId }) => editor.constant.delete(constantId),
+      SetDefaultResourceConstant: ({ constantId }) => editor.constant.setDefault(constantId),
       GetResourceValues: ({ package: pluginId, resource }) =>
         editor.engine.getResourceValues(pluginId, resource),
       ReloadResource: ({ package: pluginId, resource }) =>

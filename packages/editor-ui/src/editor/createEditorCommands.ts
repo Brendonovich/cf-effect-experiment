@@ -60,10 +60,8 @@ export function createEditorCommands(
   const renameConstant = (constantId: string, name: string) => {
     const c = client();
     if (c && canEdit())
-      runFork(
-        applyMutation(c.RenameResourceConstant({ constantId, name })).pipe(
-          Effect.tapError(Effect.log),
-        ),
+      return runPromise(
+        applyMutation(c.RenameResourceConstant({ constantId, name })).pipe(Effect.asVoid),
       );
   };
   const selectConstant = (constantId: string, value: Schema.Json) => {
@@ -80,6 +78,15 @@ export function createEditorCommands(
     if (c && canEdit())
       runFork(
         applyMutation(c.DeleteResourceConstant({ constantId })).pipe(Effect.tapError(Effect.log)),
+      );
+  };
+  const setDefaultConstant = (constantId: string) => {
+    const c = client();
+    if (c && canEdit())
+      runFork(
+        applyMutation(c.SetDefaultResourceConstant({ constantId })).pipe(
+          Effect.tapError(Effect.log),
+        ),
       );
   };
   const deleteNode = (nodeId: string) => {
@@ -332,6 +339,7 @@ export function createEditorCommands(
     createConstant,
     renameConstant,
     selectConstant,
+    setDefaultConstant,
     deleteConstant,
     createGraph,
     createNode,

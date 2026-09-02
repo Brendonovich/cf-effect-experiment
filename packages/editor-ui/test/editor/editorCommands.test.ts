@@ -8,6 +8,7 @@ import {
   Node,
   PackageId,
   Project,
+  ResourceConstant,
   SchemaId,
   type NodeIO,
 } from "@macrograph/core";
@@ -68,6 +69,7 @@ const setup = () =>
     const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>("main");
     editor.setProject({ ...Project.empty(), graphs: { main: Graph.empty("main") } }, {});
     const rpc = {
+      RenameResourceConstant: vi.fn<RpcMethod<"RenameResourceConstant">>(),
       CreateNode: vi.fn<RpcMethod<"CreateNode">>((payload) =>
         Effect.succeed({
           _tag: "NodeCreated",
@@ -125,6 +127,42 @@ const setup = () =>
     );
     return { editor, rpc, commands };
   });
+
+describe("constant renaming", () => {
+  it("resolves only after the confirmed name is applied to the store", async () => {
+    const { editor, rpc, commands } = setup();
+    const constant = {
+      id: ResourceConstant.Id.make("constant"),
+      name: "Old name",
+      resource: { package: "test", resource: "resource" },
+    };
+    editor.applyEvent({ _tag: "ResourceConstantCreated", actor: Actor.system, constant });
+    let finishRename = (_event: EditorEvent.ResourceConstantUpdated) => {};
+    rpc.RenameResourceConstant.mockImplementationOnce(() =>
+      Effect.promise(
+        () =>
+          new Promise<EditorEvent.ResourceConstantUpdated>((resolve) => {
+            finishRename = resolve;
+          }),
+      ),
+    );
+    const renamed = commands.renameConstant(constant.id, "New name");
+    expect(renamed).toBeInstanceOf(Promise);
+    flush();
+    expect(editor.store.project!.constants[constant.id]!.name).toBe("Old name");
+    finishRename({
+      _tag: "ResourceConstantUpdated",
+      actor: Actor.system,
+      constant: { ...constant, name: "New name" },
+      nodeIO: {},
+      inputDefaults: {},
+      deletedConnectionIds: {},
+    });
+    await renamed;
+    flush();
+    expect(editor.store.project!.constants[constant.id]!.name).toBe("New name");
+  });
+});
 
 describe("node creation placement", () => {
   it.each([
