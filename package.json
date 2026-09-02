@@ -11,13 +11,13 @@
     "catalog": {
       "@stylexjs/stylex": "0.19.0",
       "@stylexjs/unplugin": "0.19.0",
-      "effect": "4.0.0-beta.107",
-      "@effect/opentelemetry": "4.0.0-beta.107",
-      "@effect/platform-browser": "4.0.0-beta.107",
-      "@effect/platform-bun": "4.0.0-beta.107",
-      "@effect/platform-node": "4.0.0-beta.107",
-      "@effect/platform-node-shared": "4.0.0-beta.107",
-      "@effect/vitest": "4.0.0-beta.107"
+      "effect": "4.0.0-rc.112",
+      "@effect/opentelemetry": "4.0.0-rc.112",
+      "@effect/platform-browser": "4.0.0-rc.112",
+      "@effect/platform-bun": "4.0.0-rc.112",
+      "@effect/platform-node": "4.0.0-rc.112",
+      "@effect/platform-node-shared": "4.0.0-rc.112",
+      "@effect/vitest": "4.0.0-rc.112"
     }
   },
   "type": "module",
@@ -43,7 +43,8 @@
   "pnpm": {
     "patchedDependencies": {
       "alchemy@2.0.0-beta.72": "patches/alchemy@2.0.0-beta.72.patch",
-      "@solidjs/router@2.0.0-next.17": "patches/@solidjs__router@2.0.0-next.17.patch"
+      "@solidjs/router@2.0.0-next.17": "patches/@solidjs__router@2.0.0-next.17.patch",
+      "@opencode-ai/client@0.0.0-beta-18684": "patches/@opencode-ai__client@0.0.0-beta-18684.patch"
     }
   }
 }

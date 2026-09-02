@@ -94,6 +94,7 @@
     { "path": "packages/plugins/logic" },
     { "path": "packages/plugins/math" },
     { "path": "packages/plugins/openai" },
+    { "path": "packages/plugins/opencode" },
     { "path": "packages/plugins/shell" },
     { "path": "packages/plugins/speakerbot" },
     { "path": "packages/plugins/streamdeck" },

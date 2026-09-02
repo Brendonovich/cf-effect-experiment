@@ -18,6 +18,7 @@ import Logic from "@macrograph/plugin-logic";
 import Math from "@macrograph/plugin-math";
 import OBS from "@macrograph/plugin-obs/Deployment/WebSocket";
 import OpenAI from "@macrograph/plugin-openai/Deployment";
+import OpenCode from "@macrograph/plugin-opencode/Deployment";
 import Shell from "@macrograph/plugin-shell/Deployment";
 import SpeakerBot from "@macrograph/plugin-speakerbot/Deployment";
 import StreamDeck from "@macrograph/plugin-streamdeck/Deployment";
@@ -48,6 +49,7 @@ const deployments = [
   LIFX,
   OBS,
   OpenAI,
+  OpenCode,
   Shell,
   SpeakerBot,
   StreamDeck,
@@ -74,6 +76,7 @@ const mounted = Layer.mergeAll(
   PluginHost.deploymentLayer(LIFX),
   PluginHost.deploymentLayer(OBS),
   PluginHost.deploymentLayer(OpenAI),
+  PluginHost.deploymentLayer(OpenCode),
   PluginHost.deploymentLayer(Shell),
   PluginHost.deploymentLayer(SpeakerBot),
   PluginHost.deploymentLayer(StreamDeck),
@@ -155,6 +158,7 @@ describe("Self-hosted plugins", () => {
         ["math", 33],
         ["obs", 209],
         ["openai", 2],
+        ["opencode", 3],
         ["shell", 1],
         ["speakerbot", 6],
         ["streamdeck", 2],

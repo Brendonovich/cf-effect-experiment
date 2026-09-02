@@ -25,6 +25,7 @@
     "@macrograph/plugin-lifx": "workspace:*",
     "@macrograph/plugin-obs": "workspace:*",
     "@macrograph/plugin-openai": "workspace:*",
+    "@macrograph/plugin-opencode": "workspace:*",
     "@macrograph/plugin-speakerbot": "workspace:*",
     "@macrograph/plugin-streamdeck": "workspace:*",
     "@macrograph/plugin-streamlabs": "workspace:*",

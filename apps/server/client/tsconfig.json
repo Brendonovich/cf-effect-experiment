@@ -14,6 +14,7 @@
     { "path": "../../../packages/editor" },
     { "path": "../../../packages/editor-ui" },
     { "path": "../../../packages/execution" },
-    { "path": "../../../packages/plugin" }
+    { "path": "../../../packages/plugin" },
+    { "path": "../../../packages/plugins/opencode" }
   ]
 }

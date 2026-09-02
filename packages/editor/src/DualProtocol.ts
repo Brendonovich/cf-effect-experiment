@@ -1,4 +1,4 @@
-import { Cause, Effect, Queue, Result, Schedule, Scope, Stream, Types } from "effect";
+import { Cause, Effect, Queue, Result, Schedule, Schema, Scope, Stream, Types } from "effect";
 import { RpcClient, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
 
@@ -36,6 +36,7 @@ export const makeDualServerProtocol = (
 > =>
   Effect.gen(function* () {
     const serialization = yield* RpcSerialization.RpcSerialization;
+    const encodeDefect = Schema.encodeSync(serialization.codecFor(Schema.Defect()));
     const disconnects = yield* Queue.make<number>();
 
     let clientId = 0;
@@ -76,7 +77,7 @@ export const makeDualServerProtocol = (
               if (encoded === undefined) return Effect.void;
               return Effect.orDie(writeRaw(frameRpc(encoded)));
             } catch (cause) {
-              const defect = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+              const defect = parser.encode(RpcMessage.ResponseDefectEncoded(encodeDefect(cause)));
               return Effect.orDie(writeRaw(frameRpc(defect ?? new Uint8Array())));
             }
           };
@@ -132,7 +133,9 @@ export const makeDualServerProtocol = (
                       { discard: true },
                     );
                   } catch (cause) {
-                    const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+                    const encoded = parser.encode(
+                      RpcMessage.ResponseDefectEncoded(encodeDefect(cause)),
+                    );
                     return Effect.orDie(writeRaw(frameRpc(encoded ?? new Uint8Array())));
                   }
                 case customFrameTag:
@@ -176,6 +179,8 @@ export const makeDualServerProtocol = (
         supportsAck: false,
         supportsTransferables: false,
         supportsSpanPropagation: true,
+        supportsNotifications: true,
+        codecFor: serialization.codecFor,
       });
     });
 

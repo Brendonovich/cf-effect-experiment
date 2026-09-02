@@ -677,6 +677,7 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
     const state = yield* Cloudflare.DurableObjectState;
 
     const serialization = yield* RpcSerialization.RpcSerialization;
+    const encodeDefect = Schema.encodeSync(serialization.codecFor(Schema.Defect()));
     const disconnects = yield* Queue.make<number>();
 
     let clientId = 0;
@@ -736,7 +737,7 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
           }
           return Effect.orDie(writeRaw(DualProtocol.frameRpc(encoded)));
         } catch (cause) {
-          const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+          const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(encodeDefect(cause)));
           if (encoded === undefined) return Effect.void;
           return Effect.orDie(writeRaw(DualProtocol.frameRpc(encoded)));
         }
@@ -776,7 +777,7 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
               step: constVoid,
             });
           } catch (cause) {
-            const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+            const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(encodeDefect(cause)));
             if (encoded === undefined) return Effect.void;
             return writeRaw(DualProtocol.frameRpc(encoded));
           }
@@ -819,6 +820,8 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
         supportsAck: false,
         supportsTransferables: false,
         supportsSpanPropagation: true,
+        supportsNotifications: true,
+        codecFor: serialization.codecFor,
       });
     });
 

@@ -20,6 +20,7 @@ const serverDeployments = new Set([
   "@macrograph/plugin-logic",
   "@macrograph/plugin-math",
   "@macrograph/plugin-openai",
+  "@macrograph/plugin-opencode",
   "@macrograph/plugin-shell",
   "@macrograph/plugin-speakerbot",
   "@macrograph/plugin-streamdeck",
