@@ -11,46 +11,135 @@ const styles = stylex.create({
   panel: {
     display: "flex",
     flexDirection: "column",
-    gap: 10,
-    padding: 8,
     fontSize: 12,
     minWidth: 0,
   },
-  card: {
+  kindTabs: {
+    alignItems: "center",
+    backgroundColor: colors.gray3,
+    borderBottom: `1px solid ${colors.gray5}`,
     display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    padding: 8,
-    backgroundColor: colors.gray2,
-    borderRadius: 4,
-    minWidth: 0,
+    height: 32,
+    paddingInline: 4,
   },
-  row: { display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" },
-  input: {
-    minWidth: 0,
-    width: "100%",
-    padding: 6,
-    backgroundColor: colors.gray1,
-    color: colors.gray12,
-    border: `1px solid ${colors.gray6}`,
-    borderRadius: 3,
+  kindTab: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    borderRadius: 2,
+    color: colors.gray10,
+    flex: 1,
+    fontSize: 11,
+    fontWeight: 500,
+    height: 24,
+  },
+  activeKind: { backgroundColor: colors.gray5, color: colors.gray12 },
+  iconButton: {
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    borderRadius: 2,
+    color: { default: colors.gray10, ":hover": colors.gray12 },
+    display: "flex",
+    flexShrink: 0,
+    height: 24,
+    justifyContent: "center",
+    marginLeft: 4,
     outline: "none",
-    ":focus": { borderColor: colors.focus },
+    width: 24,
+    ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
   },
-  muted: { color: colors.gray11, fontSize: 11, overflowWrap: "anywhere" },
-  warning: {
-    color: colors.red11,
-    backgroundColor: colors.red2,
-    padding: 8,
-    borderRadius: 4,
-    overflowWrap: "anywhere",
-  },
-  fields: {
+  icon: { height: 15, width: 15 },
+  editor: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
-    borderLeft: `1px solid ${colors.gray6}`,
-    paddingLeft: 6,
+    padding: 8,
+    borderBottom: `1px solid ${colors.gray6}`,
+    minWidth: 0,
+  },
+  editorHeader: { alignItems: "center", display: "flex", gap: 4 },
+  editorTitle: { color: colors.gray11, fontSize: 10, fontWeight: 600, textTransform: "uppercase" },
+  row: { display: "flex", gap: 4, alignItems: "center" },
+  input: {
+    minWidth: 0,
+    width: "100%",
+    height: 24,
+    paddingInline: 6,
+    backgroundColor: colors.gray2,
+    color: colors.gray12,
+    border: 0,
+    borderRadius: 2,
+    boxShadow: `0 0 0 1px ${colors.gray6}`,
+    outline: "none",
+    ":focus": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
+  },
+  nameInput: { fontSize: 12, fontWeight: 500 },
+  muted: { color: colors.gray9, fontSize: 11, overflowWrap: "anywhere" },
+  warning: {
+    color: colors.red11,
+    backgroundColor: colors.red2,
+    padding: 6,
+    borderRadius: 2,
+    overflowWrap: "anywhere",
+  },
+  notice: {
+    backgroundColor: colors.gray3,
+    borderLeft: `2px solid ${colors.focus}`,
+    color: colors.gray11,
+    padding: 6,
+  },
+  alert: { margin: 8 },
+  fields: {
+    display: "flex",
+    flexDirection: "column",
+    backgroundColor: colors.gray1,
+    borderRadius: 3,
+    paddingInline: 6,
+  },
+  member: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+    paddingBlock: 6,
+    borderBottom: `1px solid ${colors.gray5}`,
+  },
+  addMember: { alignSelf: "flex-start", marginBlock: 4 },
+  typeList: { display: "flex", flexDirection: "column" },
+  typeItem: {
+    borderBottom: `1px solid ${colors.gray5}`,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    paddingBlock: 7,
+    paddingInline: 8,
+  },
+  typeName: {
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    borderRadius: 2,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: 500,
+    minWidth: 0,
+    overflow: "hidden",
+    padding: 4,
+    textAlign: "left",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  empty: {
+    color: colors.gray9,
+    fontSize: 12,
+    fontStyle: "italic",
+    padding: 12,
+    textAlign: "center",
+  },
+  dialog: {
+    backgroundColor: colors.gray2,
+    border: `1px solid ${colors.gray6}`,
+    borderRadius: 4,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    margin: 8,
+    padding: 8,
   },
 });
 
@@ -67,17 +156,30 @@ function Fields(props: {
     <div sx={styles.fields}>
       <For each={props.fields.map((_, index) => index)}>
         {(index) => (
-          <div sx={styles.card} data-type-field={index}>
-            <input
-              sx={styles.input}
-              aria-label={`Field ${index + 1} name`}
-              value={props.fields[index]?.name ?? ""}
-              disabled={props.disabled}
-              onInput={(event) => {
-                const field = props.fields[index];
-                if (field) update(index, { ...field, name: event.currentTarget.value });
-              }}
-            />
+          <div sx={styles.member} data-type-field={index}>
+            <div sx={styles.row}>
+              <input
+                sx={styles.input}
+                aria-label={`Field ${index + 1} name`}
+                placeholder="Field name"
+                value={props.fields[index]?.name ?? ""}
+                disabled={props.disabled}
+                onInput={(event) => {
+                  const field = props.fields[index];
+                  if (field) update(index, { ...field, name: event.currentTarget.value });
+                }}
+              />
+              <button
+                type="button"
+                sx={styles.iconButton}
+                aria-label={`Remove field ${index + 1}`}
+                title="Remove field"
+                disabled={props.disabled}
+                onClick={() => props.onChange(props.fields.filter((_, i) => i !== index))}
+              >
+                <IconTablerTrash {...stylex.attrs(styles.icon)} />
+              </button>
+            </div>
             <DataTypePicker
               value={props.fields[index]?.type ?? DataType.String}
               definitions={props.definitions}
@@ -88,26 +190,18 @@ function Fields(props: {
                 if (field) update(index, { ...field, type });
               }}
             />
-            <Button
-              type="button"
-              size="sm"
-              variant="text"
-              disabled={props.disabled}
-              onClick={() => props.onChange(props.fields.filter((_, i) => i !== index))}
-            >
-              Remove field {index + 1}
-            </Button>
           </div>
         )}
       </For>
       <Button
         type="button"
         size="sm"
-        variant="secondary"
+        variant="text"
+        sx={styles.addMember}
         disabled={props.disabled}
         onClick={() => props.onChange([...props.fields, { name: "", type: DataType.String }])}
       >
-        Add field
+        <IconBiPlus {...stylex.attrs(styles.icon)} /> Add field
       </Button>
     </div>
   );
@@ -120,6 +214,7 @@ export function TypeDefinitions(props: {
   onPreview: (change: TypeDefinition.Change) => Promise<TypeDefinition.Impact>;
   onConfirm: (token: string) => Promise<unknown>;
 }) {
+  const [kind, setKind] = createSignal<"Struct" | "Enum">("Struct");
   const [draft, setDraft] = createSignal<DataType.Definition | null>(null);
   const [impact, setImpact] = createSignal<TypeDefinition.Impact | null>(null);
   const [busy, setBusy] = createSignal(false);
@@ -137,8 +232,8 @@ export function TypeDefinitions(props: {
     setError("");
     try {
       setImpact(await props.onPreview(change));
-    } catch (cause) {
-      setError(String(cause));
+    } catch {
+      setError("Could not review this change. Try again.");
     } finally {
       setBusy(false);
     }
@@ -152,8 +247,8 @@ export function TypeDefinitions(props: {
       await props.onConfirm(pending.token);
       setImpact(null);
       setDraft(null);
-    } catch (cause) {
-      setError(`${String(cause)}. Preview the change again before confirming.`);
+    } catch {
+      setError("The project changed before this edit was saved. Review the change again.");
       setImpact(null);
     } finally {
       setBusy(false);
@@ -169,48 +264,81 @@ export function TypeDefinitions(props: {
         : { ...base, _tag: "Enum", variants: [{ name: "", fields: [] }] },
     );
   };
+  const filteredDefinitions = createMemo(() => {
+    const query = props.search.trim().toLowerCase();
+    return Object.values(definitions()).filter(
+      (definition) => definition._tag === kind() && definition.name.toLowerCase().includes(query),
+    );
+  });
   return (
     <section
       sx={styles.panel}
       aria-label="Project types"
       onKeyDown={(event) => event.stopPropagation()}
     >
-      <p sx={styles.muted}>
-        Named project types keep their identity when renamed. Generated operations appear in the
-        node menu automatically.
-      </p>
-      <div sx={styles.row}>
-        <Button type="button" size="sm" disabled={disabled()} onClick={() => create("Struct")}>
-          New struct
-        </Button>
-        <Button type="button" size="sm" disabled={disabled()} onClick={() => create("Enum")}>
-          New enum
-        </Button>
+      <div sx={styles.kindTabs}>
+        <button
+          type="button"
+          sx={[styles.kindTab, kind() === "Struct" ? styles.activeKind : null]}
+          aria-pressed={kind() === "Struct" ? "true" : "false"}
+          onClick={() => setKind("Struct")}
+        >
+          Structs
+        </button>
+        <button
+          type="button"
+          sx={[styles.kindTab, kind() === "Enum" ? styles.activeKind : null]}
+          aria-pressed={kind() === "Enum" ? "true" : "false"}
+          onClick={() => setKind("Enum")}
+        >
+          Enums
+        </button>
+        <button
+          type="button"
+          sx={styles.iconButton}
+          aria-label={`New ${kind() === "Struct" ? "struct" : "enum"}`}
+          title={`New ${kind() === "Struct" ? "struct" : "enum"}`}
+          disabled={disabled()}
+          onClick={() => create(kind())}
+        >
+          <IconBiPlus {...stylex.attrs(styles.icon)} />
+        </button>
       </div>
       <Show when={error()}>
-        <div role="alert" sx={styles.warning}>
+        <div role="alert" sx={[styles.warning, styles.alert]}>
           {error()}
         </div>
       </Show>
       <Show when={draft()}>
         {(value) => (
-          <div sx={styles.card} aria-label="Type authoring">
-            <strong>
+          <div sx={styles.editor} aria-label="Type authoring">
+            <span sx={styles.editorTitle}>
               {definitions()[value().id] ? "Edit" : "Create"}{" "}
               {value()._tag === "Struct" ? "struct" : "tagged enum"}
-            </strong>
-            <label>
-              Name
+            </span>
+            <div sx={styles.editorHeader}>
               <input
-                sx={styles.input}
+                sx={[styles.input, styles.nameInput]}
                 aria-label="Type name"
+                placeholder="Type name"
                 value={value().name}
                 disabled={disabled()}
                 onInput={(event) => setDraft({ ...value(), name: event.currentTarget.value })}
               />
-            </label>
-            <div sx={styles.muted}>
-              Identity: <code>{value().id}</code>
+              <button
+                type="button"
+                sx={styles.iconButton}
+                aria-label="Cancel editing"
+                title="Cancel editing"
+                disabled={busy()}
+                onClick={() => {
+                  setDraft(null);
+                  setImpact(null);
+                  setError("");
+                }}
+              >
+                <IconBiX {...stylex.attrs(styles.icon)} />
+              </button>
             </div>
             <Show
               when={
@@ -239,57 +367,64 @@ export function TypeDefinitions(props: {
                 <>
                   <For each={enumeration().variants.map((_, index) => index)}>
                     {(index) => (
-                      <div sx={styles.card} data-type-variant={index}>
-                        <input
-                          sx={styles.input}
-                          aria-label={`Variant ${index + 1} name`}
-                          value={enumeration().variants[index]?.name ?? ""}
-                          disabled={disabled()}
-                          onInput={(event) =>
-                            setDraft({
-                              ...enumeration(),
-                              variants: enumeration().variants.map((variant, i) =>
-                                i === index
-                                  ? { ...variant, name: event.currentTarget.value }
-                                  : variant,
-                              ),
-                            })
-                          }
-                        />
-                        <Fields
-                          fields={enumeration().variants[index]?.fields ?? []}
-                          definitions={choices()}
-                          disabled={disabled()}
-                          onChange={(fields) =>
-                            setDraft({
-                              ...enumeration(),
-                              variants: enumeration().variants.map((variant, i) =>
-                                i === index ? { ...variant, fields } : variant,
-                              ),
-                            })
-                          }
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="text"
-                          disabled={disabled()}
-                          onClick={() =>
-                            setDraft({
-                              ...enumeration(),
-                              variants: enumeration().variants.filter((_, i) => i !== index),
-                            })
-                          }
-                        >
-                          Remove variant {index + 1}
-                        </Button>
+                      <div sx={styles.fields} data-type-variant={index}>
+                        <div sx={styles.member}>
+                          <div sx={styles.row}>
+                            <input
+                              sx={styles.input}
+                              aria-label={`Variant ${index + 1} name`}
+                              placeholder="Variant name"
+                              value={enumeration().variants[index]?.name ?? ""}
+                              disabled={disabled()}
+                              onInput={(event) =>
+                                setDraft({
+                                  ...enumeration(),
+                                  variants: enumeration().variants.map((variant, i) =>
+                                    i === index
+                                      ? { ...variant, name: event.currentTarget.value }
+                                      : variant,
+                                  ),
+                                })
+                              }
+                            />
+                            <button
+                              type="button"
+                              sx={styles.iconButton}
+                              aria-label={`Remove variant ${index + 1}`}
+                              title="Remove variant"
+                              disabled={disabled()}
+                              onClick={() =>
+                                setDraft({
+                                  ...enumeration(),
+                                  variants: enumeration().variants.filter((_, i) => i !== index),
+                                })
+                              }
+                            >
+                              <IconTablerTrash {...stylex.attrs(styles.icon)} />
+                            </button>
+                          </div>
+                          <Fields
+                            fields={enumeration().variants[index]?.fields ?? []}
+                            definitions={choices()}
+                            disabled={disabled()}
+                            onChange={(fields) =>
+                              setDraft({
+                                ...enumeration(),
+                                variants: enumeration().variants.map((variant, i) =>
+                                  i === index ? { ...variant, fields } : variant,
+                                ),
+                              })
+                            }
+                          />
+                        </div>
                       </div>
                     )}
                   </For>
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
+                    variant="text"
+                    sx={styles.addMember}
                     disabled={disabled()}
                     onClick={() =>
                       setDraft({
@@ -298,7 +433,7 @@ export function TypeDefinitions(props: {
                       })
                     }
                   >
-                    Add variant
+                    <IconBiPlus {...stylex.attrs(styles.icon)} /> Add variant
                   </Button>
                 </>
               )}
@@ -310,7 +445,7 @@ export function TypeDefinitions(props: {
                 disabled={disabled()}
                 onClick={() => void preview({ _tag: "Upsert", definition: value() })}
               >
-                Preview changes
+                Review changes
               </Button>
               <Button
                 type="button"
@@ -323,7 +458,7 @@ export function TypeDefinitions(props: {
                   setError("");
                 }}
               >
-                Cancel editing
+                Cancel
               </Button>
             </div>
           </div>
@@ -331,32 +466,21 @@ export function TypeDefinitions(props: {
       </Show>
       <Show when={impact()}>
         {(pending) => (
-          <div role="dialog" aria-label="Confirm type changes" sx={styles.card}>
+          <div role="dialog" aria-label="Confirm type changes" sx={styles.dialog}>
             <strong>
               {pending().change._tag === "Delete" ? "Delete type?" : "Confirm type changes?"}
             </strong>
-            <p sx={styles.warning}>
+            <p sx={styles.notice}>
               Existing nodes, wires, and defaults are preserved. Incompatible values or missing pins
               remain invalid until you explicitly repair or remove them.
             </p>
-            <strong>Dependent types ({pending().affectedTypes.length})</strong>
-            <For each={pending().affectedTypes} fallback={<span sx={styles.muted}>None</span>}>
-              {(id) => (
-                <span sx={styles.muted}>
-                  {definitions()[id]?.name ?? id} ({id})
-                </span>
-              )}
-            </For>
-            <strong>Impacted nodes ({pending().nodes.length})</strong>
-            <For each={pending().nodes} fallback={<span sx={styles.muted}>None</span>}>
-              {(node) => (
-                <div sx={styles.muted}>
-                  {props.project?.graphs[node.graphId]?.name ?? node.graphId} /{" "}
-                  {props.project?.graphs[node.graphId]?.nodes[node.nodeId]?.name ?? node.nodeId}
-                  <For each={node.reasons}>{(reason) => <div>{reason}</div>}</For>
-                </div>
-              )}
-            </For>
+            <Show when={pending().affectedTypes.length > 0 || pending().nodes.length > 0}>
+              <span sx={styles.muted}>
+                This affects {pending().affectedTypes.length}{" "}
+                {pending().affectedTypes.length === 1 ? "dependent type" : "dependent types"} and{" "}
+                {pending().nodes.length} {pending().nodes.length === 1 ? "node" : "nodes"}.
+              </span>
+            </Show>
             <div sx={styles.row}>
               <Button
                 type="button"
@@ -382,51 +506,50 @@ export function TypeDefinitions(props: {
           </div>
         )}
       </Show>
-      <For
-        each={Object.values(definitions()).filter((definition) =>
-          `${definition.name} ${definition.id}`
-            .toLowerCase()
-            .includes(props.search.trim().toLowerCase()),
-        )}
-        fallback={<span sx={styles.muted}>No project types found.</span>}
-      >
-        {(definition) => (
-          <div sx={styles.card}>
-            <strong>{definition.name}</strong>
-            <span sx={styles.muted}>
-              {definition._tag} / {definition.id}
+      <div sx={styles.typeList}>
+        <For
+          each={filteredDefinitions()}
+          fallback={
+            <span sx={styles.empty}>
+              {props.search.trim() === ""
+                ? `No ${kind() === "Struct" ? "structs" : "enums"} yet.`
+                : `No ${kind() === "Struct" ? "structs" : "enums"} found.`}
             </span>
-            <For each={diagnostics().filter((diagnostic) => diagnostic.id === definition.id)}>
-              {(diagnostic) => <span sx={styles.warning}>{diagnostic.reason}</span>}
-            </For>
-            <div sx={styles.row}>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={disabled()}
-                aria-label={`Edit type ${definition.name}`}
-                onClick={() => {
-                  setDraft(definition);
-                  setError("");
-                }}
-              >
-                Edit
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="text"
-                disabled={disabled()}
-                aria-label={`Delete type ${definition.name}`}
-                onClick={() => void preview({ _tag: "Delete", id: definition.id })}
-              >
-                Delete
-              </Button>
+          }
+        >
+          {(definition) => (
+            <div sx={styles.typeItem}>
+              <div sx={styles.row}>
+                <button
+                  type="button"
+                  sx={styles.typeName}
+                  disabled={disabled()}
+                  aria-label={`Edit type ${definition.name}`}
+                  onClick={() => {
+                    setDraft(definition);
+                    setError("");
+                  }}
+                >
+                  {definition.name}
+                </button>
+                <button
+                  type="button"
+                  sx={styles.iconButton}
+                  disabled={disabled()}
+                  aria-label={`Delete type ${definition.name}`}
+                  title="Delete"
+                  onClick={() => void preview({ _tag: "Delete", id: definition.id })}
+                >
+                  <IconTablerTrash {...stylex.attrs(styles.icon)} />
+                </button>
+              </div>
+              <For each={diagnostics().filter((diagnostic) => diagnostic.id === definition.id)}>
+                {(diagnostic) => <span sx={styles.warning}>{diagnostic.reason}</span>}
+              </For>
             </div>
-          </div>
-        )}
-      </For>
+          )}
+        </For>
+      </div>
     </section>
   );
 }

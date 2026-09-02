@@ -62,7 +62,7 @@ const choose = async (scope, depth, name) => {
   await page.getByRole("option").filter({ hasText: name }).first().click();
 };
 const preview = async () => {
-  await button("Preview changes").click();
+  await button("Review changes").click();
   await page.getByRole("dialog", { name: "Confirm type changes", exact: true }).waitFor();
 };
 const confirm = async () => {
@@ -256,6 +256,7 @@ try {
   await waitSaved((project) => Object.values(project.types).some((type) => type.name === "Person"));
   const person = Object.values((await snapshot()).types).find((type) => type.name === "Person");
 
+  await button("Enums").click();
   await button("New enum").click();
   await page.getByLabel("Type name", { exact: true }).fill("Response");
   await page.getByLabel("Variant 1 name", { exact: true }).fill("Ok");
@@ -327,6 +328,7 @@ try {
   );
 
   await button("Types").click();
+  await button("Structs").click();
   await button("Edit type Person").click();
   await page.getByLabel("Type name", { exact: true }).fill("Profile");
   await preview();
@@ -339,7 +341,7 @@ try {
     ),
   );
   await confirm();
-  await page.getByRole("alert").filter({ hasText: "Stale" }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "project changed" }).waitFor();
   assert.equal(
     (await snapshot()).types[person.id].name,
     "Person",
@@ -360,7 +362,7 @@ try {
   await preview();
   assert.match(
     await page.getByRole("dialog", { name: "Confirm type changes" }).innerText(),
-    /Response/,
+    /1 dependent type/,
   );
   await button("Cancel changes").click();
   assert.equal((await snapshot()).types[person.id].fields.length, 2);
@@ -415,6 +417,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await button("Browse").click();
   await button("Types").click();
+  await button("Enums").click();
   await button("Edit type Response").click();
   await choose(page.locator('[data-type-field="0"]'), 0, "String");
   await preview();
@@ -445,6 +448,7 @@ try {
   await page.getByText(/Replay queued/).waitFor();
   await button("editor").click();
   await button("Types").click();
+  await button("Structs").click();
   await button("Edit type Person").click();
   await choose(page.locator('[data-type-field="0"]'), 0, "Int");
   await preview();

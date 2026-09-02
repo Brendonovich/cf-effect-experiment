@@ -8,7 +8,6 @@ import {
   filterTypeChoices,
   replaceTypeSegment,
   typeSegments,
-  choiceKey,
   choiceLabel,
   typeLabel,
   type TypeChoice,
@@ -19,35 +18,36 @@ const styles = stylex.create({
   segments: {
     display: "flex",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 3,
-    padding: 3,
-    backgroundColor: "black",
-    borderRadius: 8,
+    flexWrap: "nowrap",
+    gap: 2,
+    overflowX: "auto",
+    padding: 2,
+    backgroundColor: colors.gray1,
+    borderRadius: 4,
     borderColor: colors.gray6,
     borderStyle: "solid",
     borderWidth: 1,
   },
   segment: {
     fontFamily: "monospace",
-    fontSize: 12,
-    borderRadius: 6,
+    fontSize: 11,
+    borderRadius: 3,
     borderColor: colors.gray6,
     borderStyle: "solid",
     borderWidth: 1,
-    paddingBlock: 5,
-    paddingInline: 6,
-    backgroundColor: { default: "black", ":hover": colors.gray4 },
+    height: 22,
+    paddingInline: 5,
+    backgroundColor: { default: colors.gray2, ":hover": colors.gray4 },
     color: colors.gray12,
     outline: "none",
     maxWidth: "100%",
-    overflowWrap: "anywhere",
+    flexShrink: 0,
     ":focus-visible": { borderColor: colors.focus },
-    "@media (pointer: coarse)": { minHeight: 36 },
+    "@media (pointer: coarse)": { minHeight: 32 },
   },
   selected: {
     borderColor: colors.focus,
-    backgroundColor: "color-mix(in srgb, var(--gray-12) 10%, black)",
+    backgroundColor: colors.gray4,
   },
   arrow: { color: colors.gray10, fontSize: 10, marginLeft: 5 },
   menu: {
@@ -79,13 +79,6 @@ const styles = stylex.create({
     ":focus": { borderColor: colors.focus },
   },
   list: { overflowY: "auto", minHeight: 0 },
-  category: {
-    color: colors.gray10,
-    fontSize: 10,
-    fontWeight: 600,
-    paddingBlock: 6,
-    paddingInline: 4,
-  },
   option: {
     display: "block",
     textAlign: "left",
@@ -227,11 +220,6 @@ export function DataTypePicker(props: DataTypePickerProps) {
               data-type-depth={index}
               sx={[styles.segment, depth() === index ? styles.selected : null]}
               aria-label={`${props.label ?? "Data type"}, ${index === 0 ? "outer" : `nested ${index}`}: ${segmentLabel(index)}`}
-              title={
-                segments()[index]?._tag === "Custom"
-                  ? choiceKey(segments()[index] as DataType.Custom)
-                  : undefined
-              }
               aria-haspopup="listbox"
               aria-expanded={depth() === index ? "true" : "false"}
               aria-controls={depth() === index ? id : undefined}
@@ -308,16 +296,12 @@ export function DataTypePicker(props: DataTypePickerProps) {
                   id={`${id}-${index()}`}
                   tabindex={-1}
                   aria-selected={selectedChoice(choice) ? "true" : "false"}
-                  title={choiceKey(choice)}
                   sx={[styles.option, highlight() === index() ? styles.highlighted : null]}
                   onPointerDown={(event) => event.preventDefault()}
                   onPointerMove={() => setHighlight(index())}
                   onClick={() => select(choice)}
                 >
                   {choiceLabel(choice, props.definitions)}
-                  <Show when={typeof choice !== "string"}>
-                    <div sx={styles.category}>{choiceKey(choice)}</div>
-                  </Show>
                 </button>
               )}
             </For>
