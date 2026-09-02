@@ -545,6 +545,8 @@ function EditorContent(
                   onCreateConstant={controller.commands.createConstant}
                   onRenameConstant={controller.commands.renameConstant}
                   onSelectConstant={controller.commands.selectConstant}
+                  onSetDefaultConstant={controller.commands.setDefaultConstant}
+                  canEditConstants={controller.connection.canEdit()}
                   onDeleteConstant={controller.commands.deleteConstant}
                   resourceDefinition={controller.catalog.resourceDefinition}
                   valuesFor={controller.catalog.valuesFor}

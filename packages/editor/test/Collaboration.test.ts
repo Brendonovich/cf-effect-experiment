@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Actor } from "@macrograph/core";
+import { Actor, ResourceConstant } from "@macrograph/core";
 import { Effect, Exit, Fiber, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -81,6 +81,28 @@ describe("collaboration", () => {
       assert.isTrue(
         EditorRpc.isEventVisibleTo({ ...own, actor: { type: "SYSTEM" } }, "connection-a"),
       );
+      const defaultChanged: EditorEvent.ResourceConstantDefaultChanged = {
+        _tag: "ResourceConstantDefaultChanged",
+        actor: client,
+        constants: [
+          {
+            id: ResourceConstant.Id.make("default"),
+            name: "Default account",
+            resource: { package: "test", resource: "account" },
+            isDefault: true,
+          },
+        ],
+      };
+      assert.deepStrictEqual(
+        yield* Schema.decodeUnknownEffect(EditorEvent.ResourceConstantDefaultChanged)(
+          yield* Schema.encodeUnknownEffect(EditorEvent.ResourceConstantDefaultChanged)(
+            defaultChanged,
+          ),
+        ),
+        defaultChanged,
+      );
+      assert.isFalse(EditorRpc.isEventVisibleTo(defaultChanged, "connection-a"));
+      assert.isTrue(EditorRpc.isEventVisibleTo(defaultChanged, "connection-b"));
     }),
   );
 
@@ -90,6 +112,14 @@ describe("collaboration", () => {
         EditorRpc.authorize(identity("reader", "project", false), "CreateNode"),
       );
       assert.isTrue(Exit.isFailure(denied));
+      assert.isTrue(
+        Exit.isFailure(
+          yield* Effect.exit(
+            EditorRpc.authorize(identity("reader", "project", false), "SetDefaultResourceConstant"),
+          ),
+        ),
+      );
+      yield* EditorRpc.authorize(identity("owner", "project"), "SetDefaultResourceConstant");
       yield* EditorRpc.authorize(identity("reader", "project", false), "GetProject");
       yield* EditorRpc.authorize(identity("reader", "project", false), "UpdatePresence");
       yield* EditorRpc.authorize(identity("owner", "project"), "CreateNode");

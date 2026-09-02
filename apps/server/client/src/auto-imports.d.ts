@@ -16,5 +16,7 @@ declare global {
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
+  const IconTablerStar: typeof import('~icons/tabler/star.jsx').default
+  const IconTablerStarFilled: typeof import('~icons/tabler/star-filled.jsx').default
   const IconTablerTrash: typeof import('~icons/tabler/trash.jsx').default
 }

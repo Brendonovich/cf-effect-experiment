@@ -1,12 +1,17 @@
-import type { Graph, Node, Package, Project } from "@macrograph/core";
-
+import {
+  type Graph,
+  type Node,
+  type Package,
+  type Project,
+  ResourceConstant,
+} from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { Select } from "../../ui/Select";
 import { PropertyControl } from "./PropertyControl";
 import { SchemaInfoButton } from "./SchemaInfoButton";
-import { Select } from "../../ui/Select";
 
 const styles = stylex.create({
   empty: {
@@ -210,6 +215,11 @@ export function Inspector(props: {
                                     constant.resource.resource === resourceProperty().resource,
                                 );
                               const selected = () => node().properties[property.id];
+                              const defaultConstant = () =>
+                                ResourceConstant.getDefault(props.constants, {
+                                  package: node().schema.package,
+                                  resource: resourceProperty().resource,
+                                });
                               const selectedConstantId = () => {
                                 const value = selected();
                                 return typeof value === "string" ? value : "";
@@ -221,7 +231,13 @@ export function Inspector(props: {
                                 <label sx={styles.field}>
                                   <span sx={styles.fieldLabel}>{property.name}</span>
                                   <Select
-                                    options={constants()}
+                                    options={constants().map((constant) => ({
+                                      id: constant.id,
+                                      name:
+                                        constant.id === defaultConstant()?.id
+                                          ? `Default (${constant.name})`
+                                          : constant.name,
+                                    }))}
                                     value={selectedConstantId()}
                                     valid={valid()}
                                     placeholder="Missing constant"

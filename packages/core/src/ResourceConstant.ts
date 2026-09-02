@@ -20,12 +20,31 @@ export const Model = Schema.Struct({
   name: Schema.String,
   resource: ResourceRef,
   value: Schema.optional(Schema.Json),
+  // Explicit choice; use getDefault to include the automatic fallback.
+  isDefault: Schema.optional(Schema.Boolean),
 });
 export type Model = typeof Model.Type;
 
 export const Collection = Schema.Record(Schema.String, Model).pipe(
   Schema.withDecodingDefaultKey(Effect.succeed({})),
 );
+
+export const getDefault = (
+  constants: Readonly<Record<string, Model>>,
+  resource: ResourceRef,
+): Model | undefined => {
+  let fallback: Model | undefined;
+  for (const constant of Object.values(constants)) {
+    if (
+      constant.resource.package !== resource.package ||
+      constant.resource.resource !== resource.resource
+    )
+      continue;
+    fallback ??= constant;
+    if (constant.isDefault) return constant;
+  }
+  return fallback;
+};
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(
   "ResourceConstantNotFoundError",
