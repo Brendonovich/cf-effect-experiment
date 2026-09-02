@@ -5,6 +5,8 @@ import { colors } from "../tokens.stylex.ts";
 import { createPresence } from "./createPresence";
 import { createStateMachine } from "./createStateMachine.ts";
 
+const searchMarker = stylex.defineMarker();
+
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px)" },
   to: { opacity: 1, transform: "translateY(0)" },
@@ -71,17 +73,35 @@ const styles = stylex.create({
     zIndex: 50,
   },
   search: {
+    alignItems: "center",
     backgroundColor: colors.gray4,
-    border: 0,
     borderRadius: 2,
-    color: colors.gray12,
+    display: "flex",
     flexShrink: 0,
-    fontSize: 11,
     height: 28,
     marginBottom: 2,
     minWidth: 0,
-    paddingInline: 6,
     width: "100%",
+  },
+  searchIcon: {
+    color: {
+      default: colors.gray9,
+      [stylex.when.ancestor(":focus-within", searchMarker)]: colors.focus,
+    },
+    flexShrink: 0,
+    height: 12,
+    marginLeft: 8,
+    width: 12,
+  },
+  searchInput: {
+    backgroundColor: "transparent",
+    color: colors.gray12,
+    flex: 1,
+    fontSize: 11,
+    height: "100%",
+    minWidth: 0,
+    outline: "none",
+    paddingInline: 6,
     "::placeholder": { color: colors.gray11 },
   },
   options: {
@@ -339,16 +359,19 @@ export function Select(props: {
           style={position()}
         >
           <Show when={searchable()}>
-            <input
-              type="search"
-              aria-label="Search options"
-              placeholder="Search..."
-              autocomplete="off"
-              spellcheck={false}
-              sx={[styles.search, styles.focus]}
-              value={search()}
-              onInput={(event) => setSearch(event.currentTarget.value)}
-            />
+            <div sx={[searchMarker, styles.search]}>
+              <IconTablerSearch aria-hidden="true" {...stylex.attrs(styles.searchIcon)} />
+              <input
+                type="search"
+                aria-label="Search options"
+                placeholder="Search..."
+                autocomplete="off"
+                spellcheck={false}
+                sx={styles.searchInput}
+                value={search()}
+                onInput={(event) => setSearch(event.currentTarget.value)}
+              />
+            </div>
           </Show>
           <div role="listbox" sx={styles.options}>
             <For each={options()}>
