@@ -126,7 +126,7 @@ test("SQLite roundtrips recursive tagged types, preserved invalid defaults and w
   }
 });
 
-test("generated types migration upgrades old projects without changing saved defaults", async () => {
+test("generated migrations upgrade populated projects without changing saved defaults or wires", async () => {
   const sqlite = new DatabaseSync(":memory:");
   try {
     for (const directory of readdirSync(migrationsFolder).sort()) {
@@ -141,6 +141,12 @@ test("generated types migration upgrades old projects without changing saved def
         "INSERT INTO nodes (id, name, properties, input_defaults, schema_package, schema_schema, position_x, position_y, graph_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run("node", "Old node", "{}", defaults, "List", "Create", 0, 0, "old");
+    const outputId = 'output"with\\escaping';
+    sqlite
+      .prepare(
+        "INSERT INTO connections (id, out_node_id, out_io_id, in_node_id, in_io_id, graph_id) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("wire", "node", outputId, "node", "value", "old");
     sqlite.exec(
       readFileSync(join(migrationsFolder, "20260831063306_spicy_jazinda", "migration.sql"), "utf8"),
     );
@@ -169,6 +175,18 @@ test("generated types migration upgrades old projects without changing saved def
     );
     assert.deepEqual(loaded.types, {});
     assert.deepEqual(loaded.graphs.old!.nodes.node!.inputDefaults, JSON.parse(defaults));
+    assert.deepEqual(loaded.graphs.old!.connections, [
+      {
+        id: "wire",
+        outNodeId: "node",
+        outIo: { _tag: "Port", id: outputId },
+        inNodeId: "node",
+        inIoId: "value",
+      },
+    ]);
+    const columns = sqlite.prepare("PRAGMA table_info(connections)").all();
+    assert.ok(columns.some((column) => column.name === "out_io" && column.notnull === 1));
+    assert.ok(columns.every((column) => column.name !== "out_io_id"));
   } finally {
     sqlite.close();
   }

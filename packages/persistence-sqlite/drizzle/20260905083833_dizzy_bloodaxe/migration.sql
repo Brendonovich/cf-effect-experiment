@@ -1,3 +1,3 @@
-ALTER TABLE `connections` ADD `out_io` text NOT NULL;--> statement-breakpoint
-ALTER TABLE `nodes` ADD `split_scope_outputs` text;--> statement-breakpoint
-ALTER TABLE `connections` DROP COLUMN `out_io_id`;
+ALTER TABLE `connections` RENAME COLUMN `out_io_id` TO `out_io`;--> statement-breakpoint
+UPDATE `connections` SET `out_io` = json_object('_tag', 'Port', 'id', `out_io`);--> statement-breakpoint
+ALTER TABLE `nodes` ADD `split_scope_outputs` text;
