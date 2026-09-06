@@ -1,4 +1,4 @@
-import type { DataType as Types } from "@macrograph/plugin/DataType";
+import type { DataType as Types } from "@macrograph/module/DataType";
 
 import { type Node, type NodeIO, type Package } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
@@ -13,6 +13,7 @@ import {
   graphNodeInputs,
   graphNodeOutputs,
   graphNodeWidth,
+  graphPortGroups,
   retainedPorts,
   wireColor,
   type GraphPort,
@@ -64,6 +65,7 @@ const styles = stylex.create({
     backgroundColor: "transparent",
   },
   dataPinFilled: { backgroundColor: "currentColor" },
+  wildcardPin: { color: "white" },
   listPin: { borderRadius: 3 },
   optionPin: { borderWidth: 1.5 },
   optionPinFilled: { borderWidth: 2.5 },
@@ -133,35 +135,54 @@ const styles = stylex.create({
     paddingInline: 7,
     textAlign: "left",
   },
-  nodeBody: { display: "flex", flexDirection: "row", gap: 8, fontSize: 12 },
-  portList: {
+  nodeBody: {
     display: "flex",
-    flex: 1,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 16,
+    paddingBlock: 8,
+    paddingInline: 6,
+    fontSize: 12,
+  },
+  portColumn: {
+    display: "flex",
     minWidth: 0,
     flexDirection: "column",
     alignItems: "stretch",
     gap: 8,
-    paddingBlock: 8,
-    paddingInline: 6,
   },
+  inputColumn: { flex: "1 1 auto" },
+  outputColumn: { flex: "0 1 auto" },
   portRow: {
     display: "flex",
     height: 20,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-  portSide: {
-    display: "flex",
-    flexDirection: "row",
-    alignItems: "center",
     gap: 6,
     minWidth: 0,
-    flex: "1 1 auto",
+    flexShrink: 0,
   },
   portLabel: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   outputSide: { justifyContent: "flex-end" },
+  scopeGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    paddingBlock: 6,
+    paddingLeft: 10,
+    minWidth: 0,
+    borderLeftWidth: 1,
+    borderLeftStyle: "solid",
+    borderLeftColor: "#55555f",
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: "#55555f",
+    borderTopLeftRadius: 5,
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#55555f",
+    borderBottomLeftRadius: 5,
+  },
   expandRow: {
     display: "flex",
     width: "100%",
@@ -213,6 +234,8 @@ const dataPinStyle = (type: DataType) => {
       return styles.dateTimePin;
     case "Custom":
       return styles.dateTimePin;
+    case "Wildcard":
+      return styles.wildcardPin;
   }
 };
 
@@ -261,9 +284,11 @@ interface GraphNodeProps {
   ) => void;
   onDisconnect: (direction: "input" | "output", nodeId: string, ioId: string) => void;
   onContextMenu: (event: MouseEvent, nodeId: string) => void;
+  onScopeContextMenu?: (event: MouseEvent, nodeId: string, scope: string) => void;
   onExpand: (nodeId: string) => void;
   connectedInputIds: ReadonlySet<string>;
   connectedOutputIds: ReadonlySet<string>;
+  connectedOutputRefs?: ReadonlyArray<import("@macrograph/core").OutputRef.Model>;
   onSetInputDefault: (input: string, value: unknown) => void;
   onClearInputDefault: (input: string) => void;
   onGetSuggestions: (input: string) => Promise<ReadonlyArray<string>>;
@@ -277,6 +302,7 @@ const headerStyle = (type: Package.SchemaModel["type"] | undefined) => {
       return styles.execHeader;
     case "pure":
       return styles.pureHeader;
+    case "base":
     default:
       return styles.baseHeader;
   }
@@ -303,7 +329,11 @@ const Pin: Component<{
       data-node-id={props.nodeId}
       data-io-id={props.port.id}
       title={
-        props.port.kind === "data" ? formattedPortType(props.port, props.definitions) : "Execution"
+        props.port.kind === "data"
+          ? formattedPortType(props.port, props.definitions)
+          : props.port.kind === "scope"
+            ? `Scope${props.port.scope === null ? " (inferred)" : ": " + (props.port.scope ?? []).map((field) => `${field.name ?? field.id}: ${formattedPortType({ id: field.id, type: field.type, kind: "data" }, props.definitions)}`).join(", ")}`
+            : "Execution"
       }
       data-invalid-pin={props.port.kind === "data" && props.port.invalid ? "" : undefined}
       onPointerDown={(event) => {
@@ -315,7 +345,7 @@ const Pin: Component<{
       onPointerLeave={() => setHovered(false)}
       onDblClick={() => props.onDoubleClick?.()}
     >
-      {props.port.kind === "execution" ? (
+      {props.port.kind !== "data" ? (
         <svg
           viewBox="0 0 14 17.5"
           sx={[
@@ -326,8 +356,12 @@ const Pin: Component<{
           aria-hidden="true"
         >
           <path
-            d="M12.6667 8.53812C13.2689 9.03796 13.2689 9.96204 12.6667 10.4619L5.7983 16.1622C4.98369 16.8383 3.75 16.259 3.75 15.2003V3.79967C3.75 2.74104 4.98369 2.16171 5.79831 2.83779L12.6667 8.53812Z"
-            stroke="white"
+            d={
+              props.port.kind === "scope"
+                ? "M2 3 H8 L13 9 L8 15 H2 Z M5 6 V12"
+                : "M12.6667 8.53812C13.2689 9.03796 13.2689 9.96204 12.6667 10.4619L5.7983 16.1622C4.98369 16.8383 3.75 16.259 3.75 15.2003V3.79967C3.75 2.74104 4.98369 2.16171 5.79831 2.83779L12.6667 8.53812Z"
+            }
+            stroke={props.port.kind === "scope" ? "#c084fc" : "white"}
             stroke-width="1.5"
           />
         </svg>
@@ -369,7 +403,7 @@ const Pin: Component<{
 const DataDefaultControl: Component<{
   node: Node.Model;
   port: Extract<GraphPort, { readonly kind: "data" }>;
-  pluginDefault?: () => unknown;
+  moduleDefault?: () => unknown;
   suggestions: boolean;
   connected: boolean;
   definitions?: Types.Definitions;
@@ -379,7 +413,7 @@ const DataDefaultControl: Component<{
 }> = (props) => {
   const persisted = () => Object.hasOwn(props.node.inputDefaults, props.port.id);
   const value = () =>
-    persisted() ? props.node.inputDefaults[props.port.id] : props.pluginDefault?.();
+    persisted() ? props.node.inputDefaults[props.port.id] : props.moduleDefault?.();
   const formatValue = () => {
     const current = value();
     return typeof current === "string" || typeof current === "number" ? String(current) : "";
@@ -453,6 +487,8 @@ const DataDefaultControl: Component<{
 };
 
 export const GraphNode: Component<GraphNodeProps> = (props) => {
+  const declaredOutputs = () =>
+    graphNodeOutputs(props.io, props.node.splitScopeOutputs, props.connectedOutputRefs);
   const inputs = () =>
     visiblePorts(
       retainedPorts(
@@ -465,7 +501,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
     );
   const outputs = () =>
     visiblePorts(
-      retainedPorts(graphNodeOutputs(props.io), props.connectedOutputIds),
+      retainedPorts(declaredOutputs(), props.connectedOutputIds),
       props.node.foldPins,
       props.connectedOutputIds,
     );
@@ -476,11 +512,101 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         props.connectedInputIds,
         Object.keys(props.node.inputDefaults),
       ).length ||
-    outputs().length < retainedPorts(graphNodeOutputs(props.io), props.connectedOutputIds).length;
-  const rows = () =>
-    Array.from({
-      length: Math.max(inputs().length, outputs().length),
-    });
+    outputs().length < retainedPorts(declaredOutputs(), props.connectedOutputIds).length;
+  const outputGroups = () => graphPortGroups(outputs());
+  const openScopeMenu = (event: MouseEvent, scope: string) => {
+    if (props.onScopeContextMenu === undefined) return;
+    event.preventDefault();
+    event.stopPropagation();
+    props.onScopeContextMenu(event, props.node.id, scope);
+  };
+  const NodePin: Component<{ port: GraphPort; direction: "input" | "output" }> = (pin) => {
+    const isSource = () =>
+      props.connectionSource?.nodeId === props.node.id &&
+      props.connectionSource.ioId === pin.port.id &&
+      props.connectionSource.kind === pin.port.kind &&
+      props.connectionSource.direction === pin.direction;
+    return (
+      <Pin
+        direction={pin.direction}
+        port={pin.port}
+        definitions={props.definitions ?? {}}
+        nodeId={props.node.id}
+        filled={
+          (pin.direction === "input" ? props.connectedInputIds : props.connectedOutputIds).has(
+            pin.port.id,
+          ) || isSource()
+        }
+        highlighted={
+          (isSource() && props.connectionSource?.dragging === true) ||
+          (props.snapTarget?.nodeId === props.node.id &&
+            props.snapTarget.ioId === pin.port.id &&
+            props.snapTarget.kind === pin.port.kind &&
+            props.snapTarget.direction === pin.direction)
+        }
+        onPointerDown={(event) =>
+          props.onPortPointerDown(event, props.node.id, pin.port.id, pin.port.kind, pin.direction)
+        }
+        onDoubleClick={() => props.onDisconnect(pin.direction, props.node.id, pin.port.id)}
+      />
+    );
+  };
+  const InputRow: Component<{ port: GraphPort }> = (row) => (
+    <div sx={styles.portRow} data-io-row="input">
+      <NodePin port={row.port} direction="input" />
+      <span
+        sx={styles.portLabel}
+        title={
+          row.port.kind === "data" && row.port.invalid
+            ? row.port.name
+            : formattedPortType(row.port, props.definitions)
+        }
+      >
+        {row.port.name}
+      </span>
+      <Show when={row.port.kind === "data" && row.port}>
+        {(port) => {
+          const metadata = () =>
+            props.io?.dataInputs.find((candidate) => candidate.id === port().id);
+          return (
+            <DataDefaultControl
+              node={props.node}
+              port={port()}
+              definitions={props.definitions ?? {}}
+              connected={props.connectedInputIds.has(port().id)}
+              moduleDefault={() => metadata()?.defaultValue}
+              suggestions={metadata()?.suggestions === true}
+              onSet={(value) => props.onSetInputDefault(port().id, value)}
+              onClear={() => props.onClearInputDefault(port().id)}
+              onGetSuggestions={() => props.onGetSuggestions(port().id)}
+            />
+          );
+        }}
+      </Show>
+    </div>
+  );
+  const OutputRow: Component<{ port: GraphPort }> = (row) => (
+    <div
+      sx={[styles.portRow, styles.outputSide]}
+      data-io-row="output"
+      onContextMenu={(event) => {
+        if (row.port.kind === "scope" && row.port.outputRef?._tag === "Port")
+          openScopeMenu(event, row.port.outputRef.id);
+      }}
+    >
+      <span
+        sx={styles.portLabel}
+        title={
+          row.port.kind === "data" && row.port.invalid
+            ? row.port.name
+            : formattedPortType(row.port, props.definitions)
+        }
+      >
+        {row.port.name}
+      </span>
+      <NodePin port={row.port} direction="output" />
+    </div>
+  );
 
   return (
     <div
@@ -496,7 +622,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       ]}
       data-graph-node-id={props.node.id}
       style={{
-        width: `${graphNodeWidth(props.io, props.node.name)}px`,
+        width: `${graphNodeWidth(props.io, props.node.name, props.node.splitScopeOutputs, props.connectedOutputRefs)}px`,
         transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)`,
         "box-shadow":
           !props.selected && props.presenceColor ? `0 0 0 2px ${props.presenceColor}` : undefined,
@@ -522,132 +648,34 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         </div>
       </div>
       <div sx={styles.nodeBody}>
-        <div sx={styles.portList}>
-          <For each={rows()}>
-            {(_, index) => {
-              const input = () => inputs()[index()];
-              const output = () => outputs()[index()];
-              const inputIsSource = () =>
-                props.connectionSource?.nodeId === props.node.id &&
-                props.connectionSource.ioId === input()?.id &&
-                props.connectionSource.kind === input()?.kind &&
-                props.connectionSource.direction === "input";
-              const outputIsSource = () =>
-                props.connectionSource?.nodeId === props.node.id &&
-                props.connectionSource.ioId === output()?.id &&
-                props.connectionSource.kind === output()?.kind &&
-                props.connectionSource.direction === "output";
-              return (
-                <div sx={styles.portRow}>
-                  <div sx={styles.portSide}>
-                    {input() && (
-                      <Pin
-                        direction="input"
-                        port={input()!}
-                        definitions={props.definitions ?? {}}
-                        nodeId={props.node.id}
-                        filled={props.connectedInputIds.has(input()!.id) || inputIsSource()}
-                        highlighted={
-                          (inputIsSource() && props.connectionSource?.dragging === true) ||
-                          (props.snapTarget?.nodeId === props.node.id &&
-                            props.snapTarget.ioId === input()!.id &&
-                            props.snapTarget.kind === input()!.kind &&
-                            props.snapTarget.direction === "input")
-                        }
-                        onPointerDown={(event) =>
-                          props.onPortPointerDown(
-                            event,
-                            props.node.id,
-                            input()!.id,
-                            input()!.kind,
-                            "input",
-                          )
-                        }
-                        onDoubleClick={() =>
-                          props.onDisconnect("input", props.node.id, input()!.id)
-                        }
-                      />
-                    )}
-                    <span
-                      sx={styles.portLabel}
-                      title={
-                        input()?.kind === "data" &&
-                        (input() as Extract<GraphPort, { kind: "data" }>).invalid
-                          ? input()?.name
-                          : formattedPortType(input(), props.definitions)
-                      }
-                    >
-                      {input()?.kind === "data" && (input()?.name || input()?.id)}
-                    </span>
-                    <Show
-                      when={
-                        input()?.kind === "data" &&
-                        (input() as Extract<GraphPort, { readonly kind: "data" }>)
-                      }
-                    >
-                      {(port) => {
-                        const metadata = () =>
-                          props.io?.dataInputs.find((candidate) => candidate.id === port().id);
-                        return (
-                          <DataDefaultControl
-                            node={props.node}
-                            port={port()}
-                            definitions={props.definitions ?? {}}
-                            connected={props.connectedInputIds.has(port().id)}
-                            pluginDefault={() => metadata()?.defaultValue}
-                            suggestions={metadata()?.suggestions === true}
-                            onSet={(value) => props.onSetInputDefault(port().id, value)}
-                            onClear={() => props.onClearInputDefault(port().id)}
-                            onGetSuggestions={() => props.onGetSuggestions(port().id)}
-                          />
-                        );
-                      }}
-                    </Show>
-                  </div>
-                  <div sx={[styles.portSide, styles.outputSide]}>
-                    <span
-                      sx={styles.portLabel}
-                      title={
-                        output()?.kind === "data" &&
-                        (output() as Extract<GraphPort, { kind: "data" }>).invalid
-                          ? output()?.name
-                          : formattedPortType(output(), props.definitions)
-                      }
-                    >
-                      {output()?.kind === "data" && (output()?.name || output()?.id)}
-                    </span>
-                    {output() && (
-                      <Pin
-                        direction="output"
-                        port={output()!}
-                        definitions={props.definitions ?? {}}
-                        nodeId={props.node.id}
-                        filled={props.connectedOutputIds.has(output()!.id) || outputIsSource()}
-                        highlighted={
-                          (outputIsSource() && props.connectionSource?.dragging === true) ||
-                          (props.snapTarget?.nodeId === props.node.id &&
-                            props.snapTarget.ioId === output()!.id &&
-                            props.snapTarget.kind === output()!.kind &&
-                            props.snapTarget.direction === "output")
-                        }
-                        onPointerDown={(event) =>
-                          props.onPortPointerDown(
-                            event,
-                            props.node.id,
-                            output()!.id,
-                            output()!.kind,
-                            "output",
-                          )
-                        }
-                        onDoubleClick={() =>
-                          props.onDisconnect("output", props.node.id, output()!.id)
-                        }
-                      />
-                    )}
-                  </div>
+        <div sx={[styles.portColumn, styles.inputColumn]} data-io-column="input">
+          <For each={inputs()} keyed={(port) => port.id}>
+            {(port) => <InputRow port={port()} />}
+          </For>
+        </div>
+        <div sx={[styles.portColumn, styles.outputColumn]} data-io-column="output">
+          <For
+            each={outputGroups()}
+            keyed={(group) => JSON.stringify([group.scope, group.ports[0]!.id])}
+          >
+            {(group) => (
+              <Show
+                when={group().scope !== undefined}
+                fallback={<OutputRow port={group().ports[0]!} />}
+              >
+                <div
+                  sx={styles.scopeGroup}
+                  data-scope-group={group().scope}
+                  role="group"
+                  aria-label={`${group().ports[0]?.name ?? group().scope} scope`}
+                  onContextMenu={(event) => openScopeMenu(event, group().scope!)}
+                >
+                  <For each={group().ports} keyed={(port) => port.id}>
+                    {(port) => <OutputRow port={port()} />}
+                  </For>
                 </div>
-              );
-            }}
+              </Show>
+            )}
           </For>
         </div>
       </div>

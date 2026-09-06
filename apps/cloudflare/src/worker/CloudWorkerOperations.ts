@@ -1,6 +1,6 @@
 import { Project } from "@macrograph/core";
-import { HttpEndpoint } from "@macrograph/plugin";
-import UtilitiesPlugin from "@macrograph/plugin-utilities";
+import { HttpEndpoint } from "@macrograph/module";
+import UtilitiesModule from "@macrograph/module-utilities";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Cause, Effect, Schema } from "effect";
@@ -182,7 +182,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
               utilitiesTickEnabled: Object.values(deployment.project.graphs).some((graph) =>
                 Object.values(graph.nodes).some(
                   (node) =>
-                    node.schema.package === UtilitiesPlugin.id && node.schema.schema === "Tick",
+                    node.schema.package === UtilitiesModule.id && node.schema.schema === "Tick",
                 ),
               ),
             })
@@ -314,7 +314,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             id: event.id,
             projectId: request.projectId,
             endpointId: request.endpointId,
-            pluginId: event.pluginId,
+            moduleId: event.moduleId,
             eventType: event.eventType,
             eventId: event.eventId ?? null,
             eventPayload: event.payloadJson,
@@ -350,7 +350,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
                   ...(ingressRecorded ? { ingressEventId: event.ingressEventId } : {}),
                   deploymentId: event.deploymentId,
                   r2Key: event.r2Key,
-                  pluginId: event.pluginId,
+                  moduleId: event.moduleId,
                   eventType: event.eventType,
                   ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
                   event: event.payloadJson,

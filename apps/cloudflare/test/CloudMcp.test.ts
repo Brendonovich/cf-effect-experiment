@@ -72,7 +72,7 @@ describe("Cloud MCP toolkit", () => {
       "projectId",
       "graphId",
       "outNodeId",
-      "outIoId",
+      "outIo",
       "inNodeId",
       "inIoId",
     ]);

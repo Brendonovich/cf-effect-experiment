@@ -1,5 +1,5 @@
-import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant, IoId } from "@macrograph/core";
+import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 
 const actor = Actor.Model.pipe(Schema.withDecodingDefaultKey(Effect.succeed(Actor.system)));
@@ -99,6 +99,14 @@ export const NodeFoldPinsChanged = Schema.TaggedStruct("NodeFoldPinsChanged", {
 });
 export type NodeFoldPinsChanged = typeof NodeFoldPinsChanged.Type;
 
+export const NodeScopeSplitChanged = Schema.TaggedStruct("NodeScopeSplitChanged", {
+  actor,
+  graphId: Schema.String,
+  nodeId: Schema.String,
+  splitScopeOutputs: Schema.Array(IoId),
+});
+export type NodeScopeSplitChanged = typeof NodeScopeSplitChanged.Type;
+
 export const NodePropertyUpdated = Schema.TaggedStruct("NodePropertyUpdated", {
   actor,
   graphId: Schema.String,
@@ -136,16 +144,16 @@ export type ConnectionDeleted = typeof ConnectionDeleted.Type;
 
 export const EngineStateChanged = Schema.TaggedStruct("EngineStateChanged", {
   actor,
-  pluginId: Schema.String,
+  moduleId: Schema.String,
   state: Schema.Json,
 });
 export type EngineStateChanged = typeof EngineStateChanged.Type;
 
-export const PluginClientStateDirty = Schema.TaggedStruct("PluginClientStateDirty", {
+export const ModuleClientStateDirty = Schema.TaggedStruct("ModuleClientStateDirty", {
   actor,
-  pluginId: Schema.String,
+  moduleId: Schema.String,
 });
-export type PluginClientStateDirty = typeof PluginClientStateDirty.Type;
+export type ModuleClientStateDirty = typeof ModuleClientStateDirty.Type;
 
 export const ResourceConstantCreated = Schema.TaggedStruct("ResourceConstantCreated", {
   actor,
@@ -200,12 +208,13 @@ export type EditorEvent =
   | NodeNameChanged
   | NodePositionChanged
   | NodeFoldPinsChanged
+  | NodeScopeSplitChanged
   | NodePropertyUpdated
   | InputDefaultUpdated
   | ConnectionCreated
   | ConnectionDeleted
   | EngineStateChanged
-  | PluginClientStateDirty
+  | ModuleClientStateDirty
   | ResourceConstantCreated
   | ResourceConstantDefaultChanged
   | ResourceConstantUpdated

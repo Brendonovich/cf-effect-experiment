@@ -272,7 +272,7 @@ export function TabLayout(props: {
                       }}
                     >
                       <span
-                        sx={tab.description === "Plugin" ? styles.baselineTabText : styles.contents}
+                        sx={tab.description === "Module" ? styles.baselineTabText : styles.contents}
                       >
                         <span
                           sx={[

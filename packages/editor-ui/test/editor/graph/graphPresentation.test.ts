@@ -3,6 +3,7 @@ import {
   Graph,
   IoId,
   NodeId,
+  OutputRef,
   PackageId,
   SchemaId,
   type NodeIO,
@@ -11,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   graphConnections,
+  graphNodeWidth,
   handlePosition,
   retainedPorts,
   wireColor,
@@ -40,7 +42,7 @@ const graph: Graph.Model = {
     {
       id: ConnectionId.make("connection"),
       outNodeId: "source",
-      outIoId: outputId,
+      outIo: { _tag: "Port" as const, id: outputId },
       inNodeId: "target",
       inIoId: inputId,
     },
@@ -66,6 +68,24 @@ const ioByNode: Record<string, NodeIO> = {
 };
 
 describe("graph presentation", () => {
+  it("sizes nodes using explicit labels, including execution labels, rather than port IDs", () => {
+    const io: NodeIO = {
+      dataInputs: [{ id: IoId.make("a-very-long-internal-input-id"), type: { _tag: "Bool" } }],
+      dataOutputs: [{ id: IoId.make("a-very-long-internal-output-id"), type: { _tag: "Bool" } }],
+      executionInputs: [{ id: IoId.make("exec") }],
+      executionOutputs: [{ id: IoId.make("true") }],
+    };
+    expect(graphNodeWidth(io)).toBe(148);
+    expect(graphNodeWidth({
+      ...io,
+      executionOutputs: [{ id: IoId.make("true"), name: "A long named execution branch" }],
+    })).toBeGreaterThan(graphNodeWidth(io));
+    expect(graphNodeWidth({
+      ...io,
+      dataInputs: io.dataInputs.map((port) => ({ ...port, name: "" })),
+    })).toBe(graphNodeWidth(io));
+  });
+
   it("shows orphan defaults without wires and omits nominally incompatible wires", () => {
     expect(retainedPorts([], new Set(), ["removed"])).toEqual([
       {
@@ -127,7 +147,7 @@ describe("graph presentation", () => {
           {
             id: ConnectionId.make("exec"),
             outNodeId: "source",
-            outIoId: IoId.make("exec-out"),
+            outIo: { _tag: "Port" as const, id: IoId.make("exec-out") },
             inNodeId: "target",
             inIoId: IoId.make("exec-in"),
           },
@@ -147,7 +167,7 @@ describe("graph presentation", () => {
             mixedGraph,
             ioForNode,
             edge.connection.outNodeId,
-            edge.connection.outIoId,
+            OutputRef.key(edge.connection.outIo),
             "output",
             kind,
           ),

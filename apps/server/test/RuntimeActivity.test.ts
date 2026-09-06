@@ -9,8 +9,8 @@ import {
   Presence,
 } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
+import { Engine, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
-import { Engine, Plugin } from "@macrograph/plugin";
 import { Array, Cause, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
 import { RpcTest } from "effect/unstable/rpc";
 
@@ -42,7 +42,7 @@ describe("workspace runtime activity access", () => {
           const activity = yield* RuntimeActivity.Service;
           class Secret extends Schema.TaggedClass<Secret>()("Secret", { token: Schema.String }) {}
           class TestEngine extends Engine.make({ events: Array.empty<Secret>() }) {}
-          const plugin = Plugin.make({
+          const module = Module.make({
             id: "private",
             engine: TestEngine,
             effect: () => Effect.void,
@@ -51,13 +51,13 @@ describe("workspace runtime activity access", () => {
           const event = new Secret({ token: "secret-payload" });
           const executor = activity.wrap({
             ...(yield* Executor.make(Project.empty())),
-            handleEvent: (_plugin, input) =>
+            handleEvent: (_module, input) =>
               Effect.sync(() => {
                 assert.strictEqual(input, event);
                 calls++;
               }),
           });
-          yield* executor.handleEvent(plugin, event);
+          yield* executor.handleEvent(module, event);
           const original = (yield* activity.snapshot)[0]!;
           const client = yield* RpcTest.makeClient(WorkspaceRpcs);
           const snapshot = yield* client.ActivityStream().pipe(Stream.runHead, Effect.exit);
@@ -101,7 +101,7 @@ describe("workspace runtime activity access", () => {
             assert.strictEqual(calls, 1);
             assert.deepStrictEqual(yield* activity.snapshot, [original]);
           }
-          assert.deepStrictEqual(yield* client.GetPackages({}), [CustomTypes.packageModel({})]);
+          assert.deepStrictEqual(yield* client.GetPackages({}), [CustomTypes.packageModel]);
           const presence = yield* client.PresenceStream().pipe(Stream.runHead);
           assert.isTrue(Option.isSome(presence));
         }).pipe(

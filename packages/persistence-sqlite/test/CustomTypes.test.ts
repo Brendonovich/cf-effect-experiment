@@ -1,6 +1,6 @@
 import { Project } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { migrate } from "drizzle-orm/node-sqlite/migrator";
 import { Effect, Layer, Schema } from "effect";
@@ -49,10 +49,11 @@ const project = Schema.decodeUnknownSync(Project.Model)({
         node: {
           id: "node",
           name: "Preserved node",
-          schema: { package: "CustomTypes", schema: '["result","stringify"]' },
+          schema: { package: "CustomTypes", schema: "StringifyJson" },
           position: { x: 10, y: 20 },
-          properties: {},
+          properties: { type: "result" },
           foldPins: false,
+          splitScopeOutputs: ["found"],
           inputDefaults: {
             value: {
               _type: "result",
@@ -64,7 +65,9 @@ const project = Schema.decodeUnknownSync(Project.Model)({
         },
       },
       connections: [
-        { id: "wire", outNodeId: "node", outIoId: "removed", inNodeId: "node", inIoId: "orphan" },
+        { id: "wire", outNodeId: "node", outIo: { _tag: "Port" as const, id: "removed" }, inNodeId: "node", inIoId: "orphan" },
+        { id: "scope-exec", outNodeId: "node", outIo: { _tag: "ScopeExec", scope: "found" }, inNodeId: "node", inIoId: "exec" },
+        { id: "scope-field", outNodeId: "node", outIo: { _tag: "ScopeField", scope: "found", field: "value" }, inNodeId: "node", inIoId: "value" },
       ],
     },
   },
@@ -146,6 +149,11 @@ test("generated types migration upgrades old projects without changing saved def
       sqlite.prepare("SELECT input_defaults FROM nodes").get()!.input_defaults,
       defaults,
     );
+    // The persistence implementation always targets the latest schema.
+    for (const directory of readdirSync(migrationsFolder).sort()) {
+      if (directory > "20260831063306_spicy_jazinda")
+        sqlite.exec(readFileSync(join(migrationsFolder, directory, "migration.sql"), "utf8"));
+    }
     const loaded = await Effect.runPromise(
       Effect.gen(function* () {
         return yield* (yield* Persistence.Service).loadProject();

@@ -20,7 +20,7 @@ import {
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentSnapshotsBucket } from "../Storage.ts";
-import * as ExecutorPlugins from "./ExecutorPlugins.ts";
+import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
 const WorkflowNodeStepName = Schema.String.pipe(
@@ -40,7 +40,7 @@ export interface GraphExecutionWorkflowInput {
 	readonly ingressEventId?: string;
 	readonly deploymentId: string;
 	readonly r2Key: DeploymentObjectKey;
-	readonly pluginId: string;
+	readonly moduleId: string;
 	readonly eventType: string;
 	readonly providerEventId?: string;
 	readonly event: string;
@@ -148,7 +148,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 										projectId: input.projectId,
 										source: input.source,
 										ingressEventId: input.ingressEventId ?? null,
-										pluginId: input.pluginId,
+										moduleId: input.moduleId,
 										eventType: input.eventType,
 										providerEventId: input.providerEventId ?? null,
 										eventPayload: input.event,
@@ -273,11 +273,11 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 				const executor = yield* ProjectExecutor.make(project, {
 					projectId: input.projectId,
 					executionDriver,
-					plugins: ExecutorPlugins.registry,
+					modules: ExecutorModules.registry,
 					engineClient,
 				});
-				yield* ExecutorPlugins.registry
-					.handle(executor, input.pluginId, event)
+				yield* ExecutorModules.registry
+					.handle(executor, input.moduleId, event)
 					.pipe(Effect.orDie);
 				yield* Cloudflare.Workflows.task(
 					"runtime-execution-v1/complete",

@@ -158,7 +158,7 @@ export function EventTimeline(props: {
 export function EventListItem(props: {
   readonly id: string;
   readonly name: string;
-  readonly pluginName: string;
+  readonly moduleName: string;
   readonly source: EventSource;
   readonly receivedAt: string | number;
   readonly now: number;
@@ -175,7 +175,7 @@ export function EventListItem(props: {
       <div sx={styles.betweenCenter}>
         <div sx={[styles.titleRow, styles.minWidth]}>
           <span sx={styles.eventName}>{props.name}</span>
-          <span sx={styles.instance}>{props.pluginName}</span>
+          <span sx={styles.instance}>{props.moduleName}</span>
         </div>
         <SourceBadge source={props.source} />
       </div>

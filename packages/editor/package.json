@@ -15,7 +15,7 @@
   "dependencies": {
     "@macrograph/core": "workspace:*",
     "@macrograph/persistence": "workspace:*",
-    "@macrograph/plugin": "workspace:*",
+    "@macrograph/module": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
@@ -23,7 +23,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@effect/vitest": "catalog:",
     "@macrograph/persistence-sqlite": "workspace:*",
-    "@macrograph/plugin-utilities": "workspace:*",
+    "@macrograph/module-utilities": "workspace:*",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
   }

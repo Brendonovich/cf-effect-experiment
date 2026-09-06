@@ -1,5 +1,5 @@
-import type { ResourceConstant } from "@macrograph/core";
-import type { DataType } from "@macrograph/plugin/DataType";
+import type { ResourceConstant, OutputRef, IoId } from "@macrograph/core";
+import type { DataType } from "@macrograph/module/DataType";
 import type { Schema } from "effect";
 
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
@@ -31,6 +31,7 @@ export const nodes = sqliteTable("nodes", {
     .$type<Record<string, Schema.Json>>()
     .default({}),
   foldPins: integer("fold_pins", { mode: "boolean" }).notNull().default(false),
+  splitScopeOutputs: text("split_scope_outputs", { mode: "json" }).$type<ReadonlyArray<IoId>>(),
   schemaPackage: text("schema_package").notNull(),
   schemaSchema: text("schema_schema").notNull(),
   positionX: real("position_x").notNull(),
@@ -41,7 +42,7 @@ export const nodes = sqliteTable("nodes", {
 export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
   outNodeId: text("out_node_id").notNull(),
-  outIoId: text("out_io_id").notNull(),
+  outIo: text("out_io", { mode: "json" }).notNull().$type<OutputRef.Model>(),
   inNodeId: text("in_node_id").notNull(),
   inIoId: text("in_io_id").notNull(),
   graphId: text("graph_id").notNull(),

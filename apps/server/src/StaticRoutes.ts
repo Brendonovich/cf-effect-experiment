@@ -11,7 +11,7 @@ import { join, resolve, sep } from "node:path";
 const reservedPaths = [
   "/api",
   "/health",
-  "/plugin",
+  "/module",
   "/rpc",
   "/rpc-ws",
 ];

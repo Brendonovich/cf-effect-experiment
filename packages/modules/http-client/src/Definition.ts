@@ -1,0 +1,56 @@
+import * as Engine from "@macrograph/module/Engine";
+import { Array, Schema } from "effect";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+
+export const RequestMethod = Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+export type RequestMethod = typeof RequestMethod.Type;
+
+export class RequestFailure extends Schema.TaggedError<RequestFailure>()(
+  "HttpClientRequestFailure",
+  {
+    method: RequestMethod,
+    url: Schema.String,
+    reason: Schema.String,
+  },
+) {}
+
+export const TextRequest = Schema.Struct({
+  method: RequestMethod,
+  url: Schema.String,
+  body: Schema.optionalKey(Schema.String),
+  headers: Schema.optionalKey(Schema.String),
+});
+
+export const TextResponse = Schema.Struct({
+  status: Schema.Int,
+  body: Schema.String,
+  contentType: Schema.String,
+  headers: Schema.Record(Schema.String, Schema.String),
+});
+
+export class UrlComponentFailure extends Schema.TaggedError<UrlComponentFailure>()(
+  "HttpUrlComponentFailure",
+  { operation: Schema.Literals(["encode", "decode"]), reason: Schema.String },
+) {}
+
+export class RuntimeRpcs extends RpcGroup.make(
+  Rpc.make("HttpClientRequest", {
+    payload: Schema.Struct({ method: RequestMethod, url: Schema.String }),
+    success: Schema.Int,
+    error: RequestFailure,
+  }),
+  Rpc.make("HttpClientRequestText", {
+    payload: TextRequest,
+    success: TextResponse,
+    error: RequestFailure,
+  }),
+) {}
+
+export const ClientState = Schema.Struct({});
+export class ClientRpcs extends RpcGroup.make() {}
+
+export class HttpClientEngine extends Engine.make({
+  events: Array.empty<never>(),
+  rpcs: RuntimeRpcs,
+  client: { state: ClientState, rpcs: ClientRpcs },
+}) {}

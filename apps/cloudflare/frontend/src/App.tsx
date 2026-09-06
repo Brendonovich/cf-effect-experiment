@@ -24,7 +24,7 @@ import {
   untrack,
   useContext,
 } from "solid-js";
-import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
+import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import type { ApiClient } from "./api";
 
@@ -47,7 +47,7 @@ interface WorkspaceContextValue {
   readonly currentUserId: () => string | undefined;
   readonly teamMembers: () => ReadonlyArray<TeamMember>;
   readonly editorUrl: (projectId: string) => string;
-  readonly refreshEditorPluginData: (projectId: string) => Promise<void>;
+  readonly refreshEditorModuleData: (projectId: string) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue>();
@@ -186,10 +186,10 @@ export function App(
     const userId = currentUserId();
     if (projectId === undefined || userId === undefined) return undefined;
     return createEditorController({
-      connection: makeEditorConnection(editorUrl(projectId), discoveredPluginSettings),
+      connection: makeEditorConnection(editorUrl(projectId), discoveredModuleSettings),
       workspaceId: projectId,
       userId,
-      settingsDescriptors: discoveredPluginSettings,
+      settingsDescriptors: discoveredModuleSettings,
       reconnect: true,
     });
   });
@@ -211,9 +211,9 @@ export function App(
     currentUserId,
     teamMembers,
     editorUrl,
-    refreshEditorPluginData: (projectId) =>
+    refreshEditorModuleData: (projectId) =>
       editorProjectId() === projectId
-        ? (editorController()?.refreshPluginData() ?? Promise.resolve())
+        ? (editorController()?.refreshModuleData() ?? Promise.resolve())
         : Promise.resolve(),
   };
 

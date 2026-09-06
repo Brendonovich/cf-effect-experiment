@@ -96,8 +96,8 @@ function projectForExport(project: Project.Model): Project.Model {
   return {
     ...project,
     engines: Object.fromEntries(
-      Object.entries(project.engines).map(([pluginId, state]) => [
-        pluginId,
+      Object.entries(project.engines).map(([moduleId, state]) => [
+        moduleId,
         sanitizeExportValue(state),
       ]),
     ),

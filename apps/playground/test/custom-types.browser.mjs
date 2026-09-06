@@ -71,7 +71,7 @@ const confirm = async () => {
     .getByRole("dialog", { name: "Confirm type changes", exact: true })
     .waitFor({ state: "detached" });
 };
-const createNode = async (name, x, y) => {
+const createNode = async (name, x, y, type) => {
   await page.locator("[data-active-graph-canvas]").click({ button: "right", position: { x, y } });
   await page.getByPlaceholder("Search nodes").fill(name);
   await button(name, page.getByRole("dialog", { name: "Create node", exact: true })).click();
@@ -89,9 +89,22 @@ const createNode = async (name, x, y) => {
     { key, name },
   );
   const project = await snapshot();
-  return Object.values(project.graphs)
+  const node = Object.values(project.graphs)
     .flatMap((graph) => Object.values(graph.nodes))
     .find((node) => node.name === name);
+  if (type) {
+    await selectNode(node);
+    await page.getByRole("group", { name: "Target type", exact: true }).getByRole("button").click();
+    await page.getByRole("option", { name: type, exact: true }).click();
+    await page.waitForFunction(
+      ({ key, id }) =>
+        Object.values(JSON.parse(localStorage.getItem(key)).project.graphs).some(
+          (graph) => graph.nodes[id]?.properties.type,
+        ),
+      { key, id: node.id },
+    );
+  }
+  return node;
 };
 const selectNode = async (node) => page.locator(`[data-node-header="${node.id}"]`).click();
 const wire = async (source, target) => {
@@ -130,17 +143,26 @@ const executionFixture = (types) => {
     add(
       id,
       "CustomTypes",
-      JSON.stringify(member === undefined ? [type.id, operation] : [type.id, operation, member]),
+      {
+        make: "MakeStruct",
+        break: "BreakStruct",
+        update: "UpdateStruct",
+        construct: "ConstructEnum",
+        match: "MatchEnum",
+        parse: "ParseJson",
+        stringify: "StringifyJson",
+      }[operation],
       defaults,
+      operation === "break" ? {} : { type: type.id, ...(member === undefined ? {} : { variant: member }) },
     );
   const connect = (outNodeId, outIoId, inNodeId, inIoId) =>
-    connections.push({ id: `wire-${connections.length}`, outNodeId, outIoId, inNodeId, inIoId });
+    connections.push({ id: `wire-${connections.length}`, outNodeId, outIo: { _tag: "Port", id: outIoId }, inNodeId, inIoId });
   const date = [{ _tag: "Some", value: "2026-08-31T00:00:00.000Z" }];
   const original = { _type: person.id, name: "original", dates: date };
   const updated = { ...original, name: "PR15_EXECUTION_PROOF" };
   add("tick", "util", "Tick");
   generated("make", person, "make", { [field("name")]: "original", [field("dates")]: date });
-  generated("update", person, "update", { [field("name")]: updated.name }, "name");
+  generated("update", person, "update", { [field("name")]: { _tag: "Some", value: updated.name } });
   generated("stringify", person, "stringify");
   generated("parse", person, "parse");
   generated("break", person, "break");
@@ -163,7 +185,7 @@ const executionFixture = (types) => {
   let previous = "match";
   let previousPort = `variant:${JSON.stringify("Ok")}`;
   const listOperation = (id, schema, defaults, execution = false) => {
-    add(id, "list", schema, defaults, { type: JSON.stringify(custom) });
+    add(id, "list", schema, defaults);
     if (execution) {
       connect(previous, previousPort, id, "exec");
       previous = id;
@@ -171,6 +193,7 @@ const executionFixture = (types) => {
     }
   };
   listOperation("create", "ListCreate", { "value-0": original });
+  connect("make", "value", "create", "value-0");
   listOperation("push", "PushListValue", { value: updated }, true);
   connect("create", "out", "push", "list");
   listOperation("insert", "InsertListValue", { value: original, index: 1 }, true);
@@ -185,10 +208,10 @@ const executionFixture = (types) => {
   connect("remove", "returnList", "slice", "list");
   listOperation("includes", "ListIncludes", { input: updated });
   connect("slice", "output", "includes", "list");
-  add("branch", "util", "Branch");
+  add("branch", "logic", "Branch");
   connect(previous, previousPort, "branch", "exec");
   connect("includes", "output", "branch", "condition");
-  connect("branch", "trueOut", "print", "exec");
+  connect("branch", "true", "print", "exec");
   listOperation("get", "GetListValue", { index: 0 });
   connect("slice", "output", "get", "list");
   listOperation("length", "ListLength", {});
@@ -276,14 +299,8 @@ try {
   await page.locator("[data-active-graph-canvas]").waitFor();
   const listPickerNode = await createNode("List Create", 60, 340);
   await selectNode(listPickerNode);
-  await choose(page.getByRole("group", { name: "List item type", exact: true }), 0, "Person");
-  await page.waitForFunction(
-    ({ key, id }) =>
-      Object.values(JSON.parse(localStorage.getItem(key)).project.graphs).some((graph) =>
-        graph.nodes[id]?.properties.type?.includes("Custom"),
-      ),
-    { key, id: listPickerNode.id },
-  );
+  assert.equal(await page.getByRole("group", { name: "List item type", exact: true }).count(), 0,
+    "List Create infers its item type instead of exposing a type picker");
   await selectNode(listPickerNode);
   await page.keyboard.press("Delete");
   await page.waitForFunction(
@@ -293,9 +310,9 @@ try {
       ),
     { key, id: listPickerNode.id },
   );
-  const make = await createNode("Make Person", 60, 80);
-  const stringify = await createNode("Stringify Person JSON", 460, 100);
-  const match = await createNode("Match Response", 460, 340);
+  const make = await createNode("Make Struct", 60, 80, "Person");
+  const stringify = await createNode("Stringify JSON", 460, 100, "Person");
+  const match = await createNode("Match Enum", 460, 340, "Response");
   await selectNode(match);
   const matchDefault = page.locator('[data-default-editor="Response"]');
   await button("Set default", matchDefault).click();
@@ -332,7 +349,7 @@ try {
   await button("Edit type Person").click();
   await page.getByLabel("Type name", { exact: true }).fill("Profile");
   await preview();
-  await button("Make Person").click();
+  await button("Make Struct").click();
   await page.locator("input").filter({ visible: true }).last().fill("Renamed Make");
   await page.locator("input").filter({ visible: true }).last().press("Enter");
   await waitSaved((project) =>
@@ -397,15 +414,13 @@ try {
   assert((await snapshot()).types[person.id]);
   await button("Delete type Profile").click();
   await confirm();
-  await page.locator("[data-invalid-wire]").waitFor();
-  await selectNode(make);
-  await page
-    .getByText("Missing node schema. Restore its type or remove this node.", { exact: true })
-    .waitFor();
-  await button("Remove invalid wire").click();
   await waitSaved((project) =>
     Object.values(project.graphs).every((graph) => graph.connections.length === 0),
   );
+  assert.equal(await page.locator("[data-invalid-wire]").count(), 0);
+  assert.equal(await button("Remove invalid wire").count(), 0);
+  await selectNode(make);
+  await page.getByText(`Missing type ${person.id}`, { exact: true }).waitFor();
   await page.reload();
   await button("Types").waitFor();
   assert.equal((await snapshot()).types[person.id], undefined);
@@ -484,7 +499,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: struct/enum/nested picker/defaults/List selector/all generated and collection execution/JSON roundtrip/replay/runtime block-restore/wire/rename/stale-preview/cancel-confirm/orphan-repair/delete/reload/mobile",
+    "PASS: struct/enum/nested picker/defaults/List selector/all generated and collection execution/JSON roundtrip/replay/runtime block-restore/automatic-wire-removal/rename/stale-preview/cancel-confirm/orphan-repair/delete/reload/mobile",
   );
 } catch (error) {
   console.error(await page.locator("body").innerText());

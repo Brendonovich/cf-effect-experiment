@@ -69,7 +69,7 @@ it("serves the client and backend through one Vite server", async () => {
 
 it.each([
   ["server code", "src/Server.ts"],
-  ["workspace dependencies", "../../packages/plugins/utilities/src/Engine.ts"],
+  ["workspace dependencies", "../../packages/modules/utilities/src/Engine.ts"],
 ])("disposes WebSockets and reloads changes to %s", async (_, file) => {
   const socket = new WebSocket(`${origin.replace("http:", "ws:")}${basePath}/rpc-ws`);
   await new Promise<void>((resolveOpen, reject) => {

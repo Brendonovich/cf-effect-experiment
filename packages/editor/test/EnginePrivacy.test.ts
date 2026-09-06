@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Actor, GraphId, Project } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { Engine } from "@macrograph/plugin";
+import { Engine } from "@macrograph/module";
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import { RpcGroup, RpcSerialization, RpcTest } from "effect/unstable/rpc";
@@ -79,16 +79,16 @@ describe("Engine storage privacy", () => {
       const events = yield* EditorEvents.Service;
       yield* events.publish({
         _tag: "EngineStateChanged",
-        pluginId: "integration",
+        moduleId: "integration",
         state: { token: "private-token" },
       });
       const frame = yield* Queue.take(frames);
       assert.strictEqual(frame[0], 1);
       const text = new TextDecoder().decode(frame.subarray(1));
       assert.deepStrictEqual(JSON.parse(text), {
-        _tag: "PluginClientStateDirty",
+        _tag: "ModuleClientStateDirty",
         actor: Actor.system,
-        pluginId: "integration",
+        moduleId: "integration",
       });
       assert.notInclude(text, "private-token");
     }).pipe(
@@ -120,7 +120,7 @@ describe("Engine storage privacy", () => {
       const events = yield* EditorEvents.Service;
       yield* events.publish({
         _tag: "EngineStateChanged",
-        pluginId: "integration",
+        moduleId: "integration",
         state: { token: "updated-private-token" },
       });
       const results = yield* Fiber.join(stream);
@@ -131,9 +131,9 @@ describe("Engine storage privacy", () => {
         assert.deepStrictEqual(results[0].snapshot.nodeIO, { graph: {} });
       }
       assert.deepStrictEqual(results[1], {
-        _tag: "PluginClientStateDirty",
+        _tag: "ModuleClientStateDirty",
         actor: Actor.system,
-        pluginId: "integration",
+        moduleId: "integration",
       });
       assert.notInclude(JSON.stringify(results), "private-token");
       assert.deepStrictEqual((yield* persistence.loadProject()).engines, {
@@ -161,7 +161,7 @@ describe("Engine storage privacy", () => {
       const events = yield* EditorEvents.Service;
       yield* events.publish({
         _tag: "EngineStateChanged",
-        pluginId: "integration",
+        moduleId: "integration",
         state: { token: "updated-private-token" },
       });
       const results = yield* Fiber.join(stream);
@@ -171,7 +171,7 @@ describe("Engine storage privacy", () => {
       assert.deepStrictEqual(results[1], {
         _tag: "EngineStateChanged",
         actor: Actor.system,
-        pluginId: "integration",
+        moduleId: "integration",
         state: { token: "updated-private-token" },
       });
     }).pipe(Effect.scoped, Effect.provide(services), Effect.provide(policy(true))),

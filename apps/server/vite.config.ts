@@ -1,4 +1,4 @@
-import { pluginDeployments } from "@macrograph/plugin/vite";
+import { moduleDeployments } from "@macrograph/module/vite";
 import { fileURLToPath } from "node:url";
 import {
   defineConfig,
@@ -8,7 +8,7 @@ import {
   type UserConfig,
 } from "vite";
 
-import clientConfig, { serverPlugins } from "./client/vite.config.ts";
+import clientConfig, { serverModules } from "./client/vite.config.ts";
 import { ServerConfig } from "./src/ServerConfig.ts";
 
 export default defineConfig((env) => {
@@ -38,7 +38,7 @@ export default defineConfig((env) => {
       ),
     },
     plugins: [
-      pluginDeployments(undefined, serverPlugins),
+      moduleDeployments(undefined, serverModules),
       {
         name: "macrograph-dev-server",
         apply: "serve",

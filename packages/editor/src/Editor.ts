@@ -1,16 +1,19 @@
-import type * as Engine from "@macrograph/plugin/Engine";
-import type * as Plugin from "@macrograph/plugin/Plugin";
+import type * as Engine from "@macrograph/module/Engine";
+import type * as Module from "@macrograph/module/Module";
 
 import {
   Clipboard,
   Connection,
   CustomTypes,
+  Scopes,
+  Wildcards,
   Graph,
   GraphId,
   IoId,
   Node,
   NodeId,
   NodeIO,
+  OutputRef,
   Package,
   PackageId,
   Project,
@@ -19,11 +22,22 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
+import { DataType } from "@macrograph/module/DataType";
+import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
+import * as Registration from "@macrograph/module/Registration";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
-import { DataType } from "@macrograph/plugin/DataType";
-import * as HttpEndpoint from "@macrograph/plugin/HttpEndpoint";
-import * as Registration from "@macrograph/plugin/Registration";
-import { Clock, Context, Effect, Fiber, Layer, Ref, Schema, Semaphore, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Effect,
+  Fiber,
+  Layer,
+  Ref,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+} from "effect";
 
 import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
@@ -77,6 +91,12 @@ type NodeSetFoldPinsOptions = {
   readonly nodeID: string;
   readonly foldPins: boolean;
 };
+type NodeSetScopeSplitOptions = {
+  readonly graphID: string;
+  readonly nodeID: string;
+  readonly scope: string;
+  readonly split: boolean;
+};
 
 export const ProjectSnapshot = Schema.Struct({
   project: Project.Model,
@@ -113,16 +133,16 @@ const projectState = (value: unknown): string =>
 
 export class EngineNotRegistered extends Schema.TaggedError<EngineNotRegistered>()(
   "EngineNotRegistered",
-  { pluginId: Schema.String },
+  { moduleId: Schema.String },
 ) {}
 
 export class EngineNotHosted extends Schema.TaggedError<EngineNotHosted>()("EngineNotHosted", {
-  pluginId: Schema.String,
+  moduleId: Schema.String,
 }) {}
 
 export class InvalidEngineState extends Schema.TaggedError<InvalidEngineState>()(
   "InvalidEngineState",
-  { pluginId: Schema.String, cause: Schema.Unknown },
+  { moduleId: Schema.String, cause: Schema.Unknown },
 ) {}
 
 export interface HostedResource {
@@ -243,6 +263,12 @@ export interface Interface {
     readonly setFoldPins: (
       options: NodeSetFoldPinsOptions,
     ) => Effect.Effect<EditorEvent.NodeFoldPinsChanged, NodeMutationError>;
+    readonly setScopeSplit: (
+      options: NodeSetScopeSplitOptions,
+    ) => Effect.Effect<
+      EditorEvent.NodeScopeSplitChanged,
+      NodeMutationError | Package.SchemaNotFoundError | Connection.InvalidError
+    >;
     readonly setProperty: (
       options: NodeSetPropertyOptions,
     ) => Effect.Effect<
@@ -297,7 +323,7 @@ export interface Interface {
   };
   readonly engine: {
     readonly setState: (
-      pluginId: string,
+      moduleId: string,
       state: unknown,
     ) => Effect.Effect<
       EditorEvent.EngineStateChanged,
@@ -306,37 +332,37 @@ export interface Interface {
     readonly getEndpoints: () => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
     readonly setEndpoints: (endpoints: ReadonlyArray<HttpEndpoint.Routed>) => Effect.Effect<void>;
     readonly hostClientState: (
-      pluginId: string,
+      moduleId: string,
       state: Effect.Effect<Schema.Json>,
     ) => Effect.Effect<void>;
-    readonly getClientState: (pluginId: string) => Effect.Effect<Schema.Json, EngineNotHosted>;
-    readonly dirtyClientState: (pluginId: string) => Effect.Effect<void>;
+    readonly getClientState: (moduleId: string) => Effect.Effect<Schema.Json, EngineNotHosted>;
+    readonly dirtyClientState: (moduleId: string) => Effect.Effect<void>;
     readonly getClientCapabilities: () => Effect.Effect<ReadonlyArray<string>>;
     readonly hostResource: (
-      pluginId: string,
+      moduleId: string,
       resourceId: string,
       resource: HostedResource,
     ) => Effect.Effect<void>;
     readonly getResourceValues: (
-      pluginId: string,
+      moduleId: string,
       resourceId: string,
     ) => Effect.Effect<
       ReadonlyArray<ResourceConstant.LiveValue>,
       ResourceConstant.InvalidResourceError
     >;
     readonly reloadResource: (
-      pluginId: string,
+      moduleId: string,
       resourceId: string,
     ) => Effect.Effect<void, ResourceConstant.InvalidResourceError>;
-    readonly hostRuntimeClient: (pluginId: string, client: unknown) => Effect.Effect<void>;
-    readonly getRuntimeClient: (pluginId: string) => Effect.Effect<unknown, EngineNotHosted>;
+    readonly hostRuntimeClient: (moduleId: string, client: unknown) => Effect.Effect<void>;
+    readonly getRuntimeClient: (moduleId: string) => Effect.Effect<unknown, EngineNotHosted>;
   };
-  readonly plugin: <Definition extends Engine.AnyDef = never>(
-    ...args: Plugin.RegisterArgs<Definition>
+  readonly module: <Definition extends Engine.AnyDef = never>(
+    ...args: Module.RegisterArgs<Definition>
   ) => Effect.Effect<void>;
 }
 
-/** Coordinates project editing, resource constants, plugin registration, and hosted engines. */
+/** Coordinates project editing, resource constants, module registration, and hosted engines. */
 export class Service extends Context.Service<Service, Interface>()("macrograph/Editor") {}
 
 export const layer = Layer.effect(Service)(
@@ -370,8 +396,8 @@ export const layer = Layer.effect(Service)(
       ReadonlyMap<ResourceKey, HostedResource & { readonly forwardingFiber: Fiber.Fiber<void> }>
     >(new Map());
     const runtimeClients = yield* Ref.make<ReadonlyMap<string, unknown>>(new Map());
-    const resourceKey = (pluginId: string, resourceId: string) =>
-      ResourceKey.make(`${pluginId}\0${resourceId}`);
+    const resourceKey = (moduleId: string, resourceId: string) =>
+      ResourceKey.make(`${moduleId}\0${resourceId}`);
     const resolveIOProperties = Effect.fnUntraced(function* (
       schemaRef: Node.Model["schema"],
       persistedProperties: Readonly<Record<string, Schema.Json>>,
@@ -398,10 +424,84 @@ export const layer = Layer.effect(Service)(
       }
       return properties;
     });
-    const getNodeIO = (node: Node.Model, definitions?: DataType.Definitions) =>
+    const getBaseNodeIO = (node: Node.Model, definitions?: DataType.Definitions) =>
       resolveIOProperties(node.schema, node.properties).pipe(
         Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties, definitions)),
       );
+    const getNodeIO = Effect.fnUntraced(function* (
+      node: Node.Model,
+      definitions?: DataType.Definitions,
+    ) {
+      const io = yield* getBaseNodeIO(node, definitions);
+      if (!Scopes.isBreakScope(node) && !CustomTypes.isBreakStruct(node)) return io;
+      const project = yield* persistence.loadProject();
+      const graph = Object.values(project.graphs).find((graph) =>
+        Object.hasOwn(graph.nodes, node.id),
+      );
+      if (graph === undefined) return io;
+      if (CustomTypes.isBreakStruct(node)) {
+        const { declarations } = yield* graphWildcards(
+          graph,
+          { [node.id]: io },
+          undefined,
+          definitions,
+        );
+        return declarations.get(node.id) ?? io;
+      }
+      const wire = graph.connections.find(
+        (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
+      );
+      const source = wire === undefined ? undefined : graph.nodes[wire.outNodeId];
+      const sourceIO =
+        source === undefined
+          ? undefined
+          : yield* getBaseNodeIO(source, definitions).pipe(
+              Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
+            );
+      return Scopes.resolveIO(graph, node.id, (id) => (id === source?.id ? sourceIO : io)) ?? io;
+    });
+    const wildcardCaches = new Map<string, Wildcards.Cache>();
+    const graphWildcards = Effect.fnUntraced(function* (
+      graph: Graph.Model,
+      overrides: Readonly<Record<string, NodeIO>> = {},
+      cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(),
+      definitions?: DataType.Definitions,
+    ): Effect.fn.Return<
+      {
+        cache: Wildcards.Cache;
+        declarations: Map<string, NodeIO>;
+        result: Result.Result<void, ReadonlyArray<Wildcards.Conflict>>;
+      },
+      PersistenceError | Project.NotFoundError
+    > {
+      const declarations = new Map<string, NodeIO>();
+      for (const node of Object.values(graph.nodes)) {
+        const io =
+          overrides[node.id] ??
+          (yield* getBaseNodeIO(node, definitions).pipe(
+            Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
+          ));
+        if (io !== undefined) declarations.set(node.id, io);
+      }
+      for (const node of Object.values(graph.nodes)) {
+        if (!Scopes.isBreakScope(node)) continue;
+        const io = Scopes.resolveIO(graph, node.id, (id) => declarations.get(id));
+        if (io !== undefined) declarations.set(node.id, io);
+      }
+      const result = cache.update(
+        declarations,
+        graph.connections,
+        CustomTypes.derivedOutputs(graph, definitions ?? (yield* persistence.loadProject()).types),
+      );
+      if (Result.isSuccess(result)) {
+        for (const [id, io] of declarations) {
+          const outputs = cache.derivedOutputs(id);
+          if (outputs !== undefined) declarations.set(id, { ...io, dataOutputs: outputs });
+        }
+      }
+      wildcardCaches.set(graph.id, cache);
+      return { cache, declarations, result };
+    });
     const retainValidInputDefaults = Effect.fnUntraced(function* (
       io: NodeIO,
       defaults: Readonly<Record<string, Schema.Json>>,
@@ -452,10 +552,9 @@ export const layer = Layer.effect(Service)(
       outputIO: NodeIO,
       inputIO: NodeIO,
     ) => {
-      const executionOutputs = outputIO.executionOutputs.filter(
-        (output) => output.id === connection.outIoId,
-      );
-      const dataOutputs = outputIO.dataOutputs.filter((output) => output.id === connection.outIoId);
+      const output = OutputRef.resolve(outputIO, connection.outIo);
+      const executionOutputs = output?.kind === "execution" ? [output.port] : [];
+      const dataOutputs = output?.kind === "data" ? [output.port] : [];
       const executionInputs = inputIO.executionInputs.filter(
         (input) => input.id === connection.inIoId,
       );
@@ -463,11 +562,16 @@ export const layer = Layer.effect(Service)(
       if (executionOutputs.length + dataOutputs.length !== 1) return false;
       if (executionInputs.length + dataInputs.length !== 1) return false;
       if ((executionOutputs.length === 1) !== (executionInputs.length === 1)) return false;
+      if (
+        executionOutputs.length === 1 &&
+        !Registration.scopesCompatible(executionOutputs[0]!.scope, executionInputs[0]!.scope)
+      )
+        return false;
       const dataOutput = dataOutputs[0];
       const dataInput = dataInputs[0];
       return dataOutput === undefined || dataInput === undefined
         ? dataOutput === undefined && dataInput === undefined
-        : DataType.equals(dataOutput.type, dataInput.type);
+        : DataType.compatible(dataOutput.type, dataInput.type);
     };
 
     const proposedTypes = Effect.fnUntraced(function* (
@@ -515,25 +619,35 @@ export const layer = Layer.effect(Service)(
         };
         for (const node of Object.values(graph.nodes)) {
           const io =
-            node.schema.package === CustomTypes.packageId
+            node.schema.package === CustomTypes.packageId && !CustomTypes.isBreakStruct(node)
               ? (CustomTypes.nodeIO(node.schema, node.properties, project.types) ?? emptyNodeIO)
               : yield* getNodeIO(node, project.types).pipe(
                   Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
                 );
           before[node.id] = io;
           const nextIO =
-            node.schema.package === CustomTypes.packageId
+            node.schema.package === CustomTypes.packageId && !CustomTypes.isBreakStruct(node)
               ? (CustomTypes.nodeIO(node.schema, node.properties, types) ?? emptyNodeIO)
               : yield* getNodeIO(node, types).pipe(
                   Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
                 );
           after[node.id] = nextIO;
           if (!definitionsChanged) continue;
+          if (
+            node.schema.package === CustomTypes.packageId &&
+            typeof node.properties.type === "string" &&
+            affected.has(node.properties.type)
+          )
+            add(node.id, `Selected type ${node.properties.type} is affected`);
           for (const port of [
             ...io.dataInputs,
             ...io.dataOutputs,
             ...nextIO.dataInputs,
             ...nextIO.dataOutputs,
+            ...io.executionInputs.flatMap((port) => port.scope ?? []),
+            ...io.executionOutputs.flatMap((port) => port.scope ?? []),
+            ...nextIO.executionInputs.flatMap((port) => port.scope ?? []),
+            ...nextIO.executionOutputs.flatMap((port) => port.scope ?? []),
           ])
             for (const ref of TypeDefinition.references(port.type))
               if (affected.has(ref)) add(node.id, `Port ${port.id} uses affected type ${ref}`);
@@ -553,9 +667,13 @@ export const layer = Layer.effect(Service)(
           const newOut = after[wire.outNodeId] ?? emptyNodeIO;
           const newIn = after[wire.inNodeId] ?? emptyNodeIO;
           const usesAffected = [
-            ...oldOut.dataOutputs.filter((p) => p.id === wire.outIoId),
+            ...[OutputRef.resolve(oldOut, wire.outIo)].flatMap((p) =>
+              p?.kind === "data" ? [p.port] : [],
+            ),
             ...oldIn.dataInputs.filter((p) => p.id === wire.inIoId),
-            ...newOut.dataOutputs.filter((p) => p.id === wire.outIoId),
+            ...[OutputRef.resolve(newOut, wire.outIo)].flatMap((p) =>
+              p?.kind === "data" ? [p.port] : [],
+            ),
             ...newIn.dataInputs.filter((p) => p.id === wire.inIoId),
           ].some((port) => TypeDefinition.references(port.type).some((ref) => affected.has(ref)));
           const changedEndpoint =
@@ -615,7 +733,7 @@ export const layer = Layer.effect(Service)(
           nodeIO[graphId] = {};
           const resolved = new Set<string>();
           for (const node of Object.values(graph.nodes)) {
-            const result = yield* getNodeIO(node).pipe(
+            const result = yield* getNodeIO(node, types).pipe(
               Effect.map((io) => ({ io, resolved: true as const })),
               Effect.catchTag("SchemaNotFoundError", () =>
                 Effect.succeed({ io: emptyNodeIO, resolved: false as const }),
@@ -678,7 +796,9 @@ export const layer = Layer.effect(Service)(
     const graphDelete = Effect.fn("Editor.graph.delete")(function* (options: {
       readonly graphID: string;
     }) {
-      return yield* events.publish({ _tag: "GraphDeleted", graphId: options.graphID });
+      const event = yield* events.publish({ _tag: "GraphDeleted", graphId: options.graphID });
+      wildcardCaches.delete(options.graphID);
+      return event;
     }, lock.withPermit);
 
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
@@ -719,6 +839,9 @@ export const layer = Layer.effect(Service)(
         properties,
         inputDefaults,
         foldPins: options.node.foldPins ?? false,
+        ...(options.node.splitScopeOutputs === undefined
+          ? {}
+          : { splitScopeOutputs: options.node.splitScopeOutputs }),
         schema: options.node.schema,
         position: options.node.position ?? { x: 0, y: 0 },
       };
@@ -762,8 +885,8 @@ export const layer = Layer.effect(Service)(
             const names = fragment.nodeSchemas?.[source.id];
             missingSchemas.set(key, {
               ...source.schema,
-              pluginName:
-                names?.pluginName ??
+              moduleName:
+                names?.moduleName ??
                 availablePackages.find((candidate) => candidate.id === source.schema.package)
                   ?.name ??
                 source.schema.package,
@@ -838,14 +961,16 @@ export const layer = Layer.effect(Service)(
             );
             yield* validateResourceBindings(source.schema, properties);
             const ioProperties = yield* resolveIOProperties(source.schema, properties);
+            const declaredIO = yield* packages.getNodeIO(source.schema, ioProperties);
             const inputDefaults: Record<string, Schema.Json> = {};
-            for (const [input, value] of Object.entries(source.inputDefaults))
-              inputDefaults[input] = yield* packages.validateInputDefault(
-                source.schema,
-                ioProperties,
-                input,
-                value,
-              );
+            for (const [input, value] of Object.entries(source.inputDefaults)) {
+              const port = declaredIO.dataInputs.find((port) => port.id === input);
+              // Wildcard defaults can only be checked after all pasted wires are known.
+              inputDefaults[input] =
+                port !== undefined && DataType.hasWildcard(port.type)
+                  ? value
+                  : yield* packages.validateInputDefault(source.schema, ioProperties, input, value);
+            }
             let id = NodeId.make(crypto.randomUUID());
             while (Object.hasOwn(graph.nodes, id) || nodes.some((node) => node.id === id))
               id = NodeId.make(crypto.randomUUID());
@@ -885,6 +1010,47 @@ export const layer = Layer.effect(Service)(
           sameProject && fragment.source?.graphId === options.graphID
             ? (fragment.externalConnections ?? [])
             : [];
+        // Infer Break Scope pins from the complete proposed fragment, independent of wire order.
+        const proposedGraph: Graph.Model = {
+          ...graph,
+          nodes: { ...graph.nodes, ...Object.fromEntries(nodes.map((node) => [node.id, node])) },
+          connections: [
+            ...graph.connections,
+            ...[...fragment.connections, ...external]
+              .filter(
+                (wire) => !missingNodeIds.has(wire.outNodeId) && !missingNodeIds.has(wire.inNodeId),
+              )
+              .map((wire) => ({
+                ...wire,
+                id: Connection.ConnectionId.make(crypto.randomUUID()),
+                outNodeId: remap.get(wire.outNodeId) ?? wire.outNodeId,
+                inNodeId: remap.get(wire.inNodeId) ?? wire.inNodeId,
+              })),
+          ],
+        };
+        const sourceIO = { ...nodeIO };
+        for (const node of nodes) {
+          if (!Scopes.isBreakScope(node)) continue;
+          const wire = proposedGraph.connections.find(
+            (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
+          );
+          if (wire !== undefined && sourceIO[wire.outNodeId] === undefined) {
+            const source = proposedGraph.nodes[wire.outNodeId];
+            if (source !== undefined)
+              sourceIO[source.id] = yield* getNodeIO(source).pipe(
+                Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+              );
+          }
+          nodeIO[node.id] =
+            Scopes.resolveIO(proposedGraph, node.id, (id) => sourceIO[id]) ?? Scopes.emptyIO;
+        }
+        if (nodes.some(CustomTypes.isBreakStruct)) {
+          const inferred = yield* graphWildcards(proposedGraph, nodeIO);
+          for (const node of nodes) {
+            const io = inferred.declarations.get(node.id);
+            if (io !== undefined) nodeIO[node.id] = io;
+          }
+        }
         const occupied = new Set(
           graph.connections.map((connection) =>
             JSON.stringify([connection.inNodeId, connection.inIoId]),
@@ -932,6 +1098,36 @@ export const layer = Layer.effect(Service)(
           connectionIds.add(id);
           connections.push({ ...source, id, outNodeId, inNodeId });
           occupied.add(inputKey);
+        }
+        const { cache: pastedWildcards, result } = yield* graphWildcards(
+          {
+            ...proposedGraph,
+            connections: [...graph.connections, ...connections],
+          },
+          nodeIO,
+        );
+        if (Result.isFailure(result))
+          return yield* new Clipboard.InvalidError({ reason: result.failure[0]!.reason });
+        for (const node of nodes) {
+          const resolved = pastedWildcards.resolveIO(node.id, nodeIO[node.id]!);
+          for (const [input, value] of Object.entries(node.inputDefaults)) {
+            const declared = nodeIO[node.id]!.dataInputs.find((port) => port.id === input);
+            if (declared === undefined || !DataType.hasWildcard(declared.type)) continue;
+            const port = resolved.dataInputs.find((port) => port.id === input)!;
+            // Preserve a detached node's saved default for when it is reconnected.
+            if (DataType.hasWildcard(port.type)) continue;
+            yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(port.type, project.types))(
+              value,
+            ).pipe(
+              Effect.catchTag(
+                "SchemaError",
+                () =>
+                  new Clipboard.InvalidError({
+                    reason: `${node.name}: ${input}: default does not match the inferred wildcard type`,
+                  }),
+              ),
+            );
+          }
         }
         return yield* events.publish({
           _tag: "FragmentPasted",
@@ -1033,6 +1229,35 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
+    const nodeSetScopeSplit = Effect.fn("Editor.node.setScopeSplit")(function* (
+      options: NodeSetScopeSplitOptions,
+    ) {
+      const graph = yield* persistence.loadGraph(options.graphID);
+      const node = yield* Graph.getNode(graph, options.nodeID);
+      const io = yield* getNodeIO(node);
+      const port = OutputRef.resolve(io, OutputRef.port(options.scope));
+      if (port?.kind !== "execution" || port.port.scope == null)
+        return yield* new Connection.InvalidError({ reason: "Output is not a scope" });
+      const split = new Set(node.splitScopeOutputs ?? []);
+      if (
+        split.has(IoId.make(options.scope)) !== options.split &&
+        graph.connections.some(
+          (wire) => wire.outNodeId === node.id && OutputRef.parentId(wire.outIo) === options.scope,
+        )
+      )
+        return yield* new Connection.InvalidError({
+          reason: "Disconnect this scope's output wires before changing its display mode",
+        });
+      if (options.split) split.add(IoId.make(options.scope));
+      else split.delete(IoId.make(options.scope));
+      return yield* events.publish({
+        _tag: "NodeScopeSplitChanged",
+        graphId: options.graphID,
+        nodeId: node.id,
+        splitScopeOutputs: [...split],
+      });
+    }, lock.withPermit);
+
     const nodeSetFoldPins = Effect.fn("Editor.node.setFoldPins")(function* (
       options: NodeSetFoldPinsOptions,
     ) {
@@ -1078,7 +1303,8 @@ export const layer = Layer.effect(Service)(
       const preservesTypeData =
         node.schema.package === CustomTypes.packageId ||
         [...oldIO.dataInputs, ...oldIO.dataOutputs, ...io.dataInputs, ...io.dataOutputs].some(
-          (port) => TypeDefinition.references(port.type).length > 0,
+          (port) =>
+            TypeDefinition.references(port.type).length > 0 || DataType.hasWildcard(port.type),
         ) ||
         TypeDefinition.valueReferences(node.properties).length > 0 ||
         TypeDefinition.valueReferences(node.inputDefaults).length > 0 ||
@@ -1098,9 +1324,19 @@ export const layer = Layer.effect(Service)(
         }
         const outputIO = outputNode.id === node.id ? io : yield* getNodeIO(outputNode);
         const inputIO = inputNode.id === node.id ? io : yield* getNodeIO(inputNode);
-        if (!isConnectionValid(connection, outputIO, inputIO))
-          stale.push(connection);
+        if (!isConnectionValid(connection, outputIO, inputIO)) stale.push(connection);
       }
+      const { result } = yield* graphWildcards(
+        {
+          ...graph,
+          connections: graph.connections.filter((wire) => !stale.includes(wire)),
+        },
+        { [node.id]: io },
+      );
+      const conflicts = new Set(
+        Result.isFailure(result) ? result.failure.map((conflict) => conflict.connectionId) : [],
+      );
+      stale.push(...graph.connections.filter((wire) => conflicts.has(wire.id)));
       return yield* events.publish({
         _tag: "NodePropertyUpdated",
         graphId: options.graphID,
@@ -1108,7 +1344,11 @@ export const layer = Layer.effect(Service)(
         property: options.property,
         properties,
         inputDefaults,
-        deletedConnectionIds: stale
+        deletedConnectionIds: (node.schema.package === CustomTypes.packageId &&
+        CustomTypes.operationFor(node.schema.schema) !== undefined
+          ? []
+          : stale
+        )
           .map((connection) => connection.id)
           .sort((left, right) => left.localeCompare(right)),
         io,
@@ -1127,13 +1367,57 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       const node = yield* Graph.getNode(graph, options.nodeID);
       const ioProperties = yield* resolveIOProperties(node.schema, node.properties);
-      const value = yield* packages.validateInputDefault(
-        node.schema,
-        ioProperties,
-        options.input,
-        options.value,
-        (yield* persistence.loadProject()).types,
-      );
+      const { cache, declarations, result } = yield* graphWildcards(graph);
+      const definitions = (yield* persistence.loadProject()).types;
+      const declaredIO = declarations.get(node.id) ?? emptyNodeIO;
+      // Invalid persisted graphs must not use inference from the last valid snapshot.
+      const resolved = Result.isFailure(result) ? declaredIO : cache.resolveIO(node.id, declaredIO);
+      const input = resolved.dataInputs.find((port) => port.id === options.input);
+      const declared = declarations
+        .get(node.id)
+        ?.dataInputs.find((port) => port.id === options.input);
+      if (
+        declared !== undefined &&
+        DataType.hasWildcard(declared.type) &&
+        (resolved.dataInputs.filter((port) => port.id === options.input).length !== 1 ||
+          resolved.executionInputs.some((port) => port.id === options.input))
+      )
+        return yield* new Package.InvalidInputDefaultError({
+          input: options.input,
+          reason: "Input is not an unambiguous data input",
+        });
+      const value =
+        declared !== undefined && DataType.hasWildcard(declared.type) && input !== undefined
+          ? yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
+              options.value,
+              { onExcessProperty: "error" },
+            ).pipe(
+              Effect.catchTag("SchemaError", () =>
+                Schema.decodeUnknownEffect(DataType.ValueSchema(input.type, definitions))(
+                  options.value,
+                ),
+              ),
+              Effect.flatMap((value) =>
+                Schema.encodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
+                  value,
+                ),
+              ),
+              Effect.catchTag(
+                "SchemaError",
+                () =>
+                  new Package.InvalidInputDefaultError({
+                    input: options.input,
+                    reason: "Default does not match the inferred wildcard type",
+                  }),
+              ),
+            )
+          : yield* packages.validateInputDefault(
+              node.schema,
+              ioProperties,
+              options.input,
+              options.value,
+              (yield* persistence.loadProject()).types,
+            );
       return yield* events.publish({
         _tag: "InputDefaultUpdated",
         graphId: options.graphID,
@@ -1201,12 +1485,9 @@ export const layer = Layer.effect(Service)(
       const outSchema = yield* getNodeIO(outNode);
       const inSchema = yield* getNodeIO(inNode);
 
-      const executionOutputs = outSchema.executionOutputs.filter(
-        (output) => output.id === options.connection.outIoId,
-      );
-      const dataOutputs = outSchema.dataOutputs.filter(
-        (output) => output.id === options.connection.outIoId,
-      );
+      const output = OutputRef.resolve(outSchema, options.connection.outIo);
+      const executionOutputs = output?.kind === "execution" ? [output.port] : [];
+      const dataOutputs = output?.kind === "data" ? [output.port] : [];
       const executionInputs = inSchema.executionInputs.filter(
         (input) => input.id === options.connection.inIoId,
       );
@@ -1224,14 +1505,18 @@ export const layer = Layer.effect(Service)(
         return yield* new Connection.InvalidError({
           reason: "Input does not identify one IO kind",
         });
-      if ((executionOutputs.length === 0) !== (executionInputs.length === 0))
+      if (
+        (executionOutputs.length === 0) !== (executionInputs.length === 0) ||
+        (executionOutputs.length === 1 &&
+          !Registration.scopesCompatible(executionOutputs[0]!.scope, executionInputs[0]!.scope))
+      )
         return yield* new Connection.InvalidError({
           reason: "Connection endpoints must have the same IO kind",
         });
       if (
         dataOutputs[0] !== undefined &&
         dataInputs[0] !== undefined &&
-        !DataType.equals(dataOutputs[0].type, dataInputs[0].type)
+        !DataType.compatible(dataOutputs[0].type, dataInputs[0].type)
       )
         return yield* new Connection.InvalidError({ reason: "Data types are incompatible" });
       if (
@@ -1246,6 +1531,12 @@ export const layer = Layer.effect(Service)(
         ...options.connection,
         id: Connection.ConnectionId.make(Math.random().toString(36).slice(2)),
       };
+      const { result } = yield* graphWildcards({
+        ...graph,
+        connections: [...graph.connections, connection],
+      });
+      if (Result.isFailure(result))
+        return yield* new Connection.InvalidError({ reason: result.failure[0]!.reason });
       return yield* events.publish({
         _tag: "ConnectionCreated",
         graphId: options.graphID,
@@ -1292,6 +1583,7 @@ export const layer = Layer.effect(Service)(
       const graphs: Record<string, RenderedProject.Model["graphs"][string]> = {};
       for (const [graphId, graph] of Object.entries(project.graphs)) {
         const nodes: Record<string, RenderedProject.Model["graphs"][string]["nodes"][string]> = {};
+        const { cache, declarations, result } = yield* graphWildcards(graph);
         const schemas: Record<string, Record<string, Package.SchemaModel>> = {};
         for (const node of Object.values(graph.nodes)) {
           const schema = yield* packages
@@ -1305,7 +1597,9 @@ export const layer = Layer.effect(Service)(
             );
           nodes[node.id] = {
             ...node,
-            io: yield* getNodeIO(node),
+            io: Result.isFailure(result)
+              ? (declarations.get(node.id) ?? emptyNodeIO)
+              : cache.resolveIO(node.id, declarations.get(node.id) ?? emptyNodeIO),
           };
           if (schema !== undefined)
             (schemas[node.schema.package] ??= {})[node.schema.schema] = schema;
@@ -1474,38 +1768,38 @@ export const layer = Layer.effect(Service)(
     }, lock.withPermit);
 
     const engineSetState = Effect.fn("Editor.engine.setState")(function* (
-      pluginId: string,
+      moduleId: string,
       state: unknown,
     ) {
-      const definition = (yield* Ref.get(engines)).get(pluginId);
-      if (definition === undefined) return yield* new EngineNotRegistered({ pluginId });
+      const definition = (yield* Ref.get(engines)).get(moduleId);
+      if (definition === undefined) return yield* new EngineNotRegistered({ moduleId });
       const decoded = yield* Schema.decodeUnknownEffect(definition.Storage)(state).pipe(
-        Effect.mapError((cause) => new InvalidEngineState({ pluginId, cause })),
+        Effect.mapError((cause) => new InvalidEngineState({ moduleId, cause })),
       );
       const encoded = yield* Schema.encodeUnknownEffect(definition.Storage)(decoded).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
-        Effect.mapError((cause) => new InvalidEngineState({ pluginId, cause })),
+        Effect.mapError((cause) => new InvalidEngineState({ moduleId, cause })),
       );
-      return yield* events.publish({ _tag: "EngineStateChanged", pluginId, state: encoded });
+      return yield* events.publish({ _tag: "EngineStateChanged", moduleId, state: encoded });
     }, lock.withPermit);
 
-    const plugin: Interface["plugin"] = (...args) =>
+    const module: Interface["module"] = (...args) =>
       Effect.gen(function* () {
         const [definition, deployment] = args;
         if (
           definition.engine !== undefined &&
           (deployment === undefined ||
-            deployment.pluginId !== definition.id ||
+            deployment.moduleId !== definition.id ||
             deployment.definition !== definition.engine)
         )
-          return yield* Effect.die(`Deployment does not match plugin ${definition.id}`);
+          return yield* Effect.die(`Deployment does not match module ${definition.id}`);
         const schemas = yield* Registration.collect(definition.effect);
         const resources = definition.engine?.Resource ?? [];
         const resourceIds = new Set<string>();
         for (const resource of resources) {
           if (resourceIds.has(resource.key))
             return yield* Effect.die(
-              `Plugin ${definition.id} registers duplicate resource ${resource.key}`,
+              `Module ${definition.id} registers duplicate resource ${resource.key}`,
             );
           resourceIds.add(resource.key);
         }
@@ -1531,7 +1825,7 @@ export const layer = Layer.effect(Service)(
           definitions: DataType.Definitions,
         ): Schema.Json =>
           Schema.decodeUnknownSync(Schema.Json)(
-            Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(value),
+            Schema.encodeUnknownSync(DataType.JsonDefaultSchema(type, definitions))(value),
           );
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
@@ -1593,14 +1887,8 @@ export const layer = Layer.effect(Service)(
               type: output.type,
               ...(output.name === undefined ? {} : { name: output.name }),
             })),
-            executionInputs: schema.executionInputs.map((input) => ({
-              id: IoId.make(input.id),
-              ...(input.name === undefined ? {} : { name: input.name }),
-            })),
-            executionOutputs: schema.executionOutputs.map((output) => ({
-              id: IoId.make(output.id),
-              ...(output.name === undefined ? {} : { name: output.name }),
-            })),
+            executionInputs: schema.executionInputs.map(Scopes.executionPort),
+            executionOutputs: schema.executionOutputs.map(Scopes.executionPort),
           })),
         };
         yield* packages.loadPackage(
@@ -1623,7 +1911,7 @@ export const layer = Layer.effect(Service)(
                         input.defaultValue === undefined
                           ? undefined
                           : Schema.encodeUnknownResult(
-                              DataType.JsonValueSchema(input.type, definitions),
+                              DataType.JsonDefaultSchema(input.type, definitions),
                             )(input.defaultValue);
                       return {
                         id: IoId.make(input.id),
@@ -1642,14 +1930,8 @@ export const layer = Layer.effect(Service)(
                       type: output.type,
                       ...(output.name === undefined ? {} : { name: output.name }),
                     })),
-                    executionInputs: io.executionInputs.map((input) => ({
-                      id: IoId.make(input.id),
-                      ...(input.name === undefined ? {} : { name: input.name }),
-                    })),
-                    executionOutputs: io.executionOutputs.map((output) => ({
-                      id: IoId.make(output.id),
-                      ...(output.name === undefined ? {} : { name: output.name }),
-                    })),
+                    executionInputs: io.executionInputs.map(Scopes.executionPort),
+                    executionOutputs: io.executionOutputs.map(Scopes.executionPort),
                   };
                 },
                 getSuggestions: (properties, inputDefaults, input) =>
@@ -1676,14 +1958,14 @@ export const layer = Layer.effect(Service)(
           });
       }).pipe(lock.withPermit);
 
-      return Service.of({
-        typeDefinition: { preview: typePreview, confirm: typeConfirm },
-        fragment: {
+    return Service.of({
+      typeDefinition: { preview: typePreview, confirm: typeConfirm },
+      fragment: {
         identity: () => Effect.succeed(clipboardSession),
         paste: fragmentPaste,
-          delete: fragmentDelete,
-        },
-        project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
+        delete: fragmentDelete,
+      },
+      project: { get: projectGet, snapshot: projectSnapshot, rendered: projectRendered },
       constant: {
         create: constantCreate,
         rename: constantRename,
@@ -1696,6 +1978,7 @@ export const layer = Layer.effect(Service)(
         create: nodeCreate,
         update: nodeUpdate,
         setFoldPins: nodeSetFoldPins,
+        setScopeSplit: nodeSetScopeSplit,
         setProperty: nodeSetProperty,
         clearProperty: nodeClearProperty,
         setInputDefault: nodeSetInputDefault,
@@ -1708,32 +1991,32 @@ export const layer = Layer.effect(Service)(
         setState: engineSetState,
         getEndpoints: () => Ref.get(engineEndpoints),
         setEndpoints: (endpoints) => Ref.set(engineEndpoints, endpoints),
-        hostClientState: (pluginId, state) =>
+        hostClientState: (moduleId, state) =>
           Ref.update(engineClientStates, (current) => {
             const next = new Map(current);
-            next.set(pluginId, state);
+            next.set(moduleId, state);
             return next;
           }),
-        getClientState: (pluginId) =>
+        getClientState: (moduleId) =>
           Ref.get(engineClientStates).pipe(
             Effect.flatMap((states) => {
-              const state = states.get(pluginId);
-              return state === undefined ? new EngineNotHosted({ pluginId }) : state;
+              const state = states.get(moduleId);
+              return state === undefined ? new EngineNotHosted({ moduleId }) : state;
             }),
           ),
-        dirtyClientState: (pluginId) =>
-          events.publishEphemeral({ _tag: "PluginClientStateDirty", pluginId }).pipe(Effect.asVoid),
+        dirtyClientState: (moduleId) =>
+          events.publishEphemeral({ _tag: "ModuleClientStateDirty", moduleId }).pipe(Effect.asVoid),
         getClientCapabilities: () =>
           Ref.get(engineClientStates).pipe(
             Effect.map((states) => Array.from(states.keys()).sort()),
           ),
-        hostResource: (pluginId, resourceId, resource) =>
+        hostResource: (moduleId, resourceId, resource) =>
           Effect.gen(function* () {
             const forwardingFiber = yield* resource.changes.pipe(
               Stream.runForEach((values) =>
                 events.publishEphemeral({
                   _tag: "ResourceValuesUpdated",
-                  package: pluginId,
+                  package: moduleId,
                   resource: resourceId,
                   values,
                 }),
@@ -1741,7 +2024,7 @@ export const layer = Layer.effect(Service)(
               Effect.forkIn(scope),
             );
             const previous = yield* Ref.modify(hostedResources, (current) => {
-              const key = resourceKey(pluginId, resourceId);
+              const key = resourceKey(moduleId, resourceId);
               return [
                 current.get(key),
                 new Map(current).set(key, { ...resource, forwardingFiber }),
@@ -1749,45 +2032,45 @@ export const layer = Layer.effect(Service)(
             });
             if (previous !== undefined) yield* Fiber.interrupt(previous.forwardingFiber);
           }),
-        getResourceValues: (pluginId, resourceId) =>
+        getResourceValues: (moduleId, resourceId) =>
           Ref.get(hostedResources).pipe(
             Effect.flatMap((resources) => {
-              const resource = resources.get(resourceKey(pluginId, resourceId));
+              const resource = resources.get(resourceKey(moduleId, resourceId));
               return resource === undefined
                 ? new ResourceConstant.InvalidResourceError({
-                    package: pluginId,
+                    package: moduleId,
                     resource: resourceId,
                     reason: "Resource engine is not hosted",
                   })
                 : resource.values;
             }),
           ),
-        reloadResource: (pluginId, resourceId) =>
+        reloadResource: (moduleId, resourceId) =>
           Ref.get(hostedResources).pipe(
             Effect.flatMap((resources) => {
-              const resource = resources.get(resourceKey(pluginId, resourceId));
+              const resource = resources.get(resourceKey(moduleId, resourceId));
               return resource === undefined
                 ? new ResourceConstant.InvalidResourceError({
-                    package: pluginId,
+                    package: moduleId,
                     resource: resourceId,
                     reason: "Resource engine is not hosted",
                   })
                 : resource.reload;
             }),
           ),
-        hostRuntimeClient: (pluginId, client) =>
-          Ref.update(runtimeClients, (current) => new Map(current).set(pluginId, client)),
-        getRuntimeClient: (pluginId) =>
+        hostRuntimeClient: (moduleId, client) =>
+          Ref.update(runtimeClients, (current) => new Map(current).set(moduleId, client)),
+        getRuntimeClient: (moduleId) =>
           Ref.get(runtimeClients).pipe(
             Effect.flatMap((clients) => {
-              const client = clients.get(pluginId);
+              const client = clients.get(moduleId);
               return client === undefined
-                ? new EngineNotHosted({ pluginId })
+                ? new EngineNotHosted({ moduleId })
                 : Effect.succeed(client);
             }),
           ),
       },
-      plugin,
+      module,
     });
   }),
 );

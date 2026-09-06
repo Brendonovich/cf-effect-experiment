@@ -12,7 +12,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
-import { DataType } from "@macrograph/plugin";
+import { DataType } from "@macrograph/module";
 import { Effect, Layer, PubSub, Result, Schema } from "effect";
 
 import { Editor, EditorEvent, EditorEvents, EditorRpc, Packages } from "../src/index.ts";
@@ -61,7 +61,7 @@ const fragment: Clipboard.Fragment = {
     {
       id: ConnectionId.make("edge"),
       outNodeId: "a",
-      outIoId: IoId.make("text"),
+      outIo: { _tag: "Port" as const, id: IoId.make("text") },
       inNodeId: "b",
       inIoId: IoId.make("text"),
     },
@@ -240,7 +240,7 @@ it.layer(TestLayer)((it) => {
           nodes: [node("a", 0), eventNode],
           nodeIO: { event: sourceIO },
           nodeSchemas: {
-            event: { pluginName: "Project Events", schemaName: "Stream Started" },
+            event: { moduleName: "Project Events", schemaName: "Stream Started" },
           },
           connections: [{ ...fragment.connections[0], inNodeId: "event", inIoId: "field:old" }],
         });
@@ -256,7 +256,7 @@ it.layer(TestLayer)((it) => {
           {
             package: "project-events",
             schema: "emit:old",
-            pluginName: "Project Events",
+            moduleName: "Project Events",
             schemaName: "Stream Started",
           },
         ]);

@@ -3,7 +3,7 @@ import {
 	SessionStoreError,
 	type CredentialClient,
 } from "@macrograph/cloud-credentials";
-import { type Engine } from "@macrograph/plugin";
+import { type Engine } from "@macrograph/module";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Redacted } from "effect";

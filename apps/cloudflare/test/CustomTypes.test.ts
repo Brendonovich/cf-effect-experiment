@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CustomTypes, Project, RenderedProject } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
-import * as ExecutorPlugins from "../src/execution/ExecutorPlugins.ts";
+import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 
 describe("hosted custom types", () => {
   it.effect("retains deployment definitions and replays tagged match outputs as JSON", () =>
@@ -20,12 +20,18 @@ describe("hosted custom types", () => {
           ],
         },
       };
-      const makeNode = (id: string, pkg: string, schema: string, defaults = {}) => ({
+      const makeNode = (
+        id: string,
+        pkg: string,
+        schema: string,
+        defaults = {},
+        properties = {},
+      ) => ({
         id,
         name: id,
         schema: { package: pkg, schema },
         position: { x: 0, y: 0 },
-        properties: {},
+        properties,
         inputDefaults: defaults,
       });
       const project = Schema.decodeUnknownSync(Project.Model)({
@@ -37,12 +43,18 @@ describe("hosted custom types", () => {
             name: "Hosted custom types",
             nodes: {
               tick: makeNode("tick", "util", "Tick"),
-              match: makeNode("match", CustomTypes.packageId, '["result","match"]', {
-                value: { _type: "result", _tag: "Found", items: [1, 2, 3] },
-              }),
+              match: makeNode(
+                "match",
+                CustomTypes.packageId,
+                "MatchEnum",
+                {
+                  value: { _type: "result", _tag: "Found", items: [1, 2, 3] },
+                },
+                { type: "result" },
+              ),
             },
             connections: [
-              { id: "exec", outNodeId: "tick", outIoId: "exec", inNodeId: "match", inIoId: "exec" },
+              { id: "exec", outNodeId: "tick", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "match", inIoId: "exec" },
             ],
           },
         },
@@ -57,7 +69,7 @@ describe("hosted custom types", () => {
       const executor = yield* ProjectExecutor.make(
         { ...project, types: deployed.types },
         {
-          plugins: ExecutorPlugins.registry,
+          modules: ExecutorModules.registry,
           executionDriver: {
             executeNode: (key, effect) =>
               effect.pipe(
@@ -70,7 +82,7 @@ describe("hosted custom types", () => {
           },
         },
       );
-      yield* ExecutorPlugins.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
+      yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
       assert.deepStrictEqual(recorded.find((step) => step.node === "match")?.output, {
         outputs: [{ outputId: 'variant:"Found"/field:"items"', value: [1, 2, 3] }],
         executionOutputId: 'variant:"Found"',
@@ -78,9 +90,9 @@ describe("hosted custom types", () => {
       yield* executor.loadProject({ ...project, types: {} });
       const count = recorded.length;
       const failure = yield* Effect.flip(
-        ExecutorPlugins.registry.handle(executor, "util", { _tag: "TickEvent", tick: 2 }),
+        ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 2 }),
       );
-      assert.strictEqual(failure._tag, "SchemaNotRegistered");
+      assert.strictEqual(failure._tag, "InvalidGraph");
       assert.strictEqual(
         recorded.length,
         count,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { DataType, Engine, Plugin, Resource } from "@macrograph/plugin";
+import { DataType, Engine, Module, Resource } from "@macrograph/module";
 import { Array, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -22,12 +22,13 @@ const node = (
   schema: string,
   inputDefaults: Readonly<Record<string, unknown>> = {},
   packageId = "gate-test",
+  properties: Readonly<Record<string, unknown>> = {},
 ) => ({
   id,
   name: id,
   schema: { package: packageId, schema },
   inputDefaults,
-  properties: {},
+  properties,
   foldPins: false,
   position: { x: 0, y: 0 },
 });
@@ -37,7 +38,7 @@ const wire = (
   outIoId: string,
   inNodeId: string,
   inIoId: string,
-) => ({ id, outNodeId, outIoId, inNodeId, inIoId });
+) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outIoId }, inNodeId, inIoId });
 
 describe("event graph preflight", () => {
   it.effect(
@@ -46,7 +47,7 @@ describe("event graph preflight", () => {
       Effect.gen(function* () {
         let runs = 0;
         let checkpoints = 0;
-        const plugin = Plugin.make({
+        const module = Module.make({
           id: "gate-test",
           engine: TestEngine,
           effect: Effect.fnUntraced(function* (context) {
@@ -101,7 +102,7 @@ describe("event graph preflight", () => {
           }),
         });
         const make = [...CustomTypes.schemas(definitions).values()].find(
-          (schema) => schema.name === "Make Item",
+          (schema) => schema.name === "Make Struct",
         )!;
         const base = {
           id: "g",
@@ -159,7 +160,9 @@ describe("event graph preflight", () => {
               ...base,
               nodes: {
                 ...base.nodes,
-                source: node("source", make.id, { 'field:"count"': 1 }, CustomTypes.packageId),
+                source: node("source", make.id, { 'field:"count"': 1 }, CustomTypes.packageId, {
+                  type: typeId,
+                }),
                 sink: node("sink", "int"),
               },
               connections: [...base.connections, wire("data", "source", "value", "sink", "value")],
@@ -248,14 +251,14 @@ describe("event graph preflight", () => {
                 }).pipe(Effect.andThen(effect)),
             },
           });
-          yield* executor.plugin(
-            plugin,
+          yield* executor.module(
+            module,
             Engine.deployment(
-              plugin,
+              module,
               TestEngine.toLayer(() => Effect.die("Not hosted")),
             ),
           );
-          const error = yield* Effect.flip(executor.handleEvent(plugin, new Trigger({})));
+          const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
           expect(error._tag).toBe(variant.tag);
           expect(runs).toBe(0);
           expect(checkpoints).toBe(0);
@@ -266,7 +269,7 @@ describe("event graph preflight", () => {
   it.effect("ignores unused invalid definitions, disconnected nodes and unrelated graphs", () =>
     Effect.gen(function* () {
       let runs = 0;
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "gate-test",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -311,21 +314,21 @@ describe("event graph preflight", () => {
         },
       });
       const executor = yield* Executor.make(project);
-      yield* executor.plugin(
-        plugin,
+      yield* executor.module(
+        module,
         Engine.deployment(
-          plugin,
+          module,
           TestEngine.toLayer(() => Effect.die("Not hosted")),
         ),
       );
-      yield* executor.handleEvent(plugin, new Trigger({}));
+      yield* executor.handleEvent(module, new Trigger({}));
       expect(runs).toBe(1);
     }),
   );
 
   it.effect("rejects replayed outputs using the current nominal registry without defects", () =>
     Effect.gen(function* () {
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "gate-test",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -359,14 +362,14 @@ describe("event graph preflight", () => {
               }),
           },
         });
-        yield* executor.plugin(
-          plugin,
+        yield* executor.module(
+          module,
           Engine.deployment(
-            plugin,
+            module,
             TestEngine.toLayer(() => Effect.die("Not hosted")),
           ),
         );
-        expect((yield* Effect.flip(executor.handleEvent(plugin, new Trigger({}))))._tag).toBe(
+        expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(
           "InvalidOutputValue",
         );
       }
@@ -382,7 +385,7 @@ describe("event graph preflight", () => {
       }) {}
       let runs = 0;
       let lookups = 0;
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "gate-test",
         engine: ResourceEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -415,7 +418,7 @@ describe("event graph preflight", () => {
           selector: {
             id: "selector",
             name: "Selected port",
-            resource: { package: plugin.id, resource: "selector" },
+            resource: { package: module.id, resource: "selector" },
             value: "selected-port",
           },
         },
@@ -442,14 +445,14 @@ describe("event graph preflight", () => {
             return [{ id: "selected-port", display: "Selected" }];
           }),
       });
-      yield* executor.plugin(
-        plugin,
+      yield* executor.module(
+        module,
         Engine.deployment(
-          plugin,
+          module,
           ResourceEngine.toLayer(() => Effect.die("Not hosted")),
         ),
       );
-      yield* executor.handleEvent(plugin, new Trigger({}));
+      yield* executor.handleEvent(module, new Trigger({}));
       expect(runs).toBe(3);
       expect(lookups).toBeGreaterThan(0);
       runs = 0;
@@ -467,7 +470,7 @@ describe("event graph preflight", () => {
           },
         },
       });
-      expect((yield* Effect.flip(executor.handleEvent(plugin, new Trigger({}))))._tag).toBe(
+      expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(
         "InvalidInputValue",
       );
       expect(runs).toBe(0);
@@ -493,7 +496,7 @@ describe("event graph preflight", () => {
         };
         cyclic.next = Option.some(cyclic);
         for (const pure of [false, true]) {
-          const plugin = Plugin.make({
+          const module = Module.make({
             id: "gate-test",
             engine: TestEngine,
             effect: Effect.fnUntraced(function* (context) {
@@ -540,14 +543,14 @@ describe("event graph preflight", () => {
             },
           });
           const executor = yield* Executor.make(project);
-          yield* executor.plugin(
-            plugin,
+          yield* executor.module(
+            module,
             Engine.deployment(
-              plugin,
+              module,
               TestEngine.toLayer(() => Effect.die("Not hosted")),
             ),
           );
-          expect((yield* Effect.flip(executor.handleEvent(plugin, new Trigger({}))))._tag).toBe(
+          expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(
             "InvalidOutputValue",
           );
         }

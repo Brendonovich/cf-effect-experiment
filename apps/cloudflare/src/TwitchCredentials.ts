@@ -1,4 +1,4 @@
-import { AppCredentials } from "@macrograph/plugin-twitch/EventSub/Webhook";
+import { AppCredentials } from "@macrograph/module-twitch/EventSub/Webhook";
 import { Config, Effect, Layer } from "effect";
 
 export const ClientIdConfig = Config.string("TWITCH_CLIENT_ID");

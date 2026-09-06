@@ -1,4 +1,4 @@
-import { HttpEndpoint } from "@macrograph/plugin";
+import { HttpEndpoint } from "@macrograph/module";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 

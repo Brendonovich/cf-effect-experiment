@@ -1,15 +1,15 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { pluginSettings, stylexProps } from "@macrograph/plugin/vite";
+import { moduleSettings, stylexProps } from "@macrograph/module/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig, type Plugin } from "vite";
 
 const browserSettings = new Set([
-  "@macrograph/plugin-obs",
-  "@macrograph/plugin-twitch",
-  "@macrograph/plugin-utilities",
-  "@macrograph/plugin-websocket-client",
+  "@macrograph/module-obs",
+  "@macrograph/module-twitch",
+  "@macrograph/module-utilities",
+  "@macrograph/module-websocket-client",
 ]);
 const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
@@ -19,11 +19,11 @@ const browserImportAudit: Plugin = {
       "/apps/server/",
       "/packages/cloud-api/",
       "/packages/persistence-sqlite/",
-      "/packages/plugins/kofi/",
-      "/packages/plugin/src/HttpIngress",
-      "/packages/plugins/twitch/src/Deployment/Webhook",
-      "/packages/plugins/twitch/src/WebhookEventSub",
-      "/packages/plugins/websocket-server/",
+      "/packages/modules/kofi/",
+      "/packages/module/src/HttpIngress",
+      "/packages/modules/twitch/src/Deployment/Webhook",
+      "/packages/modules/twitch/src/WebhookEventSub",
+      "/packages/modules/websocket-server/",
       "/@effect/platform-node/",
       "/@effect/platform-bun/",
     ];
@@ -60,10 +60,10 @@ const browserImportAudit: Plugin = {
         : [],
     );
     const required = [
-      "/packages/plugins/obs/src/Engine.ts",
-      "/packages/plugins/twitch/src/Engine.ts",
-      "/packages/plugins/twitch/src/WebSocketEventSub.ts",
-      "/packages/plugins/websocket-client/src/Engine.ts",
+      "/packages/modules/obs/src/Engine.ts",
+      "/packages/modules/twitch/src/Engine.ts",
+      "/packages/modules/twitch/src/WebSocketEventSub.ts",
+      "/packages/modules/websocket-client/src/Engine.ts",
       "/apps/playground/src/local/BrowserCredentials.ts",
       "/apps/playground/src/local/BrowserServices.ts",
     ];
@@ -91,7 +91,7 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
-    pluginSettings(undefined, browserSettings),
+    moduleSettings(undefined, browserSettings),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
     stylexProps(),
     stylex.vite({

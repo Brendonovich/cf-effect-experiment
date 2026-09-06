@@ -1,6 +1,15 @@
 // @vitest-environment happy-dom
 
-import { Actor, Graph, IoId, Node, PackageId, Project, SchemaId } from "@macrograph/core";
+import {
+  Actor,
+  Graph,
+  IoId,
+  Node,
+  PackageId,
+  Project,
+  SchemaId,
+  OutputRef,
+} from "@macrograph/core";
 import { Effect } from "effect";
 import { createMemo, createRoot, createSignal, flush, untrack } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -95,7 +104,7 @@ describe("editor concern hooks", () => {
     flush();
     expect(controller.layout.selectedPaneId()).toBe("settings");
     expect(controller.layout.selectedGraphId()).toBeNull();
-    await controller.refreshPluginData();
+    await controller.refreshModuleData();
   });
 
   it("scopes connections to the parent controller and disposes replaced controllers", async () => {
@@ -219,6 +228,7 @@ describe("editor concern hooks", () => {
         );
         const [selectedNodeIds, setSelectedNodeIds] = createSignal(["first", "second"]);
         const canvas = createEditorCanvas({
+          createNode: () => Promise.resolve(),
           editor,
           client: () => null,
           canEdit: () => true,
@@ -314,6 +324,7 @@ describe("editor concern hooks", () => {
       );
       const [selectedNodeIds, setSelectedNodeIds] = createSignal(["first"]);
       const canvas = createEditorCanvas({
+        createNode: () => Promise.resolve(),
         editor,
         client: () => ({ SetNodePosition: setNodePosition }) as unknown as EditorRpcClient,
         canEdit: () => true,
@@ -453,6 +464,7 @@ describe("editor concern hooks", () => {
           Effect.succeed({ _tag: "NodePositionChanged" as const, actor: Actor.system, ...payload }),
         );
         const canvas = createEditorCanvas({
+          createNode: () => Promise.resolve(),
           editor,
           client: () => ({ SetNodePosition: rpc }) as unknown as EditorRpcClient,
           canEdit: () => true,
@@ -570,6 +582,7 @@ describe("editor concern hooks", () => {
           Effect.succeed({ _tag: "NodePositionChanged" as const, actor: Actor.system, ...payload }),
         );
         const canvas = createEditorCanvas({
+          createNode: () => Promise.resolve(),
           editor,
           client: () => ({ SetNodePosition: rpc }) as unknown as EditorRpcClient,
           canEdit: () => true,
@@ -666,6 +679,7 @@ describe("editor concern hooks", () => {
       const canvas = createRoot((cleanup) => {
         dispose = cleanup;
         return createEditorCanvas({
+          createNode: () => Promise.resolve(),
           editor: createEditorStore(),
           client: () => null,
           canEdit: () => true,
@@ -703,6 +717,147 @@ describe("editor concern hooks", () => {
   );
 
   it.each(["input", "output"] as const)(
+    "inserts the sole compatible schema from an %s pin without showing a menu",
+    async (direction) => {
+      let resolve = () => {};
+      let reject = (_error: Error) => {};
+      const pending = new Promise<void>((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      const createNode = vi.fn(() => pending);
+      let editable = true;
+      const { canvas, editor, pkg } = createRoot((cleanup) => {
+        dispose = cleanup;
+        const editor = createEditorStore();
+        const io = {
+          executionInputs: [],
+          executionOutputs: [],
+          dataInputs: [{ id: IoId.make("value"), type: { _tag: "String" as const } }],
+          dataOutputs: [{ id: IoId.make("value"), type: { _tag: "String" as const } }],
+        };
+        editor.setProject(
+          { ...Project.empty(), graphs: { main: Graph.empty("main") } },
+          { main: { source: io } },
+        );
+        const pkg = {
+          id: PackageId.make("only"),
+          name: "Only",
+          resources: [],
+          schemas: [
+            {
+              ...io,
+              id: SchemaId.make("target"),
+              name: "Target",
+              type: "pure" as const,
+              properties: [],
+            },
+          ],
+        };
+        editor.setPackages([pkg]);
+        const canvas = createEditorCanvas({
+          createNode,
+          editor,
+          client: () => ({}) as EditorRpcClient,
+          canEdit: () => editable,
+          publishPointer: () => {},
+          selectedGraphId: () => "main",
+          selectedGraph: () => editor.store.project!.graphs.main!,
+          nodes: () => [],
+          selectedNodeIds: () => [],
+          setSelectedNodeIds: () => {},
+          canvasScale: () => 2,
+          setCanvasScale: () => {},
+          canvasOrigin: () => ({ x: 20, y: 30 }),
+          setCanvasOrigin: () => {},
+        });
+        return { canvas, editor, pkg };
+      });
+      const element = document.createElement("div");
+      vi.spyOn(element, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 80, 800, 600));
+      const sourceNode = document.createElement("div");
+      sourceNode.dataset.graphNodeId = "source";
+      vi.spyOn(sourceNode, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(140, 100, 200, 100),
+      );
+      element.append(sourceNode);
+      canvas.setGraphCanvas(element);
+      const start = () => {
+        canvas.startConnection(
+          {
+            pointerId: 1,
+            clientX: 160,
+            clientY: 120,
+            currentTarget: {
+              hasPointerCapture: () => false,
+              getBoundingClientRect: () => ({ left: 150, top: 110, width: 20, height: 20 }),
+            },
+          } as unknown as PointerEvent,
+          "source",
+          direction === "output" ? OutputRef.key(OutputRef.port("value")) : "value",
+          "data",
+          direction,
+        );
+        flush();
+      };
+      const release = (type = "pointerup", clientX = 500, clientY = 400) => {
+        window.dispatchEvent(
+          Object.assign(new Event(type), { pointerId: 1, clientX, clientY, shiftKey: true }),
+        );
+        flush();
+      };
+      start();
+      release("pointercancel");
+      start();
+      release("pointerup", 160, 120);
+      start();
+      editable = false;
+      release();
+      editable = true;
+      expect(createNode).not.toHaveBeenCalled();
+      expect(canvas.nodeMenu()).toBeUndefined();
+
+      start();
+      release();
+      await vi.waitFor(() => expect(createNode).toHaveBeenCalledTimes(1));
+      expect(createNode).toHaveBeenCalledWith(
+        { package: "only", schema: "target" },
+        "Target",
+        { x: 220, y: 190 },
+        expect.objectContaining({ nodeId: "source", direction }),
+        true,
+      );
+      expect(canvas.nodeMenu()).toBeUndefined();
+      expect(canvas.connectionPreview()?.pointer).toEqual({ x: 220, y: 190 });
+      release();
+      expect(createNode).toHaveBeenCalledTimes(1);
+
+      // A failed insertion must clear the preview, without opening the schema menu.
+      if (direction === "input") reject(new Error("creation failed"));
+      else resolve();
+      await vi.waitFor(() => {
+        flush();
+        expect(canvas.connectionPreview()).toBeUndefined();
+      });
+      expect(canvas.nodeMenu()).toBeUndefined();
+
+      // Zero choices and multiple choices both retain the normal menu behavior.
+      editor.setPackages([]);
+      flush();
+      start();
+      release();
+      expect(canvas.nodeMenu()).toBeDefined();
+      canvas.setNodeMenu(undefined);
+      editor.setPackages([pkg, { ...pkg, id: PackageId.make("other") }]);
+      flush();
+      start();
+      release();
+      expect(canvas.nodeMenu()).toBeDefined();
+      expect(createNode).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["input", "output"] as const)(
     "retains a draft from an %s pin through the menu and async node creation",
     async (direction) => {
       const canvas = createRoot((cleanup) => {
@@ -721,7 +876,25 @@ describe("editor concern hooks", () => {
             },
           },
         );
+        editor.setPackages([
+          {
+            id: PackageId.make("choices"),
+            name: "Choices",
+            resources: [],
+            schemas: ["first", "second"].map((id) => ({
+              id: SchemaId.make(id),
+              name: id,
+              type: "exec" as const,
+              properties: [],
+              dataInputs: [],
+              dataOutputs: [],
+              executionInputs: [{ id: IoId.make("exec") }],
+              executionOutputs: [{ id: IoId.make("exec") }],
+            })),
+          },
+        ]);
         return createEditorCanvas({
+          createNode: () => Promise.resolve(),
           editor,
           client: () => ({}) as EditorRpcClient,
           canEdit: () => true,
@@ -738,10 +911,14 @@ describe("editor concern hooks", () => {
         });
       });
       const canvasElement = document.createElement("div");
-      vi.spyOn(canvasElement, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 80, 800, 600));
+      vi.spyOn(canvasElement, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(100, 80, 800, 600),
+      );
       const sourceNode = document.createElement("div");
       sourceNode.dataset.graphNodeId = "source";
-      vi.spyOn(sourceNode, "getBoundingClientRect").mockReturnValue(new DOMRect(140, 100, 200, 100));
+      vi.spyOn(sourceNode, "getBoundingClientRect").mockReturnValue(
+        new DOMRect(140, 100, 200, 100),
+      );
       canvasElement.append(sourceNode);
       canvas.setGraphCanvas(canvasElement);
       flush();
@@ -756,7 +933,7 @@ describe("editor concern hooks", () => {
             },
           } as unknown as PointerEvent,
           "source",
-          "exec",
+          direction === "output" ? OutputRef.key(OutputRef.port("exec")) : "exec",
           "execution",
           direction,
         );
@@ -853,6 +1030,7 @@ describe("editor concern hooks", () => {
       dispose = cleanup;
       const editor = createEditorStore();
       return createEditorCanvas({
+        createNode: () => Promise.resolve(),
         editor,
         client: () => null,
         canEdit: () => false,

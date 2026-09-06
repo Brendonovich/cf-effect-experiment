@@ -21,7 +21,7 @@ type RunContext<IO, Engines extends Record<string, Engine.Def<any>>> = {
   engine: { [K in keyof Engines]: RpcClient.RpcClient<RpcGroup.Rpcs<Engines[K]["rpcs"]>> };
 };
 
-type PluginContext<Engines extends Record<string, Engine.Def<any>>> = {
+type ModuleContext<Engines extends Record<string, Engine.Def<any>>> = {
   schema: {
     register: <IO>(schema: {
       id: string;
@@ -31,10 +31,10 @@ type PluginContext<Engines extends Record<string, Engine.Def<any>>> = {
   };
 };
 
-type Plugin<Engines extends Record<string, any> = Record<string, never>> = {
+type Module<Engines extends Record<string, any> = Record<string, never>> = {
   id: string;
   engines?: Engines;
-  effect: (ctx: PluginContext<Engines>) => Effect.Effect<void>;
+  effect: (ctx: ModuleContext<Engines>) => Effect.Effect<void>;
 };
 
 namespace Persistence {
@@ -95,7 +95,7 @@ namespace ProjectEditor {
       }) => Effect.Effect<void, Persistence.PersistenceError>;
       delete: () => Effect.Effect<void, Persistence.PersistenceError>;
     };
-    plugin: <Engines extends Record<string, any>>(plugin: Plugin<Engines>) => Effect.Effect<void>;
+    module: <Engines extends Record<string, any>>(module: Module<Engines>) => Effect.Effect<void>;
   }
 
   export class Service extends Context.Service<Service, Interface>()(
@@ -124,8 +124,8 @@ namespace ProjectEditor {
         }),
         delete: Effect.fn(function* () {}),
       },
-      plugin: Effect.fnUntraced(function* (plugin) {
-        void plugin;
+      module: Effect.fnUntraced(function* (module) {
+        void module;
       }),
     });
   });
@@ -154,7 +154,7 @@ const EditorLive = ProjectEditor.layer().pipe(
 Effect.gen(function* () {
   const editor = yield* ProjectEditor.Service;
 
-  yield* editor.plugin({
+  yield* editor.module({
     id: "http",
     engines: {
       http: HttpEngine,
@@ -186,7 +186,7 @@ Effect.gen(function* () {
   yield* editor.node.delete();
   yield* editor.graph.delete();
 
-  yield* editor.plugin({
+  yield* editor.module({
     id: "console",
     engines: {},
     effect: Effect.fnUntraced(function* (ctx) {

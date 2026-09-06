@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 
+import { IoId } from "./IO.ts";
 import { Position } from "./Position.ts";
 import { SchemaRef } from "./SchemaRef.ts";
 
@@ -14,13 +15,16 @@ export const Model = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed({})),
   ),
   foldPins: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  splitScopeOutputs: Schema.optional(Schema.Array(IoId)),
   schema: SchemaRef,
   position: Position,
 });
 export type Model = typeof Model.Type;
 
 export const CreateInput = Schema.Struct({
-  name: Schema.optional(Schema.String.annotate({ description: "Optional display name for the node." })),
+  name: Schema.optional(
+    Schema.String.annotate({ description: "Optional display name for the node." }),
+  ),
   properties: Schema.optional(
     Schema.Record(Schema.String, Schema.Json).annotate({
       description:
@@ -33,6 +37,7 @@ export const CreateInput = Schema.Struct({
     }),
   ),
   foldPins: Schema.optional(Schema.Boolean),
+  splitScopeOutputs: Schema.optional(Schema.Array(IoId)),
   schema: SchemaRef,
   position: Schema.optional(Position),
 });

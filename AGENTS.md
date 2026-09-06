@@ -11,6 +11,7 @@ The Effect v4 monorepo is checked in as a git submodule at `lib/effect-smol` (ef
 
 ## Hard Rules
 
+- **Backwards compatibility is not required at this stage.** Prefer clean changes over compatibility layers, legacy fallbacks, or migrations solely to support old APIs or saved formats, unless explicitly requested.
 - **NEVER use `as any`**. Use `{BrandedType}.make(value)` for branded types, or restructure types to avoid the cast.
 - **NEVER mutate Schema.Class instances**. All properties are readonly. Create new instances with `new Model({ ...existing, field: newValue })`.
 - **EntityNotFoundError classes live in the core package**, under their respective namespace (`Project.NotFoundError`, `Graph.NotFoundError`, `Node.NotFoundError`).

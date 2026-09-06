@@ -4,9 +4,9 @@ declare module "*.png" {
   export default url;
 }
 
-declare module "virtual:macrograph-plugin-settings" {
+declare module "virtual:macrograph-module-settings" {
   import type { JSX } from "@solidjs/web";
-  import type { ClientSettings } from "@macrograph/plugin";
+  import type { ClientSettings } from "@macrograph/module";
 
   const settings: ReadonlyArray<ClientSettings.Descriptor<JSX.Element>>;
   export default settings;

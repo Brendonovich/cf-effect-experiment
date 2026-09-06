@@ -1,9 +1,9 @@
 declare module "*.css" {}
 
-declare module "virtual:macrograph-plugin-settings" {
-  import type { PluginSettingsDescriptor } from "@macrograph/editor-ui";
+declare module "virtual:macrograph-module-settings" {
+  import type { ModuleSettingsDescriptor } from "@macrograph/editor-ui";
 
-  const settings: ReadonlyArray<PluginSettingsDescriptor>;
+  const settings: ReadonlyArray<ModuleSettingsDescriptor>;
   export default settings;
 }
 

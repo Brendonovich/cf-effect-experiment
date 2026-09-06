@@ -55,7 +55,7 @@ const databaseLayer = (
 const eventSql = (kind: "event" | "ingress") => {
   const table = kind === "event" ? "project_events" : "project_ingress_events";
   const ids = kind === "event" ? '"ingress_event_id", "provider_event_id"' : '"id", "event_id"';
-  return `select "plugin_id", "event_type", "event_payload", ${ids}, "trace_context" from "${table}" where (("${table}"."project_id" = $1) and ("${table}"."id" = $2)) limit $3`;
+  return `select "module_id", "event_type", "event_payload", ${ids}, "trace_context" from "${table}" where (("${table}"."project_id" = $1) and ("${table}"."id" = $2)) limit $3`;
 };
 
 // Deployment column/table names still use the persisted revision terminology.
@@ -118,7 +118,7 @@ describe("Event.make replay", () => {
                       ]);
                       return [
                         [
-                          "captured-plugin",
+                          "captured-module",
                           "captured-type",
                           payload,
                           ingressEventId,
@@ -158,7 +158,7 @@ describe("Event.make replay", () => {
                   deploymentId: result.deploymentId,
                   r2Key: deploymentObjectKey("project", result.deploymentId),
                   source: "replay",
-                  pluginId: "captured-plugin",
+                  moduleId: "captured-module",
                   eventType: "captured-type",
                   event: payload,
                   ...(ingressEventId === null ? {} : { ingressEventId }),
@@ -227,7 +227,7 @@ describe("Event.make replay", () => {
           }),
           Effect.provide(
             databaseLayer((sql) => {
-              if (sql === eventSql(kind)) return [["plugin", "type", "{}", null, null, null]];
+              if (sql === eventSql(kind)) return [["module", "type", "{}", null, null, null]];
               assert.strictEqual(sql, deploymentSql);
               return [["deployment", deploymentObjectKey("project", "deployment")]];
             }),
@@ -265,7 +265,7 @@ describe("Event.make replay", () => {
                     "other-project-or-missing-event",
                     1,
                   ]);
-                  return missing === "event" ? [] : [["plugin", "type", "{}", null, null, null]];
+                  return missing === "event" ? [] : [["module", "type", "{}", null, null, null]];
                 }
                 assert.strictEqual(queries, 2);
                 assert.strictEqual(sql, deploymentSql);

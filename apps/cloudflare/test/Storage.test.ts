@@ -50,7 +50,7 @@ describe("Storage", () => {
           },
         },
         connections: [
-          { outNodeId: "timer", outIoId: "exec", inNodeId: "print", inIoId: "exec" },
+          { outNodeId: "timer", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "print", inIoId: "exec" },
         ],
       };
 

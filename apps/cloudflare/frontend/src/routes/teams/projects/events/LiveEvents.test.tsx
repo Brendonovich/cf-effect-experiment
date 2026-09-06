@@ -11,7 +11,7 @@ import {
 
 const event: LiveEventsProps["events"][number] = {
   id: "original-event",
-  pluginId: "test",
+  moduleId: "test",
   name: "Message",
   source: "Engine",
   replayable: true,

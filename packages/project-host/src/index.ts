@@ -1,4 +1,4 @@
 export * as EngineHost from "./EngineHost.ts";
-export * as ExecutorPlugins from "./ExecutorPlugins.ts";
-export * as PluginMount from "./PluginMount.ts";
+export * as ExecutorModules from "./ExecutorModules.ts";
+export * as ModuleMount from "./ModuleMount.ts";
 export * as ProjectExecutor from "./ProjectExecutor.ts";

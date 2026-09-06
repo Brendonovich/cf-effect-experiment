@@ -1,4 +1,4 @@
-import type { Credential } from "@macrograph/plugin";
+import type { Credential } from "@macrograph/module";
 
 import { Effect, Schema, Semaphore } from "effect";
 import { randomBytes, timingSafeEqual } from "node:crypto";

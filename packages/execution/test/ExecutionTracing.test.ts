@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { DataType, Engine, Plugin } from "@macrograph/plugin";
+import { DataType, Engine, Module } from "@macrograph/module";
 import { Array, Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -20,7 +20,7 @@ const setup = Effect.fnUntraced(function* (
   run: Effect.Effect<void, unknown> | (() => Effect.Effect<void, unknown>),
   missingInput = false,
 ) {
-  const plugin = Plugin.make({
+  const module = Module.make({
     id: "tracing",
     engine: TestEngine,
     effect: (registration) =>
@@ -33,7 +33,7 @@ const setup = Effect.fnUntraced(function* (
       }),
   });
   const deployment = Engine.deployment(
-    plugin,
+    module,
     TestEngine.toLayer(() => Effect.die("not hosted")),
   );
   const project: Project.Model = {
@@ -58,7 +58,7 @@ const setup = Effect.fnUntraced(function* (
     },
   };
   const executor = yield* Executor.make(project, { projectId: "project-1" });
-  yield* executor.plugin(plugin, deployment);
+  yield* executor.module(module, deployment);
   const spans: Array<Tracer.Span> = [];
   const tracer = Tracer.make({
     span: (options) => {
@@ -70,7 +70,7 @@ const setup = Effect.fnUntraced(function* (
   return {
     spans,
     dispatch: executor
-      .handleEvent(plugin, new Trigger({}))
+      .handleEvent(module, new Trigger({}))
       .pipe(Effect.provideService(Tracer.Tracer, tracer)),
   };
 });

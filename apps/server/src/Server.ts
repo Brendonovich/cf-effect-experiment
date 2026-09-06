@@ -13,7 +13,7 @@ import {
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
-import { Engine } from "@macrograph/plugin";
+import { Engine } from "@macrograph/module";
 import { Effect, Layer } from "effect";
 import {
   FetchHttpClient,
@@ -25,12 +25,12 @@ import {
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { mkdirSync } from "node:fs";
 import { createServer } from "node:http";
-import Deployments from "virtual:macrograph-plugin-deployments";
+import Deployments from "virtual:macrograph-module-deployments";
 
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
 import { Observability } from "./Observability.ts";
-import { PluginHost } from "./PluginHost.ts";
+import { ModuleHost } from "./ModuleHost.ts";
 import { ProjectExecution } from "./ProjectExecution.ts";
 import { ServerConfig } from "./ServerConfig.ts";
 import { ServerSetup } from "./ServerSetup.ts";
@@ -266,7 +266,7 @@ const HealthRoute = Layer.effectDiscard(
 const ApiRoutes = Layer.mergeAll(
   EditorHttpRoutes,
   ClientAuthRoutes,
-  PluginHost.rpcRoute(config.basePath, canEditRequest),
+  ModuleHost.rpcRoute(config.basePath, canEditRequest),
   HealthRoute,
 );
 
@@ -279,17 +279,17 @@ const StaticRoute = StaticRoutes.layer({
 
 const HttpRoutes = ApiRoutes.pipe(Layer.provideMerge(StaticRoute));
 
-const MountedPlugins = Layer.mergeAll(
+const MountedModules = Layer.mergeAll(
   Layer.empty,
   ...Deployments.map((deployment) =>
     "definition" in deployment
-      ? PluginHost.deploymentLayer(deployment)
-      : PluginHost.pluginLayer(deployment),
+      ? ModuleHost.deploymentLayer(deployment)
+      : ModuleHost.moduleLayer(deployment),
   ),
 );
 
 const AppLayer = HttpRoutes.pipe(
-  Layer.provideMerge(MountedPlugins),
+  Layer.provideMerge(MountedModules),
   Layer.provide(EditorRpc.handlerLayer),
   Layer.provide(RuntimeActivity.handlerLayer),
   Layer.provide(EditorRpc.connectionMiddlewareLayer),
@@ -313,7 +313,7 @@ const AppLayer = HttpRoutes.pipe(
       },
     }),
   ),
-  Layer.provide(PluginHost.layer),
+  Layer.provide(ModuleHost.layer),
   Layer.provide(SqlitePersistence.layer),
   Layer.provide(
     Layer.mergeAll(

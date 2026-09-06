@@ -9,7 +9,7 @@ import {
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { createSignal, For, onCleanup, onSettled, Show } from "solid-js";
-import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
+import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { editorConnection } from "./editorConnection";
 
@@ -442,9 +442,9 @@ export function App() {
         <Show when={rpcUrl()} keyed>
           {(url) => {
             const controller = createEditorController({
-              connection: editorConnection(url, discoveredPluginSettings),
+              connection: editorConnection(url, discoveredModuleSettings),
               workspaceId: new URL(url).pathname,
-              settingsDescriptors: discoveredPluginSettings,
+              settingsDescriptors: discoveredModuleSettings,
               userId: localUserId(),
               reconnect: true,
               projectSettings: true,
@@ -521,7 +521,7 @@ export function App() {
                           </>
                         }
                         loadingLabel="Loading server authorization..."
-                        onChanged={context.refreshPluginData}
+                        onChanged={context.refreshModuleData}
                       />
                     )}
                   />

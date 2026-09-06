@@ -76,7 +76,7 @@ const obsAuthentication = async (password: string) => {
 };
 
 describe("local browser runtime", () => {
-  it.effect("exposes connected Twitch credentials in plugin settings and resources", () =>
+  it.effect("exposes connected Twitch credentials in module settings and resources", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const storage = new MemoryStorage();
@@ -121,9 +121,9 @@ describe("local browser runtime", () => {
         const connection = yield* makeLocalConnection(makeLocalProjectStore(storage), credentials);
         const catalog = yield* connection.client.GetCredentialCatalog();
         assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
-        const settings = connection.pluginSettings.get("twitch")!;
+        const settings = connection.moduleSettings.get("twitch")!;
         assert.deepStrictEqual(
-          yield* settings.load((pluginId) => connection.client.GetPluginClientState({ pluginId })),
+          yield* settings.load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
           {
             transport: "websocket",
             accounts: [
@@ -145,14 +145,14 @@ describe("local browser runtime", () => {
         );
         yield* connection.client.DisconnectCredentialAuth();
         assert.deepStrictEqual(
-          yield* settings.load((pluginId) => connection.client.GetPluginClientState({ pluginId })),
+          yield* settings.load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
           { transport: "websocket", accounts: [] },
         );
       }),
     ),
   );
 
-  it.effect("projects editor mutations and exposes only browser-safe plugins", () =>
+  it.effect("projects editor mutations and exposes only browser-safe modules", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const connection = yield* makeLocalConnection(makeLocalProjectStore(new MemoryStorage()));
@@ -195,13 +195,13 @@ describe("local browser runtime", () => {
         ]);
         assert.strictEqual(new Set(packageIds).size, packageIds.length);
         assert.deepStrictEqual(
-          [...connection.pluginSettings.keys()],
+          [...connection.moduleSettings.keys()],
           ["util", "obs", "twitch", "websocket-client"],
         );
         assert.deepStrictEqual(
-          yield* connection.pluginSettings
+          yield* connection.moduleSettings
             .get("util")!
-            .load((pluginId) => connection.client.GetPluginClientState({ pluginId })),
+            .load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
           { running: true },
         );
         assert.deepStrictEqual(
@@ -345,7 +345,7 @@ describe("local browser runtime", () => {
               Stream.runHead,
             ),
           );
-          assert.strictEqual(events[0]?.pluginId, "obs");
+          assert.strictEqual(events[0]?.moduleId, "obs");
           assert.strictEqual(events[0]?.name, "CustomEvent");
           assert.include(events[0]!.payload, "hello");
           assert.lengthOf(events[0]!.nodes, 1);

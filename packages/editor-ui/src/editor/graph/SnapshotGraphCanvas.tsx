@@ -1,4 +1,4 @@
-import { type Graph, type NodeIO, type RenderedGraph } from "@macrograph/core";
+import { OutputRef, type Graph, type NodeIO, type RenderedGraph } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { For, createMemo, createSignal, type Component } from "solid-js";
 
@@ -57,10 +57,12 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
           .filter((connection) => connection.outNodeId === node.id)
           .filter(
             (connection, index, connections) =>
-              connections.findIndex((candidate) => candidate.outIoId === connection.outIoId) ===
-              index,
+              connections.findIndex(
+                (candidate) =>
+                  OutputRef.parentId(candidate.outIo) === OutputRef.parentId(connection.outIo),
+              ) === index,
           )
-          .map((connection) => ({ id: connection.outIoId })),
+          .map((connection) => ({ id: OutputRef.parentId(connection.outIo) })),
       });
     }
     return result;
@@ -107,7 +109,7 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
               <path
                 d={connectionPath(edge.from, edge.to)}
                 fill="none"
-                stroke={wireColor(edge.type)}
+                stroke={wireColor(edge.type, edge.scope)}
                 stroke-width="2"
                 opacity="0.75"
               />
@@ -128,6 +130,9 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
               onExpand={noop}
               connectedInputIds={connectedPortIds(props.graph, node.id, "input")}
               connectedOutputIds={connectedPortIds(props.graph, node.id, "output")}
+              connectedOutputRefs={props.graph.connections
+                .filter((wire) => wire.outNodeId === node.id)
+                .map((wire) => wire.outIo)}
               onSetInputDefault={noop}
               onClearInputDefault={noop}
               onGetSuggestions={noSuggestions}

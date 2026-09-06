@@ -1,9 +1,9 @@
-import { Engine, HttpEndpoint, HttpIngress } from "@macrograph/plugin";
+import { Engine, HttpEndpoint, HttpIngress } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 export class DuplicateDeployment extends Schema.TaggedError<DuplicateDeployment>()(
   "DuplicateHttpIngressDeployment",
-  { pluginId: Schema.String },
+  { moduleId: Schema.String },
 ) {}
 
 export interface Service {
@@ -29,14 +29,14 @@ export const make = (
   endpoints: HttpEndpoint.Service,
 ): Effect.Effect<Service, DuplicateDeployment> =>
   Effect.gen(function* () {
-    const byPlugin = new Map(deployments.map((deployment) => [deployment.pluginId, deployment]));
-    if (byPlugin.size !== deployments.length) {
+    const byModule = new Map(deployments.map((deployment) => [deployment.moduleId, deployment]));
+    if (byModule.size !== deployments.length) {
       const duplicate = deployments.find(
         (deployment, index) =>
-          deployments.findIndex((candidate) => candidate.pluginId === deployment.pluginId) !==
+          deployments.findIndex((candidate) => candidate.moduleId === deployment.moduleId) !==
           index,
       );
-      return yield* new DuplicateDeployment({ pluginId: duplicate?.pluginId ?? "unknown" });
+      return yield* new DuplicateDeployment({ moduleId: duplicate?.moduleId ?? "unknown" });
     }
 
     return {
@@ -44,7 +44,7 @@ export const make = (
         Effect.forEach(deployments, (deployment) =>
           deployment.httpIngress
             .resolveRequirements(
-              engines[deployment.pluginId] ?? deployment.definition.InitialStorage,
+              engines[deployment.moduleId] ?? deployment.definition.InitialStorage,
             )
             .pipe(Effect.flatMap(HttpIngress.manifest)),
         ).pipe(Effect.map((manifests) => manifests.flat())),
@@ -58,7 +58,7 @@ export const make = (
             const previousEntry = previousByKey.get(HttpIngress.manifestEntryKey(entry));
             const definition = registry.definitions.find(
               (candidate) =>
-                candidate.id === entry.handlerId && candidate.pluginId === entry.pluginId,
+                candidate.id === entry.handlerId && candidate.moduleId === entry.moduleId,
             );
             if (
               options?.remount === true ||

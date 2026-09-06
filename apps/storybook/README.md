@@ -12,4 +12,4 @@ Build the standalone site with:
 pnpm storybook:build
 ```
 
-Stories are colocated with their components in `packages/editor-ui/src/` and `packages/plugins/*/src/`, covering shared editor components, complete editor states, and every visual plugin settings interface. The app uses the same Solid 2, StyleX, and icon transforms as MacroGraph's production frontends.
+Stories are colocated with their components in `packages/editor-ui/src/` and `packages/modules/*/src/`, covering shared editor components, complete editor states, and every visual module settings interface. The app uses the same Solid 2, StyleX, and icon transforms as MacroGraph's production frontends.

@@ -11,7 +11,7 @@ import { type createEditorStore, resourceValuesKey } from "../store";
 export function createEditorCatalog(
   editor: ReturnType<typeof createEditorStore>,
   graphs: ReturnType<typeof createEditorWorkspace>["graphs"],
-  pluginSettingsById: ReturnType<typeof createEditorConnection>["pluginSettingsById"],
+  moduleSettingsById: ReturnType<typeof createEditorConnection>["moduleSettingsById"],
 ) {
   const { store } = editor;
   const [navSearch, setNavSearch] = createSignal("");
@@ -38,9 +38,9 @@ export function createEditorCatalog(
       })),
     );
   const filteredPackagesWithSettings = () =>
-    filteredPackages().filter((pkg) => pluginSettingsById().has(pkg.id));
+    filteredPackages().filter((pkg) => moduleSettingsById().has(pkg.id));
   const filteredPackagesWithoutSettings = () =>
-    filteredPackages().filter((pkg) => !pluginSettingsById().has(pkg.id));
+    filteredPackages().filter((pkg) => !moduleSettingsById().has(pkg.id));
   const resourceDefinition = (resource: ResourceConstant.ResourceRef) => {
     const pkg = store.packages.find((candidate) => candidate.id === resource.package);
     const definition = pkg?.resources.find((candidate) => candidate.id === resource.resource);

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { Engine, Plugin } from "@macrograph/plugin";
+import { Engine, Module } from "@macrograph/module";
 import {
   Array as EffectArray,
   Cause,
@@ -35,7 +35,7 @@ class Message extends Schema.TaggedClass<Message>()("Message", {
   values: Schema.Array(Schema.Number),
 }) {}
 class TestEngine extends Engine.make({ events: EffectArray.empty<Message>() }) {}
-const plugin = Plugin.make({ id: "replay-test", engine: TestEngine, effect: () => Effect.void });
+const module = Module.make({ id: "replay-test", engine: TestEngine, effect: () => Effect.void });
 
 describe("RuntimeActivity", () => {
   it.effect("replays the full original input with fresh IDs and the current executor", () =>
@@ -52,14 +52,14 @@ describe("RuntimeActivity", () => {
         handleEvent: (definition, input) => {
           const currentVersion = version;
           return Effect.sync(() => {
-            assert.isTrue(Object.is(definition, plugin));
+            assert.isTrue(Object.is(definition, module));
             assert.strictEqual(input, event);
             assert.instanceOf(input, Message);
             calls.push(currentVersion);
           });
         },
       });
-      yield* executor.handleEvent(plugin, event);
+      yield* executor.handleEvent(module, event);
       const original = (yield* activity.snapshot)[0]!;
       assert.strictEqual(original.source, "Engine");
       assert.isTrue(original.replayable);
@@ -80,7 +80,7 @@ describe("RuntimeActivity", () => {
         const replayed = events[0]!;
         assert.strictEqual(replayed.source, "Replay");
         assert.isTrue(replayed.replayable);
-        assert.strictEqual(replayed.pluginId, original.pluginId);
+        assert.strictEqual(replayed.moduleId, original.moduleId);
         assert.strictEqual(replayed.name, original.name);
         assert.strictEqual(replayed.payload, original.payload);
         assert.strictEqual(new Set(events.map((event) => event.id)).size, version + 1);
@@ -107,7 +107,7 @@ describe("RuntimeActivity", () => {
           handleEvent: () =>
             activity.executionDriver.executeNode(key("queued"), nodeEffect).pipe(Effect.asVoid),
         });
-        yield* executor.handleEvent(plugin, new Message({ message: "queued", values: [] }));
+        yield* executor.handleEvent(module, new Message({ message: "queued", values: [] }));
         const original = (yield* activity.snapshot)[0]!;
         nodeEffect = Deferred.succeed(started, undefined).pipe(
           Effect.andThen(Deferred.await(release)),
@@ -166,7 +166,7 @@ describe("RuntimeActivity", () => {
             calls++;
           }),
       });
-      yield* executor.handleEvent(plugin, new Message({ message: "old", values: [] }));
+      yield* executor.handleEvent(module, new Message({ message: "old", values: [] }));
       const evictedId = (yield* activity.snapshot)[0]!.id;
       for (let index = 0; index < RuntimeActivity.limits.events; index++)
         yield* activity.track("test", { _tag: String(index) }, Effect.void);
@@ -203,7 +203,7 @@ describe("RuntimeActivity", () => {
       const events = yield* activity.snapshot;
       assert.lengthOf(events, 1);
       const captured = events[0]!;
-      assert.strictEqual(captured.pluginId, "test");
+      assert.strictEqual(captured.moduleId, "test");
       assert.strictEqual(captured.name, "Message");
       assert.strictEqual(captured.startedAt, startedAt);
       assert.strictEqual(captured.finishedAt, yield* Clock.currentTimeMillis);

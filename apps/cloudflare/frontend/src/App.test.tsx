@@ -26,7 +26,7 @@ vi.mock("./Auth", () => ({
   }),
 }));
 vi.mock("./editorConnection", () => ({ makeEditorConnection: () => Effect.never }));
-vi.mock("virtual:macrograph-plugin-settings", () => ({ default: [] }));
+vi.mock("virtual:macrograph-module-settings", () => ({ default: [] }));
 vi.mock("@macrograph/editor-ui", async () => ({
   ...(await import("../../../../packages/editor-ui/src/ui/createStateMachine")),
   AccountMenu: () => null,

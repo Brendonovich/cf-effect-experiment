@@ -9,10 +9,10 @@
   "include": ["src", "test"],
   "references": [
     { "path": "../core" },
-    { "path": "../plugin" },
+    { "path": "../module" },
     { "path": "../persistence" },
     { "path": "../persistence-sqlite" },
-    { "path": "../plugins/utilities" },
-    { "path": "../plugins/list" }
+    { "path": "../modules/utilities" },
+    { "path": "../modules/list" }
   ]
 }

@@ -48,13 +48,13 @@ export function LiveEvents(props: LiveEventsProps) {
     return props.events.filter(
       (event) =>
         query === "" ||
-        [event.name, event.pluginId, event.id].some((value) => value.toLowerCase().includes(query)),
+        [event.name, event.moduleId, event.id].some((value) => value.toLowerCase().includes(query)),
     );
   });
   const byId = createMemo(() => new Map(props.events.map((event) => [event.id, event])));
   const selected = createMemo(() => byId().get(selectedId() ?? ""));
   const executions = createMemo(() => activityExecutions(selected()?.nodes ?? []));
-  const pluginName = (id: string) => props.packages?.find((pkg) => pkg.id === id)?.name ?? id;
+  const moduleName = (id: string) => props.packages?.find((pkg) => pkg.id === id)?.name ?? id;
   const payload = createMemo(() => {
     const value = selected()?.payload ?? "";
     try {
@@ -128,7 +128,7 @@ export function LiveEvents(props: LiveEventsProps) {
             <EventListItem
               id={id}
               name={byId().get(id)?.name ?? ""}
-              pluginName={pluginName(byId().get(id)?.pluginId ?? "")}
+              moduleName={moduleName(byId().get(id)?.moduleId ?? "")}
               source={byId().get(id)?.source ?? "Engine"}
               receivedAt={byId().get(id)?.startedAt ?? 0}
               now={now()}
@@ -194,8 +194,8 @@ export function LiveEvents(props: LiveEventsProps) {
 
                 <div sx={styles.detailBody}>
                   <EventPayload eventId={event().id} source={event().source} payload={payload()}>
-                    <span sx={styles.fieldValue} title={pluginName(event().pluginId)}>
-                      {pluginName(event().pluginId)}
+                    <span sx={styles.fieldValue} title={moduleName(event().moduleId)}>
+                      {moduleName(event().moduleId)}
                     </span>
                   </EventPayload>
 

@@ -11,13 +11,13 @@
   },
   "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
-    { "path": "../../packages/plugins/elevenlabs" },
-    { "path": "../../packages/plugins/json" },
-    { "path": "../../packages/plugins/list" },
-    { "path": "../../packages/plugins/logic" },
-    { "path": "../../packages/plugins/math" },
-    { "path": "../../packages/plugins/openai" },
-    { "path": "../../packages/plugins/string" },
+    { "path": "../../packages/modules/elevenlabs" },
+    { "path": "../../packages/modules/json" },
+    { "path": "../../packages/modules/list" },
+    { "path": "../../packages/modules/logic" },
+    { "path": "../../packages/modules/math" },
+    { "path": "../../packages/modules/openai" },
+    { "path": "../../packages/modules/string" },
     {
       "path": "../../packages/cloud-credentials"
     },
@@ -28,7 +28,7 @@
       "path": "../../packages/core"
     },
     {
-      "path": "../../packages/plugin"
+      "path": "../../packages/module"
     },
     {
       "path": "../../packages/persistence"
@@ -52,22 +52,22 @@
       "path": "../../packages/project-host"
     },
     {
-      "path": "../../packages/plugins/twitch"
+      "path": "../../packages/modules/twitch"
     },
     {
-      "path": "../../packages/plugins/kofi"
+      "path": "../../packages/modules/kofi"
     },
     {
-      "path": "../../packages/plugins/http-client"
+      "path": "../../packages/modules/http-client"
     },
     {
-      "path": "../../packages/plugins/utilities"
+      "path": "../../packages/modules/utilities"
     },
     {
-      "path": "../../packages/plugins/websocket-client"
+      "path": "../../packages/modules/websocket-client"
     },
     {
-      "path": "../../packages/plugins/websocket-server"
+      "path": "../../packages/modules/websocket-server"
     }
   ]
 }

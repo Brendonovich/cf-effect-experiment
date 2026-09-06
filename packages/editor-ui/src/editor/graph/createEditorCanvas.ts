@@ -1,6 +1,6 @@
 import type { EditorEvent, Presence } from "@macrograph/editor";
 
-import { IoId, type Graph, type Node } from "@macrograph/core";
+import { IoId, type Graph, type Node, type SchemaRef } from "@macrograph/core";
 import { Effect } from "effect";
 import { createMemo, createSignal, onSettled } from "solid-js";
 
@@ -11,22 +11,36 @@ import { runFork } from "../../observability/browserTracing";
 import { createPresence } from "../../ui/createPresence";
 import { createStateMachine } from "../../ui/createStateMachine";
 import { zoomOriginAt } from "../workspace/workspace";
-import { findSnapTarget, type PortDirection, type PortEndpoint } from "./connectionAuthoring";
 import {
-  GRAPH_NODE_IO_SPACING,
+  findSnapTarget,
+  singleCompatibleSchema,
+  type PortDirection,
+  type PortEndpoint,
+} from "./connectionAuthoring";
+import { outputRefForPort } from "./GraphPort";
+import {
   GRAPH_GRID_SPACING,
   snapGraphPosition,
   type GraphPort,
   connectedPortIds as graphConnectedPortIds,
   graphConnections as presentGraphConnections,
+  graphNodeWidth,
+  graphNodeHeight,
   graphNodeInputs,
   graphNodeOutputs,
-  graphNodeWidth,
+  retainedPorts,
   handlePosition as graphHandlePosition,
   visibleNodePorts as graphVisibleNodePorts,
 } from "./graphPresentation";
 
 export interface EditorCanvasOptions {
+  readonly createNode: (
+    schema: SchemaRef,
+    name: string,
+    position: { x: number; y: number },
+    source?: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
+    shiftKey?: boolean,
+  ) => Promise<void> | undefined;
   readonly editor: ReturnType<typeof createEditorStore>;
   readonly client: () => EditorRpcClient | null;
   readonly canEdit: () => boolean;
@@ -90,6 +104,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
   type NodeContextMenu = {
     nodeId: string;
     screen: { x: number; y: number };
+    scope?: string;
   };
   type SelectionRect = {
     start: { x: number; y: number };
@@ -123,8 +138,9 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
           state.mode = { type: "node-menu" };
         } else if (state.mode.type === "node-menu") state.mode = { type: "idle" };
       },
-      beginNodeCreation(state, id: symbol) {
-        if (state.mode.type === "node-menu") state.mode = { type: "node-creation", id };
+      beginNodeCreation(state, id: symbol, menu: NodeMenu) {
+        state.context.nodeMenu = menu;
+        state.mode = { type: "node-creation", id };
       },
       endNodeCreation(state, id: symbol) {
         if (state.mode.type === "node-creation" && state.mode.id === id)
@@ -181,16 +197,21 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     if (menu?.source === undefined) return;
     return { source: menu.source, pointer: menu.graph, target: undefined };
   });
-  const createNodeFromMenu = async (create: (menu: NodeMenu) => Promise<void> | undefined) => {
-    const menu = nodeMenu();
-    if (menu === undefined) return;
+  const createNodeAt = async (
+    menu: NodeMenu,
+    create: (menu: NodeMenu) => Promise<void> | undefined,
+  ) => {
     const id = Symbol();
-    canvasActions.beginNodeCreation(id);
+    canvasActions.beginNodeCreation(id, menu);
     try {
       await create(menu);
     } finally {
       canvasActions.endNodeCreation(id);
     }
+  };
+  const createNodeFromMenu = (create: (menu: NodeMenu) => Promise<void> | undefined) => {
+    const menu = nodeMenu();
+    return menu === undefined ? Promise.resolve() : createNodeAt(menu, create);
   };
   const presentNodeMenu = () => canvasInteraction.context.nodeMenu;
   const [nodeMenuElement, setNodeMenuElement] = createSignal<HTMLDivElement | null>(null);
@@ -331,12 +352,35 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
         event.clientY <= bounds.bottom
       )
         return;
-      setNodeMenu({
+      const menu: NodeMenu = {
         screen: { x: event.clientX, y: event.clientY },
         graph: pointer,
         source: drag.source,
         shiftKey: event.shiftKey,
-      });
+      };
+      const match = singleCompatibleSchema(
+        store.packages,
+        drag.source,
+        store.project?.types,
+        editor.authoring,
+      );
+      if (match === undefined) setNodeMenu(menu);
+      else
+        runFork(
+          Effect.tryPromise({
+            try: () =>
+              createNodeAt(menu, (placement) =>
+                options.createNode(
+                  match.ref,
+                  match.name,
+                  placement.graph,
+                  placement.source,
+                  placement.shiftKey,
+                ),
+              ),
+            catch: (error) => error,
+          }).pipe(Effect.catchCause(Effect.log)),
+        );
       return;
     }
 
@@ -349,7 +393,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
           graphId,
           connection: {
             outNodeId: output.nodeId,
-            outIoId: IoId.make(output.port.id),
+            outIo: outputRefForPort(output.port),
             inNodeId: input.nodeId,
             inIoId: IoId.make(input.port.id),
           },
@@ -378,10 +422,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
     const bounds = handle.getBoundingClientRect();
     const position = canvasPosition(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
-    const ports =
-      direction === "input"
-        ? graphNodeInputs(ioForNode(nodeId))
-        : graphNodeOutputs(ioForNode(nodeId));
+    const ports = visibleNodePorts(nodeId, direction);
     const port = ports.find((candidate) => candidate.id === ioId && candidate.kind === kind);
     if (port === undefined) return;
     const source: PortEndpoint = { nodeId, direction, port, position };
@@ -615,14 +656,37 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     const selected = nodes()
       .filter((node) => {
         const io = ioForNode(node.id);
-        const width = graphNodeWidth(io, node.name);
-        const height =
-          38 +
-          Math.max(
-            visibleNodePorts(node.id, "input").length,
-            visibleNodePorts(node.id, "output").length,
-          ) *
-            GRAPH_NODE_IO_SPACING;
+        const width = graphNodeWidth(
+          io,
+          node.name,
+          node.splitScopeOutputs,
+          selectedGraph()
+            ?.connections.filter((wire) => wire.outNodeId === node.id)
+            .map((wire) => wire.outIo),
+        );
+        const inputs = visibleNodePorts(node.id, "input");
+        const outputs = visibleNodePorts(node.id, "output");
+        const height = graphNodeHeight(
+          inputs,
+          outputs,
+          inputs.length <
+            retainedPorts(
+              graphNodeInputs(io),
+              connectedPortIds(node.id, "input"),
+              Object.keys(node.inputDefaults),
+            ).length ||
+            outputs.length <
+              retainedPorts(
+                graphNodeOutputs(
+                  io,
+                  node.splitScopeOutputs,
+                  selectedGraph()
+                    ?.connections.filter((wire) => wire.outNodeId === node.id)
+                    .map((wire) => wire.outIo),
+                ),
+                connectedPortIds(node.id, "output"),
+              ).length,
+        );
         return (
           node.position.x >= left &&
           node.position.y >= top &&

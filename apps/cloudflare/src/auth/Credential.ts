@@ -1,6 +1,6 @@
 import { CurrentUser, ProjectNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
-import { Credential } from "@macrograph/plugin";
+import { Credential } from "@macrograph/module";
 import { eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { HttpApiError } from "effect/unstable/httpapi";

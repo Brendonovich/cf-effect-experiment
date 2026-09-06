@@ -18,16 +18,16 @@
     "vite.config.ts",
     "../../packages/editor-ui/src/**/*.stories.tsx",
     "../../packages/editor-ui/src/editor/storybook-fixtures.ts",
-    "../../packages/plugins/*/src/**/*.stories.tsx"
+    "../../packages/modules/*/src/**/*.stories.tsx"
   ],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/editor-ui" },
-    { "path": "../../packages/plugin" },
-    { "path": "../../packages/plugins/kofi" },
-    { "path": "../../packages/plugins/obs" },
-    { "path": "../../packages/plugins/twitch" },
-    { "path": "../../packages/plugins/websocket-client" },
-    { "path": "../../packages/plugins/websocket-server" }
+    { "path": "../../packages/module" },
+    { "path": "../../packages/modules/kofi" },
+    { "path": "../../packages/modules/obs" },
+    { "path": "../../packages/modules/twitch" },
+    { "path": "../../packages/modules/websocket-client" },
+    { "path": "../../packages/modules/websocket-server" }
   ]
 }

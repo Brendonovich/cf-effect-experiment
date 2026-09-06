@@ -1,10 +1,10 @@
 # MacroGraph self-hosted server
 
-The server runs the collaborative browser editor, editor RPC, plugin settings RPC, and local
+The server runs the collaborative browser editor, editor RPC, module settings RPC, and local
 runtime in one Node.js process. The current persistence model is one project in one SQLite file.
 
-The browser workspace has Editor, Events, and Settings views. Edits and plugin configuration apply
-to the running project automatically; there is no deployment step. Events streams recent plugin
+The browser workspace has Editor, Events, and Settings views. Edits and module configuration apply
+to the running project automatically; there is no deployment step. Events streams recent module
 events, execution node status, timings, and errors to signed-in owners/admins. Activity retains up
 to 100 events and the latest 200 nodes per event, with bounded payload/error previews. It is held
 only in memory, so restarting the server clears it. Event payloads may contain sensitive
@@ -31,7 +31,7 @@ PORT=3001 MACROGRAPH_DATA_DIR=./data pnpm --filter @macrograph/server start
 
 Open `http://localhost:5174` for the Vite development client. The backend remains at
 `http://localhost:3001`. `GET /health/live` reports process liveness and
-`GET /health/ready` reports readiness after persistence and plugin initialization. `GET /health`
+`GET /health/ready` reports readiness after persistence and module initialization. `GET /health`
 is a compatibility alias for readiness.
 
 ## Configuration
@@ -90,18 +90,18 @@ The collector must accept HTTP OTLP, not gRPC (typically port `4318`, not `4317`
 batched every second and pending spans are flushed during graceful shutdown.
 
 Every engine event dispatched to the executor produces an `Executor.handleEvent` span, even when
-no graph matches. Twitch chat messages are identified by `macrograph.plugin.id=twitch` and
+no graph matches. Twitch chat messages are identified by `macrograph.module.id=twitch` and
 `macrograph.event.type=channel.chat.message` attributes. Independent events start separate traces;
 events with an existing parent retain it, even if the parent has ended. Twitch's WebSocket listener
-detaches connection-setup context before processing notifications. The span includes project, plugin, and event-type
+detaches connection-setup context before processing notifications. The span includes project, module, and event-type
 attributes, not the event payload, and contains any spans created during graph execution.
 
 The shared executor adds `Executor.matchEvent`, `Executor.executeEventNode`, `Executor.runNode`,
 and `Executor.resolveInput` spans. Graph, node, schema, and input details remain in attributes. Node
 spans cover resource/property resolution, input evaluation (including pure nodes), execution-driver
-work, and output validation. Each actual schema invocation gets a `Schema.run <plugin>.<schema-id>`
-span, such as `Schema.run util.Print`, with plugin/schema/node identity also in attributes. It wraps
-the callback and its returned Effect; plugin-created sub-operation spans nest beneath it. Cache
+work, and output validation. Each actual schema invocation gets a `Schema.run <module>.<schema-id>`
+span, such as `Schema.run util.Print`, with module/schema/node identity also in attributes. It wraps
+the callback and its returned Effect; module-created sub-operation spans nest beneath it. Cache
 hits that skip the callback do not produce a schema-run span. Input spans
 identify connections or default sources without recording input/output values. These boundaries
 apply to every runtime using the shared executor, not just Cloudflare workflows.
@@ -156,7 +156,7 @@ MacroGraph authorization is stored separately from project data in
 `MACROGRAPH_DATA_DIR/macrograph-auth.json`, which is atomically replaced with mode `0600` in a
 mode `0700` directory. Opaque signed-in browser sessions are stored with the same protections in
 `MACROGRAPH_DATA_DIR/macrograph-client-auth.json`. Anonymous browsers have read-only editor access;
-only the signed-in server owner and configured admins may modify the project. Plugin configuration,
+only the signed-in server owner and configured admins may modify the project. Module configuration,
 including OBS passwords, is stored in the ordinary project SQLite engine storage.
 
 For a path prefix, build with `--build-arg MACROGRAPH_BASE_PATH=/macrograph` and run with the same

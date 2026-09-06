@@ -2,27 +2,30 @@ import {
   CustomTypes,
   Graph,
   Node,
+  OutputRef,
   Project,
   ResourceConstant,
+  Scopes,
   TypeDefinition,
+  Wildcards,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
-import * as Engine from "@macrograph/plugin/Engine";
-import * as Plugin from "@macrograph/plugin/Plugin";
-import * as Registration from "@macrograph/plugin/Registration";
-import { Cause, Effect, Ref, Schema } from "effect";
+import { DataType } from "@macrograph/module/DataType";
+import * as Engine from "@macrograph/module/Engine";
+import * as Module from "@macrograph/module/Module";
+import * as Registration from "@macrograph/module/Registration";
+import { Cause, Effect, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
 
-export class PluginNotRegistered extends Schema.TaggedError<PluginNotRegistered>()(
-  "PluginNotRegistered",
-  { pluginId: Schema.String },
+export class ModuleNotRegistered extends Schema.TaggedError<ModuleNotRegistered>()(
+  "ModuleNotRegistered",
+  { moduleId: Schema.String },
 ) {}
 
 export class SchemaNotRegistered extends Schema.TaggedError<SchemaNotRegistered>()(
   "SchemaNotRegistered",
-  { pluginId: Schema.String, schemaId: Schema.String },
+  { moduleId: Schema.String, schemaId: Schema.String },
 ) {}
 
 export class InvalidConnection extends Schema.TaggedError<InvalidConnection>()(
@@ -39,6 +42,15 @@ export class MissingOutput extends Schema.TaggedError<MissingOutput>()("MissingO
   nodeId: Schema.String,
   outputId: Schema.String,
 }) {}
+
+export class ScopeNotActive extends Schema.TaggedError<ScopeNotActive>()("ScopeNotActive", {
+  nodeId: Schema.String,
+  scopeId: Schema.String,
+}) {}
+type ScopeActivations = ReadonlyMap<
+  string,
+  { readonly scopeId: string; readonly payload: Readonly<Record<string, unknown>> } | undefined
+>;
 
 export class InvalidInputValue extends Schema.TaggedError<InvalidInputValue>()(
   "InvalidInputValue",
@@ -61,7 +73,7 @@ export class ResourceResolutionError extends Schema.TaggedError<ResourceResoluti
 
 export class EngineClientUnavailable extends Schema.TaggedError<EngineClientUnavailable>()(
   "EngineClientUnavailable",
-  { pluginId: Schema.String },
+  { moduleId: Schema.String },
 ) {}
 
 export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()(
@@ -82,11 +94,12 @@ const isEngineClientUnavailable = (value: unknown): value is EngineClientUnavail
   value._tag === "EngineClientUnavailable";
 
 export type ExecutorError =
-  | PluginNotRegistered
+  | ModuleNotRegistered
   | SchemaNotRegistered
   | InvalidConnection
   | MissingInput
   | MissingOutput
+  | ScopeNotActive
   | InvalidInputValue
   | InvalidOutputValue
   | ExecutionCycle
@@ -96,7 +109,7 @@ export type ExecutorError =
   | InvalidGraph
   | Node.NotFoundError;
 
-interface RegisteredPlugin {
+interface RegisteredModule {
   readonly schemas: ReadonlyMap<string, Registration.RegisteredSchema>;
   readonly engineClient: unknown;
 }
@@ -111,11 +124,11 @@ interface ExecutionState {
 export interface Service {
   readonly project: Effect.Effect<Project.Model>;
   readonly loadProject: (project: Project.Model) => Effect.Effect<void>;
-  readonly plugin: <Definition extends Engine.AnyDef = never>(
-    ...args: Plugin.RegisterArgs<Definition>
+  readonly module: <Definition extends Engine.AnyDef = never>(
+    ...args: Module.RegisterArgs<Definition>
   ) => Effect.Effect<void>;
   readonly handleEvent: <Definition extends Engine.AnyDef>(
-    plugin: Plugin.Plugin<Definition>,
+    module: Module.Module<Definition>,
     event: Engine.EventOf<Definition>,
   ) => Effect.Effect<void, ExecutorError>;
 }
@@ -125,7 +138,7 @@ export interface NodeExecutionKey {
   readonly graphId: string;
   readonly eventNodeId: string;
   readonly nodeId: string;
-  readonly kind: "event" | "exec";
+  readonly kind: "base" | "event" | "exec";
   readonly executionPath: string;
   readonly executionTraceId: string;
   readonly traceId: string;
@@ -140,6 +153,7 @@ export interface NodeOutput {
 export interface NodeExecutionResult {
   readonly outputs: ReadonlyArray<NodeOutput>;
   readonly executionOutputId: string | null;
+  readonly scopePayload?: Readonly<Record<string, unknown>>;
 }
 
 export interface ExecutionDriver {
@@ -152,7 +166,7 @@ export interface ExecutionDriver {
 export interface MakeOptions {
   readonly projectId?: string;
   readonly executionDriver?: ExecutionDriver;
-  readonly engineClient?: (pluginId: string) => Effect.Effect<unknown>;
+  readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
   readonly resourceValues?: (
     resource: ResourceConstant.ResourceRef,
   ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
@@ -170,19 +184,19 @@ export const make = Effect.fnUntraced(function* (
   options?: MakeOptions,
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
-  const plugins = yield* Ref.make<ReadonlyMap<string, RegisteredPlugin>>(new Map());
+  const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
   const executionDriver = options?.executionDriver ?? inlineExecutionDriver;
   const projectId = options?.projectId ?? "local";
 
-  const registerPlugin: Service["plugin"] = Effect.fnUntraced(function* (...args) {
+  const registerModule: Service["module"] = Effect.fnUntraced(function* (...args) {
     const [definition, deployment] = args;
     if (
       definition.engine !== undefined &&
       (deployment === undefined ||
-        deployment.pluginId !== definition.id ||
+        deployment.moduleId !== definition.id ||
         deployment.definition !== definition.engine)
     )
-      return yield* Effect.die(`Deployment does not match plugin ${definition.id}`);
+      return yield* Effect.die(`Deployment does not match module ${definition.id}`);
     const registered = yield* Registration.collect(definition.effect);
     const engineClient =
       definition.engine === undefined
@@ -192,11 +206,11 @@ export const make = Effect.fnUntraced(function* (
               {},
               {
                 get: () => () =>
-                  Effect.fail(new EngineClientUnavailable({ pluginId: definition.id })),
+                  Effect.fail(new EngineClientUnavailable({ moduleId: definition.id })),
               },
             )
           : yield* options.engineClient(definition.id);
-    yield* Ref.update(plugins, (current) => {
+    yield* Ref.update(modules, (current) => {
       const next = new Map(current);
       next.set(definition.id, {
         schemas: new Map(registered.map((schema) => [schema.id, schema])),
@@ -207,16 +221,16 @@ export const make = Effect.fnUntraced(function* (
   });
 
   const getSchema = Effect.fnUntraced(function* (
-    registeredPlugins: ReadonlyMap<string, RegisteredPlugin>,
+    registeredModules: ReadonlyMap<string, RegisteredModule>,
     node: Node.Model,
   ) {
-    const registeredPlugin = registeredPlugins.get(node.schema.package);
-    if (registeredPlugin === undefined)
-      return yield* new PluginNotRegistered({ pluginId: node.schema.package });
-    const schema = registeredPlugin.schemas.get(node.schema.schema);
+    const registeredModule = registeredModules.get(node.schema.package);
+    if (registeredModule === undefined)
+      return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
+    const schema = registeredModule.schemas.get(node.schema.schema);
     if (schema === undefined)
       return yield* new SchemaNotRegistered({
-        pluginId: node.schema.package,
+        moduleId: node.schema.package,
         schemaId: node.schema.schema,
       });
     return schema;
@@ -224,13 +238,17 @@ export const make = Effect.fnUntraced(function* (
 
   const handleEvent: Service["handleEvent"] = Effect.fnUntraced(function* (definition, event) {
     const currentProject = yield* Ref.get(project);
-    const registeredPlugins = new Map(yield* Ref.get(plugins));
-    registeredPlugins.set(CustomTypes.packageId, {
+    const registeredModules = new Map(yield* Ref.get(modules));
+    registeredModules.set(CustomTypes.packageId, {
       schemas: CustomTypes.schemas(currentProject.types),
       engineClient: undefined,
     });
-    if (!registeredPlugins.has(definition.id))
-      return yield* new PluginNotRegistered({ pluginId: definition.id });
+    registeredModules.set(Scopes.packageId, {
+      schemas: new Map([[Scopes.schema.id, Scopes.schema]]),
+      engineClient: undefined,
+    });
+    if (!registeredModules.has(definition.id))
+      return yield* new ModuleNotRegistered({ moduleId: definition.id });
 
     const resolveProperties = Effect.fnUntraced(function* (
       node: Node.Model,
@@ -298,6 +316,125 @@ export const make = Effect.fnUntraced(function* (
       return resolved;
     });
 
+    const generateUnresolvedNodeIO = Effect.fnUntraced(function* (
+      graph: Graph.Model,
+      node: Node.Model,
+      schema: Registration.RegisteredSchema,
+      properties: Readonly<Record<string, unknown>>,
+    ): Effect.fn.Return<Registration.RegisteredNodeIO, ExecutorError> {
+      const generate = (
+        schema: Registration.RegisteredSchema,
+        properties: Readonly<Record<string, unknown>>,
+      ) =>
+        Effect.try({
+          try: () => schema.generateIO(properties),
+          catch: () =>
+            new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: ["Schema IO could not be generated"],
+            }),
+        });
+      const io = yield* generate(schema, properties);
+      if (!Scopes.isBreakScope(node)) return io;
+      const wires = graph.connections.filter(
+        (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
+      );
+      const wire = wires.length === 1 ? wires[0] : undefined;
+      if (wire === undefined) return io;
+      const source = yield* Graph.getNode(graph, wire.outNodeId);
+      const sourceSchema = yield* getSchema(registeredModules, source);
+      const sourceIO = yield* generate(
+        sourceSchema,
+        yield* resolveProperties(source, sourceSchema, false),
+      );
+      const fields =
+        wire.outIo._tag === "Port"
+          ? sourceIO.executionOutputs.find((port) => port.id === OutputRef.parentId(wire.outIo))
+              ?.scope
+          : undefined;
+      return {
+        ...io,
+        dataOutputs: (fields ?? []).map(
+          (field) => new Registration.DataOutputRef(field.id, field.type, field.name),
+        ),
+      };
+    });
+
+    // Event-local declarations are immutable. Reuse the solved groups for preflight,
+    // live input/output checks and durable-result encoding/decoding alike.
+    const wildcardGraphs = new Map<string, Wildcards.Cache>();
+    const generateNodeIO = Effect.fnUntraced(function* (
+      graph: Graph.Model,
+      node: Node.Model,
+      schema: Registration.RegisteredSchema,
+      properties: Readonly<Record<string, unknown>>,
+    ): Effect.fn.Return<Registration.RegisteredNodeIO, ExecutorError> {
+      const io = yield* generateUnresolvedNodeIO(graph, node, schema, properties);
+      let cache = wildcardGraphs.get(graph.id);
+      if (cache?.group(node.id) === undefined) {
+        cache ??= new Wildcards.Cache();
+        const declarations = new Map<string, Registration.RegisteredNodeIO>();
+        for (const candidate of Object.values(graph.nodes)) {
+          const declaration =
+            candidate.id === node.id
+              ? io
+              : yield* Effect.gen(function* () {
+                  const schema = yield* getSchema(registeredModules, candidate);
+                  return yield* generateUnresolvedNodeIO(
+                    graph,
+                    candidate,
+                    schema,
+                    yield* resolveProperties(candidate, schema, false),
+                  );
+                }).pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+          // Unavailable nodes outside the event closure must not block execution.
+          // The ordinary preflight still reports them if it reaches them.
+          if (declaration !== undefined) declarations.set(candidate.id, declaration);
+        }
+        const derive = CustomTypes.derivedOutputs(graph, currentProject.types);
+        const result = cache.update(declarations, graph.connections, derive);
+        if (Result.isFailure(result)) {
+          const conflicts = result.failure.filter((conflict) => conflict.nodes.has(node.id));
+          if (conflicts.length > 0)
+            return yield* new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: conflicts.map((conflict) => `${conflict.connectionId}: ${conflict.reason}`),
+            });
+          // Keep only completed groups outside invalid components. If execution reaches
+          // an excluded node later, validate it again above rather than caching its errors.
+          const invalidNodes = new Set(result.failure.flatMap((conflict) => [...conflict.nodes]));
+          const valid = cache.update(
+            new Map([...declarations].filter(([id]) => !invalidNodes.has(id))),
+            graph.connections.filter(
+              (wire) => !invalidNodes.has(wire.outNodeId) && !invalidNodes.has(wire.inNodeId),
+            ),
+            derive,
+          );
+          if (Result.isFailure(valid))
+            return yield* new InvalidGraph({
+              graphId: graph.id,
+              nodeId: node.id,
+              reasons: valid.failure.map((conflict) => conflict.reason),
+            });
+        }
+        wildcardGraphs.set(graph.id, cache);
+      }
+      const outputs = cache.derivedOutputs(node.id);
+      return cache.resolveIO(
+        node.id,
+        outputs === undefined
+          ? io
+          : {
+              ...io,
+              dataOutputs: outputs.map(
+                (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
+              ),
+            },
+      );
+    });
+
     // Validate only the event's execution closure and its upstream data dependencies.
     // No schema.run, execution driver, or resource lookup may happen during this pass.
     const validateEventGraph = Effect.fnUntraced(function* (
@@ -318,17 +455,9 @@ export const make = Effect.fnUntraced(function* (
         const cached = inspected.get(id);
         if (cached !== undefined) return cached;
         const node = yield* Graph.getNode(graph, id);
-        const schema = yield* getSchema(registeredPlugins, node);
+        const schema = yield* getSchema(registeredModules, node);
         const properties = yield* resolveProperties(node, schema, false);
-        const io = yield* Effect.try({
-          try: () => schema.generateIO(properties),
-          catch: () =>
-            new InvalidGraph({
-              graphId: graph.id,
-              nodeId: node.id,
-              reasons: ["Schema IO could not be generated"],
-            }),
-        });
+        const io = yield* generateNodeIO(graph, node, schema, properties);
         const result = { node, schema, io };
         inspected.set(id, result);
         return result;
@@ -374,19 +503,30 @@ export const make = Effect.fnUntraced(function* (
               : definition.variants.flatMap((variant) => variant.fields);
           fields.forEach((field) => visitType(field.type));
         };
-        [...io.dataInputs, ...io.dataOutputs].forEach((port) => visitType(port.type));
+        [
+          ...io.dataInputs,
+          ...io.dataOutputs,
+          ...io.executionInputs.flatMap((port) => port.scope ?? []),
+          ...io.executionOutputs.flatMap((port) => port.scope ?? []),
+        ].forEach((port) => visitType(port.type));
         const reasons = [
           ...Array.from(missing, (id) => `Unknown type ${id}`),
           ...TypeDefinition.validate(dependencyDefinitions).map((error) => error.reason),
         ];
         if (
-          node.schema.package === "list" &&
-          node.schema.schema !== "JoinStringList" &&
-          DataType.parseSelector(
-            typeof node.properties.type === "string" ? node.properties.type : "String",
-          ) === undefined
+          [
+            ...io.dataInputs,
+            ...io.dataOutputs,
+            ...io.executionInputs.flatMap((port) => port.scope ?? []),
+            ...io.executionOutputs.flatMap((port) => port.scope ?? []),
+          ].some((port) => DataType.hasWildcard(port.type))
         )
-          reasons.push("Invalid list element type selector");
+          reasons.push("Unresolved wildcard type; connect it to a concrete type before execution");
+        if (
+          schema.type === "pure" &&
+          [...io.executionInputs, ...io.executionOutputs].some((port) => port.scope !== undefined)
+        )
+          reasons.push("Pure nodes cannot consume or emit scopes");
         if (node.schema.package === "list" && node.schema.schema === "ListCreate") {
           const count = node.properties.number ?? 1;
           if (
@@ -458,24 +598,21 @@ export const make = Effect.fnUntraced(function* (
           )
             continue;
           const source = outgoing ? { node, schema, io } : yield* inspect(connection.outNodeId);
-          const sourceData = source.io.dataOutputs.filter((port) => port.id === connection.outIoId);
-          const sourceExec = source.io.executionOutputs.filter(
-            (port) => port.id === connection.outIoId,
-          );
-          if (sourceData.length + sourceExec.length !== 1)
+          const output = OutputRef.resolve(source.io, connection.outIo);
+          if (output === undefined)
             return yield* new InvalidConnection({
               connectionId: connection.id,
-              reason: `Output ${connection.outIoId} is missing or ambiguous`,
+              reason: `Output ${OutputRef.key(connection.outIo)} is missing or ambiguous`,
             });
           // Data consumers outside this event closure are not executed or validated.
           if (
             outgoing &&
-            sourceData.length === 1 &&
+            output.kind === "data" &&
             !processed.has(connection.inNodeId) &&
             !executionNodes.has(connection.inNodeId)
           )
             continue;
-          if (outgoing && sourceExec.length === 1 && !executionNodes.has(node.id)) continue;
+          if (outgoing && output.kind === "execution" && !executionNodes.has(node.id)) continue;
           const target = incoming ? { node, schema, io } : yield* inspect(connection.inNodeId);
           const targetData = target.io.dataInputs.filter((port) => port.id === connection.inIoId);
           const targetExec = target.io.executionInputs.filter(
@@ -483,10 +620,11 @@ export const make = Effect.fnUntraced(function* (
           );
           if (
             targetData.length + targetExec.length !== 1 ||
-            (sourceData.length === 1
-              ? targetData.length !== 1 ||
-                !DataType.equals(sourceData[0]!.type, targetData[0]!.type)
-              : targetExec.length !== 1 || target.schema.type !== "exec")
+            (output.kind === "data"
+              ? targetData.length !== 1 || !DataType.equals(output.port.type, targetData[0]!.type)
+              : targetExec.length !== 1 ||
+                !Registration.scopesCompatible(output.port.scope, targetExec[0]?.scope) ||
+                (target.schema.type !== "exec" && target.schema.type !== "base"))
           )
             return yield* new InvalidConnection({
               connectionId: connection.id,
@@ -501,8 +639,8 @@ export const make = Effect.fnUntraced(function* (
               connectionId: duplicates[1]!.id,
               reason: `Input ${connection.inIoId} has multiple connections`,
             });
-          if (incoming && sourceData.length === 1) pending.push(source.node.id);
-          if (outgoing && sourceExec.length === 1 && executionNodes.has(node.id)) {
+          if (incoming && output.kind === "data") pending.push(source.node.id);
+          if (outgoing && output.kind === "execution" && executionNodes.has(node.id)) {
             executionNodes.add(target.node.id);
             pending.push(target.node.id);
           }
@@ -524,7 +662,7 @@ export const make = Effect.fnUntraced(function* (
               : undefined
             : connection.outNodeId === id &&
                 executionNodes.has(id) &&
-                current.io.executionOutputs.some((port) => port.id === connection.outIoId)
+                OutputRef.resolve(current.io, connection.outIo)?.kind === "execution"
               ? connection.inNodeId
               : undefined;
           if (next === undefined) continue;
@@ -572,9 +710,18 @@ export const make = Effect.fnUntraced(function* (
         node: Node.Model,
         schema: Registration.RegisteredSchema,
         executionPath: string,
+        scopes: ScopeActivations,
         parentTraceId?: string,
+        incomingScope?: {
+          readonly inputId: string;
+          readonly payload: Readonly<Record<string, unknown>>;
+        },
       ): Effect.fn.Return<
-        { readonly executionOutputId: string | null; readonly traceId: string },
+        {
+          readonly executionOutputId: string | null;
+          readonly traceId: string;
+          readonly scopePayload?: Readonly<Record<string, unknown>>;
+        },
         ExecutorError
       > {
         const traceId = crypto.randomUUID();
@@ -584,28 +731,32 @@ export const make = Effect.fnUntraced(function* (
           "macrograph.node.id": node.id,
           "macrograph.node.name": node.name,
           "macrograph.node.kind": schema.type,
-          "macrograph.plugin.id": node.schema.package,
+          "macrograph.module.id": node.schema.package,
           "macrograph.schema.id": node.schema.schema,
           "macrograph.execution.path": executionPath,
           ...(parentTraceId === undefined ? {} : { "macrograph.trace.parent.id": parentTraceId }),
         };
         yield* Effect.annotateCurrentSpan(nodeAttributes);
-        const registeredPlugin = registeredPlugins.get(node.schema.package);
-        if (registeredPlugin === undefined)
-          return yield* new PluginNotRegistered({ pluginId: node.schema.package });
+        const registeredModule = registeredModules.get(node.schema.package);
+        if (registeredModule === undefined)
+          return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
         if (
           schema.properties.some((property) => "resource" in property) &&
-          registeredPlugin.engineClient === undefined
+          registeredModule.engineClient === undefined
         )
-          return yield* new EngineClientUnavailable({ pluginId: node.schema.package });
+          return yield* new EngineClientUnavailable({ moduleId: node.schema.package });
         const resolvedProperties = yield* resolveProperties(node, schema);
-        const nodeIO = schema.generateIO(resolvedProperties);
+        const nodeIO = yield* generateNodeIO(graph, node, schema, resolvedProperties);
         state.nodeIO.set(node.id, nodeIO);
+        for (const input of nodeIO.executionInputs) {
+          if (input.scope !== undefined && incomingScope?.inputId !== input.id)
+            return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
+        }
         const inputs = new Map<string, unknown>();
         yield* Effect.forEach(
           nodeIO.dataInputs,
           (input) =>
-            resolveInput(node, input, executionPath, traceId).pipe(
+            resolveInput(node, input, executionPath, traceId, scopes).pipe(
               Effect.tap((value) =>
                 Effect.sync(() => {
                   inputs.set(input.id, value);
@@ -625,17 +776,32 @@ export const make = Effect.fnUntraced(function* (
         };
         const execute = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
+          if (Scopes.isBreakScope(node)) {
+            return {
+              outputs: nodeIO.dataOutputs.map((port) => ({
+                outputId: port.id,
+                value: incomingScope?.payload[port.id],
+              })),
+              executionOutputId: "exec",
+            } satisfies NodeExecutionResult;
+          }
           const selected = selectOutput(
             nodeIO,
             yield* Effect.suspend(() =>
               schema.run({
+                types: {
+                  resolve: (type) => wildcardGraphs.get(graph.id)!.resolve(node.id, type),
+                  definitions: currentProject.types,
+                },
                 input: (input) => inputs.get(input.id),
+                scopeInput: (input) =>
+                  incomingScope?.inputId === input.id ? incomingScope.payload : undefined,
                 output: (output, value) => {
                   outputs.push({ outputId: output.id, value });
                 },
                 properties: resolvedProperties,
                 event,
-                engine: registeredPlugin.engineClient,
+                engine: registeredModule.engineClient,
                 execution: {
                   projectId,
                   graphId: graph.id,
@@ -666,6 +832,9 @@ export const make = Effect.fnUntraced(function* (
           return {
             outputs,
             executionOutputId: selected?.id ?? null,
+            ...(selected instanceof Registration.ScopeExecution
+              ? { scopePayload: selected.payload }
+              : {}),
           } satisfies NodeExecutionResult;
         });
 
@@ -676,6 +845,48 @@ export const make = Effect.fnUntraced(function* (
             value: unknown,
           ) => Effect.Effect<unknown, Schema.SchemaError>,
         ) {
+          const branch = nodeIO.executionOutputs.find(
+            (port) => port.id === result.executionOutputId,
+          );
+          const fields = branch?.scope;
+          let scopePayload: Readonly<Record<string, unknown>> | undefined;
+          if (fields !== undefined) {
+            const payload = result.scopePayload;
+            if (
+              payload === undefined ||
+              payload === null ||
+              typeof payload !== "object" ||
+              Object.keys(payload).length !== fields.length ||
+              fields.some((field) => !Object.hasOwn(payload, field.id)) ||
+              new Set(fields.map((field) => field.id)).size !== fields.length
+            )
+              return yield* new InvalidOutputValue({
+                nodeId: node.id,
+                outputId: branch!.id,
+                reason: "Scope payload must contain exactly the declared fields",
+              });
+            scopePayload = Object.fromEntries(
+              yield* Effect.forEach(fields, (field) =>
+                transform(field.type, payload[field.id]).pipe(
+                  Effect.map((value) => [field.id, value] as const),
+                  Effect.catchCause(
+                    () =>
+                      new InvalidOutputValue({
+                        nodeId: node.id,
+                        outputId: branch!.id,
+                        reason: `Invalid scope field ${field.id}`,
+                      }),
+                  ),
+                ),
+              ),
+            );
+          } else if (result.scopePayload !== undefined) {
+            return yield* new InvalidOutputValue({
+              nodeId: node.id,
+              outputId: result.executionOutputId ?? "",
+              reason: "Payload requires a declared scope output",
+            });
+          }
           const outputs = yield* Effect.forEach(result.outputs, (output) => {
             const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
             if (
@@ -701,7 +912,7 @@ export const make = Effect.fnUntraced(function* (
               ),
             );
           });
-          return { ...result, outputs };
+          return { ...result, outputs, ...(scopePayload === undefined ? {} : { scopePayload }) };
         });
 
         const result =
@@ -739,20 +950,6 @@ export const make = Effect.fnUntraced(function* (
                     ),
                   ),
                 );
-
-        if (node.schema.package === CustomTypes.packageId && nodeIO.executionInputs.length > 0) {
-          if (
-            result.executionOutputId === null ||
-            result.outputs.some(
-              (output) => !output.outputId.startsWith(`${result.executionOutputId}/`),
-            )
-          )
-            return yield* new InvalidGraph({
-              graphId: graph.id,
-              nodeId: node.id,
-              reasons: ["Enum match payload does not belong to the selected branch"],
-            });
-        }
 
         // An exec node may emit different payloads on successive branches. Never retain
         // outputs from its previous invocation (including a previous enum match branch).
@@ -797,7 +994,11 @@ export const make = Effect.fnUntraced(function* (
           "macrograph.execution.output.id",
           result.executionOutputId,
         );
-        return { executionOutputId: result.executionOutputId, traceId };
+        return {
+          executionOutputId: result.executionOutputId,
+          traceId,
+          ...(result.scopePayload === undefined ? {} : { scopePayload: result.scopePayload }),
+        };
       });
 
       const runPureNode = Effect.fnUntraced(function* (
@@ -805,12 +1006,13 @@ export const make = Effect.fnUntraced(function* (
         schema: Registration.RegisteredSchema,
         executionPath: string,
         parentTraceId: string,
+        scopes: ScopeActivations,
       ): Effect.fn.Return<void, ExecutorError> {
         if (state.completedPureNodes.has(node.id)) return;
         if (state.runningPureNodes.has(node.id))
           return yield* new ExecutionCycle({ nodeId: node.id });
         state.runningPureNodes.add(node.id);
-        yield* runNode(node, schema, executionPath, parentTraceId);
+        yield* runNode(node, schema, executionPath, scopes, parentTraceId);
         state.runningPureNodes.delete(node.id);
         state.completedPureNodes.add(node.id);
       });
@@ -820,6 +1022,7 @@ export const make = Effect.fnUntraced(function* (
         input: Registration.DataInputRef,
         executionPath: string,
         parentTraceId: string,
+        scopes: ScopeActivations,
       ): Effect.fn.Return<unknown, ExecutorError> {
         yield* Effect.annotateCurrentSpan({
           ...executionAttributes,
@@ -882,44 +1085,56 @@ export const make = Effect.fnUntraced(function* (
           "macrograph.input.source": "connection",
           "macrograph.connection.id": connection.id,
           "macrograph.source.node.id": connection.outNodeId,
-          "macrograph.source.output.id": connection.outIoId,
+          "macrograph.source.output.id": OutputRef.parentId(connection.outIo),
         });
         const sourceNode = yield* Graph.getNode(graph, connection.outNodeId);
-        const sourceSchema = yield* getSchema(registeredPlugins, sourceNode);
+        const sourceSchema = yield* getSchema(registeredModules, sourceNode);
         if (sourceSchema.type === "pure")
           yield* runPureNode(
             sourceNode,
             sourceSchema,
             `${executionPath}/data:${connection.id}`,
             parentTraceId,
+            scopes,
           );
         const sourceIO =
           state.nodeIO.get(sourceNode.id) ??
-          sourceSchema.generateIO(yield* resolveProperties(sourceNode, sourceSchema));
-        const outputs = sourceIO.dataOutputs.filter(
-          (candidate) => candidate.id === connection.outIoId,
-        );
-        const executionOutputs = sourceIO.executionOutputs.filter(
-          (candidate) => candidate.id === connection.outIoId,
-        );
-        if (outputs.length !== 1 || executionOutputs.length !== 0)
+          (yield* generateNodeIO(
+            graph,
+            sourceNode,
+            sourceSchema,
+            yield* resolveProperties(sourceNode, sourceSchema),
+          ));
+        const resolved = OutputRef.resolve(sourceIO, connection.outIo);
+        if (resolved?.kind !== "data")
           return yield* new InvalidConnection({
             connectionId: connection.id,
-            reason: `Output ${connection.outIoId} is not a data output`,
+            reason: `Output ${OutputRef.key(connection.outIo)} is not a data output`,
           });
-        const output = outputs[0]!;
+        const output = resolved.port;
         if (!DataType.equals(output.type, input.type))
           return yield* new InvalidConnection({
             connectionId: connection.id,
-            reason: `Output ${connection.outIoId} is incompatible with input ${input.id}`,
+            reason: `Output ${OutputRef.key(connection.outIo)} is incompatible with input ${input.id}`,
           });
-        const key = outputKey(sourceNode.id, connection.outIoId);
-        if (!state.outputs.has(key))
-          return yield* new MissingOutput({
-            nodeId: sourceNode.id,
-            outputId: connection.outIoId,
-          });
-        const value = state.outputs.get(key);
+        let value: unknown;
+        if (connection.outIo._tag === "ScopeField") {
+          const activation = scopes.get(sourceNode.id);
+          if (activation?.scopeId !== connection.outIo.scope)
+            return yield* new ScopeNotActive({
+              nodeId: sourceNode.id,
+              scopeId: connection.outIo.scope,
+            });
+          value = activation.payload[connection.outIo.field];
+        } else {
+          const key = outputKey(sourceNode.id, OutputRef.parentId(connection.outIo));
+          if (!state.outputs.has(key))
+            return yield* new MissingOutput({
+              nodeId: sourceNode.id,
+              outputId: OutputRef.parentId(connection.outIo),
+            });
+          value = state.outputs.get(key);
+        }
         return yield* Schema.decodeUnknownEffect(
           DataType.ValueSchema(input.type, currentProject.types),
         )(value).pipe(
@@ -949,15 +1164,25 @@ export const make = Effect.fnUntraced(function* (
         sourceTraceId: string,
         executionPath: string,
         path: ReadonlySet<string>,
+        scopes: ScopeActivations,
+        scopePayload?: Readonly<Record<string, unknown>>,
       ): Effect.Effect<void, ExecutorError> =>
         Effect.gen(function* () {
           const connections = graph.connections.filter(
-            (candidate) => candidate.outNodeId === currentNode.id && candidate.outIoId === outputId,
+            (candidate) =>
+              candidate.outNodeId === currentNode.id &&
+              candidate.outIo._tag !== "ScopeField" &&
+              OutputRef.parentId(candidate.outIo) === outputId,
           );
           if (connections.length === 0) return;
           const currentIO =
             state.nodeIO.get(currentNode.id) ??
-            currentSchema.generateIO(yield* resolveProperties(currentNode, currentSchema));
+            (yield* generateNodeIO(
+              graph,
+              currentNode,
+              currentSchema,
+              yield* resolveProperties(currentNode, currentSchema),
+            ));
           if (
             currentIO.executionOutputs.filter((output) => output.id === outputId).length !== 1 ||
             currentIO.dataOutputs.some((output) => output.id === outputId)
@@ -967,6 +1192,11 @@ export const make = Effect.fnUntraced(function* (
               reason: `Output ${outputId} is not an unambiguous execution output`,
             });
 
+          // Copy on branch entry: sibling paths must never see each other's activations.
+          const branchScopes: ScopeActivations = new Map(scopes).set(
+            currentNode.id,
+            scopePayload === undefined ? undefined : { scopeId: outputId, payload: scopePayload },
+          );
           for (const connection of connections) {
             const incoming = graph.connections.filter(
               (candidate) =>
@@ -981,13 +1211,18 @@ export const make = Effect.fnUntraced(function* (
 
             const nextNode = yield* Graph.getNode(graph, connection.inNodeId);
             if (path.has(nextNode.id)) return yield* new ExecutionCycle({ nodeId: nextNode.id });
-            const nextSchema = yield* getSchema(registeredPlugins, nextNode);
-            if (nextSchema.type !== "exec")
+            const nextSchema = yield* getSchema(registeredModules, nextNode);
+            if (nextSchema.type !== "exec" && nextSchema.type !== "base")
               return yield* new InvalidConnection({
                 connectionId: connection.id,
                 reason: `Execution flow cannot target a ${nextSchema.type} schema`,
               });
-            const nextIO = nextSchema.generateIO(yield* resolveProperties(nextNode, nextSchema));
+            const nextIO = yield* generateNodeIO(
+              graph,
+              nextNode,
+              nextSchema,
+              yield* resolveProperties(nextNode, nextSchema),
+            );
             if (
               nextIO.executionInputs.filter((input) => input.id === connection.inIoId).length !==
                 1 ||
@@ -1001,7 +1236,16 @@ export const make = Effect.fnUntraced(function* (
             state.completedPureNodes.clear();
             state.runningPureNodes.clear();
             const nextExecutionPath = `${executionPath}/exec:${connection.id}`;
-            const result = yield* runNode(nextNode, nextSchema, nextExecutionPath, sourceTraceId);
+            const result = yield* runNode(
+              nextNode,
+              nextSchema,
+              nextExecutionPath,
+              branchScopes,
+              sourceTraceId,
+              scopePayload === undefined || connection.outIo._tag !== "Port"
+                ? undefined
+                : { inputId: connection.inIoId, payload: scopePayload },
+            );
             if (result.executionOutputId !== null) {
               yield* followExecution(
                 nextNode,
@@ -1010,13 +1254,15 @@ export const make = Effect.fnUntraced(function* (
                 result.traceId,
                 nextExecutionPath,
                 new Set([...path, nextNode.id]),
+                branchScopes,
+                result.scopePayload,
               );
             }
           }
         });
 
       const executionPath = `event:${eventNode.id}`;
-      const eventResult = yield* runNode(eventNode, eventSchema, executionPath);
+      const eventResult = yield* runNode(eventNode, eventSchema, executionPath, new Map());
       if (eventResult.executionOutputId !== null) {
         yield* followExecution(
           eventNode,
@@ -1025,6 +1271,8 @@ export const make = Effect.fnUntraced(function* (
           eventResult.traceId,
           executionPath,
           new Set([eventNode.id]),
+          new Map(),
+          eventResult.scopePayload,
         );
       }
     });
@@ -1036,7 +1284,7 @@ export const make = Effect.fnUntraced(function* (
           Object.values(graph.nodes).filter((node) => node.schema.package === definition.id),
           (node) =>
             Effect.gen(function* () {
-              const schema = registeredPlugins
+              const schema = registeredModules
                 .get(node.schema.package)
                 ?.schemas.get(node.schema.schema);
               if (schema === undefined || schema.type !== "event") return;
@@ -1050,7 +1298,7 @@ export const make = Effect.fnUntraced(function* (
                     "macrograph.project.id": projectId,
                     "macrograph.graph.id": graph.id,
                     "macrograph.node.id": node.id,
-                    "macrograph.plugin.id": node.schema.package,
+                    "macrograph.module.id": node.schema.package,
                     "macrograph.schema.id": node.schema.schema,
                   },
                 }),
@@ -1066,15 +1314,15 @@ export const make = Effect.fnUntraced(function* (
   return {
     project: Ref.get(project),
     loadProject: (nextProject) => Ref.set(project, nextProject),
-    plugin: registerPlugin,
-    handleEvent: (plugin, event) => {
+    module: registerModule,
+    handleEvent: (module, event) => {
       const emittedEvent: { readonly _tag: string } = event;
-      return handleEvent(plugin, event).pipe(
+      return handleEvent(module, event).pipe(
         Effect.withSpan("Executor.handleEvent", {
           kind: "consumer",
           attributes: {
             "macrograph.project.id": projectId,
-            "macrograph.plugin.id": plugin.id,
+            "macrograph.module.id": module.id,
             "macrograph.event.type": emittedEvent._tag,
           },
         }),

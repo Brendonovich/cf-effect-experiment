@@ -22,7 +22,7 @@ Resource references use constant IDs and exact `{ package, resource }` compatibi
 Foreign or missing resource references require explicit compatible-constant choices.
 Schemas are never rebound. Missing schemas are listed for confirmation and can be
 removed along with their connections before the available fragment is pasted. Copied
-schema metadata provides plugin and schema display names for this confirmation. Every
+schema metadata provides module and schema display names for this confirmation. Every
 retry revalidates against current destination state; cancel inserts nothing.
 
 Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`).

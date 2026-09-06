@@ -220,9 +220,9 @@ describe("built self-hosted server", () => {
     }
   });
 
-  it("rejects inherited-property session tokens at the HTTP plugin gate", async () => {
+  it("rejects inherited-property session tokens at the HTTP module gate", async () => {
     for (const token of ["constructor", "toString", "__proto__"]) {
-      const response = await fetch(`${origin}${basePath}/plugin/twitch/rpc`, {
+      const response = await fetch(`${origin}${basePath}/module/twitch/rpc`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
       });
@@ -243,11 +243,11 @@ describe("built self-hosted server", () => {
     websocket.close();
   });
 
-  it("routes plugin RPCs over the editor WebSocket", async () => {
+  it("routes module RPCs over the editor WebSocket", async () => {
     const websocket = new WebSocket(`${origin.replace("http:", "ws:")}${basePath}/rpc-ws`);
     const response = new Promise<{ readonly id?: number; readonly error?: unknown }>(
       (resolveResponse, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Plugin RPC did not respond")), 5_000);
+        const timeout = setTimeout(() => reject(new Error("Module RPC did not respond")), 5_000);
         websocket.addEventListener("open", () => {
           const payload = new TextEncoder().encode(
             JSON.stringify({

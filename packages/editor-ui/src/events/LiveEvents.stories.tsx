@@ -8,7 +8,7 @@ import { LiveEvents } from "./LiveEvents";
 const now = Date.now();
 const event: RuntimeActivity.Event = {
   id: "event-13",
-  pluginId: "obs",
+  moduleId: "obs",
   name: "CurrentProgramSceneChanged",
   source: "Engine",
   replayable: true,
@@ -70,7 +70,7 @@ export const RecentActivity: Story = {
       {
         ...event,
         id: "event-12",
-        pluginId: "twitch",
+        moduleId: "twitch",
         name: "ChannelChatMessage",
         status: "failed",
         error: "NodeExecutionError: The WebSocket connection is closed",

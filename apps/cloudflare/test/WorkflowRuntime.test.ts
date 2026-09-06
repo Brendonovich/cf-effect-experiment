@@ -2,11 +2,11 @@ import type * as Executor from "@macrograph/execution/Executor";
 
 import { assert, describe, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { Engine } from "@macrograph/plugin";
-import { ElevenLabsEngine } from "@macrograph/plugin-elevenlabs/Definition";
-import { HttpClientEngine } from "@macrograph/plugin-http-client/Definition";
-import { OpenAIEngine } from "@macrograph/plugin-openai/Definition";
-import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/plugin-twitch/Engine";
+import { Engine } from "@macrograph/module";
+import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
+import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
+import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Cause, Effect, Option } from "effect";
 import {
@@ -17,7 +17,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http";
 
-import * as ExecutorPlugins from "../src/execution/ExecutorPlugins.ts";
+import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";
 
 const chat = { message: "Hello", model: "gpt-4o-mini", historyIn: "[]" };
@@ -203,7 +203,7 @@ describe("WorkflowRuntime", () => {
       );
       const requested: Array<string> = [];
       yield* ProjectExecutor.make(project, {
-        plugins: ExecutorPlugins.registry,
+        modules: ExecutorModules.registry,
         engineClient: (id) => {
           requested.push(id);
           return engineClient(id);
@@ -212,7 +212,7 @@ describe("WorkflowRuntime", () => {
       assert.include(requested, "openai");
       assert.include(requested, "elevenlabs");
       for (const id of ["json", "list", "logic", "math", "string"]) {
-        assert.isTrue(ExecutorPlugins.registry.entries.some((entry) => entry.id === id));
+        assert.isTrue(ExecutorModules.registry.entries.some((entry) => entry.id === id));
         assert.notInclude(requested, id);
       }
       assert.strictEqual(
@@ -283,13 +283,13 @@ describe("WorkflowRuntime", () => {
       const twitchFailure = yield* Effect.flip(twitch.SendChatMessage());
       assert.strictEqual(twitchFailure._tag, "TwitchExecutionUnavailable");
       assert.include(twitchFailure.reason, "no credential-scoped workflow RPC binding exists");
-      const unknown = (yield* engineClient("unknown-plugin")) as Record<
+      const unknown = (yield* engineClient("unknown-module")) as Record<
         string,
         () => Effect.Effect<never, Executor.EngineClientUnavailable>
       >;
       const unavailable = yield* Effect.flip(unknown.SomeRuntimeRpc!());
       assert.strictEqual(unavailable._tag, "EngineClientUnavailable");
-      assert.strictEqual(unavailable.pluginId, "unknown-plugin");
+      assert.strictEqual(unavailable.moduleId, "unknown-module");
     }),
   );
 });

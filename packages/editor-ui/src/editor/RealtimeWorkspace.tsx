@@ -98,7 +98,7 @@ export function RealtimeWorkspace(
             <p sx={styles.description}>Configuration changes apply to this runtime immediately.</p>
             {props.renderProjectSettings?.({
               client: props.controller.connection.client,
-              refreshPluginData: props.controller.refreshPluginData,
+              refreshModuleData: props.controller.refreshModuleData,
             })}
           </div>
         </section>

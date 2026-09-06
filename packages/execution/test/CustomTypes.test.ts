@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { DataType, Engine, Plugin } from "@macrograph/plugin";
+import { DataType, Engine, Module } from "@macrograph/module";
 import { Array, Effect, Option, Ref, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -26,7 +26,7 @@ describe("custom type execution", () => {
       };
       const value = { _type: "tree", value: 42, next: Option.none() };
       const captured = yield* Ref.make<unknown>(undefined);
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "custom-test",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -72,11 +72,11 @@ describe("custom type execution", () => {
               }),
             },
             connections: [
-              { id: "exec", outNodeId: "event", outIoId: "exec", inNodeId: "sink", inIoId: "exec" },
+              { id: "exec", outNodeId: "event", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "sink", inIoId: "exec" },
               {
                 id: "data",
                 outNodeId: "event",
-                outIoId: "value",
+                outIo: { _tag: "Port" as const, id: "value" },
                 inNodeId: "sink",
                 inIoId: "connected",
               },
@@ -98,17 +98,17 @@ describe("custom type execution", () => {
             ),
         },
       });
-      yield* executor.plugin(
-        plugin,
+      yield* executor.module(
+        module,
         Engine.deployment(
-          plugin,
+          module,
           TestEngine.toLayer(() => Effect.die("Not hosted")),
         ),
       );
-      yield* executor.handleEvent(plugin, new Trigger({}));
+      yield* executor.handleEvent(module, new Trigger({}));
       expect(yield* Ref.get(captured)).toEqual([value, value]);
       yield* executor.loadProject({ ...project, types: {} });
-      const error = yield* Effect.flip(executor.handleEvent(plugin, new Trigger({})));
+      const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
       expect(error._tag).toBe("InvalidGraph");
     }),
   );

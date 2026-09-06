@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Engine, HttpEndpoint, HttpIngress, Plugin } from "@macrograph/plugin";
+import { Engine, HttpEndpoint, HttpIngress, Module } from "@macrograph/module";
 import { Effect, Option, Redacted, Schema } from "effect";
 
 import { HttpIngressRuntime } from "../src/HttpIngressRuntime.ts";
@@ -11,7 +11,7 @@ class TestEngine extends Engine.make({
 	storage: TestStorage,
 	initialStorage: { values: [] },
 }) {}
-const TestPlugin = Plugin.make({
+const TestModule = Module.make({
 	id: "test",
 	engine: TestEngine,
 	effect: () => Effect.void,
@@ -19,7 +19,7 @@ const TestPlugin = Plugin.make({
 
 const TestIngress = HttpIngress.make({
 	id: "test:received",
-	pluginId: "test",
+	moduleId: "test",
 	displayName: "Webhook",
 	method: "POST",
 	metadata: Schema.Struct({ value: Schema.String }),
@@ -68,7 +68,7 @@ it.effect(
 			);
 			const deployment = Engine.withHttpIngress(
 				Engine.deployment(
-					TestPlugin,
+					TestModule,
 					TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
 				),
 				{

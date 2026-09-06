@@ -6,5 +6,5 @@
     "outDir": "dist/types"
   },
   "include": ["src", "test"],
-  "references": [{ "path": "../plugin" }]
+  "references": [{ "path": "../module" }]
 }

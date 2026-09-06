@@ -135,6 +135,7 @@ const styles = stylex.create({
   event: { backgroundColor: "#b91c1c" },
   exec: { backgroundColor: "#2563eb" },
   pure: { backgroundColor: "#047857" },
+  base: { backgroundColor: colors.base },
   schemaName: {
     fontSize: 12,
     minWidth: 0,
@@ -147,7 +148,7 @@ const styles = stylex.create({
 export function NodeCreationMenu(props: {
   packages: ReadonlyArray<Package.Model>;
   screenPosition: { x: number; y: number };
-  schemaFilter?: (schema: Package.SchemaModel) => boolean;
+  schemaFilter?: ((schema: Package.SchemaModel, packageId: string) => boolean) | undefined;
   hiding?: boolean;
   ref?: (element: HTMLDivElement) => void;
   onCreate: (schema: SchemaRef, name: string) => void;
@@ -155,7 +156,9 @@ export function NodeCreationMenu(props: {
 }) {
   const [search, setSearch] = createSignal("");
   const [expansion, setExpansion] = createSignal<ReadonlyMap<string, boolean>>(new Map());
-  const hasSearch = createMemo(() => search().trim().length > 0);
+  const hasFilter = createMemo(
+    () => search().trim().length > 0 || props.schemaFilter !== undefined,
+  );
   let root: HTMLDivElement | undefined;
 
   const packages = () => {
@@ -165,7 +168,7 @@ export function NodeCreationMenu(props: {
         schemas: rankedSearch(
           search(),
           pkg.schemas
-            .filter((schema) => props.schemaFilter?.(schema) ?? true)
+            .filter((schema) => props.schemaFilter?.(schema, pkg.id) ?? true)
             .map((schema) => ({
               item: schema,
               key: `${pkg.id}:${schema.id}`,
@@ -229,7 +232,7 @@ export function NodeCreationMenu(props: {
         >
           <For each={packages()}>
             {(pkg) => {
-              const open = createMemo(() => expansion().get(pkg.id) ?? hasSearch());
+              const open = createMemo(() => expansion().get(pkg.id) ?? hasFilter());
               return (
                 <section>
                   <button
@@ -276,7 +279,9 @@ export function NodeCreationMenu(props: {
                                 ? styles.event
                                 : schema.type === "exec"
                                   ? styles.exec
-                                  : styles.pure,
+                                  : schema.type === "pure"
+                                    ? styles.pure
+                                    : styles.base,
                             ]}
                           />
                           <span sx={styles.schemaName}>{schema.name}</span>

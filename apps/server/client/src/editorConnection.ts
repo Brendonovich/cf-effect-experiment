@@ -1,4 +1,4 @@
-import type { EditorConnection, PluginSettingsDescriptor } from "@macrograph/editor-ui";
+import type { EditorConnection, ModuleSettingsDescriptor } from "@macrograph/editor-ui";
 
 import { BrowserSocket } from "@effect/platform-browser";
 import { DualProtocol, EditorRpc } from "@macrograph/editor";
@@ -8,7 +8,7 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
 export function editorConnection(
   url: string,
-  settingsDescriptors: ReadonlyArray<PluginSettingsDescriptor>,
+  settingsDescriptors: ReadonlyArray<ModuleSettingsDescriptor>,
 ): Effect.Effect<EditorConnection, unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const dualProtocol = yield* DualProtocol.makeDualClientProtocol;
@@ -25,7 +25,7 @@ export function editorConnection(
     );
     return {
       client,
-      pluginSettings: new Map(settings),
+      moduleSettings: new Map(settings),
       activity: runtimeClient.ActivityStream(),
       replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
     };

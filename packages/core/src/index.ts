@@ -19,3 +19,8 @@ export { defaultPackage } from "./defaultPackage.ts";
 export * as ResourceConstant from "./ResourceConstant.ts";
 export * as TypeDefinition from "./TypeDefinition.ts";
 export * as CustomTypes from "./CustomTypes.ts";
+export * as SchemaAuthoring from "./SchemaAuthoring.ts";
+export * as BuiltinAuthoring from "./BuiltinAuthoring.ts";
+export * as Scopes from "./Scopes.ts";
+export * as OutputRef from "./OutputRef.ts";
+export { Wildcards } from "./Wildcards.ts";

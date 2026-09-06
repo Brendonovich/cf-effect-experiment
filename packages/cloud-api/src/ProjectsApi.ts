@@ -82,7 +82,7 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
   })
     .annotate(
       OpenApi.Description,
-      "Create an empty graph or a complete connected graph in one request. The nodes object maps temporary client-defined node IDs to node definitions. Connections reference those temporary IDs through outNodeId and inNodeId, and use outIoId and inIoId for port IDs. Node schemas use { package, schema }; resource properties use IDs returned by listResources.",
+      "Create an empty graph or a complete connected graph in one request. The nodes object maps temporary client-defined node IDs to node definitions. Connections reference those temporary IDs through outNodeId and inNodeId. outIo is a structured output reference: { _tag: 'Port', id }, { _tag: 'ScopeExec', scope }, or { _tag: 'ScopeField', scope, field }; inIoId identifies the input. Node schemas use { package, schema }; resource properties use IDs returned by listResources.",
     )
     .middleware(Authentication),
   HttpApiEndpoint.get("getGraph", "/api/projects/:projectId/graphs/:graphId", {

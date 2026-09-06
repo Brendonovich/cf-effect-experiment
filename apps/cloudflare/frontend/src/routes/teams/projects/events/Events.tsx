@@ -17,8 +17,8 @@ import {
   LoadingState,
 } from "@macrograph/editor-ui";
 import { styles } from "@macrograph/editor-ui/events.stylex";
-import KofiPlugin from "@macrograph/plugin-kofi";
-import TwitchPlugin from "@macrograph/plugin-twitch";
+import KofiModule from "@macrograph/module-kofi";
+import TwitchModule from "@macrograph/module-twitch";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery } from "@tanstack/solid-query";
 import { Effect } from "effect";
@@ -194,7 +194,7 @@ export const Events: Component<EventsProps> = (props) => {
     return search === ""
       ? timeline()
       : timeline().filter((item) =>
-          [item.record.eventType, item.record.pluginId, item.record.id].some((value) =>
+          [item.record.eventType, item.record.moduleId, item.record.id].some((value) =>
             value.toLowerCase().includes(search),
           ),
         );
@@ -290,8 +290,8 @@ export const Events: Component<EventsProps> = (props) => {
           </div>
           <div sx={styles.instance}>
             {endpointProps.ingress.schema.displayName} ·{" "}
-            {[KofiPlugin, TwitchPlugin].find((plugin) =>
-              endpointProps.ingress.schema.id.startsWith(`${plugin.id}:`),
+            {[KofiModule, TwitchModule].find((module) =>
+              endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
         </div>
@@ -408,9 +408,9 @@ export const Events: Component<EventsProps> = (props) => {
             <EventListItem
               id={item.record.id}
               name={item.record.eventType}
-              pluginName={
-                [KofiPlugin, TwitchPlugin].find((plugin) => plugin.id === item.record.pluginId)
-                  ?.name ?? item.record.pluginId
+              moduleName={
+                [KofiModule, TwitchModule].find((module) => module.id === item.record.moduleId)
+                  ?.name ?? item.record.moduleId
               }
               source={item.kind === "event" ? eventSource(item.record) : "Ingress"}
               receivedAt={item.record.receivedAt}
@@ -449,13 +449,13 @@ export const Events: Component<EventsProps> = (props) => {
                   endpoint === undefined
                     ? undefined
                     : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
-                const pluginName =
-                  [KofiPlugin, TwitchPlugin].find(
-                    (plugin) => plugin.id === selected.record.pluginId,
-                  )?.name ?? selected.record.pluginId;
+                const moduleName =
+                  [KofiModule, TwitchModule].find(
+                    (module) => module.id === selected.record.moduleId,
+                  )?.name ?? selected.record.moduleId;
 
                 return {
-                  name: ingressName === undefined ? pluginName : `${pluginName} · ${ingressName}`,
+                  name: ingressName === undefined ? moduleName : `${moduleName} · ${ingressName}`,
                   id: ingress?.endpointId,
                   endpoint,
                 };

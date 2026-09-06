@@ -1,4 +1,4 @@
-import type { Credential } from "@macrograph/plugin";
+import type { Credential } from "@macrograph/module";
 
 import * as stylex from "@stylexjs/stylex";
 import { For } from "solid-js";

@@ -1,6 +1,7 @@
 import {
   Connection,
-  CustomTypes,
+  BuiltinAuthoring,
+  SchemaAuthoring,
   Graph,
   Node,
   type NodeIO,
@@ -30,6 +31,8 @@ type MutableEditorStore = {
   project: MutableProject | null;
   packages: Package.Model[];
   nodeIO: Record<string, Record<string, NodeIO>>;
+  declaredNodeIO: Record<string, Record<string, NodeIO>>;
+  nodeDiagnostics: Record<string, Readonly<Record<string, ReadonlyArray<string>>>>;
   events: EditorEvent.EditorEvent[];
   resourceValues: Record<string, ResourceConstant.LiveValue[]>;
 };
@@ -37,11 +40,14 @@ type MutableEditorStore = {
 export const resourceValuesKey = (packageId: string, resourceId: string) =>
   JSON.stringify([packageId, resourceId]);
 
-export function createEditorStore() {
+export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry) {
+  const resolvers = new Map<string, SchemaAuthoring.GraphResolver>();
   const [store, setStoreValue] = createStore<MutableEditorStore>({
     project: null,
     packages: [],
     nodeIO: {},
+    declaredNodeIO: {},
+    nodeDiagnostics: {},
     events: [],
     resourceValues: {},
   });
@@ -63,9 +69,12 @@ export function createEditorStore() {
                 constants: { ...current.project.constants },
               },
         packages: [...current.packages],
+        // Event reducers edit declarations, never the previous inferred types.
         nodeIO: Object.fromEntries(
-          Object.entries(current.nodeIO).map(([graphId, nodes]) => [graphId, { ...nodes }]),
+          Object.entries(current.declaredNodeIO).map(([graphId, nodes]) => [graphId, { ...nodes }]),
         ),
+        declaredNodeIO: current.declaredNodeIO,
+        nodeDiagnostics: {},
         events: [...current.events],
         resourceValues: Object.fromEntries(
           Object.entries(current.resourceValues).map(([key, values]) => [key, [...values]]),
@@ -73,6 +82,17 @@ export function createEditorStore() {
       };
       const result = update(draft);
       const next = result === undefined ? draft : result;
+      next.declaredNodeIO = next.nodeIO;
+      next.nodeIO = {};
+      for (const id of resolvers.keys()) if (!next.project?.graphs[id]) resolvers.delete(id);
+      for (const graph of Object.values(next.project?.graphs ?? {})) {
+        const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
+        resolvers.set(graph.id, resolver);
+        const declarations = next.declaredNodeIO[graph.id] ?? {};
+        const result = resolver.resolve(graph, declarations, next.project!.types);
+        next.nodeIO[graph.id] = { ...result.io };
+        next.nodeDiagnostics[graph.id] = result.diagnostics;
+      }
       // Solid's server store setter invokes the callback without reconciling its return value.
       if (current === store) Object.assign(current, next);
       return next;
@@ -101,10 +121,6 @@ export function createEditorStore() {
         setStore((store) => {
           if (!store.project) return;
           store.project.types = event.types;
-          store.packages = [
-            ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
-            CustomTypes.packageModel(event.types),
-          ];
           for (const [graphId, nodes] of Object.entries(event.nodeIO)) {
             for (const [nodeId, io] of Object.entries(nodes))
               (store.nodeIO[graphId] ??= {})[nodeId] = io;
@@ -228,6 +244,17 @@ export function createEditorStore() {
         });
         break;
       }
+      case "NodeScopeSplitChanged": {
+        setStore((store) => {
+          const node = store.project?.graphs[event.graphId]?.nodes[event.nodeId];
+          if (node && store.project)
+            store.project.graphs[event.graphId]!.nodes[event.nodeId] = {
+              ...node,
+              splitScopeOutputs: event.splitScopeOutputs,
+            };
+        });
+        break;
+      }
       case "NodeFoldPinsChanged": {
         const graph = store.project.graphs[event.graphId];
         const node = graph?.nodes[event.nodeId];
@@ -303,7 +330,7 @@ export function createEditorStore() {
       }
       case "EngineStateChanged":
         setStore((store) => {
-          if (store.project) store.project.engines[event.pluginId] = event.state;
+          if (store.project) store.project.engines[event.moduleId] = event.state;
         });
         break;
       case "ResourceConstantCreated":
@@ -380,6 +407,7 @@ export function createEditorStore() {
   }
 
   function setProject(project: Project.Model, nodeIO: Record<string, Record<string, NodeIO>>) {
+    resolvers.clear();
     setStore((store) => {
       const cloned = structuredClone(project);
       store.project = {
@@ -392,23 +420,15 @@ export function createEditorStore() {
         ),
       };
       store.nodeIO = structuredClone(nodeIO);
-      store.packages = [
-        ...store.packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
-        CustomTypes.packageModel(project.types),
-      ];
+      store.packages = authoring.catalog(store.packages);
     });
   }
 
   function setPackages(packages: Package.Model[]) {
     setStore((store) => {
-      store.packages = store.project
-        ? [
-            ...packages.filter((pkg) => pkg.id !== CustomTypes.packageId),
-            CustomTypes.packageModel(store.project.types),
-          ]
-        : packages;
+      store.packages = store.project ? authoring.catalog(packages) : packages;
     });
   }
 
-  return { store, applyEvent, updateNodePosition, setProject, setPackages };
+  return { store, authoring, applyEvent, updateNodePosition, setProject, setPackages };
 }

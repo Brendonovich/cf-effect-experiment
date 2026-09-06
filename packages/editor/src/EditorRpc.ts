@@ -9,10 +9,10 @@ import {
   ResourceConstant,
   TypeDefinition,
 } from "@macrograph/core";
+import { Credential } from "@macrograph/module/Credential";
+import * as Engine from "@macrograph/module/Engine";
+import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import { PersistenceError } from "@macrograph/persistence";
-import { Credential } from "@macrograph/plugin/Credential";
-import * as Engine from "@macrograph/plugin/Engine";
-import * as HttpEndpoint from "@macrograph/plugin/HttpEndpoint";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { Rpc, RpcGroup, RpcMiddleware } from "effect/unstable/rpc";
 
@@ -36,8 +36,8 @@ const readOnlyRpcs = new Set([
   "GetInputSuggestions",
   "GetPackages",
   "GetIngressEndpoints",
-  "GetPluginClientState",
-  "GetPluginSettingsCapabilities",
+  "GetModuleClientState",
+  "GetModuleSettingsCapabilities",
   "GetResourceValues",
   "GetCredentialCatalog",
   "GetCredentialAuth",
@@ -73,7 +73,7 @@ export const isEventVisibleTo = (event: EditorEvent.EditorEvent, connectionId: s
 // Persisted engine state may contain credentials; public updates only invalidate client state.
 export const publicEvent = (event: EditorEvent.EditorEvent): EditorEvent.EditorEvent =>
   event._tag === "EngineStateChanged"
-    ? { _tag: "PluginClientStateDirty", actor: event.actor, pluginId: event.pluginId }
+    ? { _tag: "ModuleClientStateDirty", actor: event.actor, moduleId: event.moduleId }
     : event;
 
 export const connectionMiddlewareLayer = Layer.effect(ConnectionMiddleware)(
@@ -230,6 +230,17 @@ class SetNodeFoldPins extends Rpc.make("SetNodeFoldPins", {
   error: PersistenceGraphAndNodeErrors,
 }) {}
 
+class SetNodeScopeSplit extends Rpc.make("SetNodeScopeSplit", {
+  payload: {
+    graphId: Schema.String,
+    nodeId: Schema.String,
+    scope: Schema.String,
+    split: Schema.Boolean,
+  },
+  success: EditorEvent.NodeScopeSplitChanged,
+  error: ConnectionErrors,
+}) {}
+
 class SetNodeProperty extends Rpc.make("SetNodeProperty", {
   payload: {
     graphId: Schema.String,
@@ -332,7 +343,7 @@ class GetPackages extends Rpc.make("GetPackages", {
 }) {}
 
 class SetEngineState extends Rpc.make("SetEngineState", {
-  payload: { pluginId: Schema.String, state: Schema.Json },
+  payload: { moduleId: Schema.String, state: Schema.Json },
   success: EditorEvent.EngineStateChanged,
   error: Schema.Union([PersistenceError, Editor.EngineNotRegistered, Editor.InvalidEngineState]),
 }) {}
@@ -342,16 +353,16 @@ class GetIngressEndpoints extends Rpc.make("GetIngressEndpoints", {
   success: Schema.Array(HttpEndpoint.Routed),
 }) {}
 
-class GetPluginClientState extends Rpc.make("GetPluginClientState", {
-  payload: { pluginId: Schema.String },
+class GetModuleClientState extends Rpc.make("GetModuleClientState", {
+  payload: { moduleId: Schema.String },
   success: Schema.Json,
   error: Editor.EngineNotHosted,
 }) {}
 
-class GetPluginSettingsCapabilities extends Rpc.make("GetPluginSettingsCapabilities", {
+class GetModuleSettingsCapabilities extends Rpc.make("GetModuleSettingsCapabilities", {
   success: Schema.Array(
     Schema.Struct({
-      pluginId: Schema.String,
+      moduleId: Schema.String,
       availability: Schema.Literal("available"),
     }),
   ),
@@ -456,12 +467,13 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.NodeNameChanged,
     EditorEvent.NodePositionChanged,
     EditorEvent.NodeFoldPinsChanged,
+    EditorEvent.NodeScopeSplitChanged,
     EditorEvent.NodePropertyUpdated,
     EditorEvent.InputDefaultUpdated,
     EditorEvent.ConnectionCreated,
     EditorEvent.ConnectionDeleted,
     EditorEvent.EngineStateChanged,
-    EditorEvent.PluginClientStateDirty,
+    EditorEvent.ModuleClientStateDirty,
     EditorEvent.ResourceConstantCreated,
     EditorEvent.ResourceConstantDefaultChanged,
     EditorEvent.ResourceConstantUpdated,
@@ -497,6 +509,7 @@ export const EditorRpcs = RpcGroup.make(
   SetNodeName,
   SetNodePosition,
   SetNodeFoldPins,
+  SetNodeScopeSplit,
   SetNodeProperty,
   ClearNodeProperty,
   SetInputDefault,
@@ -508,8 +521,8 @@ export const EditorRpcs = RpcGroup.make(
   GetPackages,
   SetEngineState,
   GetIngressEndpoints,
-  GetPluginClientState,
-  GetPluginSettingsCapabilities,
+  GetModuleClientState,
+  GetModuleSettingsCapabilities,
   CreateResourceConstant,
   RenameResourceConstant,
   SelectResourceConstant,
@@ -607,6 +620,13 @@ export const handlerLayer = EditorRpcs.toLayer(
             y: payload.y,
           };
         }),
+      SetNodeScopeSplit: (payload) =>
+        editor.node.setScopeSplit({
+          graphID: payload.graphId,
+          nodeID: payload.nodeId,
+          scope: payload.scope,
+          split: payload.split,
+        }),
       SetNodeFoldPins: (payload) =>
         editor.node.setFoldPins({
           graphID: payload.graphId,
@@ -654,15 +674,15 @@ export const handlerLayer = EditorRpcs.toLayer(
         }),
       LoadPackage: (payload) => packages.loadPackage(payload.pkg),
       GetPackages: () => packages.getPackages(),
-      SetEngineState: ({ pluginId, state }) => editor.engine.setState(pluginId, state),
+      SetEngineState: ({ moduleId, state }) => editor.engine.setState(moduleId, state),
       GetIngressEndpoints: () => editor.engine.getEndpoints(),
-      GetPluginClientState: ({ pluginId }) => editor.engine.getClientState(pluginId),
-      GetPluginSettingsCapabilities: () =>
+      GetModuleClientState: ({ moduleId }) => editor.engine.getClientState(moduleId),
+      GetModuleSettingsCapabilities: () =>
         editor.engine
           .getClientCapabilities()
           .pipe(
-            Effect.map((pluginIds) =>
-              pluginIds.map((pluginId) => ({ pluginId, availability: "available" as const })),
+            Effect.map((moduleIds) =>
+              moduleIds.map((moduleId) => ({ moduleId, availability: "available" as const })),
             ),
           ),
       CreateResourceConstant: ({ resource }) => editor.constant.create(resource),
@@ -670,10 +690,10 @@ export const handlerLayer = EditorRpcs.toLayer(
       SelectResourceConstant: ({ constantId, value }) => editor.constant.select(constantId, value),
       DeleteResourceConstant: ({ constantId }) => editor.constant.delete(constantId),
       SetDefaultResourceConstant: ({ constantId }) => editor.constant.setDefault(constantId),
-      GetResourceValues: ({ package: pluginId, resource }) =>
-        editor.engine.getResourceValues(pluginId, resource),
-      ReloadResource: ({ package: pluginId, resource }) =>
-        editor.engine.reloadResource(pluginId, resource),
+      GetResourceValues: ({ package: moduleId, resource }) =>
+        editor.engine.getResourceValues(moduleId, resource),
+      ReloadResource: ({ package: moduleId, resource }) =>
+        editor.engine.reloadResource(moduleId, resource),
       GetCredentialCatalog: () =>
         credentials.catalog ??
         Effect.succeed(

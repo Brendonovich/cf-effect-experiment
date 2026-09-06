@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { Engine, Plugin } from "@macrograph/plugin";
+import { Engine, Module } from "@macrograph/module";
 import { Array, Deferred, Effect, Exit, Fiber, Option, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -9,9 +9,9 @@ class ChatMessage extends Schema.TaggedClass<ChatMessage>()("channel.chat.messag
   text: Schema.String,
 }) {}
 class TestEngine extends Engine.make({ events: Array.empty<ChatMessage>() }) {}
-const plugin = Plugin.make({ id: "twitch", engine: TestEngine, effect: () => Effect.void });
+const module = Module.make({ id: "twitch", engine: TestEngine, effect: () => Effect.void });
 const deployment = Engine.deployment(
-  plugin,
+  module,
   TestEngine.toLayer(() => Effect.die("not hosted")),
 );
 
@@ -25,11 +25,11 @@ const setup = Effect.fnUntraced(function* (registered = true) {
     },
   });
   const executor = yield* Executor.make(Project.empty(), { projectId: "project-1" });
-  if (registered) yield* executor.plugin(plugin, deployment);
+  if (registered) yield* executor.module(module, deployment);
   return {
     spans,
     dispatch: executor
-      .handleEvent(plugin, new ChatMessage({ text: "private chat content" }))
+      .handleEvent(module, new ChatMessage({ text: "private chat content" }))
       .pipe(Effect.provideService(Tracer.Tracer, tracer)),
   };
 });
@@ -48,7 +48,7 @@ describe("event tracing", () => {
         assert.isTrue(Option.isNone(span.parent));
         assert.deepStrictEqual(Object.fromEntries(span.attributes), {
           "macrograph.project.id": "project-1",
-          "macrograph.plugin.id": "twitch",
+          "macrograph.module.id": "twitch",
           "macrograph.event.type": "channel.chat.message",
         });
         assert.strictEqual(span.status._tag, "Ended");

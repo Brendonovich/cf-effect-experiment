@@ -1,5 +1,5 @@
 import { TypeDefinition } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { describe, expect, it } from "vitest";
 
 const id = DataType.DefinitionId.make("recursive");

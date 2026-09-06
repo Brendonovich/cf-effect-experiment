@@ -36,6 +36,7 @@ const styles = stylex.create({
   event: { backgroundColor: "#b91c1c" },
   exec: { backgroundColor: "#2563eb" },
   pure: { backgroundColor: "#047857" },
+  base: { backgroundColor: colors.base },
   names: { flex: 1, minWidth: 0, paddingBlock: 4, paddingInline: 8 },
   schemaName: {
     color: colors.gray12,
@@ -120,7 +121,9 @@ export function SchemaInfoButton(props: { schema: Package.SchemaModel; packageNa
       ? styles.event
       : props.schema.type === "exec"
         ? styles.exec
-        : styles.pure;
+        : props.schema.type === "pure"
+          ? styles.pure
+          : styles.base;
   const popoutPosition = () => {
     const bounds = trigger?.getBoundingClientRect();
     const width = Math.min(208, innerWidth - 16);

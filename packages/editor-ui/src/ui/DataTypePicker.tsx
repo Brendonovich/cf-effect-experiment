@@ -1,4 +1,4 @@
-import type { DataType } from "@macrograph/plugin/DataType";
+import type { DataType } from "@macrograph/module/DataType";
 
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, createSignal, Show } from "solid-js";

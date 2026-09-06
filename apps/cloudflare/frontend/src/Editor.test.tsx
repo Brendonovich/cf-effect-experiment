@@ -53,7 +53,7 @@ const graph: Graph.Model = {
     {
       id: ConnectionId.make("edge"),
       outNodeId: firstNode.id,
-      outIoId: IoId.make("out"),
+      outIo: { _tag: "Port" as const, id: IoId.make("out") },
       inNodeId: secondNode.id,
       inIoId: IoId.make("in"),
     },

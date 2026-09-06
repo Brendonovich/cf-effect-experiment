@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 
 export const typeChoices = [
   "String",
@@ -62,8 +62,4 @@ export const replaceTypeSegment = (
       : choice === "Option"
         ? DataType.Option(inner)
         : DataType[choice];
-};
-
-export const parseListType = (value: unknown): DataType.Any | undefined => {
-  return typeof value === "string" ? DataType.parseSelector(value) : undefined;
 };

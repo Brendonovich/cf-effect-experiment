@@ -85,6 +85,15 @@ export const apply = (
         return yield* persistence.saveNode(event.graphId, updated);
       }).pipe(PersistenceError.refail);
 
+    case "NodeScopeSplitChanged":
+      return Effect.gen(function* () {
+        const node = yield* persistence.loadNode(event.graphId, event.nodeId);
+        return yield* persistence.saveNode(event.graphId, {
+          ...node,
+          splitScopeOutputs: event.splitScopeOutputs,
+        });
+      }).pipe(PersistenceError.refail);
+
     case "NodeFoldPinsChanged":
       return Effect.gen(function* () {
         const node = yield* persistence.loadNode(event.graphId, event.nodeId);
@@ -142,7 +151,7 @@ export const apply = (
         const project = yield* persistence.loadProject();
         return yield* persistence.saveProject({
           ...project,
-          engines: { ...project.engines, [event.pluginId]: event.state },
+          engines: { ...project.engines, [event.moduleId]: event.state },
         });
       }).pipe(PersistenceError.refail);
 
@@ -202,7 +211,7 @@ export const apply = (
       }).pipe(PersistenceError.refail);
 
     case "ResourceValuesUpdated":
-    case "PluginClientStateDirty":
+    case "ModuleClientStateDirty":
       return Effect.void;
   }
 };

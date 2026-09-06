@@ -2,7 +2,7 @@ import type { Package } from "@macrograph/core";
 import type { Presence } from "@macrograph/editor";
 
 import { Effect, Fiber, Schedule, Stream } from "effect";
-import { createSignal, onSettled } from "solid-js";
+import { createMemo, createSignal, onSettled } from "solid-js";
 
 import type { EditorControllerOptions } from "../createEditorController";
 import type { EditorConnection, EditorRpcClient } from "../Editor";
@@ -10,13 +10,13 @@ import type { createEditorStore } from "../store";
 
 import { runFork } from "../../observability/browserTracing";
 import { createStateMachine } from "../../ui/createStateMachine";
-import { createPluginData } from "../plugins/createPluginData";
+import { createModuleData } from "../modules/createModuleData";
 
 type EditorStore = ReturnType<typeof createEditorStore>;
 
 type EditorConnectionState = {
   context: {
-    readonly pluginSettings: EditorConnection["pluginSettings"];
+    readonly moduleSettings: EditorConnection["moduleSettings"];
   };
   mode:
     | { readonly status: "connecting" }
@@ -41,9 +41,9 @@ export function createEditorConnection(
   activeConnection: () => EditorConnection | null;
   connectionState: EditorConnectionState;
   reconnecting: () => boolean;
-  pluginSettingsById: () => EditorConnection["pluginSettings"];
-  pluginData: ReturnType<typeof createPluginData>;
-  refreshPluginData: ReturnType<typeof createPluginData>["refresh"];
+  moduleSettingsById: () => EditorConnection["moduleSettings"];
+  moduleData: ReturnType<typeof createModuleData>;
+  refreshModuleData: ReturnType<typeof createModuleData>["refresh"];
   presenceClients: () => ReadonlyArray<Presence.Client>;
   selfConnectionId: () => string | undefined;
   selfPresence: () => Presence.Client | undefined;
@@ -56,7 +56,7 @@ export function createEditorConnection(
   let connectedClient: EditorRpcClient | null = null;
   const [connectionState, connectionActions] = createStateMachine(
     {
-      context: { pluginSettings: new Map() },
+      context: { moduleSettings: new Map() },
       mode: { status: "connecting" },
     } as EditorConnectionState,
     {
@@ -64,7 +64,7 @@ export function createEditorConnection(
         const reconnecting = state.mode.status === "reconnecting";
         connectedClient = connection.client;
         setActiveConnection(connection);
-        state.context = { pluginSettings: connection.pluginSettings };
+        state.context = { moduleSettings: connection.moduleSettings };
         state.mode = {
           status: "loading",
           reconnecting,
@@ -86,14 +86,14 @@ export function createEditorConnection(
         connectedClient = null;
         setActiveConnection(null);
         state.context = {
-          pluginSettings: reconnecting ? state.context.pluginSettings : new Map(),
+          moduleSettings: reconnecting ? state.context.moduleSettings : new Map(),
         };
         state.mode = { status: reconnecting ? "reconnecting" : "connecting" };
       },
       failed(state, error: unknown) {
         connectedClient = null;
         setActiveConnection(null);
-        state.context = { pluginSettings: new Map() };
+        state.context = { moduleSettings: new Map() };
         state.mode = { status: "failed", error };
       },
     },
@@ -102,15 +102,16 @@ export function createEditorConnection(
     const mode = connectionState.mode;
     return mode.status === "reconnecting" || (mode.status === "loading" && mode.reconnecting);
   };
-  const pluginSettingsById = () => connectionState.context.pluginSettings;
+  const moduleSettingsById = () => connectionState.context.moduleSettings;
   const [presenceClients, setPresenceClients] = createSignal<ReadonlyArray<Presence.Client>>([]);
   const [selfConnectionId, setSelfConnectionId] = createSignal<string>();
   const selfPresence = () =>
     presenceClients().find((entry) => entry.connectionId === selfConnectionId());
-  const canEdit = () =>
-    connectionState.mode.status === "ready" && (selfPresence()?.canEdit ?? false);
-  const pluginData = createPluginData(props.settingsDescriptors, applyEvent);
-  const refreshPluginData = pluginData.refresh;
+  const canEdit = createMemo(
+    () => connectionState.mode.status === "ready" && (selfPresence()?.canEdit ?? false),
+  );
+  const moduleData = createModuleData(props.settingsDescriptors, applyEvent);
+  const refreshModuleData = moduleData.refresh;
   let fiber: Fiber.Fiber<unknown, unknown> | null = null;
 
   onSettled(() => {
@@ -124,7 +125,7 @@ export function createEditorConnection(
           Effect.sync(() => {
             setPresenceClients([]);
             setSelfConnectionId(undefined);
-            pluginData.disconnect(props.reconnect === true);
+            moduleData.disconnect(props.reconnect === true);
             connectionActions.disconnected(props.reconnect === true);
           }),
         );
@@ -145,7 +146,7 @@ export function createEditorConnection(
               const packages = yield* activeClient.GetPackages({});
               setPackages(packages as Package.Model[]);
               connectionActions.packagesLoaded(activeClient);
-              yield* Effect.promise(() => pluginData.connect(connected, packages));
+              yield* Effect.promise(() => moduleData.connect(connected, packages));
             }),
             activeClient.ProjectEventsStream().pipe(
               Stream.runForEach((event) =>
@@ -160,8 +161,8 @@ export function createEditorConnection(
                   applyEvent(event);
                 }).pipe(
                   Effect.andThen(
-                    event._tag === "EngineStateChanged" || event._tag === "PluginClientStateDirty"
-                      ? Effect.sync(() => void refreshPluginData(event.pluginId))
+                    event._tag === "EngineStateChanged" || event._tag === "ModuleClientStateDirty"
+                      ? Effect.sync(() => void refreshModuleData(event.moduleId))
                       : Effect.void,
                   ),
                 ),
@@ -190,7 +191,7 @@ export function createEditorConnection(
         Effect.tapDefect((error) =>
           Effect.sync(() => {
             connectionActions.failed(error);
-            pluginData.disconnect();
+            moduleData.disconnect();
           }),
         ),
         Effect.tapDefect(Effect.log),
@@ -215,9 +216,9 @@ export function createEditorConnection(
     activeConnection,
     connectionState,
     reconnecting,
-    pluginSettingsById,
-    pluginData,
-    refreshPluginData,
+    moduleSettingsById,
+    moduleData,
+    refreshModuleData,
     presenceClients,
     selfConnectionId,
     selfPresence,

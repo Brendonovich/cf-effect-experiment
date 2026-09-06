@@ -1,10 +1,10 @@
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
-import { HttpEndpoint, HttpIngress } from "@macrograph/plugin";
-import kofiDeployment from "@macrograph/plugin-kofi/Deployment/Webhook";
-import twitchDeployment from "@macrograph/plugin-twitch/Deployment/Webhook";
-import { layerWebCrypto } from "@macrograph/plugin-twitch/EventSub/Webhook";
-import UtilitiesPlugin from "@macrograph/plugin-utilities";
-import { TickEvent } from "@macrograph/plugin-utilities/Definition";
+import { HttpEndpoint, HttpIngress } from "@macrograph/module";
+import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
+import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
+import UtilitiesModule from "@macrograph/module-utilities";
+import { TickEvent } from "@macrograph/module-utilities/Definition";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -31,7 +31,7 @@ export interface RuntimeEvent {
   readonly deploymentId: string;
   readonly r2Key: DeploymentObjectKey;
   readonly ingressEventId: string;
-  readonly pluginId: string;
+  readonly moduleId: string;
   readonly eventType: string;
   readonly eventId?: string;
   readonly payloadJson: string;
@@ -60,7 +60,7 @@ export interface StopPreviewRequest {
 
 export interface IngressEvent {
   readonly id: string;
-  readonly pluginId: string;
+  readonly moduleId: string;
   readonly eventType: string;
   readonly eventId?: string;
   readonly payloadJson: string;
@@ -161,9 +161,9 @@ export const projectIngressImplementation = Effect.gen(function* () {
     ): HttpIngress.ManifestEntry | undefined =>
       manifest.find(
         (candidate) =>
-          candidate.pluginId ===
+          candidate.moduleId ===
             ingressRegistry.definitions.find((definition) => definition.id === endpoint.schema.id)
-              ?.pluginId &&
+              ?.moduleId &&
           candidate.handlerId === endpoint.schema.id &&
           candidate.instanceKey === endpoint.instanceKey,
       );
@@ -288,7 +288,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                 event.eventId === undefined
                   ? {
                       id: event.ingressEventId,
-                      pluginId: event.pluginId,
+                      moduleId: event.moduleId,
                       eventType: event.eventType,
                       payloadJson: event.payloadJson,
                       previewOnly: !productionAllowed,
@@ -296,7 +296,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                     }
                   : {
                       id: event.ingressEventId,
-                      pluginId: event.pluginId,
+                      moduleId: event.moduleId,
                       eventType: event.eventType,
                       eventId: event.eventId,
                       payloadJson: event.payloadJson,
@@ -316,7 +316,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                         deploymentId: production.value.deploymentId,
                         r2Key: production.value.r2Key,
                         ingressEventId: event.ingressEventId,
-                        pluginId: event.pluginId,
+                        moduleId: event.moduleId,
                         eventType: event.eventType,
                         payloadJson: event.payloadJson,
                       }
@@ -324,7 +324,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                         deploymentId: production.value.deploymentId,
                         r2Key: production.value.r2Key,
                         ingressEventId: event.ingressEventId,
-                        pluginId: event.pluginId,
+                        moduleId: event.moduleId,
                         eventType: event.eventType,
                         eventId: event.eventId,
                         payloadJson: event.payloadJson,
@@ -540,7 +540,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
               source: "timer",
               deploymentId: deployment.value.deploymentId,
               r2Key: deployment.value.r2Key,
-              pluginId: UtilitiesPlugin.id,
+              moduleId: UtilitiesModule.id,
               eventType: "TickEvent",
               providerEventId: String(tick),
               event: JSON.stringify(new TickEvent({ tick })),

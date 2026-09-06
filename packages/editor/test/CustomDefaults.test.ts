@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { IoId, PackageId, SchemaId } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { Effect, Option, Schema } from "effect";
 
 import { Packages } from "../src/Packages.ts";

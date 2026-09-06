@@ -3,16 +3,16 @@ import type { RuntimeActivity } from "@macrograph/execution";
 export const filterActivity = (
   events: ReadonlyArray<RuntimeActivity.Event>,
   search: string,
-  pluginId: string,
+  moduleId: string,
   status: string,
 ) => {
   const query = search.trim().toLowerCase();
   return events.filter(
     (event) =>
-      (pluginId === "" || event.pluginId === pluginId) &&
+      (moduleId === "" || event.moduleId === moduleId) &&
       (status === "" || event.status === status) &&
       (query === "" ||
-        [event.id, event.name, event.pluginId, event.error ?? "", event.payload].some((value) =>
+        [event.id, event.name, event.moduleId, event.error ?? "", event.payload].some((value) =>
           value.toLowerCase().includes(query),
         )),
   );

@@ -30,7 +30,7 @@ export type Node = typeof Node.Type;
 
 export const Event = Schema.Struct({
   id: Schema.String,
-  pluginId: Schema.String,
+  moduleId: Schema.String,
   name: Schema.String,
   source: Schema.Literals(["Engine", "Replay"]),
   replayable: Schema.Boolean,
@@ -115,7 +115,7 @@ export class Service extends Context.Service<
     readonly snapshot: Effect.Effect<ReadonlyArray<Event>>;
     readonly changes: Stream.Stream<ReadonlyArray<Event>>;
     readonly track: <A, E, R, Input extends { readonly _tag: string }>(
-      pluginId: string,
+      moduleId: string,
       event: Input,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
@@ -160,7 +160,7 @@ export const layer = Layer.effect(Service)(
         })),
       );
     const track = <A, E, R, Input extends { readonly _tag: string }>(
-      pluginId: string,
+      moduleId: string,
       event: Input,
       effect: Effect.Effect<A, E, R>,
       replay?: () => Effect.Effect<void, Executor.ExecutorError>,
@@ -175,7 +175,7 @@ export const layer = Layer.effect(Service)(
             return [
               {
                 id,
-                pluginId,
+                moduleId,
                 name: event._tag,
                 source,
                 replayable: replay !== undefined,
@@ -270,16 +270,16 @@ export const layer = Layer.effect(Service)(
         }),
       wrap: (executor) => ({
         ...executor,
-        handleEvent: (plugin, event) => {
+        handleEvent: (module, event) => {
           const replay = (): Effect.Effect<void, Executor.ExecutorError> =>
             track(
-              plugin.id,
+              module.id,
               event,
-              Effect.suspend(() => executor.handleEvent(plugin, event)),
+              Effect.suspend(() => executor.handleEvent(module, event)),
               replay,
               "Replay",
             );
-          return track(plugin.id, event, executor.handleEvent(plugin, event), replay);
+          return track(module.id, event, executor.handleEvent(module, event), replay);
         },
       }),
     });

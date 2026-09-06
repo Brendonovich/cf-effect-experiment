@@ -31,6 +31,27 @@ In another terminal, with `PLAYWRIGHT_MODULE` exported if necessary:
 node apps/playground/test/custom-types.browser.mjs
 ```
 
+For the focused property-driven node regression (with deterministic project fixtures):
+
+```sh
+node apps/playground/test/custom-type-properties.browser.mjs
+```
+
+To check live Break Struct output generation specifically:
+
+```sh
+BROWSER_SCENARIO=breakStructOutputs node apps/playground/test/custom-type-properties.browser.mjs
+```
+
+This drags a Make Struct output onto Break Struct, checks that field pins appear
+immediately and can be wired, then disconnects and reconnects a different struct.
+It verifies that the output fields change without a reload or a Type property.
+
+This checks the fixed seven-operation catalog, kind-filtered type selectors, variant-dependent
+pins, nested optional update pins, persistence across reload, and live updates through a wired
+Make Some node. Runtime Print assertions verify that unmodified fields are preserved and
+disconnecting the update input restores the original value. Recording is not enabled by this test.
+
 The default URL is `http://127.0.0.1:4315`. Override it with `PLAYGROUND_URL`; set `HEADED=1` to watch Chromium:
 
 ```sh
@@ -43,8 +64,8 @@ The script uses a fresh browser context, so it does not replace your normal brow
 
 - UI authoring of named structs and tagged enums, nested searchable Custom/List/Option/DateTime selection, and nominal identity preservation on rename.
 - Structured nested defaults, saved values, explicit preview cancellation and confirmation, dependent type/node impacts, and stale-preview rejection after a concurrent node rename.
-- List property descriptor selection, retained orphan defaults and stale pins/wires, explicit repair/removal, persistence reload, and mobile dependent type repair at 390x844.
-- An imported deterministic execution graph using the UI-authored types: Make, per-field Update, Break, Construct, Match, Parse JSON, and Stringify JSON with nested DateTime preservation.
+- List property descriptor selection, retained orphan defaults and stale pins, automatic invalid-wire removal, explicit default repair/removal, persistence reload, and mobile dependent type repair at 390x844.
+- Property-selected Make, Update, Break, Construct, Match, Parse JSON, and Stringify JSON nodes. Update fields use Option inputs, with omitted fields left unchanged. An imported deterministic graph exercises these operations with nested DateTime preservation.
 - Custom collection Create, Push, Insert, Set, Remove, Get, Random, Slice, Includes, and Length, including serialized Option outputs.
 - Event replay, invalid reachable defaults blocking side effects, and restored types resuming execution; page errors and Solid strict-read warnings fail the run.
 

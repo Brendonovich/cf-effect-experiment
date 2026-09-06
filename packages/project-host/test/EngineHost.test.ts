@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
-import { Engine, HttpEndpoint, Plugin } from "@macrograph/plugin";
+import { Engine, HttpEndpoint, Module } from "@macrograph/module";
 import { Effect, Layer, PubSub, Schema } from "effect";
 
 import { EngineHost } from "../src/EngineHost.ts";
@@ -59,13 +59,13 @@ it.effect("persists editor-backed storage and endpoints", () => {
     storage: Schema.Struct({ enabled: Schema.Boolean }),
     initialStorage: { enabled: false },
   });
-  const HostedPlugin = Plugin.make({
+  const HostedModule = Module.make({
     id: "hosted",
     engine: HostedEngine,
     effect: () => Effect.void,
   });
   const deployment = Engine.deployment(
-    HostedPlugin,
+    HostedModule,
     HostedEngine.toLayer(() => Effect.die("Test engine is not hosted")),
   );
   const endpoint = {
@@ -106,7 +106,7 @@ it.effect("persists editor-backed storage and endpoints", () => {
     const context = yield* HostedEngine.EngineContext;
     const editor = yield* Editor.Service;
     const events = yield* EditorEvents.Service.pipe(Effect.flatMap((events) => events.subscribe));
-    yield* editor.plugin(HostedPlugin, deployment);
+    yield* editor.module(HostedModule, deployment);
     yield* context.storage.update((state) => ({ enabled: !state.enabled }));
     expect((yield* editor.project.get()).engines.hosted).toEqual({ enabled: true });
     expect(yield* editor.engine.getEndpoints()).toEqual([endpoint]);
@@ -114,13 +114,13 @@ it.effect("persists editor-backed storage and endpoints", () => {
     expect(yield* PubSub.take(events)).toEqual({
       _tag: "EngineStateChanged",
       actor: { type: "SYSTEM" },
-      pluginId: "hosted",
+      moduleId: "hosted",
       state: { enabled: true },
     });
     expect(yield* PubSub.take(events)).toEqual({
-      _tag: "PluginClientStateDirty",
+      _tag: "ModuleClientStateDirty",
       actor: { type: "SYSTEM" },
-      pluginId: "hosted",
+      moduleId: "hosted",
     });
   }).pipe(Effect.provide(layer), Effect.provide(editorLayer));
 });

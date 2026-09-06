@@ -80,7 +80,7 @@ export const Sidebars: Story = {
       <For
         each={
           [
-            { label: "Left sidebar", side: "left", content: "Graphs and plugins" },
+            { label: "Left sidebar", side: "left", content: "Graphs and modules" },
             { label: "Right sidebar", side: "right", content: "Inspector" },
           ] as const
         }

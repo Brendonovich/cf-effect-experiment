@@ -1,6 +1,6 @@
 import { Project } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
@@ -66,9 +66,9 @@ describe("local browser project persistence", () => {
             node: {
               id: "node",
               name: "Invalid but retained",
-              schema: { package: "CustomTypes", schema: '["result","stringify"]' },
+              schema: { package: "CustomTypes", schema: "StringifyJson" },
               position: { x: 0, y: 0 },
-              properties: {},
+              properties: { type: "result" },
               inputDefaults: {
                 value: {
                   _type: "result",

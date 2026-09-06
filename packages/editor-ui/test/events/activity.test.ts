@@ -6,7 +6,7 @@ import { activityDuration, activityExecutions, filterActivity } from "../../src/
 
 const event: RuntimeActivity.Event = {
   id: "event-1",
-  pluginId: "obs",
+  moduleId: "obs",
   name: "SceneChanged",
   source: "Engine",
   replayable: true,
@@ -19,11 +19,11 @@ const event: RuntimeActivity.Event = {
 };
 
 describe("live activity presentation", () => {
-  it("combines search, plugin, and status filters without changing event order", () => {
+  it("combines search, module, and status filters without changing event order", () => {
     const failed: RuntimeActivity.Event = {
       ...event,
       id: "event-2",
-      pluginId: "twitch",
+      moduleId: "twitch",
       status: "failed",
       error: "Connection closed",
     };

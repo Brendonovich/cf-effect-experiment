@@ -1,0 +1,28 @@
+{
+  "name": "@macrograph/module-logic",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Module.ts",
+  "exports": {
+    ".": "./src/Module.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/module": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@macrograph/core": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/module-list": "workspace:*",
+    "@macrograph/module-string": "workspace:*",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

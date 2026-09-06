@@ -1,14 +1,16 @@
 import { type Graph, type Package, type Project, ResourceConstant } from "@macrograph/core";
-import { Portal, type JSX } from "@solidjs/web";
+import { Portal } from "@solidjs/web";
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { AddButton } from "../../ui/AddButton";
 import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
 import { searchMarker } from "../markers.stylex.ts";
 import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
+import { SearchInput } from "./SearchInput";
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
   to: { opacity: 1, transform: "translateY(0) scale(1)" },
@@ -37,7 +39,7 @@ const styles = stylex.create({
   },
   tabGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     height: "100%",
     width: "100%",
   },
@@ -65,7 +67,6 @@ const styles = stylex.create({
     flexDirection: "row",
     height: 32,
   },
-  search: { alignItems: "stretch", display: "flex", flex: 1, flexDirection: "row", minWidth: 0 },
   searchIcon: {
     color: {
       default: colors.gray9,
@@ -88,21 +89,6 @@ const styles = stylex.create({
     paddingInline: 6,
     "::placeholder": { color: colors.gray9 },
   },
-  newButton: {
-    alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
-    borderRadius: 4,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
-    display: "flex",
-    flexShrink: 0,
-    height: 20,
-    justifyContent: "center",
-    marginBlock: "auto",
-    marginInline: 6,
-    padding: 2,
-    width: 20,
-  },
-  plusIcon: { flexShrink: 0, height: 16, width: 16 },
   createRoot: { display: "flex", flexShrink: 0, height: "100%" },
   dialog: {
     backgroundColor: colors.gray3,
@@ -340,7 +326,7 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "constants" | "types";
+export type NavigationSection = "graphs" | "packages" | "constants";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
@@ -351,7 +337,6 @@ export function NavigationSidebar(props: {
   packagesWithoutSettings: ReadonlyArray<Package.Model>;
   allPackages: ReadonlyArray<Package.Model>;
   constants: Project.Model["constants"];
-  typesPanel?: JSX.Element;
   onSectionChange: (section: NavigationSection) => void;
   onSearchChange: (search: string) => void;
   onClose: () => void;
@@ -631,7 +616,7 @@ export function NavigationSidebar(props: {
       <div style={{ "flex-shrink": "0" }}>
         <div sx={styles.topTabs}>
           <div sx={styles.tabGrid}>
-            <For each={["graphs", "packages", "constants", "types"] as const}>
+            <For each={["graphs", "packages", "constants"] as const}>
               {(section) => (
                 <button
                   type="button"
@@ -646,58 +631,42 @@ export function NavigationSidebar(props: {
                   {section === "graphs"
                     ? "Graphs"
                     : section === "packages"
-                      ? "Plugins"
-                      : section === "types"
-                        ? "Types"
-                        : "Constants"}
+                      ? "Modules"
+                      : "Constants"}
                 </button>
               )}
             </For>
           </div>
         </div>
         <div sx={styles.toolbar}>
-          <div sx={[searchMarker, styles.search]}>
-            <IconTablerSearch {...stylex.attrs(styles.searchIcon)} />
-            <input
-              sx={styles.searchInput}
-              placeholder={
-                props.section === "graphs"
-                  ? "Search Graphs"
-                  : props.section === "packages"
-                    ? "Search Plugins"
-                    : props.section === "types"
-                      ? "Search Types"
-                      : "Search Constants"
-              }
-              value={props.search}
-              onInput={(event) => props.onSearchChange(event.currentTarget.value)}
-            />
-          </div>
+          <SearchInput
+            placeholder={
+              props.section === "graphs"
+                ? "Search Graphs"
+                : props.section === "packages"
+                  ? "Search Modules"
+                  : "Search Constants"
+            }
+            value={props.search}
+            onChange={(value) => props.onSearchChange(value)}
+          />
           <Show when={props.section === "graphs"}>
-            <button
-              type="button"
-              sx={[styles.focus, styles.newButton]}
+            <AddButton
               aria-label="New graph"
               title="New graph"
               onClick={props.onCreateGraph}
-            >
-              <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
-            </button>
+            />
           </Show>
           <Show when={props.section === "constants"}>
             <div ref={createMenuRoot} sx={styles.createRoot}>
-              <button
+              <AddButton
                 ref={createMenuTrigger}
-                type="button"
-                sx={[styles.focus, styles.newButton]}
                 aria-label="New constant"
                 title="New constant"
                 aria-haspopup="dialog"
                 aria-expanded={createMenuOpen() ? "true" : "false"}
                 onClick={() => constantWorkflowActions.togglePicker()}
-              >
-                <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
-              </button>
+              />
               <Show when={constantWorkflow.mode !== "hidden"}>
                 <div
                   role="dialog"
@@ -775,7 +744,6 @@ export function NavigationSidebar(props: {
         </div>
       </div>
       <div sx={styles.scroll}>
-        <Show when={props.section === "types"}>{props.typesPanel}</Show>
         <Show when={props.section === "graphs"}>
           <For
             each={props.graphs}
@@ -803,7 +771,7 @@ export function NavigationSidebar(props: {
               when={props.packagesWithSettings.length + props.packagesWithoutSettings.length === 0}
             >
               <div sx={[styles.navOption, styles.noConstants]}>
-                {props.search.trim() === "" ? "No plugins yet." : "No plugins found."}
+                {props.search.trim() === "" ? "No modules yet." : "No modules found."}
               </div>
             </Show>
             <div style={{ "padding-bottom": "4px" }}>

@@ -11,6 +11,6 @@
     { "path": "../editor" },
     { "path": "../execution" },
     { "path": "../persistence" },
-    { "path": "../plugin" }
+    { "path": "../module" }
   ]
 }

@@ -20,7 +20,7 @@ export {
   type EditorProps,
   type EditorRpcClient,
   type EditorSettingsContext,
-  type PluginSettingsDescriptor,
+  type ModuleSettingsDescriptor,
 } from "./editor/Editor.tsx";
 export {
   createEditorController,

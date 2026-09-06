@@ -14,21 +14,21 @@ import {
 } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
 import { SqlitePersistence } from "@macrograph/persistence-sqlite";
-import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/plugin";
-import HttpClientPlugin from "@macrograph/plugin-http-client";
-import { HttpClientEngine } from "@macrograph/plugin-http-client/Definition";
-import HttpClientDeployment from "@macrograph/plugin-http-client/Deployment";
-import KofiPlugin from "@macrograph/plugin-kofi";
-import { KofiEngine } from "@macrograph/plugin-kofi/Definition";
-import KofiDeployment from "@macrograph/plugin-kofi/Deployment/Webhook";
-import TwitchPlugin from "@macrograph/plugin-twitch";
-import { AccountId, TwitchEngine } from "@macrograph/plugin-twitch/Definition";
-import TwitchDeployment from "@macrograph/plugin-twitch/Deployment/Webhook";
-import { make as makeTwitchEngine } from "@macrograph/plugin-twitch/Engine";
-import { EventSubEndpoint } from "@macrograph/plugin-twitch/EventSub/Webhook";
-import UtilitiesPlugin from "@macrograph/plugin-utilities";
-import { UtilitiesEngine } from "@macrograph/plugin-utilities/Definition";
-import { make as makeUtilitiesEngine } from "@macrograph/plugin-utilities/Engine";
+import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
+import HttpClientModule from "@macrograph/module-http-client";
+import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
+import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
+import KofiModule from "@macrograph/module-kofi";
+import { KofiEngine } from "@macrograph/module-kofi/Definition";
+import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import TwitchModule from "@macrograph/module-twitch";
+import { AccountId, TwitchEngine } from "@macrograph/module-twitch/Definition";
+import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
+import { make as makeTwitchEngine } from "@macrograph/module-twitch/Engine";
+import { EventSubEndpoint } from "@macrograph/module-twitch/EventSub/Webhook";
+import UtilitiesModule from "@macrograph/module-utilities";
+import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
+import { make as makeUtilitiesEngine } from "@macrograph/module-utilities/Engine";
 import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -48,13 +48,13 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
-import * as CloudPlugins from "../plugins/CloudPlugins.ts";
+import * as CloudModules from "../modules/CloudModules.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
 
 const UtilitiesDeployment = Engine.deployment(
-  UtilitiesPlugin,
+  UtilitiesModule,
   makeUtilitiesEngine({ startTicker: false }),
 );
 
@@ -64,7 +64,7 @@ const HostedDeployments = [
   TwitchDeployment,
   UtilitiesDeployment,
   HttpClientDeployment,
-  ...CloudPlugins.apiDeployments,
+  ...CloudModules.apiDeployments,
 ] as const;
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,
@@ -374,7 +374,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               Effect.flatMap((project) =>
                 reconcileEditorIngress({
                   ...project.engines,
-                  [deployment.pluginId]: state,
+                  [deployment.moduleId]: state,
                 }),
               ),
               Effect.orDie,
@@ -383,7 +383,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         return EngineHost.layer(deployment, context);
       };
       const EngineClientHandlersLayer = Layer.mergeAll(
-        CloudPlugins.editorLayer,
+        CloudModules.editorLayer,
         hostDeployment(KofiDeployment),
         hostDeployment({
           ...TwitchDeployment,
@@ -398,23 +398,23 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           EngineHost.editorContextLayer(HttpClientDeployment, { emit: () => Effect.void }),
         ),
       ).pipe(Layer.provide(Layer.succeed(Engine.Credentials, credentials)));
-      const MountPlugins = Layer.effectDiscard(
+      const MountModules = Layer.effectDiscard(
         Effect.gen(function* () {
           const kofi = yield* KofiEngine;
           const twitch = yield* TwitchEngine;
           const utilities = yield* UtilitiesEngine;
           const httpClient = yield* HttpClientEngine;
-          yield* EngineHost.mount(KofiPlugin, KofiDeployment, kofi.client.state);
-          yield* EngineHost.mount(TwitchPlugin, TwitchDeployment, twitch.client.state);
-          yield* EngineHost.mount(UtilitiesPlugin, UtilitiesDeployment, utilities.client.state);
-          yield* EngineHost.mount(HttpClientPlugin, HttpClientDeployment, httpClient.client.state);
+          yield* EngineHost.mount(KofiModule, KofiDeployment, kofi.client.state);
+          yield* EngineHost.mount(TwitchModule, TwitchDeployment, twitch.client.state);
+          yield* EngineHost.mount(UtilitiesModule, UtilitiesDeployment, utilities.client.state);
+          yield* EngineHost.mount(HttpClientModule, HttpClientDeployment, httpClient.client.state);
         }),
       ).pipe(Layer.provideMerge(EngineClientHandlersLayer));
       const RpcLayer = Layer.mergeAll(
         RpcSerialization.layerJsonRpc(),
         EditorRpc.handlerLayer,
         EditorRpc.connectionMiddlewareLayer,
-        MountPlugins,
+        MountModules,
       ).pipe(
         Layer.provide(Layer.succeed(Engine.Credentials, credentials)),
         Layer.provide(

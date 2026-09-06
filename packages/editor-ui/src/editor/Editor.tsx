@@ -1,11 +1,11 @@
 import type { EditorRpc } from "@macrograph/editor";
 import type { RuntimeActivity } from "@macrograph/execution";
-import type { ClientSettings } from "@macrograph/plugin";
+import type { ClientSettings } from "@macrograph/module";
 import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
-import { TypeDefinition } from "@macrograph/core";
+import { TypeDefinition, OutputRef } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Errored, For, Show } from "solid-js";
 
@@ -30,7 +30,7 @@ import {
 } from "./graph/graphPresentation";
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Inspector } from "./inspector/Inspector";
-import { PluginSettingsView } from "./plugins/PluginSettingsView";
+import { ModuleSettingsView } from "./modules/ModuleSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
@@ -80,20 +80,25 @@ const styles = stylex.create({
   tabIcon: { width: 14, height: 14, flexShrink: 0 },
   footer: {
     display: "flex",
+    alignItems: "center",
     justifyContent: "flex-end",
     flexShrink: 0,
-    borderTop: `1px solid ${colors.gray5}`,
-    backgroundColor: colors.gray2,
+    borderTopColor: colors.gray6,
+    borderTopStyle: "solid",
+    borderTopWidth: 1,
+    backgroundColor: colors.gray3,
+    paddingBlock: 4,
     paddingInline: 8,
   },
   shortcutsButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
-    minHeight: { default: 44, "@media (min-width: 768px)": 32 },
+    minHeight: { default: 44, "@media (min-width: 768px)": 24 },
     paddingInline: 12,
   },
+  typesButton: { marginRight: "auto" },
   editor: {
     "--gray-1": "#111111",
     "--gray-2": "#191919",
@@ -354,16 +359,16 @@ export type EditorRpcClient = RpcClient.FromGroup<
 
 export interface EditorConnection {
   readonly client: EditorRpcClient;
-  readonly pluginSettings: ReadonlyMap<string, ClientSettings.Connected<JSX.Element>>;
+  readonly moduleSettings: ReadonlyMap<string, ClientSettings.Connected<JSX.Element>>;
   readonly activity?: Stream.Stream<ReadonlyArray<RuntimeActivity.Event>, unknown>;
   readonly replayEvent?: (eventId: string) => Effect.Effect<void, unknown>;
 }
 
-export type PluginSettingsDescriptor = ClientSettings.Descriptor<JSX.Element>;
+export type ModuleSettingsDescriptor = ClientSettings.Descriptor<JSX.Element>;
 
 export interface EditorSettingsContext {
   readonly client: () => EditorRpcClient | null;
-  readonly refreshPluginData: (pluginId?: string) => Promise<void>;
+  readonly refreshModuleData: (moduleId?: string) => Promise<void>;
 }
 
 export interface EditorProps {
@@ -415,6 +420,7 @@ function EditorContent(
 ) {
   let editorRoot: HTMLDivElement | undefined;
   const canvas = createEditorCanvas({
+    createNode: controller.commands.createNode,
     editor: controller.editor,
     client: controller.connection.client,
     canEdit: controller.connection.canEdit,
@@ -448,9 +454,10 @@ function EditorContent(
         title:
           controller.editor.store.packages.find((pkg) => pkg.id === tab.packageId)?.name ??
           tab.packageId,
-        description: "Plugin",
+        description: "Module",
       };
     if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
+    if (tab.type === "types") return { id: tab.id, title: "Types" };
     return {
       id: tab.id,
       title: "Settings",
@@ -460,18 +467,27 @@ function EditorContent(
 
   const renderWorkspacePreview = (tab: WorkspaceTab) => {
     if (tab.type === "shortcuts") return <ShortcutsHelp shortcuts={shortcuts} />;
+    if (tab.type === "types")
+      return (
+        <TypeDefinitions
+          project={controller.editor.store.project}
+          canEdit={controller.connection.canEdit()}
+          onPreview={controller.commands.previewTypeDefinition}
+          onConfirm={controller.commands.confirmTypeDefinition}
+        />
+      );
     if (tab.type === "package") {
       const pkg = () =>
         controller.editor.store.packages.find((candidate) => candidate.id === tab.packageId);
       return (
         <Show when={pkg()} fallback={<EmptyContext />}>
           {(value) => (
-            <PluginSettingsView
+            <ModuleSettingsView
               package={value()}
-              settings={controller.connection.pluginSettingsById().get(value().id)}
-              data={controller.connection.pluginData.metadata()}
-              state={() => controller.connection.pluginData.states.get(value().id)?.()}
-              onChanged={() => controller.connection.refreshPluginData(value().id)}
+              settings={controller.connection.moduleSettingsById().get(value().id)}
+              data={controller.connection.moduleData.metadata()}
+              state={() => controller.connection.moduleData.states.get(value().id)?.()}
+              onChanged={() => controller.connection.refreshModuleData(value().id)}
             />
           )}
         </Show>
@@ -481,7 +497,7 @@ function EditorContent(
       return (
         renderProjectSettings()?.({
           client: controller.connection.client,
-          refreshPluginData: controller.connection.refreshPluginData,
+          refreshModuleData: controller.connection.refreshModuleData,
         }) ?? <EmptyContext />
       );
     return <EmptyContext />;
@@ -563,15 +579,6 @@ function EditorContent(
                   packagesWithoutSettings={controller.catalog.filteredPackagesWithoutSettings()}
                   allPackages={controller.editor.store.packages}
                   constants={controller.editor.store.project?.constants ?? {}}
-                  typesPanel={
-                    <TypeDefinitions
-                      project={controller.editor.store.project}
-                      search={controller.catalog.navSearch()}
-                      canEdit={controller.connection.canEdit()}
-                      onPreview={controller.commands.previewTypeDefinition}
-                      onConfirm={controller.commands.confirmTypeDefinition}
-                    />
-                  }
                   onSectionChange={controller.layout.setNavSection}
                   onSearchChange={controller.catalog.setNavSearch}
                   onClose={() => controller.layout.setNavSection(null)}
@@ -738,7 +745,7 @@ function EditorContent(
                                       }
                                       d={connectionPath(edge().from, edge().to)}
                                       fill="none"
-                                      stroke={wireColor(edge().type)}
+                                      stroke={wireColor(edge().type, edge().scope)}
                                       stroke-width="2"
                                       opacity="0.75"
                                     />
@@ -760,6 +767,7 @@ function EditorContent(
                                         drag.source.port.kind === "data"
                                           ? drag.source.port.type
                                           : undefined,
+                                        drag.source.port.kind === "scope",
                                       )}
                                       stroke-width="2"
                                       opacity="0.375"
@@ -774,16 +782,23 @@ function EditorContent(
                                     schema={canvas.schemaForNode(node())}
                                     io={ioForNode(node().id)}
                                     definitions={controller.editor.store.project?.types ?? {}}
-                                    diagnostics={TypeDefinition.nodeDiagnostics(
-                                      node(),
-                                      ioForNode(node().id) ?? {
-                                        dataInputs: [],
-                                        dataOutputs: [],
-                                        executionInputs: [],
-                                        executionOutputs: [],
-                                      },
-                                      controller.editor.store.project?.types ?? {},
-                                    )}
+                                    diagnostics={[
+                                      ...new Set([
+                                        ...(controller.editor.store.nodeDiagnostics[
+                                          tab().graphId
+                                        ]?.[node().id] ?? []),
+                                        ...TypeDefinition.nodeDiagnostics(
+                                          node(),
+                                          ioForNode(node().id) ?? {
+                                            dataInputs: [],
+                                            dataOutputs: [],
+                                            executionInputs: [],
+                                            executionOutputs: [],
+                                          },
+                                          controller.editor.store.project?.types ?? {},
+                                        ),
+                                      ]),
+                                    ]}
                                     selected={selectedIds().includes(node().id)}
                                     dragging={isNodeDragging(node().id)}
                                     positioning={
@@ -819,6 +834,18 @@ function EditorContent(
                                     onDragStart={canvas.onNodeMouseDown}
                                     onPortPointerDown={canvas.startConnection}
                                     onDisconnect={controller.commands.disconnectIo}
+                                    connectedOutputRefs={graph()!
+                                      .connections.filter((wire) => wire.outNodeId === node().id)
+                                      .map((wire) => wire.outIo)}
+                                    onScopeContextMenu={(event, nodeId, scope) => {
+                                      controller.commands.scopeSplitMutation.reset();
+                                      canvas.selectNode(nodeId, false);
+                                      canvas.setNodeContextMenu({
+                                        nodeId,
+                                        scope,
+                                        screen: { x: event.clientX, y: event.clientY },
+                                      });
+                                    }}
                                     onContextMenu={(event, nodeId) => {
                                       canvas.selectNode(nodeId, false);
                                       canvas.setNodeContextMenu({
@@ -919,9 +946,17 @@ function EditorContent(
                               ref={canvas.setNodeMenuElement}
                               hiding={canvas.nodeMenuPresence.state() === "hiding"}
                               packages={controller.editor.store.packages}
-                              schemaFilter={(schema) =>
-                                menu().source === undefined ||
-                                compatibleSchemaPorts(schema, menu().source!).length > 0
+                              schemaFilter={
+                                menu().source === undefined
+                                  ? undefined
+                                  : (schema, packageId) =>
+                                      compatibleSchemaPorts(
+                                        schema,
+                                        menu().source!,
+                                        packageId,
+                                        controller.editor.store.project?.types,
+                                        controller.editor.authoring,
+                                      ).length > 0
                               }
                               screenPosition={menu().screen}
                               onClose={() => canvas.setNodeMenu(undefined)}
@@ -949,6 +984,85 @@ function EditorContent(
                               }}
                               onPointerDown={(event) => event.stopPropagation()}
                             >
+                              <Show when={menu().scope}>
+                                {(scope) => {
+                                  const split = () =>
+                                    controller.layout
+                                      .selectedGraph()
+                                      ?.nodes[menu().nodeId]?.splitScopeOutputs?.some(
+                                        (id) => id === scope(),
+                                      ) === true;
+                                  const wired = () =>
+                                    controller.layout
+                                      .selectedGraph()
+                                      ?.connections.some(
+                                        (wire) =>
+                                          wire.outNodeId === menu().nodeId &&
+                                          OutputRef.parentId(wire.outIo) === scope(),
+                                      ) === true;
+                                  return (
+                                    <>
+                                      <button
+                                        type="button"
+                                        sx={[styles.focusRing, styles.contextAction]}
+                                        disabled={
+                                          !controller.connection.canEdit() ||
+                                          wired() ||
+                                          controller.commands.scopeSplitMutation.isPending
+                                        }
+                                        title={
+                                          wired()
+                                            ? "Disconnect this scope's output wires first"
+                                            : undefined
+                                        }
+                                        onClick={() =>
+                                          controller.commands.scopeSplitMutation.mutate(
+                                            {
+                                              nodeId: menu().nodeId,
+                                              scope: scope(),
+                                              split: !split(),
+                                            },
+                                            {
+                                              onSuccess: () => canvas.setNodeContextMenu(undefined),
+                                            },
+                                          )
+                                        }
+                                      >
+                                        {controller.commands.scopeSplitMutation.isPending
+                                          ? "Updating…"
+                                          : split()
+                                            ? "Bundle scope"
+                                            : "Split scope"}
+                                      </button>
+                                      <Show when={wired()}>
+                                        <div
+                                          style={{
+                                            padding: "4px 12px",
+                                            "font-size": "11px",
+                                            color: "#a0a0ab",
+                                            "max-width": "210px",
+                                          }}
+                                        >
+                                          Disconnect this scope's output wires first.
+                                        </div>
+                                      </Show>
+                                      <Show when={controller.commands.scopeSplitMutation.error}>
+                                        <div
+                                          role="alert"
+                                          style={{
+                                            padding: "4px 12px",
+                                            "font-size": "11px",
+                                            color: "#ff9592",
+                                            "max-width": "210px",
+                                          }}
+                                        >
+                                          Could not change scope display. Try again.
+                                        </div>
+                                      </Show>
+                                    </>
+                                  );
+                                }}
+                              </Show>
                               <button
                                 type="button"
                                 sx={[styles.focusRing, styles.contextAction]}
@@ -1003,6 +1117,12 @@ function EditorContent(
               onClose={() => controller.layout.setInspectorOpen(false)}
             >
               <Inspector
+                authoring={controller.editor.authoring}
+                nodeDiagnostics={
+                  controller.editor.store.nodeDiagnostics[
+                    controller.layout.selectedGraphId() ?? ""
+                  ] ?? {}
+                }
                 graph={controller.layout.selectedGraph()}
                 node={controller.layout.selectedNode()}
                 packages={controller.editor.store.packages}
@@ -1030,6 +1150,13 @@ function EditorContent(
             </Sidebar>
           </div>
           <footer sx={styles.footer}>
+            <button
+              type="button"
+              sx={[styles.focusRing, styles.shortcutsButton, styles.typesButton]}
+              onClick={controller.layout.openTypes}
+            >
+              Types
+            </button>
             <button
               type="button"
               sx={[styles.focusRing, styles.shortcutsButton]}

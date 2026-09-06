@@ -20,7 +20,7 @@
   },
   "references": [
     {
-      "path": "packages/plugin"
+      "path": "packages/module"
     },
     {
       "path": "packages/cloud-credentials"
@@ -62,46 +62,46 @@
       "path": "packages/project-host"
     },
     {
-      "path": "packages/plugins/twitch"
+      "path": "packages/modules/twitch"
     },
     {
-      "path": "packages/plugins/kofi"
+      "path": "packages/modules/kofi"
     },
     {
-      "path": "packages/plugins/obs"
+      "path": "packages/modules/obs"
     },
     {
-      "path": "packages/plugins/http-client"
+      "path": "packages/modules/http-client"
     },
     {
-      "path": "packages/plugins/utilities"
+      "path": "packages/modules/utilities"
     },
     {
-      "path": "packages/plugins/websocket-client"
+      "path": "packages/modules/websocket-client"
     },
     {
-      "path": "packages/plugins/websocket-server"
+      "path": "packages/modules/websocket-server"
     },
-    { "path": "packages/plugins/discord" },
-    { "path": "packages/plugins/elevenlabs" },
-    { "path": "packages/plugins/elgato-key-light" },
-    { "path": "packages/plugins/fs" },
-    { "path": "packages/plugins/goxlr" },
-    { "path": "packages/plugins/ikea-tradfri" },
-    { "path": "packages/plugins/json" },
-    { "path": "packages/plugins/lifx" },
-    { "path": "packages/plugins/list" },
-    { "path": "packages/plugins/logic" },
-    { "path": "packages/plugins/math" },
-    { "path": "packages/plugins/openai" },
-    { "path": "packages/plugins/shell" },
-    { "path": "packages/plugins/speakerbot" },
-    { "path": "packages/plugins/streamdeck" },
-    { "path": "packages/plugins/streamlabs" },
-    { "path": "packages/plugins/string" },
-    { "path": "packages/plugins/tiktok-euler-stream" },
-    { "path": "packages/plugins/voicemod" },
-    { "path": "packages/plugins/vtube-studio" },
+    { "path": "packages/modules/discord" },
+    { "path": "packages/modules/elevenlabs" },
+    { "path": "packages/modules/elgato-key-light" },
+    { "path": "packages/modules/fs" },
+    { "path": "packages/modules/goxlr" },
+    { "path": "packages/modules/ikea-tradfri" },
+    { "path": "packages/modules/json" },
+    { "path": "packages/modules/lifx" },
+    { "path": "packages/modules/list" },
+    { "path": "packages/modules/logic" },
+    { "path": "packages/modules/math" },
+    { "path": "packages/modules/openai" },
+    { "path": "packages/modules/shell" },
+    { "path": "packages/modules/speakerbot" },
+    { "path": "packages/modules/streamdeck" },
+    { "path": "packages/modules/streamlabs" },
+    { "path": "packages/modules/string" },
+    { "path": "packages/modules/tiktok-euler-stream" },
+    { "path": "packages/modules/voicemod" },
+    { "path": "packages/modules/vtube-studio" },
     {
       "path": "apps/server"
     },

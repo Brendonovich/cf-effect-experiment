@@ -6,8 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./EngineHost": "./src/EngineHost.ts",
-    "./ExecutorPlugins": "./src/ExecutorPlugins.ts",
-    "./PluginMount": "./src/PluginMount.ts",
+    "./ExecutorModules": "./src/ExecutorModules.ts",
+    "./ModuleMount": "./src/ModuleMount.ts",
     "./ProjectExecutor": "./src/ProjectExecutor.ts"
   },
   "scripts": {
@@ -21,7 +21,7 @@
     "@macrograph/editor": "workspace:*",
     "@macrograph/execution": "workspace:*",
     "@macrograph/persistence": "workspace:*",
-    "@macrograph/plugin": "workspace:*",
+    "@macrograph/module": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

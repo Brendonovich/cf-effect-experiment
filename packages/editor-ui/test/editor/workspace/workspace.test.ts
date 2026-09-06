@@ -55,6 +55,17 @@ describe("workspace reducer", () => {
     expect(selectedTab(state)?.type).toBe("graph");
   });
 
+  it("opens types as a unique, persistent workspace tab", () => {
+    let state = createWorkspaceState({ type: "graph", graphId: "main" });
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "types" } });
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "types" } });
+    expect(state.panes[state.focusedPaneId]?.tabs.map((tab) => tab.type)).toEqual([
+      "graph",
+      "types",
+    ]);
+    expect(selectedTab(parseWorkspaceState(JSON.stringify(state))!)?.type).toBe("types");
+  });
+
   it("creates an empty workspace when no initial tab is provided", () => {
     const state = createWorkspaceState();
     expect(state.panes[state.focusedPaneId]).toMatchObject({ tabs: [], selectedTabId: null });
@@ -348,6 +359,13 @@ describe("workspace storage", () => {
     ).toEqual(state);
     expect(values.has(previousKey)).toBe(false);
     expect(parseWorkspaceState(values.get(key) ?? null)).toEqual(state);
+  });
+
+  it("moves the former types sidebar selection back to graphs", () => {
+    const state = createWorkspaceState({ type: "graph", graphId: "main" });
+    expect(parseWorkspaceState(JSON.stringify({ ...state, navSection: "types" }))?.navSection).toBe(
+      "graphs",
+    );
   });
 
   it("rejects orphaned, duplicate, and inconsistent pane trees", () => {

@@ -24,7 +24,7 @@ export const layer = Layer.effect(Service)(
     );
     const executor = yield* ProjectExecutor.make(project, {
       executionDriver: activity.executionDriver,
-      engineClient: (pluginId) =>
+      engineClient: (moduleId) =>
         Effect.succeed(
           new Proxy(
             {},
@@ -32,12 +32,12 @@ export const layer = Layer.effect(Service)(
               get:
                 (_target, property) =>
                 (...args: ReadonlyArray<unknown>) =>
-                  editor.engine.getRuntimeClient(pluginId).pipe(
+                  editor.engine.getRuntimeClient(moduleId).pipe(
                     Effect.flatMap((client) => {
                       const method = Reflect.get(Object(client), property);
                       return typeof method === "function"
                         ? method(...args)
-                        : Effect.die(`Engine ${pluginId} has no ${String(property)} RPC`);
+                        : Effect.die(`Engine ${moduleId} has no ${String(property)} RPC`);
                     }),
                   ),
             },

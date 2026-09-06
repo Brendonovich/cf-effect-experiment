@@ -50,7 +50,7 @@ export function ClipboardMissingSchemas(props: {
         <For each={props.schemas}>
           {(schema) => (
             <li>
-              {schema.pluginName}: {schema.schemaName}
+              {schema.moduleName}: {schema.schemaName}
             </li>
           )}
         </For>

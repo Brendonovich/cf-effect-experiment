@@ -32,15 +32,30 @@ enum variant. Recursive types describe finite values, not cyclic JavaScript obje
 
 ## Operations And Values
 
-The project-scoped `CustomTypes` built-in package shares one schema generator between editor
-and executor. Schema IDs encode definition identity, operation and optional member as JSON
-arrays, so renaming a type does not break nodes. Fields and variants retain name-based identity
-from the original persisted format; renaming a member intentionally exposes old pins for repair.
+The project-scoped `CustomTypes` built-in package shares IO generation between
+editor and executor. Its catalog always contains seven operations: `MakeStruct`, `BreakStruct`,
+`UpdateStruct`, `ConstructEnum`, `MatchEnum`, `ParseJson`, and `StringifyJson`. Except for
+`BreakStruct`, each stores a stable definition ID in the `type` property; `ConstructEnum`
+also stores a variant name in `variant`. Break Struct has no properties: its `value` input
+is a wildcard constrained to structs. Connecting a struct reveals its fields, including
+through chains of Break nodes. Disconnection clears inferred fields; stale wires remain
+available for repair. Primitive, container and enum inputs are rejected.
+Struct/Enum selectors filter by definition kind; JSON nodes accept either. Missing selections,
+wrong kinds and removed variants produce diagnostics and block reachable execution.
+Renaming a type does not break nodes. Fields and variants retain name-based identity;
+renaming a member intentionally exposes old pins for repair. Old per-type schema IDs are not supported.
 
-- Make and break structs; per-field immutable update preserves all other fields.
-- Construct each tagged variant; match chooses an execution branch and exposes only its payload.
+- Make and break structs. Update Struct exposes an `Option<FieldType>` input for every field,
+  defaulting to `None` (keep the original); `Some(value)` replaces that field immutably. For an
+  optional field, `Some(None)` clears it and `Some(Some(value))` sets it. Pin collapsing is separate.
+- Construct each tagged variant; match chooses a scope branch carrying its typed payload.
+  Split it inline to expose fields and execution, or connect it to Break Scope. Empty variants use
+  ordinary exec outputs. See [Scope ports](./SCOPES.md).
 - Parse and stringify JSON through current project codecs, retaining nominal markers.
-- Existing List operations accept custom and nested container types through the type picker.
+- List operations accept custom and nested container types through wildcard connections.
+
+Changing a custom node's type/variant property preserves saved defaults and connections for
+explicit repair, even when the new selection makes them invalid.
 
 Structured default controls edit scalars, dates, list entries, optional values and tagged payloads.
 Recursive controls expand only finite saved/explicitly added values. Invalid saved content remains

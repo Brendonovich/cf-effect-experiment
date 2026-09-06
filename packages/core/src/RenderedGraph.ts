@@ -1,12 +1,12 @@
 import { Schema } from "effect";
 
+import * as Connection from "./Connection.ts";
 import { GraphId } from "./Graph.ts";
-import { NodeIO } from "./IO.ts";
+import { NodeIO, IoId } from "./IO.ts";
+import { NodeId } from "./Node.ts";
 import { Package } from "./Package.ts";
 import { Position } from "./Position.ts";
 import { SchemaRef } from "./SchemaRef.ts";
-import * as Connection from "./Connection.ts";
-import { NodeId } from "./Node.ts";
 
 export const Node = Schema.Struct({
   id: NodeId,
@@ -14,6 +14,7 @@ export const Node = Schema.Struct({
   properties: Schema.Record(Schema.String, Schema.Json),
   inputDefaults: Schema.Record(Schema.String, Schema.Json),
   foldPins: Schema.Boolean,
+  splitScopeOutputs: Schema.optional(Schema.Array(IoId)),
   schema: SchemaRef,
   position: Position,
   io: NodeIO,

@@ -12,9 +12,9 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
-import { DataType, Engine, Plugin, Resource } from "@macrograph/plugin";
-import UtilitiesPlugin from "@macrograph/plugin-utilities";
-import UtilitiesDeployment from "@macrograph/plugin-utilities/Deployment";
+import { DataType, Engine, Module, Resource } from "@macrograph/module";
+import UtilitiesModule from "@macrograph/module-utilities";
+import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -35,8 +35,8 @@ const utilitiesFormatSchemaRef = {
   schema: SchemaId.make("FormatString"),
 };
 
-const makeFormatPlugin = (id: string) =>
-  Plugin.make({
+const makeFormatModule = (id: string) =>
+  Module.make({
     id,
     effect: (context) =>
       context.schema.register({
@@ -66,8 +66,8 @@ const makeFormatPlugin = (id: string) =>
       }),
   });
 
-const FormatPlugin = makeFormatPlugin("format");
-const LateFormatPlugin = makeFormatPlugin("late-format");
+const FormatModule = makeFormatModule("format");
+const LateFormatModule = makeFormatModule("late-format");
 const lateFormatSchemaRef = {
   package: PackageId.make("late-format"),
   schema: SchemaId.make("format-string"),
@@ -78,7 +78,7 @@ const suggestionSchemaRef = {
   schema: SchemaId.make("search"),
 };
 
-const SuggestionPlugin = Plugin.make({
+const SuggestionModule = Module.make({
   id: "suggestions",
   effect: (context) =>
     context.schema.register({
@@ -123,8 +123,8 @@ class ResourceEngine extends Engine.make({
     }),
   ),
 }) {}
-const ResourcePlugin = Plugin.make({
-  id: "resource-plugin",
+const ResourceModule = Module.make({
+  id: "resource-module",
   name: "Resources",
   engine: ResourceEngine,
   effect: (context) =>
@@ -147,11 +147,11 @@ const ResourcePlugin = Plugin.make({
     }),
 });
 const ResourceDeployment = Engine.deployment(
-  ResourcePlugin,
+  ResourceModule,
   ResourceEngine.toLayer(() => Effect.die("not hosted in editor unit test")),
 );
 const resourceSchemaRef = {
-  package: PackageId.make("resource-plugin"),
+  package: PackageId.make("resource-module"),
   schema: SchemaId.make("action"),
 };
 
@@ -214,11 +214,11 @@ describe("Resource defaults", () => {
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       const persistence = yield* Persistence.Service;
-      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+      yield* editor.module(ResourceModule, ResourceDeployment);
       const legacy = ResourceConstant.Model.make({
         id: ResourceConstant.Id.make("legacy"),
         name: "Legacy account",
-        resource: { package: "resource-plugin", resource: "account" },
+        resource: { package: "resource-module", resource: "account" },
         value: "account-1",
       });
       const otherPackage = {
@@ -275,8 +275,8 @@ describe("Resource defaults", () => {
   it.effect("binds omitted properties before IO validation and changes only future nodes", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
-      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
-      yield* editor.engine.hostResource("resource-plugin", "account", {
+      yield* editor.module(ResourceModule, ResourceDeployment);
+      yield* editor.engine.hostResource("resource-module", "account", {
         values: Effect.succeed([
           { id: "account-1", display: "Streamer" },
           { id: "account-2", display: "Moderator" },
@@ -292,7 +292,7 @@ describe("Resource defaults", () => {
       expect(unbound.node.properties).toEqual({});
 
       const first = yield* editor.constant.create({
-        package: "resource-plugin",
+        package: "resource-module",
         resource: "account",
       });
       const second = yield* editor.constant.create(first.constant.resource);
@@ -421,9 +421,9 @@ describe("Resource defaults", () => {
   it.effect("falls back after default deletion until there are no constants left", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
-      yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+      yield* editor.module(ResourceModule, ResourceDeployment);
       const first = yield* editor.constant.create({
-        package: "resource-plugin",
+        package: "resource-module",
         resource: "account",
       });
       const second = yield* editor.constant.create(first.constant.resource);
@@ -491,29 +491,29 @@ it.layer(TestLayer)((it) => {
       }),
     );
 
-    it.effect("retrieves hosted plugin client state", () =>
+    it.effect("retrieves hosted module client state", () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        yield* editor.engine.hostClientState("plugin", Effect.succeed({ connected: true }));
+        yield* editor.engine.hostClientState("module", Effect.succeed({ connected: true }));
 
-        expect(yield* editor.engine.getClientState("plugin")).toEqual({ connected: true });
+        expect(yield* editor.engine.getClientState("module")).toEqual({ connected: true });
         const missing = yield* editor.engine.getClientState("missing").pipe(Effect.result);
         expect(Result.isFailure(missing)).toBe(true);
         if (Result.isFailure(missing)) expect(missing.failure._tag).toBe("EngineNotHosted");
       }),
     );
 
-    it.effect("publishes plugin client state dirty notifications", () =>
+    it.effect("publishes module client state dirty notifications", () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        yield* editor.engine.dirtyClientState("plugin");
+        yield* editor.engine.dirtyClientState("module");
 
         expect(yield* PubSub.take(events)).toEqual({
-          _tag: "PluginClientStateDirty",
+          _tag: "ModuleClientStateDirty",
           actor: Actor.system,
-          pluginId: "plugin",
+          moduleId: "module",
         });
       }),
     );
@@ -526,22 +526,22 @@ it.layer(TestLayer)((it) => {
           storage: Schema.Struct({ accounts: Schema.Array(Schema.String) }),
           initialStorage: { accounts: [] },
         });
-        const TestPlugin = Plugin.make({
+        const TestModule = Module.make({
           id: "engine-test",
           engine: TestEngine,
           effect: () => Effect.void,
         });
         if (false) {
           // @ts-expect-error Deployment layers must provide the declared engine service.
-          Engine.deployment(TestPlugin, Layer.empty);
+          Engine.deployment(TestModule, Layer.empty);
         }
         const deployment = Engine.deployment(
-          TestPlugin,
+          TestModule,
           TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
         );
-        // @ts-expect-error Engine plugins cannot be registered without a deployment.
-        editor.plugin(TestPlugin);
-        yield* editor.plugin(TestPlugin, deployment);
+        // @ts-expect-error Engine modules cannot be registered without a deployment.
+        editor.module(TestModule);
+        yield* editor.module(TestModule, deployment);
 
         const event = yield* editor.engine.setState("engine-test", {
           accounts: ["one", "two"],
@@ -558,9 +558,9 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const packages = yield* Packages.Service;
-        yield* editor.plugin(ResourcePlugin, ResourceDeployment);
+        yield* editor.module(ResourceModule, ResourceDeployment);
         const metadata = (yield* packages.getPackages()).find(
-          (pkg) => pkg.id === "resource-plugin",
+          (pkg) => pkg.id === "resource-module",
         );
         assert.deepStrictEqual(metadata?.resources, [
           {
@@ -569,7 +569,7 @@ it.layer(TestLayer)((it) => {
             description: "An authenticated account.",
           },
         ]);
-        yield* editor.engine.hostResource("resource-plugin", "account", {
+        yield* editor.engine.hostResource("resource-module", "account", {
           values: Effect.succeed([
             { id: "account-1", display: "Streamer" },
             { id: "account-2", display: "Moderator" },
@@ -579,7 +579,7 @@ it.layer(TestLayer)((it) => {
         });
 
         const created = yield* editor.constant.create({
-          package: "resource-plugin",
+          package: "resource-module",
           resource: "account",
         });
         const renamed = yield* editor.constant.rename(created.constant.id, "Moderator");
@@ -593,7 +593,7 @@ it.layer(TestLayer)((it) => {
             graphID: graph.graph.id,
             node: {
               schema: {
-                package: PackageId.make("resource-plugin"),
+                package: PackageId.make("resource-module"),
                 schema: SchemaId.make("action"),
               },
               properties: { account: "missing" },
@@ -607,7 +607,7 @@ it.layer(TestLayer)((it) => {
           graphID: graph.graph.id,
           node: {
             schema: {
-              package: PackageId.make("resource-plugin"),
+              package: PackageId.make("resource-module"),
               schema: SchemaId.make("action"),
             },
             properties: { account: created.constant.id },
@@ -630,7 +630,7 @@ it.layer(TestLayer)((it) => {
           _tag: "InvalidInputDefaultError",
           reason: "Suggestion resolver failed",
         });
-        yield* editor.engine.hostRuntimeClient("resource-plugin", {
+        yield* editor.engine.hostRuntimeClient("resource-module", {
           GetSuggestions: (request: { account: string; query: string }) => {
             expect(request).toEqual({ account: "account-1", query: "saved" });
             return editor.node
@@ -644,7 +644,7 @@ it.layer(TestLayer)((it) => {
           },
         });
         expect(yield* getSuggestions).toEqual(["live value"]);
-        yield* editor.engine.hostRuntimeClient("resource-plugin", {
+        yield* editor.engine.hostRuntimeClient("resource-module", {
           GetSuggestions: () => Effect.fail("disconnected"),
         });
         expect(yield* Effect.flip(getSuggestions)).toMatchObject({
@@ -714,7 +714,7 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
-        yield* editor.plugin(UtilitiesPlugin, UtilitiesDeployment);
+        yield* editor.module(UtilitiesModule, UtilitiesDeployment);
 
         const graphEvent = yield* editor.graph.create({ name: "Dynamic IO" });
         yield* PubSub.take(events);
@@ -743,7 +743,7 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: source.node.id,
-              outIoId: IoId.make("text"),
+              outIo: { _tag: "Port" as const, id: IoId.make("text") },
               inNodeId: format.node.id,
               inIoId: IoId.make("missing"),
             },
@@ -758,7 +758,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.node.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: format.node.id,
             inIoId: IoId.make("name"),
           },
@@ -800,7 +800,7 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
-        yield* editor.plugin(SuggestionPlugin);
+        yield* editor.module(SuggestionModule);
         const packages = yield* Packages.Service;
         const metadata = yield* packages.getSchema(suggestionSchemaRef);
         expect(metadata.description).toBe("Suggests values using the current node state.");
@@ -914,7 +914,7 @@ it.layer(TestLayer)((it) => {
             {
               id: ConnectionId.make("legacy"),
               outNodeId: nodeId,
-              outIoId: IoId.make("result"),
+              outIo: { _tag: "Port" as const, id: IoId.make("result") },
               inNodeId: nodeId,
               inIoId: IoId.make("first"),
             },
@@ -923,7 +923,7 @@ it.layer(TestLayer)((it) => {
         const beforeRegistration = yield* editor.project.snapshot();
         expect(beforeRegistration.project.graphs[graph.graph.id]?.nodes[nodeId]).toBeDefined();
         expect(beforeRegistration.nodeIO[graph.graph.id]?.[nodeId]).toBeUndefined();
-        yield* editor.plugin(LateFormatPlugin);
+        yield* editor.module(LateFormatModule);
 
         const snapshot = yield* editor.project.snapshot();
         expect(
@@ -944,7 +944,7 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
-        yield* editor.plugin(FormatPlugin);
+        yield* editor.module(FormatModule);
         const graph = yield* editor.graph.create({ name: "Dynamic Types" });
         yield* PubSub.take(events);
         const source = yield* editor.node.create({
@@ -965,7 +965,7 @@ it.layer(TestLayer)((it) => {
           graphID: graph.graph.id,
           connection: {
             outNodeId: source.node.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: target.node.id,
             inIoId: IoId.make("value"),
           },
@@ -991,7 +991,7 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const packages = yield* Packages.Service;
-        yield* editor.plugin(FormatPlugin);
+        yield* editor.module(FormatModule);
         const graph = yield* editor.graph.create({ name: "Replacement" });
         const node = yield* editor.node.create({
           graphID: graph.graph.id,
@@ -1071,7 +1071,7 @@ it.layer(TestLayer)((it) => {
           graphID: graph.graph.id,
           connection: {
             outNodeId: before.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: deleted.id,
             inIoId: IoId.make("text"),
           },
@@ -1081,7 +1081,7 @@ it.layer(TestLayer)((it) => {
           graphID: graph.graph.id,
           connection: {
             outNodeId: deleted.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: after.id,
             inIoId: IoId.make("text"),
           },
@@ -1121,7 +1121,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.node.id,
-            outIoId: IoId.make("exec"),
+            outIo: { _tag: "Port" as const, id: IoId.make("exec") },
             inNodeId: target.node.id,
             inIoId: IoId.make("exec"),
           },
@@ -1136,7 +1136,7 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: source.node.id,
-              outIoId: IoId.make("exec"),
+              outIo: { _tag: "Port" as const, id: IoId.make("exec") },
               inNodeId: target.node.id,
               inIoId: IoId.make("exec"),
             },
@@ -1168,7 +1168,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: target.id,
             inIoId: IoId.make("text"),
           },
@@ -1178,7 +1178,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.id,
-            outIoId: IoId.make("text"),
+            outIo: { _tag: "Port" as const, id: IoId.make("text") },
             inNodeId: otherTarget.id,
             inIoId: IoId.make("text"),
           },
@@ -1189,7 +1189,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.id,
-            outIoId: IoId.make("exec"),
+            outIo: { _tag: "Port" as const, id: IoId.make("exec") },
             inNodeId: target.id,
             inIoId: IoId.make("exec"),
           },
@@ -1199,7 +1199,7 @@ it.layer(TestLayer)((it) => {
           graphID: graphEvent.graph.id,
           connection: {
             outNodeId: source.id,
-            outIoId: IoId.make("exec"),
+            outIo: { _tag: "Port" as const, id: IoId.make("exec") },
             inNodeId: otherTarget.id,
             inIoId: IoId.make("exec"),
           },
@@ -1211,7 +1211,7 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: otherSource.id,
-              outIoId: IoId.make("text"),
+              outIo: { _tag: "Port" as const, id: IoId.make("text") },
               inNodeId: target.id,
               inIoId: IoId.make("text"),
             },
@@ -1226,7 +1226,7 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: source.id,
-              outIoId: IoId.make("count"),
+              outIo: { _tag: "Port" as const, id: IoId.make("count") },
               inNodeId: target.id,
               inIoId: IoId.make("text"),
             },
@@ -1241,7 +1241,7 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: source.id,
-              outIoId: IoId.make("exec"),
+              outIo: { _tag: "Port" as const, id: IoId.make("exec") },
               inNodeId: target.id,
               inIoId: IoId.make("count"),
             },
@@ -1363,7 +1363,7 @@ it.layer(TestLayer)((it) => {
       }),
     );
 
-    it.effect("registers plugin schemas", () =>
+    it.effect("registers module schemas", () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const packages = yield* Packages.Service;
@@ -1412,10 +1412,10 @@ it.layer(TestLayer)((it) => {
           schemas: [{ dataInputs: [], dataOutputs: [] }],
         });
 
-        yield* editor.plugin(
-          Plugin.make({
-            id: "plugin",
-            name: "Plugin",
+        yield* editor.module(
+          Module.make({
+            id: "module",
+            name: "Module",
             effect: (context) =>
               context.schema.register({
                 id: "schema",
@@ -1433,7 +1433,7 @@ it.layer(TestLayer)((it) => {
         );
 
         const schema = yield* packages.getSchema({
-          package: PackageId.make("plugin"),
+          package: PackageId.make("module"),
           schema: SchemaId.make("schema"),
         });
         expect(schema.name).toBe("Schema");
@@ -1453,7 +1453,7 @@ it.layer(TestLayer)((it) => {
         const node = yield* editor.node.create({
           graphID: graph.graph.id,
           node: {
-            schema: { package: PackageId.make("plugin"), schema: SchemaId.make("schema") },
+            schema: { package: PackageId.make("module"), schema: SchemaId.make("schema") },
             inputDefaults: {
               names: ["one", "two"],
               optional: { _tag: "Some", value: 1 },

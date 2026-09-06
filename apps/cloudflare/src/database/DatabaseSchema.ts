@@ -177,7 +177,7 @@ export const projectIngressEvents = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     endpointId: text("endpoint_id").notNull(),
-    pluginId: text("plugin_id").notNull(),
+    moduleId: text("module_id").notNull(),
     eventType: text("event_type").notNull(),
     eventId: text("event_id"),
     eventPayload: text("event_payload").notNull(),
@@ -203,7 +203,7 @@ export const projectEvents = pgTable(
     ingressEventId: text("ingress_event_id").references(() => projectIngressEvents.id, {
       onDelete: "set null",
     }),
-    pluginId: text("plugin_id").notNull(),
+    moduleId: text("module_id").notNull(),
     eventType: text("event_type").notNull(),
     providerEventId: text("provider_event_id"),
     eventPayload: text("event_payload").notNull(),
@@ -256,7 +256,7 @@ export const projectExecutionNodes = pgTable(
     graphId: text("graph_id").notNull(),
     eventNodeId: text("event_node_id").notNull(),
     nodeId: text("node_id").notNull(),
-    kind: text("kind").notNull().$type<"event" | "exec">(),
+    kind: text("kind").notNull().$type<"base" | "event" | "exec">(),
     status: text("status").notNull().$type<ProjectExecutionNodeStatus>(),
     startedAt: text("started_at").notNull(),
     completedAt: text("completed_at"),

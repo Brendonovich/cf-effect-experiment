@@ -1,4 +1,4 @@
-import { HttpEndpoint } from "@macrograph/plugin";
+import { HttpEndpoint } from "@macrograph/module";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 

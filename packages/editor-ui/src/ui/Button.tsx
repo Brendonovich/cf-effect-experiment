@@ -7,7 +7,7 @@ import { omit } from "solid-js";
 import { colors } from "../tokens.stylex.ts";
 
 type ButtonSize = "sm" | "md";
-type ButtonVariant = "primary" | "secondary" | "ghost" | "text";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "text" | "icon";
 
 export interface ButtonProps {
   /** Controls sizing. `sm` is compact, `md` is the default size. */
@@ -62,6 +62,16 @@ const styles = stylex.create({
     boxShadow: "none",
     color: { default: colors.gray11, ":hover": colors.gray12 },
   },
+  icon: {
+    aspectRatio: "1",
+    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    boxShadow: {
+      default: "none",
+      ":focus-visible": `inset 0 0 0 1px ${colors.focus}`,
+    },
+    color: { default: colors.gray10, ":hover": colors.gray12 },
+    paddingInline: 0,
+  },
 });
 
 const sizeStyle = { sm: styles.small, md: styles.medium };
@@ -70,6 +80,7 @@ const variantStyle = {
   secondary: styles.secondary,
   ghost: styles.ghost,
   text: styles.text,
+  icon: styles.icon,
 };
 
 function buttonAttrs(props: ButtonProps) {

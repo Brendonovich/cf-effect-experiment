@@ -1,15 +1,15 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { pluginSettings, stylexProps } from "@macrograph/plugin/vite";
+import { moduleSettings, stylexProps } from "@macrograph/module/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
 
 const cloudSettings = new Set([
-  "@macrograph/plugin-kofi",
-  "@macrograph/plugin-twitch",
-  "@macrograph/plugin-openai",
-  "@macrograph/plugin-elevenlabs",
+  "@macrograph/module-kofi",
+  "@macrograph/module-twitch",
+  "@macrograph/module-openai",
+  "@macrograph/module-elevenlabs",
 ]);
 const workerUrl =
   process.env.VITE_WORKER_URL ??
@@ -25,7 +25,7 @@ export default defineConfig({
   build: { sourcemap: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
-    pluginSettings(undefined, cloudSettings),
+    moduleSettings(undefined, cloudSettings),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
     stylexProps(),
     stylex.vite({

@@ -53,6 +53,7 @@ export const layer = Layer.effect(
                   properties: node.properties,
                   inputDefaults: node.inputDefaults,
                   foldPins: node.foldPins,
+                  splitScopeOutputs: node.splitScopeOutputs ?? null,
                   schemaPackage: node.schema.package,
                   schemaSchema: node.schema.schema,
                   positionX: node.position.x,
@@ -67,7 +68,7 @@ export const layer = Layer.effect(
                 .values({
                   id: connection.id,
                   outNodeId: connection.outNodeId,
-                  outIoId: connection.outIoId,
+                  outIo: connection.outIo,
                   inNodeId: connection.inNodeId,
                   inIoId: connection.inIoId,
                   graphId,
@@ -92,6 +93,9 @@ export const layer = Layer.effect(
           properties: nodeRow.properties,
           inputDefaults: nodeRow.inputDefaults,
           foldPins: nodeRow.foldPins,
+          ...(nodeRow.splitScopeOutputs === null
+            ? {}
+            : { splitScopeOutputs: nodeRow.splitScopeOutputs }),
           schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
@@ -108,7 +112,7 @@ export const layer = Layer.effect(
         connections.push({
           id: ConnectionId.make(connRow.id),
           outNodeId: connRow.outNodeId,
-          outIoId: IoId.make(connRow.outIoId),
+          outIo: connRow.outIo,
           inNodeId: connRow.inNodeId,
           inIoId: IoId.make(connRow.inIoId),
         });
@@ -210,6 +214,9 @@ export const layer = Layer.effect(
           properties: nodeRow.properties,
           inputDefaults: nodeRow.inputDefaults,
           foldPins: nodeRow.foldPins,
+          ...(nodeRow.splitScopeOutputs === null
+            ? {}
+            : { splitScopeOutputs: nodeRow.splitScopeOutputs }),
           schema: {
             package: PackageId.make(nodeRow.schemaPackage),
             schema: SchemaId.make(nodeRow.schemaSchema),
@@ -241,6 +248,7 @@ export const layer = Layer.effect(
                 properties: node.properties,
                 inputDefaults: node.inputDefaults,
                 foldPins: node.foldPins,
+                splitScopeOutputs: node.splitScopeOutputs ?? null,
                 schemaPackage: node.schema.package,
                 schemaSchema: node.schema.schema,
                 positionX: node.position.x,
@@ -255,7 +263,7 @@ export const layer = Layer.effect(
               .values({
                 id: connection.id,
                 outNodeId: connection.outNodeId,
-                outIoId: connection.outIoId,
+                outIo: connection.outIo,
                 inNodeId: connection.inNodeId,
                 inIoId: connection.inIoId,
                 graphId: graph.id,
@@ -287,6 +295,7 @@ export const layer = Layer.effect(
               properties: node.properties,
               inputDefaults: node.inputDefaults,
               foldPins: node.foldPins,
+              splitScopeOutputs: node.splitScopeOutputs ?? null,
               schemaPackage: node.schema.package,
               schemaSchema: node.schema.schema,
               positionX: node.position.x,
@@ -315,7 +324,7 @@ export const layer = Layer.effect(
             .values({
               id: connection.id,
               outNodeId: connection.outNodeId,
-              outIoId: connection.outIoId,
+              outIo: connection.outIo,
               inNodeId: connection.inNodeId,
               inIoId: connection.inIoId,
               graphId,

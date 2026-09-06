@@ -9,7 +9,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { DataType, Engine, Plugin, Resource } from "@macrograph/plugin";
+import { DataType, Engine, Module, Resource } from "@macrograph/module";
 import { Array, Effect, Exit, Option, Ref, Schema, Tracer } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
 
@@ -38,7 +38,7 @@ describe("Executor", () => {
         rpcs: RuntimeRpcs,
       }) {}
       const calls = yield* Ref.make<ReadonlyArray<string>>([]);
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "resource-action",
         engine: ActionEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -59,7 +59,7 @@ describe("Executor", () => {
         }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         ActionEngine.toLayer(() => Effect.die("not needed")),
       );
       const runtime = yield* RpcTest.makeClient(RuntimeRpcs).pipe(
@@ -118,7 +118,7 @@ describe("Executor", () => {
               {
                 id: ConnectionId.make("resource-exec"),
                 outNodeId: eventNodeId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("exec"),
               },
@@ -130,16 +130,16 @@ describe("Executor", () => {
         engineClient: () => Effect.succeed(runtime),
         resourceValues: () => Effect.succeed([{ id: "account-1", display: "Streamer" }]),
       });
-      yield* executor.plugin(plugin, deployment);
-      yield* executor.handleEvent(plugin, new Ping({ message: "go" }));
+      yield* executor.module(module, deployment);
+      yield* executor.handleEvent(module, new Ping({ message: "go" }));
       assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
 
       const unavailable = yield* Executor.make(project, {
         resourceValues: () => Effect.succeed([{ id: "account-1", display: "Streamer" }]),
       });
-      yield* unavailable.plugin(plugin, deployment);
+      yield* unavailable.module(module, deployment);
       const unavailableResult = yield* unavailable
-        .handleEvent(plugin, new Ping({ message: "go" }))
+        .handleEvent(module, new Ping({ message: "go" }))
         .pipe(Effect.result);
       assert(unavailableResult._tag === "Failure");
       if (unavailableResult._tag === "Failure")
@@ -151,16 +151,16 @@ describe("Executor", () => {
           account: { ...project.constants.account!, value: "missing" },
         },
       });
-      yield* executor.handleEvent(plugin, new Ping({ message: "go" }));
+      yield* executor.handleEvent(module, new Ping({ message: "go" }));
       assert.deepStrictEqual(yield* Ref.get(calls), ["account-1"]);
 
       const staleResource = yield* Executor.make(project, {
         engineClient: () => Effect.succeed(runtime),
         resourceValues: () => Effect.succeed([]),
       });
-      yield* staleResource.plugin(plugin, deployment);
+      yield* staleResource.module(module, deployment);
       const invalid = yield* staleResource
-        .handleEvent(plugin, new Ping({ message: "go" }))
+        .handleEvent(module, new Ping({ message: "go" }))
         .pipe(Effect.result);
       assert(invalid._tag === "Failure");
       if (invalid._tag === "Failure")
@@ -194,7 +194,7 @@ describe("Executor", () => {
           );
         },
       };
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "test",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -235,7 +235,7 @@ describe("Executor", () => {
               upperAgain: io.data.in("upperAgain", DataType.String),
               suffix: io.data.in("suffix", DataType.String),
               empty: io.data.in("empty", DataType.String, { defaultValue: "" }),
-              fallback: io.data.in("fallback", DataType.String, { defaultValue: "plugin" }),
+              fallback: io.data.in("fallback", DataType.String, { defaultValue: "module" }),
               optional: io.data.in("optional", DataType.Option(DataType.String), {
                 defaultValue: Option.none(),
               }),
@@ -249,7 +249,7 @@ describe("Executor", () => {
         }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
       );
 
@@ -305,28 +305,28 @@ describe("Executor", () => {
               {
                 id: ConnectionId.make("exec"),
                 outNodeId: eventNodeId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("exec"),
               },
               {
                 id: ConnectionId.make("message"),
                 outNodeId: eventNodeId,
-                outIoId: IoId.make("message"),
+                outIo: { _tag: "Port" as const, id: IoId.make("message") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("message"),
               },
               {
                 id: ConnectionId.make("upper"),
                 outNodeId: pureNodeId,
-                outIoId: IoId.make("result"),
+                outIo: { _tag: "Port" as const, id: IoId.make("result") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("upper"),
               },
               {
                 id: ConnectionId.make("upper-again"),
                 outNodeId: pureNodeId,
-                outIoId: IoId.make("result"),
+                outIo: { _tag: "Port" as const, id: IoId.make("result") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("upperAgain"),
               },
@@ -336,7 +336,7 @@ describe("Executor", () => {
       };
 
       const executor = yield* Executor.make(Project.empty(), { executionDriver });
-      yield* executor.plugin(plugin, deployment);
+      yield* executor.module(module, deployment);
       yield* executor.loadProject(project);
       const spans: Array<Tracer.Span> = [];
       const tracer = Tracer.make({
@@ -348,7 +348,7 @@ describe("Executor", () => {
       });
 
       yield* executor
-        .handleEvent(plugin, new Pong())
+        .handleEvent(module, new Pong())
         .pipe(Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(yield* Ref.get(executions), []);
       assert.deepStrictEqual(
@@ -358,9 +358,9 @@ describe("Executor", () => {
       assert.strictEqual(spans[1]!.attributes.get("macrograph.event.matched"), false);
 
       yield* executor
-        .handleEvent(plugin, new Ping({ message: "received" }))
+        .handleEvent(module, new Ping({ message: "received" }))
         .pipe(Effect.provideService(Tracer.Tracer, tracer));
-      assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:plugin:stored"]);
+      assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:module:stored"]);
       assert.strictEqual(yield* Ref.get(pureRuns), 1);
       assert.deepStrictEqual(yield* executor.project, project);
       const nodeSpans = spans.filter((span) => span.name === "Executor.runNode");
@@ -405,10 +405,10 @@ describe("Executor", () => {
       }
 
       const replayed = yield* Executor.make(project, { executionDriver });
-      yield* replayed.plugin(plugin, deployment);
+      yield* replayed.module(module, deployment);
       const replayStart = spans.length;
       yield* replayed
-        .handleEvent(plugin, new Ping({ message: "received" }))
+        .handleEvent(module, new Ping({ message: "received" }))
         .pipe(Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(
         spans
@@ -424,29 +424,29 @@ describe("Executor", () => {
           .map((span) => span.name),
         ["Schema.run test.uppercase"],
       );
-      assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:plugin:stored"]);
+      assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:module:stored"]);
       assert.strictEqual(yield* Ref.get(pureRuns), 2);
       assert.strictEqual(checkpoints.size, 2);
     }),
   );
 
-  it.effect("rejects events from unregistered plugins", () =>
+  it.effect("rejects events from unregistered modules", () =>
     Effect.gen(function* () {
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "test",
         engine: TestEngine,
         effect: () => Effect.void,
       });
       const executor = yield* Executor.make(Project.empty());
-      const error = yield* Effect.flip(executor.handleEvent(plugin, new Pong()));
-      assert.strictEqual(error._tag, "PluginNotRegistered");
+      const error = yield* Effect.flip(executor.handleEvent(module, new Pong()));
+      assert.strictEqual(error._tag, "ModuleNotRegistered");
     }),
   );
 
   it.effect("executes property-generated node IO", () =>
     Effect.gen(function* () {
       const values = yield* Ref.make<ReadonlyArray<string>>([]);
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "dynamic",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (context) {
@@ -478,7 +478,7 @@ describe("Executor", () => {
         }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
       );
       const graphId = GraphId.make("dynamic");
@@ -523,14 +523,14 @@ describe("Executor", () => {
               {
                 id: ConnectionId.make("dynamic-exec"),
                 outNodeId: eventId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: recordId,
                 inIoId: IoId.make("exec"),
               },
               {
                 id: ConnectionId.make("dynamic-data"),
                 outNodeId: eventId,
-                outIoId: IoId.make("message"),
+                outIo: { _tag: "Port" as const, id: IoId.make("message") },
                 inNodeId: recordId,
                 inIoId: IoId.make("message"),
               },
@@ -540,8 +540,8 @@ describe("Executor", () => {
       };
 
       const executor = yield* Executor.make(project);
-      yield* executor.plugin(plugin, deployment);
-      yield* executor.handleEvent(plugin, new Ping({ message: "dynamic value" }));
+      yield* executor.module(module, deployment);
+      yield* executor.handleEvent(module, new Ping({ message: "dynamic value" }));
       assert.deepStrictEqual(yield* Ref.get(values), ["dynamic value"]);
 
       const graph = project.graphs[graphId]!;
@@ -556,7 +556,7 @@ describe("Executor", () => {
               {
                 id: ConnectionId.make("duplicate-exec"),
                 outNodeId: eventId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: recordId,
                 inIoId: IoId.make("exec"),
               },
@@ -565,7 +565,7 @@ describe("Executor", () => {
         },
       });
       const error = yield* Effect.flip(
-        executor.handleEvent(plugin, new Ping({ message: "duplicate" })),
+        executor.handleEvent(module, new Ping({ message: "duplicate" })),
       );
       assert.strictEqual(error._tag, "InvalidConnection");
       if (error._tag === "InvalidConnection") {

@@ -98,6 +98,7 @@ const setup = (
       () => {},
     );
     const canvas = createEditorCanvas({
+      createNode: () => Promise.resolve(),
       publishPointer: () => {},
       ...layout,
       editor,

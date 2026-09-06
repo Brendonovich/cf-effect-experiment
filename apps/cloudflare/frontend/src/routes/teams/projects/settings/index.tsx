@@ -164,7 +164,7 @@ export const ProjectSettingsRoute = () => {
     setRefreshingCredentials(false);
     if (catalog !== undefined) {
       queryClient.setQueryData(credentialsKey(), catalog);
-      yield workspace.refreshEditorPluginData(projectId());
+      yield workspace.refreshEditorModuleData(projectId());
     }
   });
 

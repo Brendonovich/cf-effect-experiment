@@ -3,6 +3,7 @@ import type { EditorEvent } from "@macrograph/editor";
 import {
   Clipboard,
   IoId,
+  OutputRef,
   type ResourceConstant,
   type SchemaRef,
   type TypeDefinition,
@@ -17,6 +18,7 @@ import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 import { runFork, runPromise } from "../observability/browserTracing";
 import { portsCompatible, type PortEndpoint } from "./graph/connectionAuthoring";
+import { outputRefForPort } from "./graph/GraphPort";
 import {
   graphNodeInputs,
   graphNodeOutputs,
@@ -54,6 +56,18 @@ export function createEditorCommands(
     () => ({
       mutationFn: (operation: () => Promise<void>) => operation(),
       // Do not replay clipboard writes or editor mutations automatically.
+      retry: false,
+    }),
+    () => queryClient,
+  );
+  const scopeSplitMutation = useMutation(
+    () => ({
+      mutationFn: async (options: { nodeId: string; scope: string; split: boolean }) => {
+        const c = client();
+        const graphId = selectedGraphId();
+        if (!c || !graphId || !canEdit()) throw new Error("Editor is read only or disconnected");
+        await runPromise(applyMutation(c.SetNodeScopeSplit({ graphId, ...options })));
+      },
       retry: false,
     }),
     () => queryClient,
@@ -100,13 +114,13 @@ export function createEditorCommands(
     );
     const capturedSchemas = Object.fromEntries(
       nodes.flatMap((node) => {
-        const plugin = editor.store.packages.find(
+        const module = editor.store.packages.find(
           (candidate) => candidate.id === node.schema.package,
         );
-        const schema = plugin?.schemas.find((candidate) => candidate.id === node.schema.schema);
-        return plugin === undefined || schema === undefined
+        const schema = module?.schemas.find((candidate) => candidate.id === node.schema.schema);
+        return module === undefined || schema === undefined
           ? []
-          : [[node.id, { pluginName: plugin.name, schemaName: schema.name }]];
+          : [[node.id, { moduleName: module.name, schemaName: schema.name }]];
       }),
     );
     const externalConnections = graph.connections.filter(
@@ -352,7 +366,7 @@ export function createEditorCommands(
                   graphId,
                   connection: {
                     outNodeId: output.nodeId,
-                    outIoId: IoId.make(output.port.id),
+                    outIo: outputRefForPort(output.port),
                     inNodeId: input.nodeId,
                     inIoId: IoId.make(input.port.id),
                   },
@@ -485,7 +499,7 @@ export function createEditorCommands(
     const connections = graph.connections.filter((candidate) =>
       direction === "input"
         ? candidate.inNodeId === nodeId && candidate.inIoId === ioId
-        : candidate.outNodeId === nodeId && candidate.outIoId === ioId,
+        : candidate.outNodeId === nodeId && OutputRef.key(candidate.outIo) === ioId,
     );
     connections.forEach((connection) =>
       runFork(
@@ -498,6 +512,7 @@ export function createEditorCommands(
   };
 
   return {
+    scopeSplitMutation,
     previewTypeDefinition: (change: TypeDefinition.Change) => {
       const c = client();
       if (!c || !canEdit()) return Promise.reject(new Error("Editor is read only or disconnected"));

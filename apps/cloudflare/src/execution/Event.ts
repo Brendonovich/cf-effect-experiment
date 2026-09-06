@@ -1,6 +1,6 @@
 import { DeploymentNotFound, EventNotFound, ExecutionNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
-import { HttpEndpoint } from "@macrograph/plugin";
+import { HttpEndpoint } from "@macrograph/module";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { Context, Effect, Layer, Tracer } from "effect";
 
@@ -33,7 +33,7 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
           const table = kind === "event" ? projectEvents : projectIngressEvents;
           const rows = yield* database
             .select({
-              pluginId: table.pluginId,
+              moduleId: table.moduleId,
               eventType: table.eventType,
               eventPayload: table.eventPayload,
               ingressEventId:
@@ -79,7 +79,7 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
               projectId,
               ...deployment,
               source: "replay",
-              pluginId: event.pluginId,
+              moduleId: event.moduleId,
               eventType: event.eventType,
               event: event.eventPayload,
               ...(event.ingressEventId === null ? {} : { ingressEventId: event.ingressEventId }),

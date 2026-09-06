@@ -3,10 +3,10 @@
 import type { Presence } from "@macrograph/editor";
 
 import { Graph, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { Effect, Stream } from "effect";
+import { Effect, PubSub, Stream } from "effect";
 import { RpcClientError } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
-import { createRoot, createSignal, flush, untrack } from "solid-js";
+import { createMemo, createRoot, createSignal, flush, untrack } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorRpcClient } from "../../src/editor/Editor";
@@ -29,6 +29,69 @@ type TestClient<Keys extends keyof EditorRpcClient> = {
 };
 
 describe("editor presence lifecycle", () => {
+  it("exposes current edit permissions outside tracking and handles revocation", async () => {
+    const events = Effect.runSync(PubSub.unbounded<Presence.Snapshot | Presence.Changed>());
+    const self: Presence.Client = {
+      connectionId: "self",
+      displayName: "Self",
+      color: "#ffffff",
+      canEdit: true,
+      activeGraph: null,
+      cursor: null,
+      selectedNodeIds: [],
+    };
+    const client = {
+      GetPackages: () => Effect.succeed([]),
+      GetIngressEndpoints: () => Effect.succeed([]),
+      GetModuleSettingsCapabilities: () => Effect.succeed([]),
+      ProjectEventsStream: () =>
+        Stream.succeed({
+          _tag: "ProjectSnapshot" as const,
+          snapshot: { project: Project.empty(), nodeIO: {} },
+        }).pipe(Stream.concat(Stream.never)),
+      PresenceStream: () => Stream.fromPubSub(events),
+    } satisfies TestClient<
+      | "GetPackages"
+      | "GetIngressEndpoints"
+      | "GetModuleSettingsCapabilities"
+      | "ProjectEventsStream"
+      | "PresenceStream"
+    >;
+    const { connection, ready } = createRoot((cleanup) => {
+      dispose = cleanup;
+      const connection = createEditorConnection(
+        {
+          settingsDescriptors: [],
+          connection: Effect.succeed({
+            client: client as unknown as EditorRpcClient,
+            moduleSettings: new Map(),
+          }),
+        },
+        createEditorStore(),
+        () => {},
+        () => {},
+      );
+      return { connection, ready: createMemo(connection.editorReady) };
+    });
+    await vi.waitFor(() => expect(untrack(ready)).toBe(true));
+    expect(untrack(connection.canEdit)).toBe(false);
+    await Effect.runPromise(
+      PubSub.publish(events, {
+        _tag: "PresenceSnapshot",
+        selfConnectionId: "self",
+        clients: [self],
+      }),
+    );
+    await vi.waitFor(() => expect(untrack(connection.canEdit)).toBe(true));
+    await Effect.runPromise(
+      PubSub.publish(events, { _tag: "PresenceChanged", clients: [{ ...self, canEdit: false }] }),
+    );
+    await vi.waitFor(() => expect(untrack(connection.canEdit)).toBe(false));
+    await Effect.runPromise(PubSub.publish(events, { _tag: "PresenceChanged", clients: [self] }));
+    await vi.waitFor(() => expect(untrack(connection.canEdit)).toBe(true));
+    await Effect.runPromise(PubSub.shutdown(events));
+  });
+
   it("clears stale presence and reconnects when only the presence stream fails", async () => {
     let fail = () => {};
     let attempts = 0;
@@ -36,7 +99,7 @@ describe("editor presence lifecycle", () => {
     const client = {
       GetPackages: () => Effect.succeed([]),
       GetIngressEndpoints: () => Effect.succeed([]),
-      GetPluginSettingsCapabilities: () => Effect.succeed([]),
+      GetModuleSettingsCapabilities: () => Effect.succeed([]),
       ProjectEventsStream: () => Stream.never,
       PresenceStream: () =>
         Stream.succeed({
@@ -72,7 +135,7 @@ describe("editor presence lifecycle", () => {
     } satisfies TestClient<
       | "GetPackages"
       | "GetIngressEndpoints"
-      | "GetPluginSettingsCapabilities"
+      | "GetModuleSettingsCapabilities"
       | "ProjectEventsStream"
       | "PresenceStream"
     >;
@@ -85,7 +148,7 @@ describe("editor presence lifecycle", () => {
           connection: Effect.gen(function* () {
             attempts++;
             yield* Effect.addFinalizer(() => Effect.sync(closed));
-            return { client: client as unknown as EditorRpcClient, pluginSettings: new Map() };
+            return { client: client as unknown as EditorRpcClient, moduleSettings: new Map() };
           }),
         },
         createEditorStore(),

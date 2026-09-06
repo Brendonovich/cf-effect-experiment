@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { Engine, Plugin } from "@macrograph/plugin";
+import { Engine, Module } from "@macrograph/module";
 import { Array, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { createServer, type IncomingHttpHeaders } from "node:http";
@@ -95,7 +95,7 @@ describe("Observability", () => {
       });
       class ChatMessage extends Schema.TaggedClass<ChatMessage>()("channel.chat.message", {}) {}
       class TestEngine extends Engine.make({ events: Array.empty<ChatMessage>() }) {}
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "twitch",
         engine: TestEngine,
         effect: (registration) =>
@@ -108,7 +108,7 @@ describe("Observability", () => {
           }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         TestEngine.toLayer(() => Effect.die("not hosted")),
       );
       const graphId = GraphId.make("chat");
@@ -134,15 +134,15 @@ describe("Observability", () => {
           },
         },
       });
-      yield* executor.plugin(plugin, deployment);
+      yield* executor.module(module, deployment);
 
       yield* Effect.gen(function* () {
         yield* TestClock.adjust("10 millis").pipe(
           Effect.withSpan("child-operation"),
           Effect.withSpan("server-operation"),
         );
-        yield* executor.handleEvent(plugin, new ChatMessage({}));
-        yield* executor.handleEvent(plugin, new ChatMessage({}));
+        yield* executor.handleEvent(module, new ChatMessage({}));
+        yield* executor.handleEvent(module, new ChatMessage({}));
         // The one-second export interval has not elapsed, so these spans remain buffered.
         assert.deepStrictEqual(requests, []);
       }).pipe(Effect.provide(Observability.layer(config)));

@@ -1,8 +1,12 @@
-import type { Package } from "@macrograph/core";
+import type { Package, SchemaRef } from "@macrograph/core";
 
-import { DataType } from "@macrograph/plugin/DataType";
+import { BuiltinAuthoring, type SchemaAuthoring } from "@macrograph/core";
+import { DataType } from "@macrograph/module/DataType";
+import { scopesCompatible } from "@macrograph/module/Registration";
 
 import type { GraphPort } from "./GraphNode";
+
+import { asOutputPort } from "./GraphPort";
 
 export type PortDirection = "input" | "output";
 
@@ -18,7 +22,7 @@ export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
 ): boolean => {
-  return DataType.equals(left, right);
+  return DataType.compatible(left, right);
 };
 
 export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
@@ -26,7 +30,11 @@ export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
     ? false
     : left.kind === "execution" && right.kind === "execution"
       ? true
-      : left.kind === "data" && right.kind === "data" && dataTypesEqual(left.type, right.type);
+      : left.kind === "scope" && right.kind === "scope"
+        ? left.scope === null
+          ? scopesCompatible(right.scope, left.scope)
+          : scopesCompatible(left.scope, right.scope)
+        : left.kind === "data" && right.kind === "data" && dataTypesEqual(left.type, right.type);
 
 export const visiblePorts = (
   ports: ReadonlyArray<GraphPort>,
@@ -34,7 +42,17 @@ export const visiblePorts = (
   connectedIds: ReadonlySet<string>,
 ): ReadonlyArray<GraphPort> =>
   folded
-    ? ports.filter((port) => connectedIds.has(port.id) || (port.kind === "data" && port.invalid))
+    ? ports.filter(
+        (port) =>
+          connectedIds.has(port.id) ||
+          (port.kind === "data" && port.invalid) ||
+          (port.outputRef?._tag === "ScopeExec" &&
+            ports.some(
+              (field) =>
+                field.scopeGroup === port.scopeGroup &&
+                (connectedIds.has(field.id) || (field.kind === "data" && field.invalid)),
+            )),
+      )
     : ports;
 
 export const foldSelectedPins = (states: ReadonlyArray<boolean>): boolean =>
@@ -66,34 +84,54 @@ export const findSnapTarget = (
 export const compatibleSchemaPorts = (
   schema: Package.SchemaModel,
   source: Pick<PortEndpoint, "direction" | "port">,
+  packageId?: string,
+  definitions?: DataType.Definitions,
+  authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
 ): ReadonlyArray<GraphPort> => {
-  const ports: ReadonlyArray<GraphPort> =
-    source.direction === "output"
-      ? [
-          ...schema.executionInputs.map((port) => ({
-            id: port.id,
-            ...(port.name === undefined ? {} : { name: port.name }),
-            kind: "execution" as const,
-          })),
-          ...schema.dataInputs.map((port) => ({
-            id: port.id,
-            ...(port.name === undefined ? {} : { name: port.name }),
-            type: port.type,
-            kind: "data" as const,
-          })),
-        ]
-      : [
-          ...schema.executionOutputs.map((port) => ({
-            id: port.id,
-            ...(port.name === undefined ? {} : { name: port.name }),
-            kind: "execution" as const,
-          })),
-          ...schema.dataOutputs.map((port) => ({
-            id: port.id,
-            ...(port.name === undefined ? {} : { name: port.name }),
-            type: port.type,
-            kind: "data" as const,
-          })),
-        ];
-  return ports.filter((port) => portsCompatible(source.port, port));
+  if (schema.internal === true) return [];
+  const behavior =
+    packageId === undefined ? undefined : authoring.get({ package: packageId, schema: schema.id });
+  const execution =
+    source.direction === "output" ? schema.executionInputs : schema.executionOutputs;
+  const data = source.direction === "output" ? schema.dataInputs : schema.dataOutputs;
+  const ports: ReadonlyArray<GraphPort> = [
+    ...execution.map((port) => ({
+      id: port.id,
+      ...(port.name === undefined ? {} : { name: port.name }),
+      ...(port.scope === undefined
+        ? { kind: "execution" as const }
+        : { kind: "scope" as const, scope: port.scope }),
+    })),
+    ...data.map((port) => ({
+      id: port.id,
+      type: port.type,
+      kind: "data" as const,
+      ...(port.name === undefined ? {} : { name: port.name }),
+    })),
+  ];
+  return (source.direction === "input" ? ports.map((port) => asOutputPort(port)) : ports).filter(
+    (port) =>
+      portsCompatible(source.port, port) &&
+      (source.direction !== "output" ||
+        source.port.kind !== "data" ||
+        behavior?.acceptsInput?.(port.id, source.port.type, definitions) !== false),
+  );
+};
+
+export const singleCompatibleSchema = (
+  packages: ReadonlyArray<Package.Model>,
+  source: Pick<PortEndpoint, "direction" | "port">,
+  definitions?: DataType.Definitions,
+  authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
+): { readonly ref: SchemaRef; readonly name: string } | undefined => {
+  let match: { ref: SchemaRef; name: string } | undefined;
+  for (const pkg of packages) {
+    for (const schema of pkg.schemas) {
+      if (compatibleSchemaPorts(schema, source, pkg.id, definitions, authoring).length === 0)
+        continue;
+      if (match !== undefined) return undefined;
+      match = { ref: { package: pkg.id, schema: schema.id }, name: schema.name };
+    }
+  }
+  return match;
 };

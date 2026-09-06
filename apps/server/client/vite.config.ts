@@ -1,37 +1,37 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { pluginSettings, stylexProps } from "@macrograph/plugin/vite";
+import { moduleSettings, stylexProps } from "@macrograph/module/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig, type UserConfig } from "vite";
 
-export const serverPlugins = new Set([
-  "@macrograph/plugin-http-client",
-  "@macrograph/plugin-obs",
-  "@macrograph/plugin-twitch",
-  "@macrograph/plugin-utilities",
-  "@macrograph/plugin-websocket-client",
-  "@macrograph/plugin-websocket-server",
-  "@macrograph/plugin-discord",
-  "@macrograph/plugin-elevenlabs",
-  "@macrograph/plugin-elgato-key-light",
-  "@macrograph/plugin-fs",
-  "@macrograph/plugin-goxlr",
-  "@macrograph/plugin-ikea-tradfri",
-  "@macrograph/plugin-json",
-  "@macrograph/plugin-lifx",
-  "@macrograph/plugin-list",
-  "@macrograph/plugin-logic",
-  "@macrograph/plugin-math",
-  "@macrograph/plugin-openai",
-  "@macrograph/plugin-shell",
-  "@macrograph/plugin-speakerbot",
-  "@macrograph/plugin-streamdeck",
-  "@macrograph/plugin-streamlabs",
-  "@macrograph/plugin-string",
-  "@macrograph/plugin-tiktok-euler-stream",
-  "@macrograph/plugin-voicemod",
-  "@macrograph/plugin-vtube-studio",
+export const serverModules = new Set([
+  "@macrograph/module-http-client",
+  "@macrograph/module-obs",
+  "@macrograph/module-twitch",
+  "@macrograph/module-utilities",
+  "@macrograph/module-websocket-client",
+  "@macrograph/module-websocket-server",
+  "@macrograph/module-discord",
+  "@macrograph/module-elevenlabs",
+  "@macrograph/module-elgato-key-light",
+  "@macrograph/module-fs",
+  "@macrograph/module-goxlr",
+  "@macrograph/module-ikea-tradfri",
+  "@macrograph/module-json",
+  "@macrograph/module-lifx",
+  "@macrograph/module-list",
+  "@macrograph/module-logic",
+  "@macrograph/module-math",
+  "@macrograph/module-openai",
+  "@macrograph/module-shell",
+  "@macrograph/module-speakerbot",
+  "@macrograph/module-streamdeck",
+  "@macrograph/module-streamlabs",
+  "@macrograph/module-string",
+  "@macrograph/module-tiktok-euler-stream",
+  "@macrograph/module-voicemod",
+  "@macrograph/module-vtube-studio",
 ]);
 export default defineConfig((): UserConfig => {
   const backend = process.env.MACROGRAPH_DEV_SERVER ?? "http://localhost:3001";
@@ -43,7 +43,7 @@ export default defineConfig((): UserConfig => {
     base,
     plugins: [
       opencode({ skills: ["solidjs"] }),
-      pluginSettings(undefined, serverPlugins),
+      moduleSettings(undefined, serverModules),
       Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
       stylexProps(),
       stylex.vite({
@@ -68,7 +68,7 @@ export default defineConfig((): UserConfig => {
       strictPort: true,
       allowedHosts: true,
       proxy: Object.fromEntries(
-        ["/health", "/auth", "/rpc", "/rpc-ws", "/plugin"].map((path) => [
+        ["/health", "/auth", "/rpc", "/rpc-ws", "/module"].map((path) => [
           `${prefix}${path}`,
           { target: backend, changeOrigin: true, ws: true },
         ]),

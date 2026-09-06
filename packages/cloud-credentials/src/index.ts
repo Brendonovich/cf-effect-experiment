@@ -1,5 +1,5 @@
-import * as Credential from "@macrograph/plugin/Credential";
-import * as Engine from "@macrograph/plugin/Engine";
+import * as Credential from "@macrograph/module/Credential";
+import * as Engine from "@macrograph/module/Engine";
 import { Effect, Redacted, Schema, Scope, Semaphore } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 

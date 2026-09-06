@@ -1,5 +1,5 @@
 import type { EditorConnection } from "@macrograph/editor-ui";
-import type { ClientSettings } from "@macrograph/plugin/ClientSettings";
+import type { ClientSettings } from "@macrograph/module/ClientSettings";
 import type { JSX } from "@solidjs/web";
 import type * as S from "effect/Schema";
 
@@ -13,24 +13,24 @@ import {
 } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
-import HttpClientDeployment from "@macrograph/plugin-http-client/Deployment/Local";
-import JsonPlugin from "@macrograph/plugin-json";
-import ListPlugin from "@macrograph/plugin-list";
-import LogicPlugin from "@macrograph/plugin-logic";
-import MathPlugin from "@macrograph/plugin-math";
-import OBSDeployment from "@macrograph/plugin-obs/Deployment/WebSocket";
-import { settings as obsSettings } from "@macrograph/plugin-obs/Settings";
-import StringPlugin from "@macrograph/plugin-string";
-import TwitchDeployment from "@macrograph/plugin-twitch/Deployment/WebSocket";
-import { settings as twitchSettings } from "@macrograph/plugin-twitch/Settings";
-import UtilitiesDeployment from "@macrograph/plugin-utilities/Deployment";
-import { settings as utilitiesSettings } from "@macrograph/plugin-utilities/Settings";
-import WebSocketClientDeployment from "@macrograph/plugin-websocket-client/Deployment/Local";
-import { settings as websocketSettings } from "@macrograph/plugin-websocket-client/Settings";
-import * as Engine from "@macrograph/plugin/Engine";
-import * as Resource from "@macrograph/plugin/Resource";
+import HttpClientDeployment from "@macrograph/module-http-client/Deployment/Local";
+import JsonModule from "@macrograph/module-json";
+import ListModule from "@macrograph/module-list";
+import LogicModule from "@macrograph/module-logic";
+import MathModule from "@macrograph/module-math";
+import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
+import { settings as obsSettings } from "@macrograph/module-obs/Settings";
+import StringModule from "@macrograph/module-string";
+import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
+import { settings as twitchSettings } from "@macrograph/module-twitch/Settings";
+import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
+import { settings as utilitiesSettings } from "@macrograph/module-utilities/Settings";
+import WebSocketClientDeployment from "@macrograph/module-websocket-client/Deployment/Local";
+import { settings as websocketSettings } from "@macrograph/module-websocket-client/Settings";
+import * as Engine from "@macrograph/module/Engine";
+import * as Resource from "@macrograph/module/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
-import { PluginMount } from "@macrograph/project-host/PluginMount";
+import { ModuleMount } from "@macrograph/project-host/ModuleMount";
 import { Context, Effect, Layer, Stream, type Scope } from "effect";
 import { RpcTest, type Rpc } from "effect/unstable/rpc";
 
@@ -39,7 +39,7 @@ import type { LocalProjectStore } from "./LocalStoragePersistence";
 
 import { browserServices } from "./BrowserServices";
 
-const engineClient = (editor: Editor.Interface, pluginId: string) =>
+const engineClient = (editor: Editor.Interface, moduleId: string) =>
   Effect.succeed(
     new Proxy(
       {},
@@ -47,12 +47,12 @@ const engineClient = (editor: Editor.Interface, pluginId: string) =>
         get:
           (_target, property) =>
           (...args: ReadonlyArray<unknown>) =>
-            editor.engine.getRuntimeClient(pluginId).pipe(
+            editor.engine.getRuntimeClient(moduleId).pipe(
               Effect.flatMap((client) => {
                 const method = Reflect.get(Object(client), property);
                 return typeof method === "function"
                   ? method(...args)
-                  : Effect.die(`Engine ${pluginId} has no ${String(property)} RPC`);
+                  : Effect.die(`Engine ${moduleId} has no ${String(property)} RPC`);
               }),
             ),
       },
@@ -92,9 +92,9 @@ export const makeLocalConnection = (
           yield* Executor.make(yield* persistenceService.loadProject(), {
             projectId: store.projectId,
             executionDriver: activity.executionDriver,
-            engineClient: (pluginId) => engineClient(editorService, pluginId),
-            resourceValues: ({ package: pluginId, resource }) =>
-              editorService.engine.getResourceValues(pluginId, resource).pipe(Effect.orDie),
+            engineClient: (moduleId) => engineClient(editorService, moduleId),
+            resourceValues: ({ package: moduleId, resource }) =>
+              editorService.engine.getResourceValues(moduleId, resource).pipe(Effect.orDie),
           }),
         );
         yield* Stream.fromSubscription(yield* editorEvents.subscribe).pipe(
@@ -126,17 +126,17 @@ export const makeLocalConnection = (
           >,
         ) =>
           Effect.gen(function* () {
-            yield* executor.plugin(deployment.plugin, deployment);
+            yield* executor.module(deployment.module, deployment);
             const context = EngineHost.editorContextLayer(deployment, {
               emit: (event) =>
                 executor
                   .handleEvent(
-                    deployment.plugin,
+                    deployment.module,
                     event as Engine.EventOf<typeof deployment.definition>,
                   )
                   .pipe(
                     Effect.catchCause((cause) =>
-                      Effect.logError(`Local ${deployment.pluginId} event failed`, cause),
+                      Effect.logError(`Local ${deployment.moduleId} event failed`, cause),
                     ),
                   ),
             });
@@ -144,14 +144,14 @@ export const makeLocalConnection = (
               EngineHost.layer(deployment, context).pipe(Layer.provide(browserServices)),
             );
             const instance = Context.get(engineContext, deployment.definition);
-            yield* EngineHost.mount(deployment.plugin, deployment, instance.client.state);
+            yield* EngineHost.mount(deployment.module, deployment, instance.client.state);
             return engineContext;
           });
 
         const utilitiesContext = yield* mount(UtilitiesDeployment);
         yield* mount(HttpClientDeployment);
-        for (const plugin of [JsonPlugin, ListPlugin, LogicPlugin, MathPlugin, StringPlugin])
-          yield* PluginMount.register(executor, plugin);
+        for (const module of [JsonModule, ListModule, LogicModule, MathModule, StringModule])
+          yield* ModuleMount.register(executor, module);
         const obsContext = yield* mount(OBSDeployment);
         const twitchContext = yield* mount(TwitchDeployment);
         const websocketContext = yield* mount(WebSocketClientDeployment);
@@ -168,7 +168,7 @@ export const makeLocalConnection = (
           client,
           activity: runtimeClient.ActivityStream(),
           replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
-          pluginSettings: new Map<string, ClientSettings.Connected<JSX.Element>>([
+          moduleSettings: new Map<string, ClientSettings.Connected<JSX.Element>>([
             [utilitiesSettings.id, utilitiesConnected],
             [obsSettings.id, obsConnected],
             [twitchSettings.id, twitchConnected],

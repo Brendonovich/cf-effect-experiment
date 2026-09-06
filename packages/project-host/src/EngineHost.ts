@@ -2,10 +2,10 @@ import type * as S from "effect/Schema";
 import { type Rpc, RpcTest } from "effect/unstable/rpc";
 
 import { Persistence } from "@macrograph/persistence";
-import * as Engine from "@macrograph/plugin/Engine";
-import type * as HttpEndpoint from "@macrograph/plugin/HttpEndpoint";
-import type * as Plugin from "@macrograph/plugin/Plugin";
-import type * as Resource from "@macrograph/plugin/Resource";
+import * as Engine from "@macrograph/module/Engine";
+import type * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
+import type * as Module from "@macrograph/module/Module";
+import type * as Resource from "@macrograph/module/Resource";
 import { Context, Effect, Layer, Schema, Semaphore } from "effect";
 
 import { Editor } from "@macrograph/editor";
@@ -59,7 +59,7 @@ export const contextLayer = <
   );
 
 type DeploymentRef<Definition extends Engine.AnyDef> = {
-  readonly pluginId: string;
+  readonly moduleId: string;
   readonly definition: Definition;
 };
 
@@ -101,13 +101,13 @@ const editorLayer = <
           get: persistence.loadProject().pipe(
             Effect.flatMap((project) =>
               Schema.decodeUnknownEffect(definition.Storage)(
-                project.engines[deployment.pluginId] ?? definition.InitialStorage,
+                project.engines[deployment.moduleId] ?? definition.InitialStorage,
               ),
             ),
             Effect.orDie,
           ),
           save: (state) =>
-            editor.engine.setState(deployment.pluginId, state).pipe(Effect.asVoid, Effect.orDie),
+            editor.engine.setState(deployment.moduleId, state).pipe(Effect.asVoid, Effect.orDie),
         },
         reconcile: options.reconcile ?? (() => Effect.succeed([])),
         setEndpoints:
@@ -117,11 +117,11 @@ const editorLayer = <
           {
             refresh: (resource) =>
               editor.engine
-                .reloadResource(deployment.pluginId, resource.key)
+                .reloadResource(deployment.moduleId, resource.key)
                 .pipe(Effect.catchTag("InvalidResourceError", () => Effect.void)),
           },
         credentials,
-        client: options.client ?? { refresh: editor.engine.dirtyClientState(deployment.pluginId) },
+        client: options.client ?? { refresh: editor.engine.dirtyClientState(deployment.moduleId) },
         emit: options.emit,
       });
     }),
@@ -179,14 +179,14 @@ export const layer = <
             const runtime = yield* RpcTest.makeClient(definition.Rpcs).pipe(
               Effect.provide(engine.rpcs),
             );
-            yield* editor.engine.hostRuntimeClient(deployment.pluginId, runtime);
+            yield* editor.engine.hostRuntimeClient(deployment.moduleId, runtime);
             const resourceContext = yield* Layer.build(engine.resources);
             const resourceHandlers = resourceContext as unknown as Context.Context<
               Resource.Handler<string, Schema.Json>
             >;
             for (const resource of definition.Resource) {
               const handler = Context.get(resourceHandlers, resource.Handler);
-              yield* editor.engine.hostResource(deployment.pluginId, resource.key, {
+              yield* editor.engine.hostResource(deployment.moduleId, resource.key, {
                 values: handler.values,
                 reload: handler.reload,
                 changes: handler.changes,
@@ -202,15 +202,15 @@ export const layer = <
 };
 
 export const mount = <Definition extends Engine.AnyDef>(
-  plugin: Plugin.Plugin<Definition>,
+  module: Module.Module<Definition>,
   deployment: Engine.AnyDeploymentFor<Definition>,
   clientState: Effect.Effect<unknown>,
 ) =>
   Effect.gen(function* () {
     const editor = yield* Editor.Service;
-    yield* editor.plugin(plugin, deployment);
+    yield* editor.module(module, deployment);
     yield* editor.engine.hostClientState(
-      plugin.id,
+      module.id,
       clientState.pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
         Effect.orDie,

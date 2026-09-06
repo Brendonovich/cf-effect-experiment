@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@macrograph/core": "workspace:*",
-    "@macrograph/plugin": "workspace:*",
+    "@macrograph/module": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

@@ -1,0 +1,56 @@
+import * as WebSocket from "@macrograph/module-websocket-client/Definition";
+import { make } from "@macrograph/module-websocket-client/Engine";
+import { localLayer as policy } from "@macrograph/module-websocket-client/UrlPolicy";
+import { Effect, Layer } from "effect";
+
+import { ClientRpcs, RuntimeRpcs, SpeakerBotConnection, SpeakerBotEngine } from "./Definition.ts";
+
+export const layer = SpeakerBotEngine.toLayer((mg) =>
+  Effect.gen(function* () {
+    const base = yield* make({
+      ...mg,
+      resource: { refresh: () => mg.resource.refresh(SpeakerBotConnection) },
+      emit: () => Effect.void,
+    });
+    const send = yield* WebSocket.RuntimeRpcs.accessHandler("WebSocketSendMessage").pipe(
+      Effect.provide(base.rpcs),
+    );
+    const add = yield* WebSocket.ClientRpcs.accessHandler("WebSocketAddConnection").pipe(
+      Effect.provide(base.client.rpcs),
+    );
+    const update = yield* WebSocket.ClientRpcs.accessHandler("WebSocketUpdateConnection").pipe(
+      Effect.provide(base.client.rpcs),
+    );
+    const remove = yield* WebSocket.ClientRpcs.accessHandler("WebSocketRemoveConnection").pipe(
+      Effect.provide(base.client.rpcs),
+    );
+    const connect = yield* WebSocket.ClientRpcs.accessHandler("WebSocketConnect").pipe(
+      Effect.provide(base.client.rpcs),
+    );
+    const disconnect = yield* WebSocket.ClientRpcs.accessHandler("WebSocketDisconnect").pipe(
+      Effect.provide(base.client.rpcs),
+    );
+    return SpeakerBotEngine.of({
+      resources: SpeakerBotConnection.toLayer(
+        base.client.state.pipe(
+          Effect.map(({ connections }) =>
+            connections.map(({ definition }) => ({ id: definition.id, display: definition.name })),
+          ),
+        ),
+      ),
+      rpcs: RuntimeRpcs.toLayer({ SpeakerBotWebSocketSendMessage: send }),
+      client: {
+        state: base.client.state,
+        rpcs: ClientRpcs.toLayer({
+          SpeakerBotWebSocketAddConnection: add,
+          SpeakerBotWebSocketUpdateConnection: update,
+          SpeakerBotWebSocketRemoveConnection: remove,
+          SpeakerBotWebSocketConnect: connect,
+          SpeakerBotWebSocketDisconnect: disconnect,
+        }),
+      },
+    });
+  }),
+).pipe(Layer.provide(policy));
+
+export default layer;

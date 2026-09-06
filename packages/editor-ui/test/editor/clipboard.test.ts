@@ -45,7 +45,7 @@ const nodes: Node.Model[] = ["a", "b", "protected"].map((id, index) => ({
 const edge = {
   id: ConnectionId.make("edge"),
   outNodeId: "a",
-  outIoId: IoId.make("exec"),
+  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
   inNodeId: "b",
   inIoId: IoId.make("exec"),
 };
@@ -159,8 +159,8 @@ it("copies ordinary event nodes and internal edges, skipping only internal schem
     nodes: [{ id: "a" }, { id: "b" }],
     connections: [edge],
     nodeSchemas: {
-      a: { pluginName: "Test", schemaName: "normal" },
-      b: { pluginName: "Test", schemaName: "normal" },
+      a: { moduleName: "Test", schemaName: "normal" },
+      b: { moduleName: "Test", schemaName: "normal" },
     },
   });
   await state.commands.copyNodes(["a"], true);
@@ -356,7 +356,7 @@ it("cancels or skips nodes with missing schemas", async () => {
     {
       package: "missing",
       schema: "emit:node",
-      pluginName: "Missing Plugin",
+      moduleName: "Missing Module",
       schemaName: "Node Created",
     },
   ];

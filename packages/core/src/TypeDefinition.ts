@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { Schema } from "effect";
 
 import type { NodeIO } from "./IO.ts";
@@ -151,11 +151,12 @@ export const nodeDiagnostics = (
   definitions: DataType.Definitions,
 ): readonly string[] => {
   const reasons = new Set<string>();
-  if (
-    node.schema.package === CustomTypes.packageId &&
-    CustomTypes.nodeIO(node.schema, node.properties, definitions) === undefined
-  )
-    reasons.add(`Missing generated schema ${node.schema.schema}`);
+  if (node.schema.package === CustomTypes.packageId) {
+    const selection = CustomTypes.selectionError(node.schema.schema, node.properties, definitions);
+    if (selection !== undefined) reasons.add(selection);
+    else if (CustomTypes.nodeIO(node.schema, node.properties, definitions) === undefined)
+      reasons.add(`Missing generated schema ${node.schema.schema}`);
+  }
   const visited = new Set<string>();
   const check = (id: string): void => {
     if (visited.has(id)) return;
@@ -164,8 +165,20 @@ export const nodeDiagnostics = (
     if (definition === undefined || definition.id !== id) reasons.add(`Missing type ${id}`);
     else for (const ref of definitionReferences(definition)) check(ref);
   };
-  for (const port of [...io.dataInputs, ...io.dataOutputs])
+  for (const port of [
+    ...io.dataInputs,
+    ...io.dataOutputs,
+    ...io.executionInputs.flatMap((port) => port.scope ?? []),
+    ...io.executionOutputs.flatMap((port) => port.scope ?? []),
+  ])
     for (const id of references(port.type)) check(id);
+  if (
+    node.schema.package === CustomTypes.packageId &&
+    !CustomTypes.isBreakStruct(node) &&
+    typeof node.properties.type === "string" &&
+    node.properties.type !== ""
+  )
+    check(node.properties.type);
   for (const id of valueReferences(node.properties)) check(id);
   for (const id of valueReferences(node.inputDefaults)) check(id);
   const relevant = Object.fromEntries(
@@ -202,7 +215,11 @@ export const validate = (definitions: DataType.Definitions): ReadonlyArray<Inval
   const errors: InvalidError[] = [];
   const names = new Set<string>();
   const checkReference = (id: string, type: DataType.Any): void => {
-    if (type._tag === "Custom" && !Object.hasOwn(definitions, type.id)) {
+    if (type._tag === "Wildcard") {
+      errors.push(
+        new InvalidError({ id, reason: "Wildcards belong to node IO, not type definitions" }),
+      );
+    } else if (type._tag === "Custom" && !Object.hasOwn(definitions, type.id)) {
       errors.push(new InvalidError({ id, reason: `Unknown type ${type.id}` }));
     } else if (type._tag === "List") checkReference(id, type.item);
     else if (type._tag === "Option") checkReference(id, type.inner);

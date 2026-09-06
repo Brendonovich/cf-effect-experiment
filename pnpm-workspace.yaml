@@ -1,13 +1,13 @@
 packages:
   - "packages/*"
-  - "packages/plugins/*"
+  - "packages/modules/*"
   - "apps/*"
   - "apps/cloudflare/frontend"
   - "apps/server/client"
 allowBuilds:
   esbuild: true
   msgpackr-extract: true
-  sharp: set this to true or false
+  sharp: false
   workerd: true
 
 catalog:
@@ -20,3 +20,9 @@ catalog:
   "@effect/platform-node": 4.0.0-beta.107
   "@effect/platform-node-shared": 4.0.0-beta.107
   "@effect/vitest": 4.0.0-beta.107
+minimumReleaseAge: 0
+minimumReleaseAgeExclude:
+  - "@types/node@26.4.1"
+patchedDependencies:
+  "alchemy@2.0.0-beta.72": "patches/alchemy@2.0.0-beta.72.patch"
+  "@solidjs/router@2.0.0-next.17": "patches/@solidjs__router@2.0.0-next.17.patch"

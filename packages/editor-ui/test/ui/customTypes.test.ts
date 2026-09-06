@@ -1,13 +1,8 @@
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { describe, expect, it } from "vitest";
 
 import { defaultValueError, initialDefaultValue } from "../../src/ui/defaultValues";
-import {
-  filterTypeChoices,
-  parseListType,
-  replaceTypeSegment,
-  typeLabel,
-} from "../../src/ui/typeSelection";
+import { filterTypeChoices, replaceTypeSegment, typeLabel } from "../../src/ui/typeSelection";
 
 const id = DataType.DefinitionId.make("person");
 const recursiveId = DataType.DefinitionId.make("tree");
@@ -41,12 +36,10 @@ describe("custom type UI helpers", () => {
     expect(typeLabel(DataType.List(DataType.Custom(id)), definitions)).toBe("List<Person>");
     expect(typeLabel(DataType.Custom(id))).toBe("Missing type (person)");
   });
-  it("round trips descriptors and accepts shipped primitive selectors", () => {
-    const nested = DataType.Option(DataType.List(DataType.Custom(id)));
-    expect(parseListType(JSON.stringify(nested))).toEqual(nested);
-    expect(parseListType("String")).toEqual(DataType.String);
-    expect(parseListType("Custom")).toBeUndefined();
-    expect(parseListType("broken json")).toBeUndefined();
+  it("labels inferred and unresolved nested wildcard types", () => {
+    expect(typeLabel(DataType.Option(DataType.List(DataType.Wildcard("T"))))).toBe(
+      "Option<List<Wildcard>>",
+    );
   });
   it("initializes finite recursive tagged values and JSON codec containers", () => {
     expect(initialDefaultValue(DataType.Custom(recursiveId), definitions)).toEqual({

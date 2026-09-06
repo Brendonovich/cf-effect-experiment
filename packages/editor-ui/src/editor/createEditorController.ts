@@ -1,26 +1,28 @@
+import type { SchemaAuthoring } from "@macrograph/core";
 import type { Effect, Scope } from "effect";
 
-import type { EditorConnection, PluginSettingsDescriptor } from "./Editor";
+import type { EditorConnection, ModuleSettingsDescriptor } from "./Editor";
 
 import { createEditorCatalog } from "./catalog/createEditorCatalog";
 import { createEditorCommands } from "./createEditorCommands";
 import { createEditorConnection } from "./session/createEditorConnection";
 import { createEditorPresence } from "./session/createEditorPresence";
-import { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 import { createEditorStore } from "./store";
+import { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 export interface EditorControllerOptions {
   readonly connection: Effect.Effect<EditorConnection, unknown, Scope.Scope>;
   readonly workspaceId: string;
   readonly userId: string;
-  readonly settingsDescriptors: ReadonlyArray<PluginSettingsDescriptor>;
+  readonly settingsDescriptors: ReadonlyArray<ModuleSettingsDescriptor>;
   readonly reconnect?: boolean;
   readonly projectSettings?: boolean;
+  readonly authoring?: SchemaAuthoring.Registry;
 }
 
 /** Construct in the parent's Solid scope; that scope owns the connection and model. */
 export function createEditorController(options: EditorControllerOptions) {
-  const editor = createEditorStore();
+  const editor = createEditorStore(options.authoring);
   const layout = createEditorWorkspace(options, editor, () => presence.setLocalCursor(null));
   const connection = createEditorConnection(options, editor, layout.onProjectSnapshot, () =>
     presence.dispose(),
@@ -34,7 +36,7 @@ export function createEditorController(options: EditorControllerOptions) {
     selectedNodeIds: layout.selectedNodeIds,
     activeWorkspaceView: layout.activeWorkspaceView,
   });
-  const catalog = createEditorCatalog(editor, layout.graphs, connection.pluginSettingsById);
+  const catalog = createEditorCatalog(editor, layout.graphs, connection.moduleSettingsById);
   const commands = createEditorCommands(editor, connection, layout);
 
   return {
@@ -45,7 +47,7 @@ export function createEditorController(options: EditorControllerOptions) {
     catalog,
     commands,
     openProjectSettings: () => layout.openProjectSettings(layout.workspace().focusedPaneId),
-    refreshPluginData: connection.refreshPluginData,
+    refreshModuleData: connection.refreshModuleData,
   };
 }
 

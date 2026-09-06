@@ -8,7 +8,7 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
-import { Engine, Plugin } from "@macrograph/plugin";
+import { Engine, Module } from "@macrograph/module";
 import { Array, Effect, Fiber, Option, Ref, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -36,7 +36,7 @@ describe("schema execution context", () => {
         executeNode: (key, effect) =>
           Ref.update(keys, (current) => [...current, key]).pipe(Effect.andThen(effect)),
       };
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "context",
         engine: TestEngine,
         effect: Effect.fnUntraced(function* (registration) {
@@ -96,7 +96,7 @@ describe("schema execution context", () => {
         }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
       );
       const graphId = GraphId.make("context-graph");
@@ -145,14 +145,14 @@ describe("schema execution context", () => {
               {
                 id: ConnectionId.make("context-exec"),
                 outNodeId: eventNodeId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("exec"),
               },
               {
                 id: ConnectionId.make("context-exec-2"),
                 outNodeId: eventNodeId,
-                outIoId: IoId.make("exec"),
+                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
                 inNodeId: actionNodeId,
                 inIoId: IoId.make("alternate"),
               },
@@ -164,9 +164,9 @@ describe("schema execution context", () => {
         projectId: "project-123",
         executionDriver,
       });
-      yield* executor.plugin(plugin, deployment);
+      yield* executor.module(module, deployment);
       const spans: Array<Tracer.Span> = [];
-      yield* executor.handleEvent(plugin, new Trigger({})).pipe(
+      yield* executor.handleEvent(module, new Trigger({})).pipe(
         Effect.provideService(
           Tracer.Tracer,
           Tracer.make({
@@ -196,7 +196,7 @@ describe("schema execution context", () => {
         assert.strictEqual(span.attributes.get("macrograph.event_node.id"), eventNodeId);
         assert.strictEqual(span.attributes.get("macrograph.execution.output.id"), "exec");
       }
-      const pluginSpans = spans.filter((span) => span.name === "context.capture");
+      const moduleSpans = spans.filter((span) => span.name === "context.capture");
       const schemaSpans = spans.filter((span) => span.name.startsWith("Schema.run "));
       assert.deepStrictEqual(
         schemaSpans.map((span) => span.name),
@@ -208,15 +208,15 @@ describe("schema execution context", () => {
           span.attributes.get("macrograph.node.id"),
           nodeSpans[index]!.attributes.get("macrograph.node.id"),
         );
-        assert.strictEqual(span.attributes.get("macrograph.plugin.id"), "context");
+        assert.strictEqual(span.attributes.get("macrograph.module.id"), "context");
         assert.strictEqual(
           span.attributes.get("macrograph.schema.id"),
           index === 0 ? "event" : "action",
         );
         assert.strictEqual(span.kind, "internal");
       }
-      assert.lengthOf(pluginSpans, 3);
-      for (const [index, child] of pluginSpans.entries()) {
+      assert.lengthOf(moduleSpans, 3);
+      for (const [index, child] of moduleSpans.entries()) {
         assert.strictEqual(child.traceId, eventSpan.traceId);
         assert.strictEqual(Option.getOrUndefined(child.parent), schemaSpans[index]);
       }

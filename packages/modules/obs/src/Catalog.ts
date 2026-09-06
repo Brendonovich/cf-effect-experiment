@@ -1,0 +1,1073 @@
+import type * as Engine from "@macrograph/module/Engine";
+import type * as Registration from "@macrograph/module/Registration";
+
+import { DataType } from "@macrograph/module/DataType";
+import { Effect } from "effect";
+
+import { OBSEngine, OBSSocket } from "./Definition.ts";
+import { canvasRequests, highVolumeSubscriptions } from "./Protocol.ts";
+
+type Context = Registration.ModuleContext<typeof OBSEngine>;
+
+type Kind = "string" | "int" | "float" | "bool" | "strings" | "json";
+type SuggestionRequest = {
+  readonly requestType: string;
+  readonly list: string;
+  readonly name?: string;
+  readonly dependency?: string;
+};
+type Field = {
+  readonly id: string;
+  readonly kind: Kind;
+  readonly name?: string;
+  readonly optional?: boolean;
+  readonly defaultValue?: string | number | boolean;
+  readonly suggestions?: ReadonlyArray<SuggestionRequest>;
+};
+type Request = {
+  readonly id: string;
+  readonly requestType?: string;
+  readonly name?: string;
+  readonly inputs?: ReadonlyArray<Field>;
+  readonly outputs?: ReadonlyArray<Field>;
+};
+type Event = {
+  readonly id: string;
+  readonly name?: string;
+  readonly outputs: ReadonlyArray<Field>;
+};
+
+const s = (
+  id: string,
+  name?: string,
+  suggestions?: ReadonlyArray<SuggestionRequest>,
+): Field => ({
+  id,
+  kind: "string",
+  ...(name ? { name } : {}),
+  ...(suggestions === undefined ? {} : { suggestions }),
+});
+const i = (id: string, name?: string): Field => ({
+  id,
+  kind: "int",
+  ...(name ? { name } : {}),
+});
+const f = (id: string, name?: string): Field => ({
+  id,
+  kind: "float",
+  ...(name ? { name } : {}),
+});
+const b = (id: string, name?: string): Field => ({
+  id,
+  kind: "bool",
+  ...(name ? { name } : {}),
+});
+const ss = (id: string, name?: string): Field => ({
+  id,
+  kind: "strings",
+  ...(name ? { name } : {}),
+});
+const j = (id: string, name?: string): Field => ({
+  id,
+  kind: "json",
+  ...(name ? { name } : {}),
+});
+const optional = (
+  field: Field,
+  defaultValue: string | number | boolean,
+): Field => ({
+  ...field,
+  optional: true,
+  defaultValue,
+});
+
+const words = (value: string) => value.replace(/([a-z\d])([A-Z])/g, "$1 $2");
+const label = (field: Field) =>
+  field.name ??
+  words(field.id)
+    .replace(/^./, (value) => value.toUpperCase())
+    .replace(/\b(Id|Uuid|Obs|Rpc|Cpu|Fps)\b/g, (value) => value.toUpperCase())
+    .replace(/\bDb\b/g, "dB");
+const type = (kind: Kind): DataType.Any => {
+  switch (kind) {
+    case "string":
+    case "json":
+      return DataType.String;
+    case "int":
+      return DataType.Int;
+    case "float":
+      return DataType.Float;
+    case "bool":
+      return DataType.Bool;
+    case "strings":
+      return DataType.List(DataType.String);
+  }
+};
+
+const socketProperty = {
+  socket: {
+    name: "OBS Socket",
+    description: "The configured OBS WebSocket connection used by this node.",
+    resource: OBSSocket,
+  },
+} as const;
+
+const event = (id: string, ...outputs: ReadonlyArray<Field>): Event => ({
+  id,
+  outputs,
+});
+
+export const events: ReadonlyArray<Event> = [
+  event("ConnectionOpened"),
+  event("CanvasCreated", s("canvasName"), s("canvasUuid")),
+  event("CanvasRemoved", s("canvasName"), s("canvasUuid")),
+  event("CanvasNameChanged", s("canvasUuid"), s("oldCanvasName"), s("canvasName")),
+  event("InputActiveStateChanged", s("inputName"), s("inputUuid"), b("videoActive")),
+  event("InputShowStateChanged", s("inputName"), s("inputUuid"), b("videoShowing")),
+  event("InputVolumeMeters", j("inputs", "Inputs")),
+  event(
+    "SceneItemTransformChanged",
+    s("sceneName", "Scene name"),
+    s("sceneUuid"),
+    i("sceneItemId", "Scene Item Id"),
+    j("sceneItemTransform", "Scene Item Transform"),
+  ),
+  event(
+    "CurrentProgramSceneChanged",
+    s("sceneName", "Scene Name"),
+    s("sceneUuid", "Scene UUID"),
+  ),
+  event("ExitStarted"),
+  event("CustomEvent", j("eventData", "Event Data")),
+  event("CurrentSceneCollectionChanging", s("sceneCollectionName")),
+  event("CurrentSceneCollectionChanged", s("sceneCollectionName")),
+  event("SceneCollectionListChanged", ss("sceneCollections")),
+  event("CurrentProfileChanging", s("profileName")),
+  event("CurrentProfileChanged", s("profileName")),
+  event("ProfileListChanged", ss("profiles")),
+  event("SourceFilterListReindexed", s("sourceName"), j("filters", "Filters (JSON)")),
+  event(
+    "SourceFilterCreated",
+    s("sourceName"),
+    s("filterName"),
+    s("filterKind"),
+    i("filterIndex"),
+    j("filterSettings", "Filter Settings (JSON)"),
+    j("defaultFilterSettings"),
+  ),
+  event("SourceFilterRemoved", s("sourceName"), s("filterName")),
+  event(
+    "SourceFilterNameChanged",
+    s("sourceName"),
+    s("oldFilterName"),
+    s("filterName"),
+  ),
+  event(
+    "SourceFilterSettingsChanged",
+    s("sourceName"),
+    s("filterName"),
+    j("filterSettings", "Filter Settings (JSON)"),
+  ),
+  event(
+    "SourceFilterEnableStateChanged",
+    s("sourceName"),
+    s("filterName"),
+    b("filterEnabled"),
+  ),
+  event(
+    "InputCreated",
+    s("inputName"),
+    s("inputUuid"),
+    s("inputKind"),
+    s("unversionedInputKind"),
+    i("inputKindCaps"),
+    j("inputSettings", "Input Settings (JSON)"),
+    j("defaultInputSettings"),
+  ),
+  event("InputRemoved", s("inputName"), s("inputUuid")),
+  event("InputNameChanged", s("inputUuid"), s("oldInputName"), s("inputName")),
+  event(
+    "InputSettingsChanged",
+    s("inputName"),
+    s("inputUuid"),
+    j("inputSettings", "Input Settings (JSON)"),
+  ),
+  event(
+    "InputMuteStateChanged",
+    s("inputName"),
+    s("inputUuid"),
+    b("inputMuted"),
+  ),
+  event(
+    "InputVolumeChanged",
+    s("inputName"),
+    s("inputUuid"),
+    f("inputVolumeMul", "Volume Multiplier"),
+    f("inputVolumeDb", "Volume (dB)"),
+  ),
+  event(
+    "InputAudioBalanceChanged",
+    s("inputName"),
+    s("inputUuid"),
+    f("inputAudioBalance", "Audio Balance"),
+  ),
+  event(
+    "InputAudioSyncOffsetChanged",
+    s("inputName"),
+    s("inputUuid"),
+    i("inputAudioSyncOffset", "Audio Sync Offset"),
+  ),
+  event(
+    "InputAudioTracksChanged",
+    s("inputName"),
+    s("inputUuid"),
+    j("inputAudioTracks", "Audio Tracks (JSON)"),
+  ),
+  event(
+    "InputAudioMonitorTypeChanged",
+    s("inputName"),
+    s("inputUuid"),
+    s("monitorType"),
+  ),
+  event("MediaInputPlaybackStarted", s("inputName"), s("inputUuid")),
+  event("MediaInputPlaybackEnded", s("inputName"), s("inputUuid")),
+  event(
+    "MediaInputActionTriggered",
+    s("inputName"),
+    s("inputUuid"),
+    s("mediaAction"),
+  ),
+  event("StreamStateChanged", b("outputActive"), s("outputState")),
+  event(
+    "RecordStateChanged",
+    b("outputActive"),
+    s("outputState"),
+    s("outputPath"),
+  ),
+  event("ReplayBufferStateChanged", b("outputActive"), s("outputState")),
+  {
+    ...event("VirtualcamStateChanged", b("outputActive"), s("outputState")),
+    name: "Virtual Camera State Changed",
+  },
+  event("ReplayBufferSaved", s("savedReplayPath")),
+  event(
+    "SceneItemCreated",
+    s("sceneName"),
+    s("sceneUuid"),
+    s("sourceName"),
+    s("sourceUuid"),
+    i("sceneItemId"),
+    i("sceneItemIndex"),
+  ),
+  event(
+    "SceneItemRemoved",
+    s("sceneName"),
+    s("sceneUuid"),
+    s("sourceName"),
+    s("sourceUuid"),
+    i("sceneItemId"),
+  ),
+  event(
+    "SceneItemListReindexed",
+    s("sceneName"),
+    s("sceneUuid"),
+    j("sceneItems", "Scene Items (JSON)"),
+  ),
+  event(
+    "SceneItemEnableStateChanged",
+    s("sceneName"),
+    s("sceneUuid"),
+    i("sceneItemId"),
+    b("sceneItemEnabled"),
+  ),
+  event(
+    "SceneItemLockStateChanged",
+    s("sceneName"),
+    s("sceneUuid"),
+    i("sceneItemId"),
+    b("sceneItemLocked"),
+  ),
+  event("SceneItemSelected", s("sceneName"), s("sceneUuid"), i("sceneItemId")),
+  event("SceneCreated", s("sceneName"), s("sceneUuid"), b("isGroup")),
+  event("SceneRemoved", s("sceneName"), s("sceneUuid"), b("isGroup")),
+  event("SceneNameChanged", s("sceneUuid"), s("oldSceneName"), s("sceneName")),
+  event("CurrentPreviewSceneChanged", s("sceneName"), s("sceneUuid")),
+  event("SceneListChanged", j("scenes", "Scenes (JSON)")),
+  event(
+    "CurrentSceneTransitionChanged",
+    s("transitionName"),
+    s("transitionUuid"),
+  ),
+  event("CurrentSceneTransitionDurationChanged", i("transitionDuration")),
+  event("SceneTransitionStarted", s("transitionName"), s("transitionUuid")),
+  event("SceneTransitionEnded", s("transitionName"), s("transitionUuid")),
+  event("SceneTransitionVideoEnded", s("transitionName"), s("transitionUuid")),
+  event("StudioModeStateChanged", b("studioModeEnabled")),
+  event("ScreenshotSaved", s("savedScreenshotPath")),
+  event("VendorEvent", s("vendorName"), s("eventType"), j("eventData", "Event Data (JSON)")),
+];
+
+const request = (
+  id: string,
+  inputs: ReadonlyArray<Field> = [],
+  outputs: ReadonlyArray<Field> = [],
+  name?: string,
+): Request => ({
+  id,
+  inputs: canvasRequests.has(id)
+    ? [
+        ...inputs,
+        optional(
+          s("canvasUuid", "Canvas UUID (Optional)", [
+            { requestType: "GetCanvasList", list: "canvases", name: "canvasUuid" },
+          ]),
+          "",
+        ),
+      ]
+    : inputs,
+  outputs,
+  ...(name === undefined ? {} : { name }),
+});
+const sceneSuggestions = [
+  { requestType: "GetSceneList", list: "scenes", name: "sceneName" },
+];
+const inputSuggestions = [
+  { requestType: "GetInputList", list: "inputs", name: "inputName" },
+];
+const input = s("inputName", "Input Name", inputSuggestions);
+const source = s("sourceName", "Source Name", [
+  ...sceneSuggestions,
+  ...inputSuggestions,
+]);
+const scene = s("sceneName", "Scene Name", sceneSuggestions);
+const item = i("sceneItemId", "Scene Item ID");
+const filter = s("filterName", "Filter Name", [
+  {
+    requestType: "GetSourceFilterList",
+    list: "filters",
+    name: "filterName",
+    dependency: "sourceName",
+  },
+]);
+const inputKind = s("inputKind", undefined, [
+  { requestType: "GetInputKindList", list: "inputKinds" },
+]);
+const filterKind = s("filterKind", undefined, [
+  { requestType: "GetSourceFilterKindList", list: "sourceFilterKinds" },
+]);
+const imageFormat = s("imageFormat", undefined, [
+  { requestType: "GetVersion", list: "supportedImageFormats" },
+]);
+const output = s("outputName", "Output Name");
+
+export const requests: ReadonlyArray<Request> = [
+  request("GetCanvasList", [], [j("canvases", "Canvases (JSON)")]),
+  {
+    ...request("SetInputVolumeDb", [input, f("inputVolumeDb", "Input Volume (dB)")], [], "Set Input Volume (dB)"),
+    requestType: "SetInputVolume",
+  },
+  request("GetCurrentProgramScene", [], [s("sceneName"), s("sceneUuid")]),
+  request("SetCurrentProgramScene", [scene]),
+  request(
+    "CreateInput",
+    [
+      scene,
+      s("inputName", "Input Name"),
+      inputKind,
+      optional(j("inputSettings"), "{}"),
+      optional(b("sceneItemEnabled"), true),
+    ],
+    [s("inputUuid"), i("sceneItemId")],
+  ),
+  request(
+    "GetVersion",
+    [],
+    [
+      s("obsVersion"),
+      s("obsWebSocketVersion", "WebSocket Version"),
+      i("rpcVersion"),
+      ss("availableRequests"),
+      ss("supportedImageFormats"),
+      s("platform"),
+      s("platformDescription"),
+    ],
+  ),
+  request(
+    "GetStats",
+    [],
+    [
+      f("cpuUsage"),
+      f("memoryUsage", "Memory Usage (MB)"),
+      f("availableDiskSpace"),
+      f("activeFps", "Current FPS"),
+      f("averageFrameRenderTime"),
+      i("renderSkippedFrames"),
+      i("renderTotalFrames"),
+      i("outputSkippedFrames"),
+      i("outputTotalFrames"),
+      i("webSocketSessionIncomingMessages"),
+      i("webSocketSessionOutgoingMessages"),
+    ],
+  ),
+  request("BroadcastCustomEvent", [j("eventData", "Event Data (JSON)")]),
+  request(
+    "CallVendorRequest",
+    [s("vendorName"), s("requestType"), optional(j("requestData", "Request Data (JSON)"), "{}")],
+    [s("vendorName"), s("requestType"), j("responseData", "Response Data (JSON)")],
+  ),
+  request("Sleep", [
+    optional(i("sleepMillis", "Duration (ms)"), 0),
+    optional(i("sleepFrames"), 0),
+  ]),
+  request("GetPersistentData", [s("realm"), s("slotName")], [j("slotValue", "Value (JSON)")]),
+  request("SetPersistentData", [s("realm"), s("slotName"), j("slotValue", "Value (JSON)")]),
+  request(
+    "GetSceneCollectionList",
+    [],
+    [s("currentSceneCollectionName", "Current Collection"), ss("sceneCollections", "Collections")],
+  ),
+  request("SetCurrentSceneCollection", [
+    s("sceneCollectionName", "Collection Name", [
+      { requestType: "GetSceneCollectionList", list: "sceneCollections" },
+    ]),
+  ]),
+  request("CreateSceneCollection", [s("sceneCollectionName", "Collection Name")]),
+  request("GetProfileList", [], [s("currentProfileName", "Current Profile"), ss("profiles")]),
+  request("SetCurrentProfile", [s("profileName")]),
+  request("CreateProfile", [s("profileName")]),
+  request("RemoveProfile", [s("profileName")]),
+  request(
+    "GetProfileParameter",
+    [s("parameterCategory", "Category"), s("parameterName")],
+    [s("parameterValue", "Value"), s("defaultParameterValue")],
+  ),
+  request("SetProfileParameter", [
+    s("parameterCategory", "Category"),
+    s("parameterName"),
+    s("parameterValue", "Value"),
+  ]),
+  request(
+    "GetVideoSettings",
+    [],
+    [
+      i("fpsNumerator"),
+      i("fpsDenominator"),
+      i("baseWidth"),
+      i("baseHeight"),
+      i("outputWidth"),
+      i("outputHeight"),
+    ],
+  ),
+  request("SetVideoSettings", [
+    optional(i("fpsNumerator"), 0),
+    optional(i("fpsDenominator"), 0),
+    optional(i("baseWidth"), 0),
+    optional(i("baseHeight"), 0),
+    optional(i("outputWidth"), 0),
+    optional(i("outputHeight"), 0),
+  ]),
+  request(
+    "GetStreamServiceSettings",
+    [],
+    [s("streamServiceType", "Service Type"), j("streamServiceSettings", "Settings (JSON)")],
+  ),
+  request("SetStreamServiceSettings", [
+    s("streamServiceType", "Service Type"),
+    j("streamServiceSettings", "Settings (JSON)"),
+  ]),
+  request("GetRecordDirectory", [], [s("recordDirectory", "Directory")]),
+  request("SetRecordDirectory", [s("recordDirectory", "Directory")]),
+  request(
+    "GetStreamStatus",
+    [],
+    [
+      b("outputActive", "Active"),
+      b("outputReconnecting", "Reconnecting"),
+      s("outputTimecode"),
+      i("outputDuration"),
+      f("outputCongestion"),
+      i("outputBytes"),
+      i("outputSkippedFrames"),
+      i("outputTotalFrames"),
+    ],
+  ),
+  request("ToggleStream", [], [b("outputActive", "Active")]),
+  request("StartStream"),
+  request("StopStream"),
+  request("SendStreamCaption", [s("captionText")]),
+  request(
+    "GetRecordStatus",
+    [],
+    [
+      b("outputActive", "Active"),
+      b("outputPaused", "Paused"),
+      s("outputTimecode"),
+      i("outputDuration"),
+      i("outputBytes"),
+    ],
+  ),
+  request("ToggleRecord", [], [b("outputActive", "Active")]),
+  request("StartRecord"),
+  request("StopRecord", [], [s("outputPath")]),
+  request("ToggleRecordPause"),
+  request("PauseRecord"),
+  request("ResumeRecord"),
+  request("SplitRecordFile"),
+  request("CreateRecordChapter", [optional(s("chapterName"), "")]),
+  request("GetReplayBufferStatus", [], [b("outputActive", "Active")]),
+  request("ToggleReplayBuffer", [], [b("outputActive", "Active")]),
+  request("StartReplayBuffer"),
+  request("StopReplayBuffer"),
+  request("SaveReplayBuffer"),
+  request("GetLastReplayBufferReplay", [], [s("savedReplayPath", "Saved Path")]),
+  request("GetVirtualCamStatus", [], [b("outputActive", "Active")]),
+  request("ToggleVirtualCam", [], [b("outputActive", "Active")]),
+  request("StartVirtualCam"),
+  request("StopVirtualCam"),
+  request(
+    "GetSceneList",
+    [],
+    [
+      s("currentProgramSceneName", "Current Program Scene"),
+      s("currentProgramSceneUuid"),
+      s("currentPreviewSceneName"),
+      s("currentPreviewSceneUuid"),
+      j("scenes", "Scene Names"),
+    ],
+  ),
+  request("GetGroupList", [], [ss("groups")]),
+  request("GetCurrentPreviewScene", [], [s("sceneName"), s("sceneUuid")]),
+  request("SetCurrentPreviewScene", [scene]),
+  request("CreateScene", [s("sceneName", "Scene Name")], [s("sceneUuid")]),
+  request("RemoveScene", [scene]),
+  request("SetSceneName", [{ ...scene, name: "Current Name" }, s("newSceneName", "New Name")]),
+  request(
+    "GetSceneSceneTransitionOverride",
+    [scene],
+    [s("transitionName"), i("transitionDuration")],
+    "Get Scene Transition Override",
+  ),
+  request(
+    "SetSceneSceneTransitionOverride",
+    [scene, s("transitionName"), i("transitionDuration")],
+    [],
+    "Set Scene Transition Override",
+  ),
+  request("GetSceneItemList", [scene], [j("sceneItems", "Scene Items (JSON)")]),
+  request(
+    "GetGroupSceneItemList",
+    [s("sceneName", "Scene Name")],
+    [j("sceneItems", "Scene Items (JSON)")],
+  ),
+  request(
+    "GetSceneItemId",
+    [
+      scene,
+      s("sourceName", "Source Name", [
+        {
+          requestType: "GetSceneItemList",
+          list: "sceneItems",
+          name: "sourceName",
+          dependency: "sceneName",
+        },
+      ]),
+      optional(i("searchOffset"), 0),
+    ],
+    [item],
+    "Get Scene Item ID",
+  ),
+  request("GetSceneItemSource", [scene, item], [source, s("sourceUuid")]),
+  request(
+    "CreateSceneItem",
+    [scene, source, optional(b("sceneItemEnabled"), true)],
+    [item],
+  ),
+  request("RemoveSceneItem", [scene, item]),
+  request(
+    "DuplicateSceneItem",
+    [
+      scene,
+      item,
+      optional(s("destinationSceneName", undefined, sceneSuggestions), ""),
+    ],
+    [item],
+  ),
+  request("GetSceneItemTransform", [scene, item], [j("sceneItemTransform", "Transform (JSON)")]),
+  request("SetSceneItemTransform", [scene, item, j("sceneItemTransform", "Transform (JSON)")]),
+  request("GetSceneItemEnabled", [scene, item], [b("sceneItemEnabled", "Enabled")]),
+  request("SetSceneItemEnabled", [scene, item, b("sceneItemEnabled", "Enabled")]),
+  request("GetSceneItemLocked", [scene, item], [b("sceneItemLocked", "Locked")]),
+  request("SetSceneItemLocked", [scene, item, b("sceneItemLocked", "Locked")]),
+  request("GetSceneItemIndex", [scene, item], [i("sceneItemIndex", "Index")]),
+  request("SetSceneItemIndex", [scene, item, i("sceneItemIndex", "Index")]),
+  request("GetSceneItemBlendMode", [scene, item], [s("sceneItemBlendMode", "Blend Mode")]),
+  request("SetSceneItemBlendMode", [scene, item, s("sceneItemBlendMode", "Blend Mode")]),
+  request("GetInputList", [optional(inputKind, "")], [j("inputs", "Input Names")]),
+  request(
+    "GetInputKindList",
+    [optional(b("unversioned"), false)],
+    [ss("inputKinds")],
+  ),
+  request(
+    "GetSpecialInputs",
+    [],
+    [s("desktop1", "Desktop Audio 1"), s("desktop2", "Desktop Audio 2"), s("mic1", "Mic/Aux 1"), s("mic2", "Mic/Aux 2"), s("mic3"), s("mic4")],
+  ),
+  request("RemoveInput", [input]),
+  request("SetInputName", [{ ...input, name: "Current Name" }, s("newInputName", "New Name")]),
+  request("GetInputDefaultSettings", [inputKind], [j("defaultInputSettings", "Settings (JSON)")]),
+  request("GetInputSettings", [input], [j("inputSettings", "Settings (JSON)"), s("inputKind")]),
+  request("SetInputSettings", [
+    input,
+    j("inputSettings", "Settings (JSON)"),
+    optional(b("overlay"), true),
+  ]),
+  request("GetInputMute", [input], [b("inputMuted", "Muted")]),
+  request("SetInputMute", [input, b("inputMuted", "Muted")]),
+  request("ToggleInputMute", [input], [b("inputMuted", "Muted")]),
+  request("GetInputVolume", [input], [f("inputVolumeMul", "Volume Multiplier"), f("inputVolumeDb", "Volume (dB)")]),
+  request("SetInputVolume", [input, f("inputVolumeMul", "Volume Multiplier")]),
+  request("GetInputAudioBalance", [input], [f("inputAudioBalance", "Balance")]),
+  request("SetInputAudioBalance", [input, f("inputAudioBalance", "Balance (0.0-1.0)")]),
+  request("GetInputAudioSyncOffset", [input], [i("inputAudioSyncOffset", "Offset (ms)")]),
+  request("SetInputAudioSyncOffset", [input, i("inputAudioSyncOffset", "Offset (ms)")]),
+  request("GetInputAudioMonitorType", [input], [s("monitorType")]),
+  request("SetInputAudioMonitorType", [input, s("monitorType")]),
+  request("GetInputAudioTracks", [input], [j("inputAudioTracks", "Tracks (JSON)")]),
+  request("SetInputAudioTracks", [input, j("inputAudioTracks", "Tracks (JSON)")]),
+  request(
+    "GetInputPropertiesListPropertyItems",
+    [input, s("propertyName")],
+    [j("propertyItems", "Items (JSON)")],
+  ),
+  request("PressInputPropertiesButton", [input, s("propertyName")]),
+  request("GetInputDeinterlaceMode", [input], [s("inputDeinterlaceMode", "Deinterlace Mode")]),
+  request("SetInputDeinterlaceMode", [input, s("inputDeinterlaceMode", "Deinterlace Mode")]),
+  request(
+    "GetInputDeinterlaceFieldOrder",
+    [input],
+    [s("inputDeinterlaceFieldOrder", "Field Order")],
+  ),
+  request("SetInputDeinterlaceFieldOrder", [
+    input,
+    s("inputDeinterlaceFieldOrder", "Field Order"),
+  ]),
+  request("GetSourceActive", [source], [b("videoActive", "Active"), b("videoShowing")]),
+  request(
+    "GetSourceScreenshot",
+    [
+      source,
+      imageFormat,
+      optional(i("imageWidth", "Width"), 0),
+      optional(i("imageHeight", "Height"), 0),
+      optional(i("imageCompressionQuality"), -1),
+    ],
+    [s("imageData", "Image Data (Base64)")],
+  ),
+  request("SaveSourceScreenshot", [
+    source,
+    imageFormat,
+    s("imageFilePath", "File Path"),
+    optional(i("imageWidth", "Width"), 0),
+    optional(i("imageHeight", "Height"), 0),
+    optional(i("imageCompressionQuality"), -1),
+  ]),
+  request("GetSourceFilterList", [source], [j("filters", "Filter Names")]),
+  request(
+    "GetSourceFilterDefaultSettings",
+    [filterKind],
+    [j("defaultFilterSettings", "Settings (JSON)")],
+  ),
+  request("CreateSourceFilter", [
+    source,
+    s("filterName", "Filter Name"),
+    filterKind,
+    optional(j("filterSettings"), "{}"),
+  ]),
+  request("RemoveSourceFilter", [source, filter]),
+  request("SetSourceFilterName", [source, { ...filter, name: "Current Filter Name" }, s("newFilterName", "New Filter Name")]),
+  request(
+    "GetSourceFilter",
+    [source, filter],
+    [
+      b("filterEnabled"),
+      i("filterIndex"),
+      s("filterKind"),
+      j("filterSettings", "Settings (JSON)"),
+    ],
+  ),
+  request("SetSourceFilterSettings", [
+    source,
+    filter,
+    j("filterSettings", "Settings (JSON)"),
+    optional(b("overlay"), true),
+  ]),
+  request("SetSourceFilterEnabled", [source, filter, b("filterEnabled", "Enabled")]),
+  request("SetSourceFilterIndex", [source, filter, i("filterIndex", "Index")]),
+  request("GetSourceFilterKindList", [], [ss("sourceFilterKinds", "Filter Kinds")]),
+  request(
+    "GetSceneTransitionList",
+    [],
+    [
+      s("currentSceneTransitionName", "Current Transition"),
+      s("currentSceneTransitionUuid"),
+      s("currentSceneTransitionKind"),
+      j("transitions"),
+    ],
+  ),
+  request(
+    "GetCurrentSceneTransition",
+    [],
+    [
+      s("transitionName"),
+      s("transitionUuid"),
+      s("transitionKind"),
+      b("transitionFixed"),
+      i("transitionDuration", "Duration (ms)"),
+      b("transitionConfigurable"),
+      j("transitionSettings"),
+    ],
+  ),
+  request("SetCurrentSceneTransition", [s("transitionName")]),
+  request("SetCurrentSceneTransitionDuration", [i("transitionDuration", "Duration (ms)")]),
+  request("SetCurrentSceneTransitionSettings", [
+    j("transitionSettings", "Settings (JSON)"),
+    optional(b("overlay"), true),
+  ]),
+  request("GetCurrentSceneTransitionCursor", [], [f("transitionCursor", "Cursor Position")]),
+  request("TriggerStudioModeTransition"),
+  request(
+    "SetTBarPosition",
+    [f("position", "Position (0.0-1.0)"), optional(b("release"), true)],
+    [],
+    "Set T-Bar Position",
+  ),
+  request("GetTransitionKindList", [], [ss("transitionKinds")]),
+  request("GetStudioModeEnabled", [], [b("studioModeEnabled", "Enabled")]),
+  request("SetStudioModeEnabled", [b("studioModeEnabled", "Enabled")]),
+  request("GetOutputList", [], [j("outputs", "Output Names")]),
+  request(
+    "GetOutputStatus",
+    [output],
+    [
+      b("outputActive", "Active"),
+      b("outputReconnecting"),
+      s("outputTimecode"),
+      i("outputDuration"),
+      f("outputCongestion"),
+      i("outputBytes"),
+      i("outputSkippedFrames"),
+      i("outputTotalFrames"),
+    ],
+  ),
+  request("ToggleOutput", [output], [b("outputActive", "Active")]),
+  request("StartOutput", [output]),
+  request("StopOutput", [output]),
+  request("GetOutputSettings", [output], [j("outputSettings", "Settings (JSON)")]),
+  request("SetOutputSettings", [output, j("outputSettings", "Settings (JSON)")]),
+  request(
+    "GetMediaInputStatus",
+    [input],
+    [s("mediaState"), i("mediaDuration", "Duration (ms)"), i("mediaCursor", "Cursor (ms)")],
+  ),
+  request("SetMediaInputCursor", [input, i("mediaCursor", "Cursor (ms)")]),
+  request("OffsetMediaInputCursor", [input, i("mediaCursorOffset", "Offset (ms)")]),
+  request("TriggerMediaInputAction", [input, s("mediaAction")]),
+  request("GetHotkeyList", [], [ss("hotkeys")]),
+  request("TriggerHotkeyByName", [
+    s("hotkeyName"),
+    optional(s("contextName"), ""),
+  ]),
+  request("TriggerHotkeyByKeySequence", [
+    s("keyId"),
+    optional(j("keyModifiers"), "{}"),
+  ]),
+  request("GetMonitorList", [], [j("monitors", "Monitors (JSON)")]),
+  request("OpenInputPropertiesDialog", [input]),
+  request("OpenInputFiltersDialog", [input]),
+  request("OpenInputInteractDialog", [input]),
+  request("OpenVideoMixProjector", [
+    s("videoMixType"),
+    optional(i("monitorIndex"), -1),
+    optional(s("projectorGeometry"), ""),
+  ]),
+  request("OpenSourceProjector", [
+    source,
+    optional(i("monitorIndex"), -1),
+    optional(s("projectorGeometry"), ""),
+  ]),
+];
+
+const json = (value: unknown) => {
+  try {
+    return JSON.stringify(value) ?? "null";
+  } catch {
+    return "null";
+  }
+};
+const record = (value: unknown): Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null
+    ? Object.fromEntries(Object.entries(value))
+    : {};
+const dataInput = (
+  io: Registration.IOContext<
+    Registration.PropertyValues<typeof socketProperty>,
+    Engine.RuntimeClientOf<typeof OBSEngine>
+  >,
+  field: Field,
+) => {
+  if (field.kind === "string" && field.suggestions !== undefined) {
+    const requests = field.suggestions;
+    return io.data.in(field.id, DataType.String, {
+      name: label(field),
+      ...(typeof field.defaultValue === "string"
+        ? { defaultValue: field.defaultValue }
+        : {}),
+      suggestions: ({ properties, inputDefaults, engine }) =>
+        Effect.gen(function* () {
+          const suggestions: Array<string> = [];
+          for (const request of requests) {
+            const dependency =
+              request.dependency === undefined
+                ? undefined
+                : inputDefaults[request.dependency];
+            if (
+              request.dependency !== undefined &&
+              (typeof dependency !== "string" || dependency.length === 0)
+            )
+              return [];
+            const canvasUuid = inputDefaults.canvasUuid;
+            const requestData = {
+              ...(request.dependency === undefined ? {} : { [request.dependency]: dependency }),
+              ...(canvasRequests.has(request.requestType) &&
+              typeof canvasUuid === "string" &&
+              canvasUuid !== ""
+                ? { canvasUuid }
+                : {}),
+            };
+            const response = yield* engine.Call({
+              address: properties.socket,
+              requestType: request.requestType,
+              ...(Object.keys(requestData).length === 0 ? {} : { requestData }),
+            });
+            const values = record(response)[request.list];
+            if (!Array.isArray(values)) continue;
+            for (const value of values) {
+              const name =
+                request.name === undefined
+                  ? value
+                  : record(value)[request.name];
+              if (typeof name === "string") suggestions.push(name);
+            }
+          }
+          return suggestions;
+        }),
+    });
+  }
+  return io.data.in(field.id, type(field.kind), {
+    name: label(field),
+    ...(field.defaultValue === undefined
+      ? {}
+      : { defaultValue: field.defaultValue }),
+  });
+};
+const inputValue = (field: Field, value: unknown) =>
+  field.kind === "json" && typeof value === "string"
+    ? Effect.try({ try: () => JSON.parse(value), catch: (cause) => cause })
+    : Effect.succeed(value);
+const outputValue = (
+  field: Field,
+  value: unknown,
+): string | number | boolean | ReadonlyArray<string> => {
+  switch (field.kind) {
+    case "json":
+      return json(value);
+    case "string":
+      return typeof value === "string"
+        ? value
+        : value == null
+          ? ""
+          : String(value);
+    case "int":
+    case "float":
+      return typeof value === "number" && Number.isFinite(value) ? value : 0;
+    case "bool":
+      return value === true;
+    case "strings":
+      return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+  }
+};
+const isListField = (
+  field: Field,
+): field is Field & { readonly kind: "strings" } => field.kind === "strings";
+const isScalarField = (
+  field: Field,
+): field is Field & { readonly kind: Exclude<Kind, "strings"> } =>
+  field.kind !== "strings";
+
+export const ids = [
+  "RGBAHexToOBSColour",
+  ...requests.map(({ id }) => id),
+  ...events.map(({ id }) => id),
+] as const;
+export const count = ids.length;
+
+export const register = Effect.fnUntraced(function* (context: Context) {
+  yield* context.schema.register({
+    id: "RGBAHexToOBSColour",
+    name: "RGBA Hex to OBS Colour",
+    description:
+      "Converts eight RGBA hex digits (optionally prefixed with #) to OBS's unsigned ABGR colour integer.",
+    type: "pure",
+    io: (io) => ({
+      input: io.data.in("input", DataType.String),
+      output: io.data.out("output", DataType.Int),
+    }),
+    run: ({ io }) =>
+      Effect.gen(function* () {
+        const input = io.input.replace(/^#/, "");
+        if (!/^[\da-f]{8}$/i.test(input))
+          return yield* Effect.fail(new Error("Expected eight RGBA hex digits"));
+        const bytes = [0, 2, 4, 6].map((offset) =>
+          Number.parseInt(input.slice(offset, offset + 2), 16),
+        );
+        io.output(bytes.reduce((colour, byte, index) => colour + byte * 2 ** (index * 8), 0));
+      }),
+  });
+  for (const definition of requests) {
+    const listOutputs = (definition.outputs ?? []).filter(isListField);
+    if (listOutputs.length > 0) {
+      const scalarOutputs = (definition.outputs ?? []).filter(isScalarField);
+      yield* context.schema.register({
+        id: definition.id,
+        name: definition.name ?? words(definition.id),
+        description: `${definition.id.startsWith("Get") ? "Gets data from" : "Sends a request to"} OBS using ${words(definition.id)}.`,
+        properties: socketProperty,
+        io: (io) => ({
+          inputs: (definition.inputs ?? []).map((field) =>
+            dataInput(io, field),
+          ),
+          scalarOutputs: scalarOutputs.map((field) =>
+            io.data.out(field.id, type(field.kind), { name: label(field) }),
+          ),
+          listOutputs: listOutputs.map((field) =>
+            io.data.out(field.id, DataType.List(DataType.String), {
+              name: label(field),
+            }),
+          ),
+        }),
+        run: ({ io, properties, engine }) =>
+          Effect.gen(function* () {
+            const entries: Array<readonly [string, unknown]> = [];
+            for (const [index, field] of (definition.inputs ?? []).entries()) {
+              const raw = io.inputs[index];
+              if (field.optional === true && Object.is(raw, field.defaultValue))
+                continue;
+              entries.push([field.id, yield* inputValue(field, raw)]);
+            }
+            const values = record(
+              yield* engine.Call({
+                address: properties.socket,
+                requestType: definition.requestType ?? definition.id,
+                ...(entries.length === 0
+                  ? {}
+                  : { requestData: Object.fromEntries(entries) }),
+              }),
+            );
+            for (const [index, field] of scalarOutputs.entries()) {
+              const write = io.scalarOutputs[index];
+              const value = outputValue(field, values[field.id]);
+              if (write !== undefined && !Array.isArray(value)) write(value);
+            }
+            for (const [index, field] of listOutputs.entries()) {
+              const write = io.listOutputs[index];
+              const value = outputValue(field, values[field.id]);
+              if (write !== undefined && Array.isArray(value)) write(value);
+            }
+          }),
+      });
+      continue;
+    }
+    yield* context.schema.register({
+      id: definition.id,
+      name: definition.name ?? words(definition.id),
+      description: `${definition.id.startsWith("Get") ? "Gets data from" : "Sends a request to"} OBS using ${words(definition.id)}.`,
+      properties: socketProperty,
+      io: (io) => ({
+        inputs: (definition.inputs ?? []).map((field) => dataInput(io, field)),
+        outputs: (definition.outputs ?? []).map((field) =>
+          io.data.out(field.id, type(field.kind), { name: label(field) }),
+        ),
+      }),
+      run: ({ io, properties, engine }) =>
+        Effect.gen(function* () {
+          const entries: Array<readonly [string, unknown]> = [];
+          for (const [index, field] of (definition.inputs ?? []).entries()) {
+            const raw = io.inputs[index];
+            if (field.optional === true && Object.is(raw, field.defaultValue))
+              continue;
+            entries.push([field.id, yield* inputValue(field, raw)]);
+          }
+          const result = yield* engine.Call({
+            address: properties.socket,
+            requestType: definition.requestType ?? definition.id,
+            ...(entries.length === 0
+              ? {}
+              : { requestData: Object.fromEntries(entries) }),
+          });
+          const values = record(result);
+          for (const [index, field] of (definition.outputs ?? []).entries()) {
+            const write = io.outputs[index];
+            const value = outputValue(field, values[field.id]);
+            if (write !== undefined && !Array.isArray(value)) write(value);
+          }
+        }),
+    });
+  }
+  for (const definition of events) {
+    const scalarOutputs = definition.outputs.filter(isScalarField);
+    const listOutputs = definition.outputs.filter(isListField);
+    yield* context.schema.register({
+      id: definition.id,
+      name: definition.name ?? words(definition.id),
+      description:
+        definition.id === "ConnectionOpened"
+          ? "Runs when the selected WebSocket opens, before OBS authentication and identification. OBS requests are not ready yet."
+          : `Runs when OBS emits ${words(definition.id)} for the selected socket.${Object.hasOwn(highVolumeSubscriptions, definition.id) ? " Requires explicit highVolumeEvents socket opt-in; older buffered high-volume events are dropped on overload." : ""}`,
+      type: "event",
+      properties: socketProperty,
+      event: (value, { properties }) =>
+        Effect.succeed(
+          value._tag === definition.id &&
+            "address" in value &&
+            value.address === properties.socket,
+        ),
+      io: (io) => ({
+        scalarOutputs: scalarOutputs.map((field) =>
+          io.data.out(field.id, type(field.kind), { name: label(field) }),
+        ),
+        listOutputs: listOutputs.map((field) =>
+          io.data.out(field.id, DataType.List(DataType.String), {
+            name: label(field),
+          }),
+        ),
+      }),
+      run: ({ event: value, io }) =>
+        Effect.sync(() => {
+          const values = record(value);
+          for (const [index, field] of scalarOutputs.entries()) {
+            const write = io.scalarOutputs[index];
+            const value = outputValue(field, values[field.id]);
+            if (write !== undefined && !Array.isArray(value)) write(value);
+          }
+          for (const [index, field] of listOutputs.entries()) {
+            const write = io.listOutputs[index];
+            const value = outputValue(field, values[field.id]);
+            if (write !== undefined && Array.isArray(value)) write(value);
+          }
+        }),
+    });
+  }
+});

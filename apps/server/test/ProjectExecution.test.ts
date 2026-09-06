@@ -4,12 +4,12 @@ import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
-import { Engine, Plugin } from "@macrograph/plugin";
-import OBSPlugin from "@macrograph/plugin-obs";
-import { OBSEngine } from "@macrograph/plugin-obs/Definition";
-import OBSDeployment from "@macrograph/plugin-obs/Deployment/WebSocket";
-import TwitchPlugin from "@macrograph/plugin-twitch";
-import TwitchDeployment from "@macrograph/plugin-twitch/Deployment/WebSocket";
+import { Engine, Module } from "@macrograph/module";
+import OBSModule from "@macrograph/module-obs";
+import { OBSEngine } from "@macrograph/module-obs/Definition";
+import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
+import TwitchModule from "@macrograph/module-twitch";
+import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
 import {
   Array,
   Context,
@@ -47,7 +47,7 @@ describe("ProjectExecution", () => {
       class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
       const input = new Trigger({ message: "x".repeat(20_000) });
       let nodeEffect: Effect.Effect<void, Error> = Effect.void;
-      const plugin = Plugin.make({
+      const module = Module.make({
         id: "activity-test",
         engine: TestEngine,
         effect: (registration) =>
@@ -60,24 +60,24 @@ describe("ProjectExecution", () => {
           }),
       });
       const deployment = Engine.deployment(
-        plugin,
+        module,
         TestEngine.toLayer(() => Effect.die("unused")),
       );
       const editor = yield* Editor.Service;
       const executor = yield* ProjectExecution.Service;
       const activity = yield* RuntimeActivity.Service;
-      yield* editor.plugin(plugin, deployment);
-      yield* executor.plugin(plugin, deployment);
+      yield* editor.module(module, deployment);
+      yield* executor.module(module, deployment);
       const { graph } = yield* editor.graph.create({ name: "Activity" });
       const created = yield* editor.node.create({
         graphID: graph.id,
         node: {
-          schema: { package: PackageId.make(plugin.id), schema: SchemaId.make("event") },
+          schema: { package: PackageId.make(module.id), schema: SchemaId.make("event") },
           position: { x: 0, y: 0 },
         },
       });
       yield* Effect.yieldNow;
-      yield* executor.handleEvent(plugin, input);
+      yield* executor.handleEvent(module, input);
       const event = (yield* activity.snapshot)[0]!;
       assert.strictEqual(event.name, "Trigger");
       assert.strictEqual(event.status, "complete");
@@ -87,13 +87,13 @@ describe("ProjectExecution", () => {
       assert.strictEqual(event.nodes[0]?.status, "complete");
 
       nodeEffect = Effect.fail(new Error("node failed"));
-      assert.isTrue(Exit.isFailure(yield* executor.handleEvent(plugin, input).pipe(Effect.exit)));
+      assert.isTrue(Exit.isFailure(yield* executor.handleEvent(module, input).pipe(Effect.exit)));
       assert.strictEqual((yield* activity.snapshot)[0]?.status, "failed");
       assert.strictEqual((yield* activity.snapshot)[0]?.nodes[0]?.status, "failed");
 
       const started = yield* Deferred.make<void>();
       nodeEffect = Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
-      const fiber = yield* executor.handleEvent(plugin, input).pipe(Effect.forkChild);
+      const fiber = yield* executor.handleEvent(module, input).pipe(Effect.forkChild);
       yield* Deferred.await(started);
       yield* Fiber.interrupt(fiber);
       assert.isTrue(Exit.hasInterrupts(yield* Fiber.await(fiber)));
@@ -104,7 +104,7 @@ describe("ProjectExecution", () => {
       const added = yield* editor.node.create({
         graphID: graph.id,
         node: {
-          schema: { package: PackageId.make(plugin.id), schema: SchemaId.make("event") },
+          schema: { package: PackageId.make(module.id), schema: SchemaId.make("event") },
           position: { x: 100, y: 0 },
         },
       });
@@ -140,10 +140,10 @@ describe("ProjectExecution", () => {
 
       yield* Effect.all(
         [
-          editor.plugin(TwitchPlugin, TwitchDeployment),
-          executor.plugin(TwitchPlugin, TwitchDeployment),
-          editor.plugin(OBSPlugin, OBSDeployment),
-          executor.plugin(OBSPlugin, OBSDeployment),
+          editor.module(TwitchModule, TwitchDeployment),
+          executor.module(TwitchModule, TwitchDeployment),
+          editor.module(OBSModule, OBSDeployment),
+          executor.module(OBSModule, OBSDeployment),
         ],
         { discard: true },
       );

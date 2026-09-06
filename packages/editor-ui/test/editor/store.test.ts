@@ -10,7 +10,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { createRoot } from "solid-js";
 import { describe, expect, it } from "vitest";
 
@@ -26,20 +26,20 @@ describe("editor store", () => {
       };
       const node = {
         id: NodeId.make("node"),
-        name: "Make Person",
+        name: "Make Struct",
         schema: {
           package: PackageId.make("CustomTypes"),
-          schema: SchemaId.make(JSON.stringify([id, "make"])),
+          schema: SchemaId.make("MakeStruct"),
         },
         position: { x: 0, y: 0 },
-        properties: {},
+        properties: { type: id },
         inputDefaults: { old: "kept" },
         foldPins: false,
       };
       const connection = {
         id: ConnectionId.make("wire"),
         outNodeId: "node",
-        outIoId: IoId.make("value"),
+        outIo: { _tag: "Port" as const, id: IoId.make("value") },
         inNodeId: "node",
         inIoId: IoId.make("old"),
       };
@@ -70,7 +70,7 @@ describe("editor store", () => {
       expect(editor.store.project?.graphs.graph?.connections).toEqual([]);
       expect(
         editor.store.packages.find((pkg) => pkg.id === CustomTypes.packageId)?.schemas,
-      ).toEqual([]);
+      ).toEqual(CustomTypes.packageModel.schemas);
       dispose();
     });
   });

@@ -26,4 +26,7 @@ export default meta;
 type Story = StoryObj<typeof NodeCreationMenu>;
 
 export const HasEvents: Story = {};
+export const PinFiltered: Story = {
+  args: { schemaFilter: (schema) => schema.executionInputs.length > 0 },
+};
 export const Empty: Story = { args: { packages: [] } };

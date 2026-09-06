@@ -10,7 +10,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
-import discoveredPluginSettings from "virtual:macrograph-plugin-settings";
+import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { makeBrowserCredentialProvider } from "./local/BrowserCredentials";
 import { makeLocalConnection } from "./local/LocalRuntime";
@@ -134,7 +134,7 @@ export function App() {
     ),
     workspaceId: "local-browser",
     userId: localUserId(),
-    settingsDescriptors: discoveredPluginSettings,
+    settingsDescriptors: discoveredModuleSettings,
     projectSettings: true,
   });
   const [status, setStatus] = createSignal<LocalProjectStatus>();
@@ -193,7 +193,7 @@ export function App() {
     reader.readAsText(file);
   };
   const reset = () => {
-    if (!window.confirm("Reset the local project? All graphs and plugin settings will be deleted."))
+    if (!window.confirm("Reset the local project? All graphs and module settings will be deleted."))
       return;
     if (store.reset()) {
       location.assign(localPath("editor"));
@@ -286,7 +286,7 @@ export function App() {
                 </>
               }
               loadingLabel="Loading browser authorization..."
-              onChanged={context.refreshPluginData}
+              onChanged={context.refreshModuleData}
             />
           )}
         />

@@ -1,4 +1,4 @@
-import type { Credential } from "@macrograph/plugin";
+import type { Credential } from "@macrograph/module";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 import { CredentialTable } from "./CredentialTable";

@@ -17,8 +17,8 @@
         "@effect/platform-node": "catalog:",
         "@effect/sql-pg": "4.0.0-beta.101",
         "@macrograph/core": "workspace:*",
-        "@macrograph/plugin-kofi": "workspace:*",
-        "@macrograph/plugin-twitch": "workspace:*",
+        "@macrograph/module-kofi": "workspace:*",
+        "@macrograph/module-twitch": "workspace:*",
         "@macrograph/runtime": "workspace:*",
         "alchemy": "2.0.0-beta.64",
         "drizzle-orm": "1.0.0-rc.4",
@@ -30,7 +30,7 @@
         "@macrograph/editor": "workspace:*",
         "@macrograph/persistence": "workspace:*",
         "@macrograph/persistence-sqlite": "workspace:*",
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "drizzle-kit": "1.0.0-rc.4",
         "rolldown": "^1.0.1",
         "vite": "^8.0.7",
@@ -69,8 +69,8 @@
         "@macrograph/editor": "workspace:*",
         "@macrograph/persistence": "workspace:*",
         "@macrograph/persistence-sqlite": "workspace:*",
-        "@macrograph/plugin-kofi": "workspace:*",
-        "@macrograph/plugin-twitch": "workspace:*",
+        "@macrograph/module-kofi": "workspace:*",
+        "@macrograph/module-twitch": "workspace:*",
         "@macrograph/runtime": "workspace:*",
         "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
         "@opentelemetry/sdk-trace-base": "^2.7.1",
@@ -88,7 +88,7 @@
       "name": "@macrograph/core",
       "version": "0.0.1",
       "dependencies": {
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -101,7 +101,7 @@
       "dependencies": {
         "@macrograph/core": "workspace:*",
         "@macrograph/persistence": "workspace:*",
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -134,7 +134,7 @@
       "dependencies": {
         "@macrograph/core": "workspace:*",
         "@macrograph/persistence": "workspace:*",
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "drizzle-orm": "1.0.0-rc.4",
         "effect": "catalog:",
       },
@@ -144,8 +144,8 @@
         "typescript": "^5.8",
       },
     },
-    "packages/plugin": {
-      "name": "@macrograph/plugin",
+    "packages/module": {
+      "name": "@macrograph/module",
       "version": "0.0.1",
       "dependencies": {
         "effect": "catalog:",
@@ -154,24 +154,11 @@
         "typescript": "^5.8",
       },
     },
-    "packages/plugins/kofi": {
-      "name": "@macrograph/plugin-kofi",
+    "packages/modules/kofi": {
+      "name": "@macrograph/module-kofi",
       "version": "0.0.1",
       "dependencies": {
-        "@macrograph/plugin": "workspace:*",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@effect/vitest": "catalog:",
-        "typescript": "^5.8",
-        "vitest": "^3",
-      },
-    },
-    "packages/plugins/obs": {
-      "name": "@macrograph/plugin-obs",
-      "version": "0.0.1",
-      "dependencies": {
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -180,11 +167,24 @@
         "vitest": "^3",
       },
     },
-    "packages/plugins/twitch": {
-      "name": "@macrograph/plugin-twitch",
+    "packages/modules/obs": {
+      "name": "@macrograph/module-obs",
       "version": "0.0.1",
       "dependencies": {
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@effect/vitest": "catalog:",
+        "typescript": "^5.8",
+        "vitest": "^3",
+      },
+    },
+    "packages/modules/twitch": {
+      "name": "@macrograph/module-twitch",
+      "version": "0.0.1",
+      "dependencies": {
+        "@macrograph/module": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -198,7 +198,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@macrograph/core": "workspace:*",
-        "@macrograph/plugin": "workspace:*",
+        "@macrograph/module": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -484,13 +484,13 @@
 
     "@macrograph/playground": ["@macrograph/playground@workspace:apps/playground"],
 
-    "@macrograph/plugin": ["@macrograph/plugin@workspace:packages/plugin"],
+    "@macrograph/module": ["@macrograph/module@workspace:packages/module"],
 
-    "@macrograph/plugin-kofi": ["@macrograph/plugin-kofi@workspace:packages/plugins/kofi"],
+    "@macrograph/module-kofi": ["@macrograph/module-kofi@workspace:packages/modules/kofi"],
 
-    "@macrograph/plugin-obs": ["@macrograph/plugin-obs@workspace:packages/plugins/obs"],
+    "@macrograph/module-obs": ["@macrograph/module-obs@workspace:packages/modules/obs"],
 
-    "@macrograph/plugin-twitch": ["@macrograph/plugin-twitch@workspace:packages/plugins/twitch"],
+    "@macrograph/module-twitch": ["@macrograph/module-twitch@workspace:packages/modules/twitch"],
 
     "@macrograph/runtime": ["@macrograph/runtime@workspace:packages/runtime"],
 

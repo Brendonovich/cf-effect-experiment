@@ -1,4 +1,6 @@
 import {
+  BuiltinAuthoring,
+  type SchemaAuthoring,
   TypeDefinition,
   type Graph,
   type Node,
@@ -7,17 +9,15 @@ import {
   type Project,
   ResourceConstant,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import * as stylex from "@stylexjs/stylex";
 import { For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
-import { DataTypePicker } from "../../ui/DataTypePicker";
 import { Select } from "../../ui/Select";
-import { StructuredDefault } from "../../ui/StructuredDefault";
-import { parseListType, typeLabel } from "../../ui/typeSelection";
 import { PropertyControl } from "./PropertyControl";
 import { SchemaInfoButton } from "./SchemaInfoButton";
+import { SourceProperty } from "./SourceProperty";
 
 const styles = stylex.create({
   empty: {
@@ -75,6 +75,8 @@ export function Inspector(props: {
   graph: Graph.Model | null;
   node: Node.Model | null;
   packages: ReadonlyArray<Package.Model>;
+  authoring?: SchemaAuthoring.Registry;
+  nodeDiagnostics?: Readonly<Record<string, ReadonlyArray<string>>>;
   constants: Project.Model["constants"];
   definitions?: DataType.Definitions;
   nodeIO?: Readonly<Record<string, NodeIO>>;
@@ -156,12 +158,21 @@ export function Inspector(props: {
         const pkg = () =>
           props.packages.find((candidate) => candidate.id === node().schema.package);
         const io = () => props.nodeIO?.[node().id];
-        const diagnostics = () =>
-          TypeDefinition.nodeDiagnostics(
-            node(),
-            io() ?? { executionInputs: [], executionOutputs: [], dataInputs: [], dataOutputs: [] },
-            props.definitions ?? {},
-          );
+        const diagnostics = () => [
+          ...new Set([
+            ...(props.nodeDiagnostics?.[node().id] ?? []),
+            ...TypeDefinition.nodeDiagnostics(
+              node(),
+              io() ?? {
+                executionInputs: [],
+                executionOutputs: [],
+                dataInputs: [],
+                dataOutputs: [],
+              },
+              props.definitions ?? {},
+            ),
+          ]),
+        ];
         return (
           <div sx={styles.panel}>
             <span sx={styles.title}>Node Info</span>
@@ -218,7 +229,7 @@ export function Inspector(props: {
                   <span sx={[styles.fieldLabel, styles.schemaLabel]}>Schema</span>
                   <SchemaInfoButton
                     schema={schema()}
-                    packageName={pkg()?.name ?? "Unknown Plugin"}
+                    packageName={pkg()?.name ?? "Unknown Module"}
                   />
                   <Show when={schema().properties.length > 0}>
                     <div sx={styles.properties}>
@@ -229,7 +240,10 @@ export function Inspector(props: {
                             when={"resource" in property ? property : undefined}
                             fallback={
                               <Show
-                                when={node().schema.package === "list" && property.id === "type"}
+                                when={
+                                  (props.authoring ?? BuiltinAuthoring.registry).get(node().schema)
+                                    ?.properties?.[property.id]
+                                }
                                 fallback={
                                   <PropertyControl
                                     property={
@@ -244,29 +258,19 @@ export function Inspector(props: {
                                   />
                                 }
                               >
-                                <span sx={styles.fieldLabel}>{property.name}</span>
-                                <Show
-                                  when={
-                                    node().properties[property.id] !== undefined &&
-                                    !parseListType(node().properties[property.id])
-                                  }
-                                >
-                                  <span sx={styles.warning}>
-                                    Invalid saved type selector:{" "}
-                                    {String(node().properties[property.id])}
-                                  </span>
-                                </Show>
-                                <DataTypePicker
-                                  value={
-                                    parseListType(node().properties[property.id]) ?? DataType.String
-                                  }
-                                  definitions={props.definitions ?? {}}
-                                  label="List item type"
-                                  disabled={!props.canEdit}
-                                  onChange={(type) =>
-                                    props.onSetNodeProperty(property.id, JSON.stringify(type))
-                                  }
-                                />
+                                {(source) => (
+                                  <SourceProperty
+                                    source={source()}
+                                    property={property}
+                                    properties={node().properties}
+                                    definitions={props.definitions ?? {}}
+                                    disabled={!props.canEdit}
+                                    onChange={(value) =>
+                                      props.onSetNodeProperty(property.id, value)
+                                    }
+                                    onClear={() => props.onClearNodeProperty(property.id)}
+                                  />
+                                )}
                               </Show>
                             }
                           >
@@ -318,62 +322,6 @@ export function Inspector(props: {
                   </Show>
                 </div>
               )}
-            </Show>
-            <Show when={props.onSaveDefault && props.onRemoveDefault}>
-              <div sx={styles.properties}>
-                <span sx={styles.title}>Input Defaults</span>
-                <For each={io()?.dataInputs ?? []}>
-                  {(input) => (
-                    <div sx={styles.field}>
-                      <span sx={styles.fieldLabel}>
-                        {input.name ?? input.id} / {typeLabel(input.type, props.definitions)}
-                      </span>
-                      <Show
-                        when={props.graph?.connections.some(
-                          (connection) =>
-                            connection.inNodeId === node().id && connection.inIoId === input.id,
-                        )}
-                      >
-                        <span sx={styles.fieldLabel}>
-                          Connected. Saved default is retained but unused.
-                        </span>
-                      </Show>
-                      <StructuredDefault
-                        type={input.type}
-                        definitions={props.definitions ?? {}}
-                        value={node().inputDefaults[input.id]}
-                        present={Object.hasOwn(node().inputDefaults, input.id)}
-                        label={input.name ?? input.id}
-                        disabled={!props.canEdit}
-                        onSave={(value) => props.onSaveDefault!(node().id, input.id, value)}
-                        onRemove={() => props.onRemoveDefault!(node().id, input.id)}
-                      />
-                    </div>
-                  )}
-                </For>
-                <For
-                  each={Object.keys(node().inputDefaults).filter(
-                    (id) => !io()?.dataInputs.some((input) => input.id === id),
-                  )}
-                >
-                  {(id) => (
-                    <div sx={styles.field}>
-                      <span sx={styles.warning}>
-                        Orphan input: {id}. Restore this field in Types to repair its default.
-                      </span>
-                      <StructuredDefault
-                        definitions={props.definitions ?? {}}
-                        value={node().inputDefaults[id]}
-                        present
-                        label={id}
-                        disabled={!props.canEdit}
-                        onSave={(value) => props.onSaveDefault!(node().id, id, value)}
-                        onRemove={() => props.onRemoveDefault!(node().id, id)}
-                      />
-                    </div>
-                  )}
-                </For>
-              </div>
             </Show>
           </div>
         );

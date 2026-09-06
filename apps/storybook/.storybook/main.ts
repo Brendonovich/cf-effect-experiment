@@ -3,7 +3,7 @@ import type { StorybookConfig } from "storybook-solidjs-vite";
 const config: StorybookConfig = {
   stories: [
     "../../../packages/editor-ui/src/**/*.stories.@(ts|tsx)",
-    "../../../packages/plugins/*/src/**/*.stories.@(ts|tsx)",
+    "../../../packages/modules/*/src/**/*.stories.@(ts|tsx)",
   ],
   addons: ["@storybook/addon-docs"],
   framework: {

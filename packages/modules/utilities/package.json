@@ -1,0 +1,38 @@
+{
+  "name": "@macrograph/module-utilities",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Module.ts",
+  "exports": {
+    ".": "./src/Module.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Settings": "./src/Settings.tsx",
+    "./Deployment": "./src/Deployment.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/module": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.1",
+    "@stylexjs/stylex": "catalog:",
+    "dayjs": "^1.11.13",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@macrograph/core": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/module-logic": "workspace:*",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}

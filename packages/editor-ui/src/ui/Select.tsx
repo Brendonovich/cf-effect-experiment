@@ -183,6 +183,7 @@ export function Select(props: {
   let root: HTMLSpanElement | undefined;
   let trigger: HTMLButtonElement | undefined;
   const searchable = () => props.searchable ?? props.options.length > 10;
+  const disabled = createMemo(() => !!props.disabled || props.options.length === 0);
   const [search, setSearch] = createSignal("");
   const options = createMemo(() => {
     const query = searchable() ? search().trim().toLowerCase() : "";
@@ -200,7 +201,7 @@ export function Select(props: {
     },
     {
       open(state) {
-        if (props.disabled || props.options.length === 0) return;
+        if (disabled()) return;
         setSearch("");
         state.context.highlightedIndex = Math.max(
           0,
@@ -215,7 +216,7 @@ export function Select(props: {
         if (state.mode === "open") state.context.highlightedIndex = index;
       },
       move(state, direction: -1 | 1) {
-        if (props.disabled || props.options.length === 0) {
+        if (disabled()) {
           state.mode = "closed";
           return;
         }
@@ -236,7 +237,6 @@ export function Select(props: {
       },
     },
   );
-  const disabled = () => !!props.disabled || props.options.length === 0;
   const isOpen = () => menuState.mode === "open" && !disabled();
   const [menu, setMenu] = createSignal<HTMLDivElement | null>(null);
   const menuPresence = createPresence({
