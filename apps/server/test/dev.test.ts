@@ -50,7 +50,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await server?.close();
   vi.unstubAllEnvs();
-  if (dataDirectory !== "") await rm(dataDirectory, { recursive: true, force: true });
+  if (dataDirectory !== "")
+    await rm(dataDirectory, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
 });
 
 it("serves the client and backend through one Vite server", async () => {
