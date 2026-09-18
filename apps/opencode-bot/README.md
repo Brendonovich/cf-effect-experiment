@@ -15,6 +15,11 @@ Configure these environment variables when running `pnpm deploy`:
 - `DISCORD_AUTOFIX_BOT_ID`: Discord user ID of the bot to mention.
 - `GITHUB_API_TOKEN`: fine-grained token that can read PRs and collaborator access.
 
+Production deploys from CI after validation on `main`. Configure repository Actions
+secrets `DISCORD_AUTOFIX_WEBHOOK`, `DISCORD_AUTOFIX_BOT_ID`, and
+`AUTOFIX_GITHUB_TOKEN`; the GitHub token must also be able to administer repository
+webhooks. CI maps it to the Worker's `GITHUB_API_TOKEN` binding.
+
 Alchemy generates and persists the webhook signing secret, then creates the Worker
 and repository webhook together. Its GitHub deployment credentials need repository
 webhook administration access.
