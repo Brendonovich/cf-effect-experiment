@@ -18,11 +18,11 @@
   },
   "dependencies": {
     "@macrograph/module": "workspace:*",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
     "dayjs": "^1.11.13",
     "effect": "catalog:",
-    "solid-js": "2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.9"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

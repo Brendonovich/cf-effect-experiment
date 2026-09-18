@@ -19,9 +19,9 @@
   "dependencies": {
     "@macrograph/module": "workspace:*",
     "@macrograph/module-websocket-server": "workspace:*",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.9",
     "effect": "catalog:",
-    "solid-js": "2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.9"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

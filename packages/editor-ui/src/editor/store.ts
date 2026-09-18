@@ -11,7 +11,7 @@ import {
   ResourceConstant,
 } from "@macrograph/core";
 import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
-import { createStore } from "solid-js";
+import { createStore, runWithOwner } from "solid-js";
 
 type MutableGraph = {
   id: Canvas.CanvasId;
@@ -53,53 +53,59 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     events: [],
     resourceValues: {},
   });
+  // Editor commands intentionally mutate this store from component-owned callbacks.
   const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
-    setStoreValue((current) => {
-      const draft: MutableEditorStore = {
-        project:
-          current.project === null
-            ? null
-            : {
-                ...current.project,
-                graphs: Object.fromEntries(
-                  Object.entries(current.project.graphs).map(([id, graph]) => [
-                    id,
-                    { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
-                  ]),
-                ),
-                functions: { ...current.project.functions },
-                engines: { ...current.project.engines },
-                constants: { ...current.project.constants },
-              },
-        packages: [...current.packages],
-        // Event reducers edit declarations, never the previous inferred types.
-        nodeIO: Object.fromEntries(
-          Object.entries(current.declaredNodeIO).map(([graphId, nodes]) => [graphId, { ...nodes }]),
-        ),
-        declaredNodeIO: current.declaredNodeIO,
-        nodeDiagnostics: {},
-        events: [...current.events],
-        resourceValues: Object.fromEntries(
-          Object.entries(current.resourceValues).map(([key, values]) => [key, [...values]]),
-        ),
-      };
-      const result = update(draft);
-      const next = result === undefined ? draft : result;
-      next.declaredNodeIO = next.nodeIO;
-      next.nodeIO = {};
-      for (const id of resolvers.keys()) if (!next.project?.graphs[id]) resolvers.delete(id);
-      for (const graph of Object.values(next.project?.graphs ?? {})) {
-        const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
-        resolvers.set(graph.id, resolver);
-        const declarations = next.declaredNodeIO[graph.id] ?? {};
-        const result = resolver.resolve(graph, declarations, next.project!.types);
-        next.nodeIO[graph.id] = { ...result.io };
-        next.nodeDiagnostics[graph.id] = result.diagnostics;
-      }
-      // Solid's server store setter invokes the callback without reconciling its return value.
-      if (current === store) Object.assign(current, next);
-      return next;
-    });
+    runWithOwner(null, () =>
+      setStoreValue((current) => {
+        const draft: MutableEditorStore = {
+          project:
+            current.project === null
+              ? null
+              : {
+                  ...current.project,
+                  graphs: Object.fromEntries(
+                    Object.entries(current.project.graphs).map(([id, graph]) => [
+                      id,
+                      { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
+                    ]),
+                  ),
+                  functions: { ...current.project.functions },
+                  engines: { ...current.project.engines },
+                  constants: { ...current.project.constants },
+                },
+          packages: [...current.packages],
+          // Event reducers edit declarations, never the previous inferred types.
+          nodeIO: Object.fromEntries(
+            Object.entries(current.declaredNodeIO).map(([graphId, nodes]) => [
+              graphId,
+              { ...nodes },
+            ]),
+          ),
+          declaredNodeIO: current.declaredNodeIO,
+          nodeDiagnostics: {},
+          events: [...current.events],
+          resourceValues: Object.fromEntries(
+            Object.entries(current.resourceValues).map(([key, values]) => [key, [...values]]),
+          ),
+        };
+        const result = update(draft);
+        const next = result === undefined ? draft : result;
+        next.declaredNodeIO = next.nodeIO;
+        next.nodeIO = {};
+        for (const id of resolvers.keys()) if (!next.project?.graphs[id]) resolvers.delete(id);
+        for (const graph of Object.values(next.project?.graphs ?? {})) {
+          const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
+          resolvers.set(graph.id, resolver);
+          const declarations = next.declaredNodeIO[graph.id] ?? {};
+          const result = resolver.resolve(graph, declarations, next.project!.types);
+          next.nodeIO[graph.id] = { ...result.io };
+          next.nodeDiagnostics[graph.id] = result.diagnostics;
+        }
+        // Solid's server store setter invokes the callback without reconciling its return value.
+        if (current === store) Object.assign(current, next);
+        return next;
+      }),
+    );
 
   function applyEvent(event: EditorEvent.EditorEvent) {
     setStore((store) => {

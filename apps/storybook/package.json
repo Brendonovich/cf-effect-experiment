@@ -18,23 +18,24 @@
     "@macrograph/module-twitch": "workspace:*",
     "@macrograph/module-websocket-client": "workspace:*",
     "@macrograph/module-websocket-server": "workspace:*",
-    "@solidjs/signals": "2.0.0-rc.1",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/signals": "2.0.0-rc.9",
+    "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
     "effect": "catalog:",
-    "solid-js": "2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.9"
   },
   "devDependencies": {
     "@iconify/json": "2.2.196",
     "@macrograph/icons": "workspace:*",
-    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@solidjs/diagnostics": "2.0.0-rc.9",
+    "@solidjs/vite-plugin": "3.0.0-next.44",
     "@storybook/addon-docs": "10.5.10",
     "@stylexjs/unplugin": "catalog:",
     "@types/node": "^24",
     "storybook": "10.5.10",
     "storybook-solidjs-vite": "10.7.1",
     "typescript": "^5.8",
-    "vite": "^6.0.0",
-    "vite-plugin-solid": "npm:@solidjs/vite-plugin@3.0.0-next.31"
+    "vite": "^8.0.7",
+    "vite-plugin-solid": "npm:@solidjs/vite-plugin@3.0.0-next.44"
   }
 }
