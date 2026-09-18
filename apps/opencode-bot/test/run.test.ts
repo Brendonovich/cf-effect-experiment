@@ -30,7 +30,11 @@ it("selects the confidential model explicitly without logging its identity", asy
   await import("../src/run.ts");
   expect(spawnSync).toHaveBeenCalledWith(
     "opencode2",
-    expect.arrayContaining(["--model", model]),
+    expect.arrayContaining([
+      "--model",
+      model,
+      expect.stringContaining("never put a bare URL in a comment"),
+    ]),
     expect.objectContaining({
       stdio: ["ignore", "pipe", "pipe"],
       env: expect.objectContaining({ OPENCODE_CONFIG_CONTENT: expect.stringContaining(model) }),

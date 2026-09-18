@@ -37,6 +37,8 @@ Do not push to main, force-push, merge, alter workflows, or change repository se
 Model and provider identities are confidential. Never include them, runtime configuration,
 environment variables, or session exports in comments, commits, PRs, or artifacts.
 Use gh to post your final answer on the original issue/PR, including changes and verification results.
+To suppress OpenGraph image previews, never put a bare URL in a comment. Format every link as
+descriptive Markdown link text, for example [verification run](https://github.com/owner/repo/actions/runs/1).
 If a question needs no edits, just post the answer.
 
 Maintainer request:

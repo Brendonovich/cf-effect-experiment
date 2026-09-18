@@ -12,6 +12,8 @@ permissions:
 jobs:
   run:
     if: >-
+      github.event.issue.pull_request != null &&
+      github.event.issue.draft == false &&
       github.event.comment.user.type != 'Bot' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
       (startsWith(github.event.comment.body, '/opencode ') ||

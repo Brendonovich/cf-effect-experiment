@@ -1,6 +1,6 @@
 # OpenCode Bot
 
-Comment `/opencode <request>` or `/oc <request>` on an issue or PR. Only users with
+Comment `/opencode <request>` or `/oc <request>` on a non-draft PR. Only users with
 repository write access can invoke the bot. The workflow runs `opencode2` on a
 GitHub-hosted runner and asks it to respond using `gh`.
 
