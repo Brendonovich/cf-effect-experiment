@@ -4,10 +4,7 @@ import { Effect } from "effect";
 import { createSignal, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
 
-import {
-  LiveEvents,
-  type LiveEventsProps,
-} from "../../../../../../../../packages/editor-ui/src/events/LiveEvents";
+import { LiveEvents, type LiveEventsProps } from "../../src/events/LiveEvents";
 
 const event: LiveEventsProps["events"][number] = {
   id: "original-event",

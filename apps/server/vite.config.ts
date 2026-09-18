@@ -1,4 +1,5 @@
 import { moduleDeployments } from "@macrograph/module/vite";
+import clientConfig, { serverModules } from "@macrograph/server-client/vite-config";
 import { fileURLToPath } from "node:url";
 import {
   defineConfig,
@@ -8,7 +9,6 @@ import {
   type UserConfig,
 } from "vite";
 
-import clientConfig, { serverModules } from "./client/vite.config.ts";
 import { ServerConfig } from "./src/ServerConfig.ts";
 
 export default defineConfig((env) => {

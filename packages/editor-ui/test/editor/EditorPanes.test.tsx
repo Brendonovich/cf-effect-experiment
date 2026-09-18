@@ -1,9 +1,3 @@
-// @vitest-environment jsdom
-import { render } from "@solidjs/web";
-import { Effect } from "effect";
-import { flush } from "solid-js";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-
 import {
   Canvas,
   ConnectionId,
@@ -13,17 +7,23 @@ import {
   Project,
   SchemaId,
   type NodeIO,
-} from "../../../../packages/core/src/index";
+} from "@macrograph/core";
+// @vitest-environment jsdom
+import { render } from "@solidjs/web";
+import { Effect } from "effect";
+import { flush } from "solid-js";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
 import {
   createEditorController,
   type EditorController,
-} from "../../../../packages/editor-ui/src/editor/createEditorController";
-import { Editor } from "../../../../packages/editor-ui/src/editor/Editor";
+} from "../../src/editor/createEditorController";
+import { Editor } from "../../src/editor/Editor";
 import {
   createWorkspaceState,
   type PaneDirection,
   type TabInput,
-} from "../../../../packages/editor-ui/src/editor/workspace/workspace";
+} from "../../src/editor/workspace/workspace";
 
 const firstNode: Node.Model = {
   id: Node.NodeId.make("first"),

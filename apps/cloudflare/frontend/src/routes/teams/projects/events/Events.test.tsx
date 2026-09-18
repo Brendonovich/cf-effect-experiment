@@ -18,11 +18,9 @@ import type { CredentialsApiClient, EventsApiClient } from "../../../../api";
 
 import { Events } from "./Events";
 
-vi.mock("@macrograph/editor-ui", async () => ({
-  ...(await import("../../../../../../../../packages/editor-ui/src/events/Events")),
-  ...(await import("../../../../../../../../packages/editor-ui/src/ui/Button")),
-  ...(await import("../../../../../../../../packages/editor-ui/src/ui/LoadingState")),
-}));
+vi.mock("@macrograph/editor-ui", async () =>
+  vi.importActual<typeof import("@macrograph/editor-ui")>("@macrograph/editor-ui"),
+);
 
 const event: ProjectEventRecord = {
   id: "event",

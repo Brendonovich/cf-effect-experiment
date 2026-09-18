@@ -38,8 +38,11 @@
   },
   "devDependencies": {
     "@macrograph/icons": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@stylexjs/unplugin": "catalog:",
     "happy-dom": "^20.11.6",
     "typescript": "^5.8",
+    "vite": "^8.0.7",
     "vitest": "^4.1.0"
   }
 }
