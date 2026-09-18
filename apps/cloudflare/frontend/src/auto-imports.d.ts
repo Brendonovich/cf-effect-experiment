@@ -18,6 +18,7 @@ declare global {
   const IconTablerChevronDown: typeof import('~icons/tabler/chevron-down.jsx').default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerExternalLink: typeof import('~icons/tabler/external-link.jsx').default
+  const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
   const IconTablerTrash: typeof import('~icons/tabler/trash.jsx').default
