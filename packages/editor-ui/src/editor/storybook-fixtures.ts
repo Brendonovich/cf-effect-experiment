@@ -1,12 +1,12 @@
 import {
   ConnectionId,
-  GraphId,
+  CanvasId,
   IoId,
   NodeId,
   PackageId,
   ResourceConstant,
   SchemaId,
-  type Graph,
+  type Canvas,
   type Node,
   type Package,
   type Project,
@@ -223,7 +223,7 @@ export const switchSceneNode = renderedNode(
 );
 
 export const renderedGraph: RenderedGraph.Model = {
-  id: GraphId.make("stream-automation"),
+  id: CanvasId.make("stream-automation"),
   name: "Stream Automation",
   nodes: {
     [chatMessageNode.id]: chatMessageNode,
@@ -271,15 +271,15 @@ export const renderedGraph: RenderedGraph.Model = {
   },
 };
 
-export const graph: Graph.Model = {
+export const graph: Canvas.Model = {
   id: renderedGraph.id,
   name: renderedGraph.name,
   nodes: renderedGraph.nodes,
   connections: renderedGraph.connections,
 };
 
-export const secondaryGraph: Graph.Model = {
-  id: GraphId.make("moderation"),
+export const secondaryGraph: Canvas.Model = {
+  id: CanvasId.make("moderation"),
   name: "Chat Moderation",
   nodes: {},
   connections: [],

@@ -266,8 +266,14 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         };
         return endpoints;
       });
-      const reconcileEditorIngress = (engines: Readonly<Record<string, unknown>>, remount = false) =>
-        reconcileEditorIngressRaw(engines, remount).pipe(Effect.provide(runtimeContext), Effect.orDie);
+      const reconcileEditorIngress = (
+        engines: Readonly<Record<string, unknown>>,
+        remount = false,
+      ) =>
+        reconcileEditorIngressRaw(engines, remount).pipe(
+          Effect.provide(runtimeContext),
+          Effect.orDie,
+        );
 
       const endpointHostLayer = Layer.succeed(
         HttpEndpoint.Host,
@@ -482,13 +488,14 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       });
 
       const listGraphs = () =>
-        editor.project
-          .get()
-          .pipe(
-            Effect.map((project) =>
-              Object.values(project.graphs).map((graph) => ({ id: graph.id, name: graph.name })),
-            ),
-          );
+        editor.project.get().pipe(
+          Effect.map((project) =>
+            Object.values(project.graphs).map(({ canvas }) => ({
+              id: canvas.id,
+              name: canvas.name,
+            })),
+          ),
+        );
 
       const createGraph = (input: CreateGraphRequest, userId: string) =>
         editorEvents.withActor(
@@ -515,7 +522,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               const nodeIds = new Map<string, string>();
 
               for (const [reference, node] of Object.entries(nodes)) {
-                const event = yield* editor.node.create({ graphID: created.graph.id, node });
+                const event = yield* editor.node
+                  .create({ graphID: created.graph.id, node })
+                  .pipe(
+                    Effect.catchTag("FunctionEventNodeNotAllowedError", () =>
+                      Effect.die("A newly-created graph was unexpectedly treated as a function"),
+                    ),
+                  );
                 nodeIds.set(reference, event.node.id);
               }
 
@@ -584,7 +597,11 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       const listResources = () =>
         editor.project.get().pipe(Effect.map((project) => Object.values(project.constants)));
 
-      const createNode = (graphId: string, node: Node.CreateInput, userId: string) =>
+      const createNode: (
+        graphId: string,
+        node: Node.CreateInput,
+        userId: string,
+      ) => ReturnType<Editor.Interface["node"]["create"]> = (graphId, node, userId) =>
         editorEvents.withActor(editor.node.create({ graphID: graphId, node }), {
           type: "CLIENT",
           id: userId,

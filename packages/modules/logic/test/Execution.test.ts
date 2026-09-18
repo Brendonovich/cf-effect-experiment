@@ -110,22 +110,25 @@ describe("Logic execution", () => {
         for (const item of nodes) assert.deepStrictEqual(item.inputDefaults, {});
         const project: Project.Model = {
           name: "Defaults",
+          functions: {},
           engines: {},
           constants: {},
           types: {},
           graphs: {
             [graphId]: {
-              id: graphId,
-              name: "Defaults",
-              nodes: Object.fromEntries(nodes.map((item) => [item.id, item])),
-              connections: [
-                connect("start-sink", "start", "exec", "sink", "exec"),
-                connect("list-anchor", "start", "list", "length", "list"),
-                connect("option-anchor", "start", "option", "none", "input"),
-                connect("length-sink", "length", "output", "sink", "length"),
-                connect("none-sink", "none", "output", "sink", "none"),
-                connect("lines-sink", "lines", "output", "sink", "lines"),
-              ],
+              canvas: {
+                id: graphId,
+                name: "Defaults",
+                nodes: Object.fromEntries(nodes.map((item) => [item.id, item])),
+                connections: [
+                  connect("start-sink", "start", "exec", "sink", "exec"),
+                  connect("list-anchor", "start", "list", "length", "list"),
+                  connect("option-anchor", "start", "option", "none", "input"),
+                  connect("length-sink", "length", "output", "sink", "length"),
+                  connect("none-sink", "none", "output", "sink", "none"),
+                  connect("lines-sink", "lines", "output", "sink", "lines"),
+                ],
+              },
             },
           },
         };
@@ -204,10 +207,11 @@ describe("Logic execution", () => {
         };
         const project: Project.Model = {
           name: "Logic",
+          functions: {},
           engines: {},
           constants: {},
           types: {},
-          graphs: { [graphId]: graph },
+          graphs: { [graphId]: { canvas: graph } },
         };
         const executor = yield* Executor.make(project);
         yield* executor.module(source, sourceDeployment);
@@ -222,8 +226,13 @@ describe("Logic execution", () => {
           ...project,
           graphs: {
             [graphId]: {
-              ...graph,
-              nodes: { ...graph.nodes, [invert.id]: { ...invert, inputDefaults: { input: true } } },
+              canvas: {
+                ...graph,
+                nodes: {
+                  ...graph.nodes,
+                  [invert.id]: { ...invert, inputDefaults: { input: true } },
+                },
+              },
             },
           },
         });

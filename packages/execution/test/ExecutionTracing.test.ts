@@ -40,20 +40,22 @@ const setup = Effect.fnUntraced(function* (
     ...Project.empty(),
     graphs: {
       [graphId]: {
-        id: graphId,
-        name: "Tracing",
-        nodes: {
-          [nodeId]: {
-            id: nodeId,
-            name: "Event",
-            properties: {},
-            inputDefaults: {},
-            foldPins: false,
-            schema: { package: PackageId.make("tracing"), schema: SchemaId.make("event") },
-            position: { x: 0, y: 0 },
+        canvas: {
+          id: graphId,
+          name: "Tracing",
+          nodes: {
+            [nodeId]: {
+              id: nodeId,
+              name: "Event",
+              properties: {},
+              inputDefaults: {},
+              foldPins: false,
+              schema: { package: PackageId.make("tracing"), schema: SchemaId.make("event") },
+              position: { x: 0, y: 0 },
+            },
           },
+          connections: [],
         },
-        connections: [],
       },
     },
   };

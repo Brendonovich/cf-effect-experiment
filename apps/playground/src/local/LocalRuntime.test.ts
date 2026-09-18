@@ -173,9 +173,9 @@ describe("local browser runtime", () => {
           { concurrency: "unbounded" },
         );
         const project = yield* connection.client.GetProject({});
-        assert.strictEqual(project.graphs[created.graph.id]?.name, "Browser graph");
+        assert.strictEqual(project.graphs[created.graph.id]?.canvas.name, "Browser graph");
         assert.deepStrictEqual(
-          concurrent.map((event) => project.graphs[event.graph.id]?.name).sort(),
+          concurrent.map((event) => project.graphs[event.graph.id]?.canvas.name).sort(),
           ["Concurrent A", "Concurrent B"],
         );
 
@@ -250,7 +250,7 @@ describe("local browser runtime", () => {
         Scope.provide(secondScope),
       );
       const project = yield* second.client.GetProject({});
-      assert.strictEqual(project.graphs[created.graph.id]?.name, "Restored");
+      assert.strictEqual(project.graphs[created.graph.id]?.canvas.name, "Restored");
       const packages = yield* second.client.GetPackages({});
       assert.strictEqual(packages.length, new Set(packages.map((pkg) => pkg.id)).size);
       yield* Scope.close(secondScope, Exit.void);
@@ -274,18 +274,23 @@ describe("local browser runtime", () => {
           },
           graphs: {
             graph: {
-              id: GraphId.make("graph"),
-              name: "OBS events",
-              connections: [],
-              nodes: {
-                event: {
-                  id: NodeId.make("event"),
-                  name: "Custom Event",
-                  schema: { package: PackageId.make("obs"), schema: SchemaId.make("CustomEvent") },
-                  properties: { socket: "socket" },
-                  inputDefaults: {},
-                  foldPins: false,
-                  position: { x: 0, y: 0 },
+              canvas: {
+                id: GraphId.make("graph"),
+                name: "OBS events",
+                connections: [],
+                nodes: {
+                  event: {
+                    id: NodeId.make("event"),
+                    name: "Custom Event",
+                    schema: {
+                      package: PackageId.make("obs"),
+                      schema: SchemaId.make("CustomEvent"),
+                    },
+                    properties: { socket: "socket" },
+                    inputDefaults: {},
+                    foldPins: false,
+                    position: { x: 0, y: 0 },
+                  },
                 },
               },
             },

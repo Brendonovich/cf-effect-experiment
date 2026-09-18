@@ -180,7 +180,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
               publicOrigin: request.publicOrigin,
               engines: deployment.project.engines,
               utilitiesTickEnabled: Object.values(deployment.project.graphs).some((graph) =>
-                Object.values(graph.nodes).some(
+                Object.values(graph.canvas.nodes).some(
                   (node) =>
                     node.schema.package === UtilitiesModule.id && node.schema.schema === "Tick",
                 ),

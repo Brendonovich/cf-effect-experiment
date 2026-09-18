@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { PackageId, Project, SchemaId } from "@macrograph/core";
+import { GraphId, IoId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
@@ -109,7 +109,7 @@ describe("ProjectExecution", () => {
         },
       });
       yield* Effect.yieldNow;
-      assert.isDefined((yield* executor.project).graphs[graph.id]?.nodes[added.node.id]);
+      assert.isDefined((yield* executor.project).graphs[graph.id]?.canvas.nodes[added.node.id]);
       yield* activity.replay(event.id);
       const replayed = Option.getOrThrow(
         yield* activity.changes.pipe(
@@ -166,7 +166,7 @@ describe("ProjectExecution", () => {
       yield* Effect.yieldNow;
 
       const project = yield* executor.project;
-      assert.strictEqual(project.graphs[created.graph.id]?.name, "Live");
+      assert.strictEqual(project.graphs[created.graph.id]?.canvas.name, "Live");
       assert.deepStrictEqual(project.engines.twitch, {
         accounts: { streamer: { enabled: true, subscriptions: ["channel.ban"] } },
       });
@@ -219,6 +219,63 @@ describe("ProjectExecution", () => {
         Schema.decodeUnknownSync(OBSEngine.Storage)(loaded.engines.obs),
         project.engines.obs,
       );
+    }).pipe(Effect.ensuring(Effect.sync(() => rmSync(directory, { recursive: true }))));
+  });
+
+  it.effect("round-trips function metadata separately from graph nodes", () => {
+    const directory = mkdtempSync(join(tmpdir(), "macrograph-server-function-"));
+    const databasePath = join(directory, "project.db");
+    const migrationsDirectory = fileURLToPath(
+      new URL("../../../packages/persistence-sqlite/drizzle", import.meta.url),
+    );
+    const layer = SqlitePersistence.layer.pipe(
+      Layer.provide(DrizzleDriver.layerNodeSqlite(databasePath, migrationsDirectory)),
+    );
+    const graphId = GraphId.make("format-message");
+    const regularGraphId = GraphId.make("main");
+    const project: Project.Model = {
+      ...Project.empty(),
+      graphs: {
+        [regularGraphId]: {
+          canvas: { id: regularGraphId, name: "Main", nodes: {}, connections: [] },
+        },
+      },
+      functions: {
+        [graphId]: {
+          canvas: { id: graphId, name: "Format message", nodes: {}, connections: [] },
+          arguments: [{ id: IoId.make("message"), name: "Message", type: { _tag: "String" } }],
+          returns: [{ id: IoId.make("result"), name: "Result", type: { _tag: "String" } }],
+          inputPosition: { x: 100, y: 200 },
+          outputPosition: { x: 700, y: 200 },
+        },
+      },
+    };
+
+    return Effect.gen(function* () {
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const context = yield* Layer.build(layer);
+          const persistence = Context.get(context, Persistence.Service);
+          yield* persistence.saveProject(project);
+          yield* persistence.saveGraph({
+            ...project.functions[graphId]!.canvas,
+            name: "Updated body",
+          });
+        }),
+      );
+      const loaded = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const context = yield* Layer.build(layer);
+          return yield* Context.get(context, Persistence.Service).loadProject();
+        }),
+      );
+      assert.deepStrictEqual(loaded.functions[graphId]?.canvas.nodes, {});
+      assert.strictEqual(loaded.functions[graphId]?.canvas.name, "Updated body");
+      assert.deepStrictEqual(
+        loaded.functions[graphId]?.arguments,
+        project.functions[graphId]?.arguments,
+      );
+      assert.strictEqual(loaded.graphs[regularGraphId]?.canvas.name, "Main");
     }).pipe(Effect.ensuring(Effect.sync(() => rmSync(directory, { recursive: true }))));
   });
 });

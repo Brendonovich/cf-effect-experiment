@@ -1,6 +1,6 @@
 import {
   ConnectionId,
-  Graph,
+  Canvas,
   IoId,
   NodeId,
   OutputRef,
@@ -22,8 +22,8 @@ const outputId = IoId.make("output");
 const inputId = IoId.make("connected");
 const hiddenId = IoId.make("hidden");
 
-const graph: Graph.Model = {
-  ...Graph.empty("graph"),
+const graph: Canvas.Model = {
+  ...Canvas.empty("graph"),
   nodes: Object.fromEntries(
     ["source", "target"].map((id, index) => [
       id,
@@ -137,7 +137,7 @@ describe("graph presentation", () => {
   it.each([false, true])(
     "preserves mixed data/execution port positions when folded=%s",
     (foldPins) => {
-      const mixedGraph: Graph.Model = {
+      const mixedGraph: Canvas.Model = {
         ...graph,
         nodes: Object.fromEntries(
           Object.entries(graph.nodes).map(([id, node]) => [id, { ...node, foldPins }]),
@@ -208,7 +208,7 @@ describe("graph presentation", () => {
       id: ConnectionId.make(`connection-${index}`),
     }));
     let connectionReads = 0;
-    const manyWires: Graph.Model = {
+    const manyWires: Canvas.Model = {
       ...graph,
       get connections() {
         connectionReads++;

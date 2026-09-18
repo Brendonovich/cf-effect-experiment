@@ -2,6 +2,7 @@ import type { EditorEvent } from "@macrograph/editor";
 
 import {
   Clipboard,
+  Function as GraphFunction,
   IoId,
   OutputRef,
   type ResourceConstant,
@@ -281,6 +282,7 @@ export function createEditorCommands(
       );
   };
   const deleteNode = (nodeId: string) => {
+    if (GraphFunction.isBoundaryNodeId(nodeId)) return;
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
@@ -298,6 +300,50 @@ export function createEditorCommands(
     runFork(
       applyMutation(c.CreateGraph({ graph: {} })).pipe(
         Effect.tap((event) => Effect.sync(() => setSelectedGraphId(event.graph.id))),
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const createFunction = () => {
+    const c = client();
+    if (!c || !canEdit()) return;
+    runFork(
+      applyMutation(c.CreateFunction({})).pipe(
+        Effect.tap((event) => Effect.sync(() => setSelectedGraphId(event.graph.id))),
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const addFunctionField = (direction: "input" | "output") => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.AddFunctionField({ graphId, direction })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const updateFunctionField = (direction: "input" | "output", field: GraphFunction.Field) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.UpdateFunctionField({ graphId, direction, field })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const deleteFunctionField = (direction: "input" | "output", fieldId: string) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.DeleteFunctionField({ graphId, direction, fieldId })).pipe(
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
@@ -397,6 +443,7 @@ export function createEditorCommands(
     );
   };
   const setNodeFoldPins = (nodeId: string, foldPins: boolean) => {
+    if (GraphFunction.isBoundaryNodeId(nodeId)) return;
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
@@ -411,6 +458,7 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     const nodeId = selectedNodeId();
+    if (nodeId !== null && GraphFunction.isBoundaryNodeId(nodeId)) return;
     if (!c || !graphId || !nodeId || name.trim().length === 0 || !canEdit()) return;
     runFork(
       applyMutation(c.SetNodeName({ graphId, nodeId, name: name.trim() })).pipe(
@@ -547,6 +595,10 @@ export function createEditorCommands(
     setDefaultConstant,
     deleteConstant,
     createGraph,
+    createFunction,
+    addFunctionField,
+    updateFunctionField,
+    deleteFunctionField,
     createNode,
     deleteNode,
     setNodeFoldPins,

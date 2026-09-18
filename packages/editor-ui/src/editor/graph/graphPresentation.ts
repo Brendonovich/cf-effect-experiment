@@ -1,4 +1,4 @@
-import type { Graph, NodeIO } from "@macrograph/core";
+import type { Canvas, NodeIO } from "@macrograph/core";
 
 import { OutputRef } from "@macrograph/core";
 import { DataType as Types } from "@macrograph/module/DataType";
@@ -180,7 +180,7 @@ export function graphNodeWidth(
   return Math.max(104, name.length * 6.5 + 16, ioWidth);
 }
 
-export const connectedPortIds = (graph: Graph.Model, nodeId: string, direction: PortDirection) =>
+export const connectedPortIds = (graph: Canvas.Model, nodeId: string, direction: PortDirection) =>
   new Set(
     graph.connections
       .filter((connection) =>
@@ -192,7 +192,7 @@ export const connectedPortIds = (graph: Graph.Model, nodeId: string, direction: 
   );
 
 export const visibleNodePorts = (
-  graph: Graph.Model,
+  graph: Canvas.Model,
   ioForNode: NodeIOFor,
   nodeId: string,
   direction: PortDirection,
@@ -219,7 +219,7 @@ export const visibleNodePorts = (
 };
 
 export const handlePosition = (
-  graph: Graph.Model,
+  graph: Canvas.Model,
   ioForNode: NodeIOFor,
   nodeId: string,
   ioId: string,
@@ -248,7 +248,7 @@ export const handlePosition = (
   };
 };
 
-export const graphConnections = (graph: Graph.Model, ioForNode: NodeIOFor) => {
+export const graphConnections = (graph: Canvas.Model, ioForNode: NodeIOFor) => {
   // Index once per pass; scanning all connections for each endpoint is quadratic.
   const connected = new Map<string, Record<PortDirection, Set<string>>>();
   const outputRefs = new Map<string, OutputRef.Model[]>();

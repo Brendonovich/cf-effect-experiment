@@ -1,6 +1,7 @@
 import {
   Clipboard,
   Connection,
+  Function as GraphFunction,
   Graph,
   Node,
   Package as PkgTypes,
@@ -152,6 +153,46 @@ class SetGraphName extends Rpc.make("SetGraphName", {
   error: Schema.Union([PersistenceError, Graph.NotFoundError]),
 }) {}
 
+class CreateFunction extends Rpc.make("CreateFunction", {
+  payload: { name: Schema.optional(Schema.String) },
+  success: EditorEvent.FunctionCreated,
+  error: PersistenceError,
+}) {}
+
+class AddFunctionField extends Rpc.make("AddFunctionField", {
+  payload: {
+    graphId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+  },
+  success: EditorEvent.FunctionUpdated,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, GraphFunction.NotFoundError]),
+}) {}
+
+class UpdateFunctionField extends Rpc.make("UpdateFunctionField", {
+  payload: {
+    graphId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    field: GraphFunction.Field,
+  },
+  success: EditorEvent.FunctionUpdated,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Graph.NotFoundError,
+    GraphFunction.NotFoundError,
+  ]),
+}) {}
+
+class DeleteFunctionField extends Rpc.make("DeleteFunctionField", {
+  payload: {
+    graphId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    fieldId: Schema.String,
+  },
+  success: EditorEvent.FunctionUpdated,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, GraphFunction.NotFoundError]),
+}) {}
+
 class CreateNode extends Rpc.make("CreateNode", {
   payload: { graphId: Schema.String, node: Node.CreateInput },
   success: EditorEvent.NodeCreated,
@@ -162,6 +203,7 @@ class CreateNode extends Rpc.make("CreateNode", {
     PkgTypes.SchemaNotFoundError,
     PkgTypes.InvalidPropertyError,
     PkgTypes.InvalidInputDefaultError,
+    GraphFunction.EventNodeNotAllowedError,
   ]),
 }) {}
 
@@ -460,6 +502,8 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.TypeDefinitionsUpdated,
     EditorEvent.GraphDeleted,
     EditorEvent.GraphNameChanged,
+    EditorEvent.FunctionCreated,
+    EditorEvent.FunctionUpdated,
     EditorEvent.NodeCreated,
     EditorEvent.NodeDeleted,
     EditorEvent.FragmentPasted,
@@ -501,6 +545,10 @@ export const EditorRpcs = RpcGroup.make(
   GetProject,
   DeleteGraph,
   SetGraphName,
+  CreateFunction,
+  AddFunctionField,
+  UpdateFunctionField,
+  DeleteFunctionField,
   CreateNode,
   DeleteNode,
   PasteFragment,
@@ -564,6 +612,12 @@ export const handlerLayer = EditorRpcs.toLayer(
           .pipe(Effect.tap(() => presence.graphDeleted(payload.graphId))),
       SetGraphName: (payload) =>
         editor.graph.update({ graphID: payload.graphId, name: payload.name }),
+      CreateFunction: ({ name }) => editor.function.create(name),
+      AddFunctionField: ({ graphId, direction }) => editor.function.addField(graphId, direction),
+      UpdateFunctionField: ({ graphId, direction, field }) =>
+        editor.function.updateField(graphId, direction, field),
+      DeleteFunctionField: ({ graphId, direction, fieldId }) =>
+        editor.function.deleteField(graphId, direction, fieldId),
       CreateNode: (payload) => editor.node.create({ graphID: payload.graphId, node: payload.node }),
       PasteFragment: (payload) =>
         editor.fragment.paste({
@@ -758,7 +812,7 @@ export const handlerLayer = EditorRpcs.toLayer(
         Effect.gen(function* () {
           if (update.activeGraph !== null) {
             const project = yield* editor.project.get();
-            const graph = project.graphs[update.activeGraph];
+            const graph = Project.canvases(project)[update.activeGraph];
             if (graph === undefined)
               return yield* new Presence.InvalidUpdate({ reason: "Graph does not exist" });
             if (update.selectedNodeIds.some((nodeId) => graph.nodes[nodeId] === undefined))

@@ -3,7 +3,7 @@ import {
   BuiltinAuthoring,
   ConnectionId,
   CustomTypes,
-  Graph,
+  Canvas,
   IoId,
   NodeId,
   OutputRef,
@@ -151,8 +151,8 @@ describe("schema-owned authoring", () => {
     const resolver = new SchemaAuthoring.GraphResolver(
       registry({ Build: { generateIO: generate } }),
     );
-    const graph: Graph.Model = {
-      ...Graph.empty("g"),
+    const graph: Canvas.Model = {
+      ...Canvas.empty("g"),
       nodes: { build: node("build", "Build"), sink: node("sink", "Static") },
       connections: [wire("build", "value", "sink", "in")],
     };
@@ -202,7 +202,7 @@ describe("schema-owned authoring", () => {
     expect(compatible(t.Int)).toHaveLength(1);
     expect(compatible(w)).toHaveLength(1);
     const graph = {
-      ...Graph.empty("g"),
+      ...Canvas.empty("g"),
       nodes: { source: node("source", "Static"), target: node("target", "OnlyInt") },
       connections: [wire("source", "out", "target", "in")],
     };
@@ -234,7 +234,7 @@ describe("schema-owned authoring", () => {
       },
     });
     const graph = {
-      ...Graph.empty("g"),
+      ...Canvas.empty("g"),
       nodes: {
         end: node("end", "Expose"),
         relay: node("relay", "Relay"),
@@ -269,7 +269,7 @@ describe("schema-owned authoring", () => {
       const n = node("make", "MakeStruct", "CustomTypes", { type: "item" });
       const project = {
         ...Project.empty(),
-        graphs: { g: { ...Graph.empty("g"), nodes: { make: n } } },
+        graphs: { g: { ...Canvas.empty("g"), nodes: { make: n } } },
       };
       editor.setProject(project, { g: { make: empty } });
       const before = editor.store.packages;
@@ -301,7 +301,7 @@ describe("schema-owned authoring", () => {
 
   it("reports bad struct anchors without looping or retaining inferred fields", () => {
     const graph = {
-      ...Graph.empty("g"),
+      ...Canvas.empty("g"),
       nodes: {
         source: node("source", "Static"),
         target: node("target", "BreakStruct", "CustomTypes"),
@@ -331,7 +331,7 @@ describe("schema-owned authoring", () => {
         },
       },
     });
-    const graph = { ...Graph.empty("g"), nodes: { n: node("n", "Oscillate") } };
+    const graph = { ...Canvas.empty("g"), nodes: { n: node("n", "Oscillate") } };
     expect(
       new SchemaAuthoring.GraphResolver(authoring).resolve(graph, { n: empty }, {}).diagnostics.n,
     ).toEqual(["Inferred IO did not stabilize"]);
@@ -358,7 +358,7 @@ describe("schema-owned authoring", () => {
       ]),
     );
     const graph = {
-      ...Graph.empty("g"),
+      ...Canvas.empty("g"),
       nodes,
       connections: [
         wire("anchor", "out", "good", "in"),
@@ -396,7 +396,7 @@ describe("schema-owned authoring", () => {
     const a = node("a", "BreakStruct", "CustomTypes"),
       b = node("b", "BreakStruct", "CustomTypes");
     const graph = {
-      ...Graph.empty("g"),
+      ...Canvas.empty("g"),
       nodes: { a, b },
       connections: [
         wire("a", 'field:"next"', "b", "value"),

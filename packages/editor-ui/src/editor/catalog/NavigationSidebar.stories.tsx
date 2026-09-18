@@ -34,6 +34,7 @@ const meta: Meta<typeof NavigationSidebar> = {
     onSearchChange: noop,
     onClose: noop,
     onCreateGraph: noop,
+    onCreateFunction: noop,
     onSelectGraph: noop,
     canEditGraphs: true,
     onRenameGraph: noop,

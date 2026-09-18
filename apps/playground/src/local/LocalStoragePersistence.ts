@@ -257,7 +257,7 @@ export const makeLocalProjectStore = (
         loadGraph: (graphId) =>
           Ref.get(state).pipe(
             Effect.flatMap((current) => {
-              const graph = current.graphs[graphId];
+              const graph = Project.canvases(current)[graphId];
               return graph === undefined
                 ? new Graph.NotFoundError({ id: graphId })
                 : Effect.succeed(graph);
@@ -266,7 +266,7 @@ export const makeLocalProjectStore = (
         loadNode: (graphId, nodeId) =>
           Ref.get(state).pipe(
             Effect.flatMap((current) => {
-              const node = current.graphs[graphId]?.nodes[nodeId];
+              const node = Project.canvases(current)[graphId]?.nodes[nodeId];
               return node === undefined
                 ? new Node.NotFoundError({ id: nodeId })
                 : Effect.succeed(node);

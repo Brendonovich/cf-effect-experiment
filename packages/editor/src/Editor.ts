@@ -2,9 +2,11 @@ import type * as Engine from "@macrograph/module/Engine";
 import type * as Module from "@macrograph/module/Module";
 
 import {
+  Canvas,
   Clipboard,
   Connection,
   CustomTypes,
+  Function as GraphFunction,
   Scopes,
   Wildcards,
   Graph,
@@ -99,7 +101,14 @@ type NodeSetScopeSplitOptions = {
 };
 
 export const ProjectSnapshot = Schema.Struct({
-  project: Project.Model,
+  project: Schema.Struct({
+    name: Project.Model.fields.name,
+    graphs: Schema.Record(Schema.String, Canvas.Model),
+    functions: Project.Model.fields.functions,
+    engines: Project.Model.fields.engines,
+    constants: Project.Model.fields.constants,
+    types: Project.Model.fields.types,
+  }),
   nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
 });
 export type ProjectSnapshot = typeof ProjectSnapshot.Type;
@@ -247,6 +256,34 @@ export interface Interface {
       readonly graphID: string;
     }) => Effect.Effect<EditorEvent.GraphDeleted, PersistenceError>;
   };
+  readonly function: {
+    readonly create: (
+      name?: string,
+    ) => Effect.Effect<EditorEvent.FunctionCreated, PersistenceError>;
+    readonly addField: (
+      graphId: string,
+      direction: "input" | "output",
+    ) => Effect.Effect<
+      EditorEvent.FunctionUpdated,
+      PersistenceError | Project.NotFoundError | GraphFunction.NotFoundError
+    >;
+    readonly updateField: (
+      graphId: string,
+      direction: "input" | "output",
+      field: GraphFunction.Field,
+    ) => Effect.Effect<
+      EditorEvent.FunctionUpdated,
+      PersistenceError | Project.NotFoundError | Graph.NotFoundError | GraphFunction.NotFoundError
+    >;
+    readonly deleteField: (
+      graphId: string,
+      direction: "input" | "output",
+      fieldId: string,
+    ) => Effect.Effect<
+      EditorEvent.FunctionUpdated,
+      PersistenceError | Project.NotFoundError | GraphFunction.NotFoundError
+    >;
+  };
   readonly node: {
     readonly create: (
       options: NodeCreateOptions,
@@ -258,6 +295,7 @@ export interface Interface {
       | Package.SchemaNotFoundError
       | Package.InvalidPropertyError
       | Package.InvalidInputDefaultError
+      | GraphFunction.EventNodeNotAllowedError
     >;
     readonly update: (options: NodeUpdateOptions) => Effect.Effect<void, NodeMutationError>;
     readonly setFoldPins: (
@@ -435,7 +473,7 @@ export const layer = Layer.effect(Service)(
       const io = yield* getBaseNodeIO(node, definitions);
       if (!Scopes.isBreakScope(node) && !CustomTypes.isBreakStruct(node)) return io;
       const project = yield* persistence.loadProject();
-      const graph = Object.values(project.graphs).find((graph) =>
+      const graph = Object.values(Project.canvases(project)).find((graph) =>
         Object.hasOwn(graph.nodes, node.id),
       );
       if (graph === undefined) return io;
@@ -606,7 +644,7 @@ export const layer = Layer.effect(Service)(
       const affectedTypes = TypeDefinition.affectedTypes(id, project.types, types);
       const affected = new Set(affectedTypes);
       const nodes: Array<TypeDefinition.Impact["nodes"][number]> = [];
-      for (const [graphId, graph] of Object.entries(project.graphs).sort(([a], [b]) =>
+      for (const [graphId, graph] of Object.entries(Project.canvases(project)).sort(([a], [b]) =>
         a.localeCompare(b),
       )) {
         const before: Record<string, NodeIO> = {};
@@ -660,6 +698,17 @@ export const layer = Layer.effect(Service)(
           const previous = new Set(TypeDefinition.nodeDiagnostics(node, io, project.types));
           for (const reason of TypeDefinition.nodeDiagnostics(node, nextIO, types))
             if (!previous.has(reason) || reasons.has(node.id)) add(node.id, reason);
+        }
+        const fn = project.functions[graphId];
+        if (fn !== undefined) {
+          for (const nodeId of [
+            GraphFunction.InputBoundaryNodeId,
+            GraphFunction.OutputBoundaryNodeId,
+          ]) {
+            const io = GraphFunction.boundaryIO(fn, nodeId)!;
+            before[nodeId] = io;
+            after[nodeId] = io;
+          }
         }
         for (const wire of definitionsChanged ? graph.connections : []) {
           const oldOut = before[wire.outNodeId] ?? emptyNodeIO;
@@ -729,7 +778,7 @@ export const layer = Layer.effect(Service)(
         yield* packages.setTypeDefinitions(types);
         const nodeIO: Record<string, Record<string, NodeIO>> = {};
         const deletedConnectionIds: Record<string, Array<string>> = {};
-        for (const [graphId, graph] of Object.entries(project.graphs)) {
+        for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
           nodeIO[graphId] = {};
           const resolved = new Set<string>();
           for (const node of Object.values(graph.nodes)) {
@@ -742,10 +791,21 @@ export const layer = Layer.effect(Service)(
             nodeIO[graphId][node.id] = result.io;
             if (result.resolved) resolved.add(node.id);
           }
+          const fn = project.functions[graphId];
+          if (fn !== undefined) {
+            for (const nodeId of [
+              GraphFunction.InputBoundaryNodeId,
+              GraphFunction.OutputBoundaryNodeId,
+            ]) {
+              nodeIO[graphId][nodeId] = GraphFunction.boundaryIO(fn, nodeId)!;
+              resolved.add(nodeId);
+            }
+          }
           for (const connection of graph.connections) {
             if (
-              graph.nodes[connection.outNodeId] === undefined ||
-              graph.nodes[connection.inNodeId] === undefined
+              (graph.nodes[connection.outNodeId] === undefined &&
+                !resolved.has(connection.outNodeId)) ||
+              (graph.nodes[connection.inNodeId] === undefined && !resolved.has(connection.inNodeId))
             ) {
               (deletedConnectionIds[graphId] ??= []).push(connection.id);
               continue;
@@ -773,15 +833,32 @@ export const layer = Layer.effect(Service)(
       );
     }, lock.withPermit);
 
+    const endpointIO = Effect.fnUntraced(function* (
+      project: Project.Model,
+      graph: Canvas.Model,
+      nodeId: string,
+    ) {
+      const node = graph.nodes[nodeId];
+      if (node !== undefined) return yield* getNodeIO(node);
+      const fn = project.functions[graph.id];
+      if (fn !== undefined) {
+        const io = GraphFunction.boundaryIO(fn, nodeId);
+        if (io !== undefined) return io;
+      }
+      return yield* new Node.NotFoundError({ id: nodeId });
+    });
+
     const graphCreate = Effect.fn("Editor.graph.create")(function* (input: Graph.CreateInput) {
       const graphId = GraphId.make(Math.random().toString(36).slice(2));
       const graph: Graph.Model = {
-        id: graphId,
-        name: input.name ?? "New Graph",
-        nodes: input.nodes ?? {},
-        connections: input.connections ?? [],
+        canvas: {
+          id: graphId,
+          name: input.name ?? "New Graph",
+          nodes: input.nodes ?? {},
+          connections: input.connections ?? [],
+        },
       };
-      return yield* events.publish({ _tag: "GraphCreated", graph });
+      return yield* events.publish({ _tag: "GraphCreated", graph: graph.canvas });
     }, lock.withPermit);
 
     const graphUpdate = Effect.fn("Editor.graph.update")(function* (options: GraphUpdateOptions) {
@@ -799,6 +876,117 @@ export const layer = Layer.effect(Service)(
       const event = yield* events.publish({ _tag: "GraphDeleted", graphId: options.graphID });
       wildcardCaches.delete(options.graphID);
       return event;
+    }, lock.withPermit);
+
+    const functionCreate = Effect.fn("Editor.function.create")(function* (name?: string) {
+      const graphId = GraphId.make(crypto.randomUUID());
+      const canvas: Canvas.Model = {
+        id: graphId,
+        name: name ?? "New Function",
+        nodes: {},
+        connections: [],
+      };
+      const fn: GraphFunction.Model = {
+        canvas,
+        arguments: [],
+        returns: [],
+        inputPosition: { x: 200, y: 300 },
+        outputPosition: { x: 800, y: 300 },
+      };
+      return yield* events.publish({ _tag: "FunctionCreated", graph: canvas, fn });
+    }, lock.withPermit);
+
+    const functionFields = (fn: GraphFunction.Model, direction: "input" | "output") =>
+      direction === "input" ? fn.arguments : fn.returns;
+    const withFunctionFields = (
+      fn: GraphFunction.Model,
+      direction: "input" | "output",
+      fields: ReadonlyArray<GraphFunction.Field>,
+    ): GraphFunction.Model =>
+      direction === "input" ? { ...fn, arguments: fields } : { ...fn, returns: fields };
+    const getFunction = Effect.fnUntraced(function* (graphId: string) {
+      return yield* Project.getFunction(yield* persistence.loadProject(), graphId);
+    });
+    const functionAddField = Effect.fn("Editor.function.addField")(function* (
+      graphId: string,
+      direction: "input" | "output",
+    ) {
+      const fn = yield* getFunction(graphId);
+      const fields = functionFields(fn, direction);
+      const id = IoId.make(crypto.randomUUID());
+      const field: GraphFunction.Field = {
+        id,
+        name: `${direction === "input" ? "Input" : "Output"} ${fields.length + 1}`,
+        type: DataType.String,
+      };
+      return yield* events.publish({
+        _tag: "FunctionUpdated",
+        fn: withFunctionFields(fn, direction, [...fields, field]),
+        deletedConnectionIds: [],
+      });
+    }, lock.withPermit);
+    const functionUpdateField = Effect.fn("Editor.function.updateField")(function* (
+      graphId: string,
+      direction: "input" | "output",
+      field: GraphFunction.Field,
+    ) {
+      const fn = yield* getFunction(graphId);
+      const fields = functionFields(fn, direction);
+      const previous = fields.find((candidate) => candidate.id === field.id);
+      if (previous === undefined)
+        return yield* new GraphFunction.NotFoundError({ canvasId: graphId });
+      const graph = yield* persistence.loadGraph(graphId);
+      const deletedConnectionIds = DataType.equals(previous.type, field.type)
+        ? []
+        : graph.connections
+            .filter((connection) =>
+              direction === "input"
+                ? connection.outNodeId === GraphFunction.InputBoundaryNodeId &&
+                  OutputRef.equals(connection.outIo, OutputRef.port(field.id))
+                : connection.inNodeId === GraphFunction.OutputBoundaryNodeId &&
+                  connection.inIoId === field.id,
+            )
+            .map((connection) => connection.id);
+      return yield* events.publish({
+        _tag: "FunctionUpdated",
+        fn: withFunctionFields(
+          fn,
+          direction,
+          fields.map((candidate) => (candidate.id === field.id ? field : candidate)),
+        ),
+        deletedConnectionIds,
+      });
+    }, lock.withPermit);
+    const functionDeleteField = Effect.fn("Editor.function.deleteField")(function* (
+      graphId: string,
+      direction: "input" | "output",
+      fieldId: string,
+    ) {
+      const project = yield* persistence.loadProject();
+      const fn = yield* Project.getFunction(project, graphId);
+      const fields = functionFields(fn, direction);
+      if (!fields.some((field) => field.id === fieldId))
+        return yield* new GraphFunction.NotFoundError({ canvasId: graphId });
+      const graph = fn.canvas;
+      const deletedConnectionIds =
+        graph?.connections
+          .filter((connection) =>
+            direction === "input"
+              ? connection.outNodeId === GraphFunction.InputBoundaryNodeId &&
+                OutputRef.equals(connection.outIo, OutputRef.port(fieldId))
+              : connection.inNodeId === GraphFunction.OutputBoundaryNodeId &&
+                connection.inIoId === fieldId,
+          )
+          .map((connection) => connection.id) ?? [];
+      return yield* events.publish({
+        _tag: "FunctionUpdated",
+        fn: withFunctionFields(
+          fn,
+          direction,
+          fields.filter((field) => field.id !== fieldId),
+        ),
+        deletedConnectionIds,
+      });
     }, lock.withPermit);
 
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
@@ -845,6 +1033,13 @@ export const layer = Layer.effect(Service)(
         schema: options.node.schema,
         position: options.node.position ?? { x: 0, y: 0 },
       };
+      const project = yield* persistence.loadProject();
+      const fn = project.functions[options.graphID];
+      if (fn !== undefined) yield* GraphFunction.validateNode(fn, node, schema);
+      else {
+        const graph = yield* Project.getGraph(project, options.graphID);
+        yield* Graph.validateNode(graph, node, schema);
+      }
       const io = yield* getNodeIO(node);
       return yield* events.publish({ _tag: "NodeCreated", graphId: options.graphID, node, io });
     }, lock.withPermit);
@@ -1159,7 +1354,7 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       for (const id of options.nodeIds) {
         if (!Object.hasOwn(graph.nodes, id)) return yield* new Node.NotFoundError({ id });
-        const node = yield* Graph.getNode(graph, id);
+        const node = yield* Canvas.getNode(graph, id);
         const schema = yield* packages.getSchema(node.schema).pipe(
           Effect.catchTag(
             "SchemaNotFoundError",
@@ -1189,7 +1384,15 @@ export const layer = Layer.effect(Service)(
 
     const nodeUpdate = Effect.fn("Editor.node.update")(function* (options: NodeUpdateOptions) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      yield* Graph.getNode(graph, options.nodeID);
+      const persistedNode = graph.nodes[options.nodeID];
+      if (persistedNode === undefined) {
+        const project = yield* persistence.loadProject();
+        const fn = project.functions[options.graphID];
+        if (fn === undefined || !GraphFunction.isBoundaryNodeId(options.nodeID))
+          return yield* new Node.NotFoundError({ id: options.nodeID });
+        if (options.name !== undefined)
+          return yield* new Node.NotFoundError({ id: options.nodeID });
+      }
 
       if (options.name !== undefined) {
         yield* events.publish({
@@ -1214,7 +1417,7 @@ export const layer = Layer.effect(Service)(
 
     const nodeDelete = Effect.fn("Editor.node.delete")(function* (options: NodeDeleteOptions) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      yield* Graph.getNode(graph, options.nodeID);
+      yield* Canvas.getNode(graph, options.nodeID);
       const connections = graph.connections
         .filter(
           (connection) =>
@@ -1233,7 +1436,7 @@ export const layer = Layer.effect(Service)(
       options: NodeSetScopeSplitOptions,
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      const node = yield* Graph.getNode(graph, options.nodeID);
+      const node = yield* Canvas.getNode(graph, options.nodeID);
       const io = yield* getNodeIO(node);
       const port = OutputRef.resolve(io, OutputRef.port(options.scope));
       if (port?.kind !== "execution" || port.port.scope == null)
@@ -1262,7 +1465,7 @@ export const layer = Layer.effect(Service)(
       options: NodeSetFoldPinsOptions,
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      yield* Graph.getNode(graph, options.nodeID);
+      yield* Canvas.getNode(graph, options.nodeID);
       return yield* events.publish({
         _tag: "NodeFoldPinsChanged",
         graphId: options.graphID,
@@ -1275,7 +1478,7 @@ export const layer = Layer.effect(Service)(
       options: NodePropertyOptions & { readonly value?: unknown; readonly clear: boolean },
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      const node = yield* Graph.getNode(graph, options.nodeID);
+      const node = yield* Canvas.getNode(graph, options.nodeID);
       if (options.clear) {
         const schema = yield* packages.getSchema(node.schema);
         if (
@@ -1298,7 +1501,8 @@ export const layer = Layer.effect(Service)(
         properties,
       };
       const io = yield* getNodeIO(updated);
-      const definitions = (yield* persistence.loadProject()).types;
+      const project = yield* persistence.loadProject();
+      const definitions = project.types;
       const oldIO = yield* getNodeIO(node);
       const preservesTypeData =
         node.schema.package === CustomTypes.packageId ||
@@ -1312,18 +1516,33 @@ export const layer = Layer.effect(Service)(
       const inputDefaults = preservesTypeData
         ? node.inputDefaults
         : yield* retainValidInputDefaults(io, node.inputDefaults);
+      const fn = project.functions[graph.id];
 
       const stale: Array<Connection.Model> = [];
       for (const connection of graph.connections) {
         if (connection.inNodeId !== node.id && connection.outNodeId !== node.id) continue;
         const outputNode = graph.nodes[connection.outNodeId];
         const inputNode = graph.nodes[connection.inNodeId];
-        if (outputNode === undefined || inputNode === undefined) {
+        const outputIO =
+          outputNode?.id === node.id
+            ? io
+            : outputNode !== undefined
+              ? yield* getNodeIO(outputNode)
+              : fn === undefined
+                ? undefined
+                : GraphFunction.boundaryIO(fn, connection.outNodeId);
+        const inputIO =
+          inputNode?.id === node.id
+            ? io
+            : inputNode !== undefined
+              ? yield* getNodeIO(inputNode)
+              : fn === undefined
+                ? undefined
+                : GraphFunction.boundaryIO(fn, connection.inNodeId);
+        if (outputIO === undefined || inputIO === undefined) {
           stale.push(connection);
           continue;
         }
-        const outputIO = outputNode.id === node.id ? io : yield* getNodeIO(outputNode);
-        const inputIO = inputNode.id === node.id ? io : yield* getNodeIO(inputNode);
         if (!isConnectionValid(connection, outputIO, inputIO)) stale.push(connection);
       }
       const { result } = yield* graphWildcards(
@@ -1365,7 +1584,7 @@ export const layer = Layer.effect(Service)(
       options: NodeSetInputDefaultOptions,
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      const node = yield* Graph.getNode(graph, options.nodeID);
+      const node = yield* Canvas.getNode(graph, options.nodeID);
       const ioProperties = yield* resolveIOProperties(node.schema, node.properties);
       const { cache, declarations, result } = yield* graphWildcards(graph);
       const definitions = (yield* persistence.loadProject()).types;
@@ -1431,7 +1650,7 @@ export const layer = Layer.effect(Service)(
       options: NodeInputOptions,
     ) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      const node = yield* Graph.getNode(graph, options.nodeID);
+      const node = yield* Canvas.getNode(graph, options.nodeID);
       const io = Object.hasOwn(node.inputDefaults, options.input)
         ? undefined
         : yield* getNodeIO(node);
@@ -1461,7 +1680,7 @@ export const layer = Layer.effect(Service)(
     ) {
       const { node, properties, definitions } = yield* Effect.gen(function* () {
         const graph = yield* persistence.loadGraph(options.graphID);
-        const node = yield* Graph.getNode(graph, options.nodeID);
+        const node = yield* Canvas.getNode(graph, options.nodeID);
         const properties = yield* resolveIOProperties(node.schema, node.properties);
         return { node, properties, definitions: (yield* persistence.loadProject()).types };
       }).pipe(lock.withPermit);
@@ -1480,10 +1699,9 @@ export const layer = Layer.effect(Service)(
       readonly connection: Connection.CreateInput;
     }) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      const outNode = yield* Graph.getNode(graph, options.connection.outNodeId);
-      const inNode = yield* Graph.getNode(graph, options.connection.inNodeId);
-      const outSchema = yield* getNodeIO(outNode);
-      const inSchema = yield* getNodeIO(inNode);
+      const project = yield* persistence.loadProject();
+      const outSchema = yield* endpointIO(project, graph, options.connection.outNodeId);
+      const inSchema = yield* endpointIO(project, graph, options.connection.inNodeId);
 
       const output = OutputRef.resolve(outSchema, options.connection.outIo);
       const executionOutputs = output?.kind === "execution" ? [output.port] : [];
@@ -1565,7 +1783,11 @@ export const layer = Layer.effect(Service)(
       const project = yield* persistence.loadProject();
       yield* packages.setTypeDefinitions(project.types);
       const generated: Record<string, Record<string, NodeIO>> = {};
-      for (const [graphId, graph] of Object.entries(project.graphs)) {
+      const graphs: Record<string, Canvas.Model> = {};
+      for (const [graphId, persistedGraph] of Object.entries(Project.canvases(project))) {
+        const fn = project.functions[graphId];
+        const graph = fn === undefined ? persistedGraph : GraphFunction.projectCanvas(fn);
+        graphs[graphId] = graph;
         generated[graphId] = {};
         for (const node of Object.values(graph.nodes)) {
           const io = yield* getNodeIO(node).pipe(
@@ -1573,15 +1795,26 @@ export const layer = Layer.effect(Service)(
           );
           if (io !== undefined) generated[graphId][node.id] = io;
         }
+        if (fn !== undefined) {
+          generated[graphId][GraphFunction.InputBoundaryNodeId] = GraphFunction.boundaryIO(
+            fn,
+            GraphFunction.InputBoundaryNodeId,
+          )!;
+          generated[graphId][GraphFunction.OutputBoundaryNodeId] = GraphFunction.boundaryIO(
+            fn,
+            GraphFunction.OutputBoundaryNodeId,
+          )!;
+        }
       }
-      return { project, nodeIO: generated };
+      return { project: { ...project, graphs }, nodeIO: generated };
     }, lock.withPermit);
 
     const projectRendered = Effect.fn("Editor.project.rendered")(function* () {
       const project = yield* persistence.loadProject();
       yield* packages.setTypeDefinitions(project.types);
       const graphs: Record<string, RenderedProject.Model["graphs"][string]> = {};
-      for (const [graphId, graph] of Object.entries(project.graphs)) {
+      for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
+        const fn = project.functions[graphId];
         const nodes: Record<string, RenderedProject.Model["graphs"][string]["nodes"][string]> = {};
         const { cache, declarations, result } = yield* graphWildcards(graph);
         const schemas: Record<string, Record<string, Package.SchemaModel>> = {};
@@ -1604,6 +1837,12 @@ export const layer = Layer.effect(Service)(
           if (schema !== undefined)
             (schemas[node.schema.package] ??= {})[node.schema.schema] = schema;
         }
+        if (fn !== undefined)
+          for (const node of GraphFunction.boundaryNodes(fn))
+            nodes[node.id] = {
+              ...node,
+              io: GraphFunction.boundaryIO(fn, node.id)!,
+            };
         graphs[graphId] = { ...graph, nodes, schemas };
       }
       return { ...project, graphs };
@@ -1676,7 +1915,7 @@ export const layer = Layer.effect(Service)(
       const nodeIO: Record<string, Record<string, NodeIO>> = {};
       const inputDefaults: Record<string, Record<string, Record<string, Schema.Json>>> = {};
       const deletedConnectionIds: Record<string, Array<string>> = {};
-      for (const [graphId, graph] of Object.entries(project.graphs)) {
+      for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
         const generated = new Map<string, NodeIO>();
         for (const node of Object.values(graph.nodes)) {
           if (!Object.values(node.properties).some((propertyValue) => propertyValue === id))
@@ -1747,7 +1986,7 @@ export const layer = Layer.effect(Service)(
       yield* getConstant(id);
       const project = yield* persistence.loadProject();
       const nodeIds: Array<string> = [];
-      for (const graph of Object.values(project.graphs)) {
+      for (const graph of Object.values(Project.canvases(project))) {
         for (const node of Object.values(graph.nodes)) {
           const schema = yield* packages
             .getSchema(node.schema)
@@ -1974,6 +2213,12 @@ export const layer = Layer.effect(Service)(
         delete: constantDelete,
       },
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
+      function: {
+        create: functionCreate,
+        addField: functionAddField,
+        updateField: functionUpdateField,
+        deleteField: functionDeleteField,
+      },
       node: {
         create: nodeCreate,
         update: nodeUpdate,

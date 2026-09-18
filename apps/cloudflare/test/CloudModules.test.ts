@@ -63,7 +63,9 @@ describe("Cloud modules", () => {
           name: "Existing cloud project",
           engines: { twitch: { accounts: {} } },
           graphs: {
-            [graphId]: { id: graphId, name: "Existing graph", nodes: {}, connections: [] },
+            [graphId]: {
+              canvas: { id: graphId, name: "Existing graph", nodes: {}, connections: [] },
+            },
           },
         };
         yield* persistence.saveProject(original);
@@ -124,8 +126,11 @@ describe("Cloud modules", () => {
               ...newIds,
             ]);
             const snapshot = yield* editor.project.snapshot();
-            assert.deepStrictEqual(snapshot.project, saved);
-            const node = Object.values(saved.graphs[graphId]!.nodes)[0]!;
+            assert.deepStrictEqual(snapshot.project, {
+              ...saved,
+              graphs: Project.canvases(saved),
+            });
+            const node = Object.values(saved.graphs[graphId]!.canvas.nodes)[0]!;
             assert.isDefined(snapshot.nodeIO[graphId]?.[node.id]);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
               configured: true,

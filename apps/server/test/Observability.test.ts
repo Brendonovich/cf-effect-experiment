@@ -117,20 +117,25 @@ describe("Observability", () => {
         ...Project.empty(),
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Chat",
-            nodes: {
-              [nodeId]: {
-                id: nodeId,
-                name: "Chat Message",
-                schema: { package: PackageId.make("twitch"), schema: SchemaId.make("ChatMessage") },
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                position: { x: 0, y: 0 },
+            canvas: {
+              id: graphId,
+              name: "Chat",
+              nodes: {
+                [nodeId]: {
+                  id: nodeId,
+                  name: "Chat Message",
+                  schema: {
+                    package: PackageId.make("twitch"),
+                    schema: SchemaId.make("ChatMessage"),
+                  },
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  position: { x: 0, y: 0 },
+                },
               },
+              connections: [],
             },
-            connections: [],
           },
         },
       });

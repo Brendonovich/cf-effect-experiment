@@ -46,7 +46,9 @@ const policy = (canEdit: boolean) =>
 const stored = {
   ...Project.empty(),
   graphs: {
-    graph: { id: GraphId.make("graph"), name: "Public graph", nodes: {}, connections: [] },
+    graph: {
+      canvas: { id: GraphId.make("graph"), name: "Public graph", nodes: {}, connections: [] },
+    },
   },
   engines: { integration: { token: "private-token" } },
 };
@@ -127,7 +129,7 @@ describe("Engine storage privacy", () => {
       assert.strictEqual(results[0]?._tag, "ProjectSnapshot");
       if (results[0]?._tag === "ProjectSnapshot") {
         assert.deepStrictEqual(results[0].snapshot.project.engines, {});
-        assert.deepStrictEqual(results[0].snapshot.project.graphs, stored.graphs);
+        assert.deepStrictEqual(results[0].snapshot.project.graphs, Project.canvases(stored));
         assert.deepStrictEqual(results[0].snapshot.nodeIO, { graph: {} });
       }
       assert.deepStrictEqual(results[1], {

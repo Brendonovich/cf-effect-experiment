@@ -255,6 +255,7 @@ interface GraphNodeProps {
   selected?: boolean;
   dragging?: boolean;
   positioning?: boolean;
+  allowInputDefaults?: boolean;
   presenceColor?: string | undefined;
   connectionSource?:
     | {
@@ -564,7 +565,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       >
         {row.port.name}
       </span>
-      <Show when={row.port.kind === "data" && row.port}>
+      <Show when={props.allowInputDefaults !== false && row.port.kind === "data" && row.port}>
         {(port) => {
           const metadata = () =>
             props.io?.dataInputs.find((candidate) => candidate.id === port().id);

@@ -58,17 +58,19 @@ describe("ExecutorModules", () => {
         },
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Cloud graph",
-            nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-            connections: [
-              connection("tick-chat", "tick", "exec", "chat", "exec"),
-              connection("chat-speech", "chat", "exec", "speech", "exec"),
-              connection("tick-add", "tick", "tick", "add", "one"),
-              connection("add-string", "add", "output", "string", "input"),
-              connection("string-chat", "string", "string", "chat", "message"),
-              connection("chat-text", "chat", "response", "speech", "text"),
-            ],
+            canvas: {
+              id: graphId,
+              name: "Cloud graph",
+              nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
+              connections: [
+                connection("tick-chat", "tick", "exec", "chat", "exec"),
+                connection("chat-speech", "chat", "exec", "speech", "exec"),
+                connection("tick-add", "tick", "tick", "add", "one"),
+                connection("add-string", "add", "output", "string", "input"),
+                connection("string-chat", "string", "string", "chat", "message"),
+                connection("chat-text", "chat", "response", "speech", "text"),
+              ],
+            },
           },
         },
       };

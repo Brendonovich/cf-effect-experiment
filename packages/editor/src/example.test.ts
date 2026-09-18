@@ -68,7 +68,7 @@ namespace Persistence {
               ...project,
               graphs: {
                 ...project.graphs,
-                [graph.id]: graph,
+                [graph.canvas.id]: graph,
               },
             }));
           }),
@@ -111,7 +111,9 @@ namespace ProjectEditor {
           const id = Graph.GraphId.make(Math.random().toString(36).slice(0, 8));
 
           yield* persistence.saveGraph(
-            Graph.Model.make({ id, name: opts.name, nodes: {}, connections: [] }),
+            Graph.Model.make({
+              canvas: { id, name: opts.name, nodes: {}, connections: [] },
+            }),
           );
         }),
         update: Effect.fn(function* () {}),

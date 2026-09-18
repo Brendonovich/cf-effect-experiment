@@ -75,6 +75,7 @@ describe("Executor", () => {
       const project: Project.Model = {
         types: {},
         name: "Resources",
+        functions: {},
         engines: {},
         constants: {
           account: {
@@ -86,43 +87,45 @@ describe("Executor", () => {
         },
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Resources",
-            nodes: {
-              [eventNodeId]: {
-                id: eventNodeId,
-                name: "Event",
-                properties: { account: "account" },
-                inputDefaults: {},
-                foldPins: false,
-                schema: {
-                  package: PackageId.make("resource-action"),
-                  schema: SchemaId.make("event"),
+            canvas: {
+              id: graphId,
+              name: "Resources",
+              nodes: {
+                [eventNodeId]: {
+                  id: eventNodeId,
+                  name: "Event",
+                  properties: { account: "account" },
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: {
+                    package: PackageId.make("resource-action"),
+                    schema: SchemaId.make("event"),
+                  },
+                  position: { x: 0, y: 0 },
                 },
-                position: { x: 0, y: 0 },
-              },
-              [actionNodeId]: {
-                id: actionNodeId,
-                name: "Action",
-                properties: { account: "account" },
-                inputDefaults: {},
-                foldPins: false,
-                schema: {
-                  package: PackageId.make("resource-action"),
-                  schema: SchemaId.make("action"),
+                [actionNodeId]: {
+                  id: actionNodeId,
+                  name: "Action",
+                  properties: { account: "account" },
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: {
+                    package: PackageId.make("resource-action"),
+                    schema: SchemaId.make("action"),
+                  },
+                  position: { x: 100, y: 0 },
                 },
-                position: { x: 100, y: 0 },
               },
+              connections: [
+                {
+                  id: ConnectionId.make("resource-exec"),
+                  outNodeId: eventNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("exec"),
+                },
+              ],
             },
-            connections: [
-              {
-                id: ConnectionId.make("resource-exec"),
-                outNodeId: eventNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("exec"),
-              },
-            ],
           },
         },
       };
@@ -259,78 +262,81 @@ describe("Executor", () => {
       const actionNodeId = NodeId.make("action");
       const project: Project.Model = {
         name: "Executor test",
+        functions: {},
         engines: {},
         constants: {},
         types: {},
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Main",
-            nodes: {
-              [eventNodeId]: {
-                id: eventNodeId,
-                name: "Ping",
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                schema: { package: PackageId.make("test"), schema: SchemaId.make("ping") },
-                position: { x: 0, y: 0 },
-              },
-              [pureNodeId]: {
-                id: pureNodeId,
-                name: "Uppercase",
-                properties: {},
-                inputDefaults: { value: "hello" },
-                foldPins: false,
-                schema: {
-                  package: PackageId.make("test"),
-                  schema: SchemaId.make("uppercase"),
+            canvas: {
+              id: graphId,
+              name: "Main",
+              nodes: {
+                [eventNodeId]: {
+                  id: eventNodeId,
+                  name: "Ping",
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: { package: PackageId.make("test"), schema: SchemaId.make("ping") },
+                  position: { x: 0, y: 0 },
                 },
-                position: { x: 100, y: 100 },
-              },
-              [actionNodeId]: {
-                id: actionNodeId,
-                name: "Record",
-                properties: { suffix: "property", fallback: "property" },
-                inputDefaults: {
-                  suffix: "!",
-                  optional: { _tag: "Some", value: "stored" },
+                [pureNodeId]: {
+                  id: pureNodeId,
+                  name: "Uppercase",
+                  properties: {},
+                  inputDefaults: { value: "hello" },
+                  foldPins: false,
+                  schema: {
+                    package: PackageId.make("test"),
+                    schema: SchemaId.make("uppercase"),
+                  },
+                  position: { x: 100, y: 100 },
                 },
-                foldPins: false,
-                schema: { package: PackageId.make("test"), schema: SchemaId.make("record") },
-                position: { x: 200, y: 0 },
+                [actionNodeId]: {
+                  id: actionNodeId,
+                  name: "Record",
+                  properties: { suffix: "property", fallback: "property" },
+                  inputDefaults: {
+                    suffix: "!",
+                    optional: { _tag: "Some", value: "stored" },
+                  },
+                  foldPins: false,
+                  schema: { package: PackageId.make("test"), schema: SchemaId.make("record") },
+                  position: { x: 200, y: 0 },
+                },
               },
+              connections: [
+                {
+                  id: ConnectionId.make("exec"),
+                  outNodeId: eventNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("message"),
+                  outNodeId: eventNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("message") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("message"),
+                },
+                {
+                  id: ConnectionId.make("upper"),
+                  outNodeId: pureNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("result") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("upper"),
+                },
+                {
+                  id: ConnectionId.make("upper-again"),
+                  outNodeId: pureNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("result") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("upperAgain"),
+                },
+              ],
             },
-            connections: [
-              {
-                id: ConnectionId.make("exec"),
-                outNodeId: eventNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("message"),
-                outNodeId: eventNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("message") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("message"),
-              },
-              {
-                id: ConnectionId.make("upper"),
-                outNodeId: pureNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("result") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("upper"),
-              },
-              {
-                id: ConnectionId.make("upper-again"),
-                outNodeId: pureNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("result") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("upperAgain"),
-              },
-            ],
           },
         },
       };
@@ -486,55 +492,58 @@ describe("Executor", () => {
       const recordId = NodeId.make("dynamic-record");
       const project: Project.Model = {
         name: "Dynamic execution",
+        functions: {},
         engines: {},
         constants: {},
         types: {},
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Dynamic",
-            nodes: {
-              [eventId]: {
-                id: eventId,
-                name: "Event",
-                properties: { output: "message" },
-                inputDefaults: {},
-                foldPins: false,
-                schema: {
-                  package: PackageId.make("dynamic"),
-                  schema: SchemaId.make("event"),
+            canvas: {
+              id: graphId,
+              name: "Dynamic",
+              nodes: {
+                [eventId]: {
+                  id: eventId,
+                  name: "Event",
+                  properties: { output: "message" },
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: {
+                    package: PackageId.make("dynamic"),
+                    schema: SchemaId.make("event"),
+                  },
+                  position: { x: 0, y: 0 },
                 },
-                position: { x: 0, y: 0 },
-              },
-              [recordId]: {
-                id: recordId,
-                name: "Record",
-                properties: { input: "message" },
-                inputDefaults: {},
-                foldPins: false,
-                schema: {
-                  package: PackageId.make("dynamic"),
-                  schema: SchemaId.make("record"),
+                [recordId]: {
+                  id: recordId,
+                  name: "Record",
+                  properties: { input: "message" },
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: {
+                    package: PackageId.make("dynamic"),
+                    schema: SchemaId.make("record"),
+                  },
+                  position: { x: 100, y: 0 },
                 },
-                position: { x: 100, y: 0 },
               },
+              connections: [
+                {
+                  id: ConnectionId.make("dynamic-exec"),
+                  outNodeId: eventId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: recordId,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("dynamic-data"),
+                  outNodeId: eventId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("message") },
+                  inNodeId: recordId,
+                  inIoId: IoId.make("message"),
+                },
+              ],
             },
-            connections: [
-              {
-                id: ConnectionId.make("dynamic-exec"),
-                outNodeId: eventId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: recordId,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("dynamic-data"),
-                outNodeId: eventId,
-                outIo: { _tag: "Port" as const, id: IoId.make("message") },
-                inNodeId: recordId,
-                inIoId: IoId.make("message"),
-              },
-            ],
           },
         },
       };
@@ -550,17 +559,19 @@ describe("Executor", () => {
         graphs: {
           ...project.graphs,
           [graphId]: {
-            ...graph,
-            connections: [
-              ...graph.connections,
-              {
-                id: ConnectionId.make("duplicate-exec"),
-                outNodeId: eventId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: recordId,
-                inIoId: IoId.make("exec"),
-              },
-            ],
+            canvas: {
+              ...graph.canvas,
+              connections: [
+                ...graph.canvas.connections,
+                {
+                  id: ConnectionId.make("duplicate-exec"),
+                  outNodeId: eventId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: recordId,
+                  inIoId: IoId.make("exec"),
+                },
+              ],
+            },
           },
         },
       });

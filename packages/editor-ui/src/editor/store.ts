@@ -1,19 +1,20 @@
 import {
-  Connection,
   BuiltinAuthoring,
+  Canvas,
+  Connection,
+  Function as GraphFunction,
+  type Project,
   SchemaAuthoring,
-  Graph,
   Node,
   type NodeIO,
   Package,
-  Project,
   ResourceConstant,
 } from "@macrograph/core";
-import { EditorEvent } from "@macrograph/editor";
+import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
 import { createStore } from "solid-js";
 
 type MutableGraph = {
-  id: Graph.GraphId;
+  id: Canvas.CanvasId;
   name: string;
   nodes: Record<string, Node.Model>;
   connections: Connection.Model[];
@@ -22,6 +23,7 @@ type MutableGraph = {
 type MutableProject = {
   name: string;
   graphs: Record<string, MutableGraph>;
+  functions: Record<string, GraphFunction.Model>;
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
   types: Project.Model["types"];
@@ -65,6 +67,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                     { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
                   ]),
                 ),
+                functions: { ...current.project.functions },
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
               },
@@ -176,11 +179,51 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         setStore((store) => {
           if (store.project) {
             store.project.graphs = graphs;
+            delete store.project.functions[event.graphId];
             delete store.nodeIO[event.graphId];
           }
         });
         break;
       }
+      case "FunctionCreated":
+        setStore((store) => {
+          if (!store.project) return;
+          store.project.graphs[event.graph.id] = {
+            ...event.graph,
+            nodes: Object.fromEntries(
+              GraphFunction.boundaryNodes(event.fn).map((node) => [node.id, node]),
+            ),
+            connections: [...event.graph.connections],
+          };
+          store.project.functions[event.fn.canvas.id] = event.fn;
+          store.nodeIO[event.fn.canvas.id] = {
+            [GraphFunction.InputBoundaryNodeId]: GraphFunction.boundaryIO(
+              event.fn,
+              GraphFunction.InputBoundaryNodeId,
+            )!,
+            [GraphFunction.OutputBoundaryNodeId]: GraphFunction.boundaryIO(
+              event.fn,
+              GraphFunction.OutputBoundaryNodeId,
+            )!,
+          };
+        });
+        break;
+      case "FunctionUpdated":
+        setStore((store) => {
+          if (!store.project) return;
+          store.project.functions[event.fn.canvas.id] = event.fn;
+          const graph = store.project.graphs[event.fn.canvas.id];
+          if (graph === undefined) return;
+          const boundaries = GraphFunction.boundaryNodes(event.fn);
+          for (const node of boundaries) graph.nodes[node.id] = node;
+          const deleted = new Set(event.deletedConnectionIds);
+          graph.connections = graph.connections.filter((connection) => !deleted.has(connection.id));
+          (store.nodeIO[event.fn.canvas.id] ??= {})[GraphFunction.InputBoundaryNodeId] =
+            GraphFunction.boundaryIO(event.fn, GraphFunction.InputBoundaryNodeId)!;
+          store.nodeIO[event.fn.canvas.id]![GraphFunction.OutputBoundaryNodeId] =
+            GraphFunction.boundaryIO(event.fn, GraphFunction.OutputBoundaryNodeId)!;
+        });
+        break;
       case "GraphNameChanged": {
         const graph = store.project.graphs[event.graphId];
         if (!graph) break;
@@ -406,7 +449,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     });
   }
 
-  function setProject(project: Project.Model, nodeIO: Record<string, Record<string, NodeIO>>) {
+  function setProject(
+    project: ProjectSnapshot["project"],
+    nodeIO: Record<string, Record<string, NodeIO>>,
+  ) {
     resolvers.clear();
     setStore((store) => {
       const cloned = structuredClone(project);

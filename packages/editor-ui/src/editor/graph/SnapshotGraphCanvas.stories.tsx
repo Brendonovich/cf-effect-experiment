@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
-import { GraphId } from "@macrograph/core";
+import { CanvasId } from "@macrograph/core";
 
 import { SnapshotGraphCanvas } from "./SnapshotGraphCanvas";
 import {
@@ -33,7 +33,7 @@ export const ConnectedAutomation: Story = {};
 export const SingleEvent: Story = {
   args: {
     graph: {
-      id: GraphId.make("single-event"),
+      id: CanvasId.make("single-event"),
       name: "Single Event",
       nodes: { [chatMessageNode.id]: chatMessageNode },
       connections: [],
@@ -47,7 +47,7 @@ export const LegacyGraph: Story = { args: { graph } };
 export const Empty: Story = {
   args: {
     graph: {
-      id: GraphId.make("empty-graph"),
+      id: CanvasId.make("empty-graph"),
       name: "Empty Graph",
       nodes: {},
       connections: [],

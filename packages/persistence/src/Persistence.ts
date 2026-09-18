@@ -1,10 +1,9 @@
-import { Connection, Graph, Node, Project } from "@macrograph/core";
+import { Canvas, Connection, Graph, Node, Project } from "@macrograph/core";
 import { Cause, Context, Data, Effect, Layer, Option, Ref, Schema } from "effect";
 
-export class PersistenceError extends Schema.TaggedError<PersistenceError>()(
-  "PersistenceError",
-  { cause: Schema.Defect() },
-) {
+export class PersistenceError extends Schema.TaggedError<PersistenceError>()("PersistenceError", {
+  cause: Schema.Defect(),
+}) {
   static refail<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, PersistenceError, R> {
     return Effect.catchCause(effect, (cause) =>
       Effect.fail(new PersistenceError({ cause: Cause.squash(cause) })),
@@ -13,39 +12,38 @@ export class PersistenceError extends Schema.TaggedError<PersistenceError>()(
 }
 
 /** Persists and retrieves projects, graphs, nodes, and connections. */
-export class Service extends Context.Service<
-  Service,
-  {
-    readonly saveProject: (project: Project.Model) => Effect.Effect<void, PersistenceError>;
-    readonly loadProject: () => Effect.Effect<
-      Project.Model,
-      Project.NotFoundError | PersistenceError
-    >;
-    readonly loadGraph: (
-      graphId: string,
-    ) => Effect.Effect<Graph.Model, Graph.NotFoundError | PersistenceError>;
-    readonly loadNode: (
-      graphId: string,
-      nodeId: string,
-    ) => Effect.Effect<Node.Model, Node.NotFoundError | PersistenceError>;
-    readonly saveGraph: (graph: Graph.Model) => Effect.Effect<void, PersistenceError>;
-    readonly deleteGraph: (graphId: string) => Effect.Effect<void, PersistenceError>;
-    readonly saveNode: (graphId: string, node: Node.Model) => Effect.Effect<void, PersistenceError>;
-    readonly deleteNode: (graphId: string, nodeId: string) => Effect.Effect<void, PersistenceError>;
-    readonly saveConnection: (
-      graphId: string,
-      connection: Connection.Model,
-    ) => Effect.Effect<void, PersistenceError>;
-    readonly deleteConnection: (
-      graphId: string,
-      connectionId: string,
-    ) => Effect.Effect<void, PersistenceError>;
-  }
->()("macrograph/Persistence") {}
+export interface Interface {
+  readonly saveProject: (project: Project.Model) => Effect.Effect<void, PersistenceError>;
+  readonly loadProject: () => Effect.Effect<
+    Project.Model,
+    Project.NotFoundError | PersistenceError
+  >;
+  readonly loadGraph: (
+    graphId: string,
+  ) => Effect.Effect<Canvas.Model, Graph.NotFoundError | PersistenceError>;
+  readonly loadNode: (
+    graphId: string,
+    nodeId: string,
+  ) => Effect.Effect<Node.Model, Node.NotFoundError | PersistenceError>;
+  readonly saveGraph: (graph: Canvas.Model) => Effect.Effect<void, PersistenceError>;
+  readonly deleteGraph: (graphId: string) => Effect.Effect<void, PersistenceError>;
+  readonly saveNode: (graphId: string, node: Node.Model) => Effect.Effect<void, PersistenceError>;
+  readonly deleteNode: (graphId: string, nodeId: string) => Effect.Effect<void, PersistenceError>;
+  readonly saveConnection: (
+    graphId: string,
+    connection: Connection.Model,
+  ) => Effect.Effect<void, PersistenceError>;
+  readonly deleteConnection: (
+    graphId: string,
+    connectionId: string,
+  ) => Effect.Effect<void, PersistenceError>;
+}
+
+export class Service extends Context.Service<Service, Interface>()("macrograph/Persistence") {}
 
 export type ProjectMutation = Data.TaggedEnum<{
   SaveProject: { project: Project.Model };
-  SaveGraph: { graph: Graph.Model };
+  SaveGraph: { graph: Canvas.Model };
   DeleteGraph: { graphId: string };
   SaveNode: { graphId: string; node: Node.Model };
   DeleteNode: { graphId: string; nodeId: string };
@@ -61,69 +59,56 @@ export const applyMutation = (
 ): Option.Option<Project.Model> =>
   ProjectMutation.$match(mutation, {
     SaveProject: ({ project: newProject }) => Option.some(newProject),
-    SaveGraph: ({ graph }) =>
-      Option.some({
-        ...project,
-        graphs: { ...project.graphs, [graph.id]: graph },
-      }),
+    SaveGraph: ({ graph }) => {
+      const updated = Project.replaceCanvas(project, graph);
+      return Option.some(
+        updated === project
+          ? {
+              ...project,
+              graphs: { ...project.graphs, [graph.id]: { canvas: graph } },
+            }
+          : updated,
+      );
+    },
     DeleteGraph: ({ graphId }) => {
       const { [graphId]: _, ...graphs } = project.graphs;
-      return Option.some({ ...project, graphs });
+      const { [graphId]: _function, ...functions } = project.functions;
+      return Option.some({ ...project, graphs, functions });
     },
     SaveNode: ({ graphId, node }) => {
-      const graph = project.graphs[graphId];
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
-      return Option.some({
-        ...project,
-        graphs: {
-          ...project.graphs,
-          [graphId]: {
-            ...graph,
-            nodes: { ...graph.nodes, [node.id]: node },
-          },
-        },
-      });
+      return Option.some(
+        Project.replaceCanvas(project, {
+          ...graph,
+          nodes: { ...graph.nodes, [node.id]: node },
+        }),
+      );
     },
     DeleteNode: ({ graphId, nodeId }) => {
-      const graph = project.graphs[graphId];
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       const { [nodeId]: _, ...nodes } = graph.nodes;
-      return Option.some({
-        ...project,
-        graphs: {
-          ...project.graphs,
-          [graphId]: { ...graph, nodes },
-        },
-      });
+      return Option.some(Project.replaceCanvas(project, { ...graph, nodes }));
     },
     SaveConnection: ({ graphId, connection }) => {
-      const graph = project.graphs[graphId];
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       const existing = graph.connections.some((c) => c.id === connection.id);
       const connections = existing
         ? graph.connections.map((c) => (c.id === connection.id ? connection : c))
         : [...graph.connections, connection];
-      return Option.some({
-        ...project,
-        graphs: {
-          ...project.graphs,
-          [graphId]: { ...graph, connections },
-        },
-      });
+      return Option.some(Project.replaceCanvas(project, { ...graph, connections }));
     },
     DeleteConnection: ({ graphId, connectionId }) => {
-      const graph = project.graphs[graphId];
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
-      return Option.some({
-        ...project,
-        graphs: {
-          ...project.graphs,
-          [graphId]: {
-            ...graph,
-            connections: graph.connections.filter((c) => c.id !== connectionId),
-          },
-        },
-      });
+      return Option.some(
+        Project.replaceCanvas(project, {
+          ...graph,
+          connections: graph.connections.filter((c) => c.id !== connectionId),
+        }),
+      );
     },
   });
 
@@ -143,18 +128,18 @@ export const withMemoryBuffer = <E, R>(
     Effect.gen(function* () {
       const persistence = yield* Service;
       const cache = yield* Ref.make<Option.Option<Project.Model>>(Option.none());
-      const graphCache = yield* Ref.make<Map<string, Graph.Model>>(new Map());
+      const graphCache = yield* Ref.make<Map<string, Canvas.Model>>(new Map());
 
       const setProjectCache = (project: Project.Model) =>
         Effect.all([
           Ref.set(cache, Option.some(project)),
-          Ref.set(graphCache, new Map(Object.entries(project.graphs))),
+          Ref.set(graphCache, new Map(Object.entries(Project.canvases(project)))),
         ]);
 
       const updateGraphCache = (mutation: ProjectMutation) =>
         Ref.update(graphCache, (cached) =>
           ProjectMutation.$match(mutation, {
-            SaveProject: ({ project }) => new Map(Object.entries(project.graphs)),
+            SaveProject: ({ project }) => new Map(Object.entries(Project.canvases(project))),
             SaveGraph: ({ graph }) => {
               const next = new Map(cached);
               next.set(graph.id, graph);
@@ -307,7 +292,8 @@ export const layerMemory = Layer.effect(
         Effect.gen(function* () {
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
-            const graph = cached.value.graphs[graphId];
+            const graph =
+              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
             if (graph) return graph;
           }
           return yield* new Graph.NotFoundError({ id: graphId });
@@ -317,7 +303,9 @@ export const layerMemory = Layer.effect(
         Effect.gen(function* () {
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
-            const node = cached.value.graphs[graphId]?.nodes[nodeId];
+            const canvas =
+              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
+            const node = canvas?.nodes[nodeId];
             if (node) return node;
           }
           return yield* new Node.NotFoundError({ id: nodeId });

@@ -43,50 +43,53 @@ describe("Utilities execution", () => {
       const whenFalse = node("false", "Print", {}, { in: "false" });
       const project: Project.Model = {
         name: "Utilities",
+        functions: {},
         engines: {},
         constants: {},
         types: {},
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Utilities",
-            nodes: {
-              [tick.id]: tick,
-              [branch.id]: branch,
-              [whenTrue.id]: whenTrue,
-              [alsoTrue.id]: alsoTrue,
-              [whenFalse.id]: whenFalse,
+            canvas: {
+              id: graphId,
+              name: "Utilities",
+              nodes: {
+                [tick.id]: tick,
+                [branch.id]: branch,
+                [whenTrue.id]: whenTrue,
+                [alsoTrue.id]: alsoTrue,
+                [whenFalse.id]: whenFalse,
+              },
+              connections: [
+                {
+                  id: ConnectionId.make("tick-branch"),
+                  outNodeId: tick.id,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: branch.id,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("branch-true"),
+                  outNodeId: branch.id,
+                  outIo: { _tag: "Port" as const, id: IoId.make("true") },
+                  inNodeId: whenTrue.id,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("branch-false"),
+                  outNodeId: branch.id,
+                  outIo: { _tag: "Port" as const, id: IoId.make("false") },
+                  inNodeId: whenFalse.id,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("branch-also-true"),
+                  outNodeId: branch.id,
+                  outIo: { _tag: "Port" as const, id: IoId.make("true") },
+                  inNodeId: alsoTrue.id,
+                  inIoId: IoId.make("exec"),
+                },
+              ],
             },
-            connections: [
-              {
-                id: ConnectionId.make("tick-branch"),
-                outNodeId: tick.id,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: branch.id,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("branch-true"),
-                outNodeId: branch.id,
-                outIo: { _tag: "Port" as const, id: IoId.make("true") },
-                inNodeId: whenTrue.id,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("branch-false"),
-                outNodeId: branch.id,
-                outIo: { _tag: "Port" as const, id: IoId.make("false") },
-                inNodeId: whenFalse.id,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("branch-also-true"),
-                outNodeId: branch.id,
-                outIo: { _tag: "Port" as const, id: IoId.make("true") },
-                inNodeId: alsoTrue.id,
-                inIoId: IoId.make("exec"),
-              },
-            ],
           },
         },
       };
@@ -114,10 +117,12 @@ describe("Utilities execution", () => {
         ...project,
         graphs: {
           [graphId]: {
-            ...project.graphs[graphId]!,
-            nodes: {
-              ...project.graphs[graphId]!.nodes,
-              [branch.id]: { ...branch, inputDefaults: { condition: false } },
+            canvas: {
+              ...project.graphs[graphId]!.canvas,
+              nodes: {
+                ...project.graphs[graphId]!.canvas.nodes,
+                [branch.id]: { ...branch, inputDefaults: { condition: false } },
+              },
             },
           },
         },

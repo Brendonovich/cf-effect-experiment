@@ -77,7 +77,14 @@ it.effect("persists editor-backed storage and endpoints", () => {
   };
   const seedLayer = Layer.effectDiscard(
     Effect.flatMap(Persistence.Service, (persistence) =>
-      persistence.saveProject({ name: "test", graphs: {}, engines: {}, constants: {}, types: {} }),
+      persistence.saveProject({
+        name: "test",
+        graphs: {},
+        functions: {},
+        engines: {},
+        constants: {},
+        types: {},
+      }),
     ),
   );
   const editorLayer = Editor.defaultLayer.pipe(

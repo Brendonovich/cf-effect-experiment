@@ -3,7 +3,7 @@ import type { EditorEvent } from "@macrograph/editor";
 import {
   Actor,
   ConnectionId,
-  Graph,
+  Canvas,
   IoId,
   Node,
   PackageId,
@@ -67,7 +67,7 @@ const setup = () =>
     dispose = cleanup;
     const editor = createEditorStore();
     const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>("main");
-    editor.setProject({ ...Project.empty(), graphs: { main: Graph.empty("main") } }, {});
+    editor.setProject({ ...Project.empty(), graphs: { main: Canvas.empty("main") } }, {});
     const rpc = {
       RenameResourceConstant: vi.fn<RpcMethod<"RenameResourceConstant">>(),
       CreateNode: vi.fn<RpcMethod<"CreateNode">>((payload) =>
