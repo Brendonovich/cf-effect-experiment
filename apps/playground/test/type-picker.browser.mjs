@@ -36,6 +36,17 @@ try {
     await choose(1, "Option");
     await choose(2, "List");
     await choose(3, "Int");
+    const frames = picker.locator("[data-type-frame]");
+    assert.equal(await frames.count(), 4);
+    for (let depth = 1; depth < 4; depth++) {
+      assert.equal(
+        await picker
+          .locator(`[data-type-frame="${depth - 1}"] > [data-type-frame="${depth}"]`)
+          .count(),
+        1,
+      );
+    }
+    assert.equal(await picker.locator('[data-type-depth] [aria-hidden="true"]').count(), 0);
     await picker.locator('[data-type-depth="3"]').press("ArrowDown");
     await search.fill("nonexistent");
     await page.getByText("No data types found", { exact: true }).waitFor();
