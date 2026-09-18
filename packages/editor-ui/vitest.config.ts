@@ -1,5 +1,5 @@
 import { Icons } from "@macrograph/icons/vite";
-import { stylexProps } from "@macrograph/plugin/vite";
+import { stylexProps } from "@macrograph/module/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vitest/config";
