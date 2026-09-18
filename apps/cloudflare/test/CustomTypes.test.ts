@@ -92,8 +92,9 @@ describe("hosted custom types", () => {
       );
       yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
       assert.deepStrictEqual(recorded.find((step) => step.node === "match")?.output, {
-        outputs: [{ outputId: 'variant:"Found"/field:"items"', value: [1, 2, 3] }],
+        outputs: [],
         executionOutputId: 'variant:"Found"',
+        scopePayload: { 'field:"items"': [1, 2, 3] },
       });
       yield* executor.loadProject({ ...project, types: {} });
       const count = recorded.length;

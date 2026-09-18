@@ -76,6 +76,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
               "CustomTypes",
+              "Scopes",
               ...newIds,
             ]);
             assert.deepStrictEqual(yield* editor.project.get(), original);
@@ -123,6 +124,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
               "CustomTypes",
+              "Scopes",
               ...newIds,
             ]);
             const snapshot = yield* editor.project.snapshot();
