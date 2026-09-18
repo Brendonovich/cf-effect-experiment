@@ -4,6 +4,21 @@ Comment `/opencode <request>` or `/oc <request>` on an issue or PR. Only users w
 repository write access can invoke the bot. The workflow runs `opencode2` on a
 GitHub-hosted runner and asks it to respond using `gh`.
 
+An Alchemy-deployed Cloudflare Worker receives signed GitHub `workflow_run`
+webhooks. Failed `CI` runs on open, non-draft, same-repository PRs authored by
+maintainers are sent to the Discord repair bot. It ignores stale failures, forks,
+and runs triggered by bots. Discord link embeds are suppressed.
+
+Configure these environment variables when running `pnpm deploy`:
+
+- `DISCORD_AUTOFIX_WEBHOOK`: webhook for the Discord repair channel.
+- `DISCORD_AUTOFIX_BOT_ID`: Discord user ID of the bot to mention.
+- `GITHUB_API_TOKEN`: fine-grained token that can read PRs and collaborator access.
+
+Alchemy generates and persists the webhook signing secret, then creates the Worker
+and repository webhook together. Its GitHub deployment credentials need repository
+webhook administration access.
+
 ## Credentials
 
 - Secret `OPENCODE_CREDENTIAL_KEY`: random 32-byte base64 AES-256-GCM key.
