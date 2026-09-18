@@ -137,6 +137,7 @@ describe("Self-hosted modules", () => {
         catalog.map((module) => module.id).sort(),
         [
           "CustomTypes",
+          "Scopes",
           ...deployments.map((deployment) => deployment.moduleId),
           ...statelessModules.map((module) => module.id),
         ].sort(),

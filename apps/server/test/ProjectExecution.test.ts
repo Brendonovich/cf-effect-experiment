@@ -150,6 +150,7 @@ describe("ProjectExecution", () => {
 
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
         "CustomTypes",
+        "Scopes",
         "obs",
         "twitch",
       ]);
