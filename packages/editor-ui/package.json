@@ -7,6 +7,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./Button": "./src/ui/Button.tsx",
     "./events.stylex": "./src/events/events.stylex.ts",
     "./events-markers.stylex": "./src/events/events-markers.stylex.ts",
     "./tokens.stylex": "./src/tokens.stylex.ts",
