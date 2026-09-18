@@ -14,6 +14,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, "../..");
 const mode = process.argv[2] ?? "all";
 const supportedModes = new Set(["doctor", "smoke", "journey", "all"]);
+const uiTimeout = Number(process.env.MACROGRAPH_VERIFY_UI_TIMEOUT ?? 60_000);
 const runId = process.env.MACROGRAPH_VERIFY_RUN_ID ?? new Date().toISOString().replaceAll(":", "-");
 const outputDirectory = resolve(
   root,
@@ -240,7 +241,9 @@ function isUnavailableOpenCodePicker(url) {
 async function smoke(page) {
   await page.getByRole("img", { name: "MacroGraph" }).waitFor();
   await page.getByRole("button", { name: "Export", exact: true }).waitFor();
-  await page.getByRole("button", { name: "New graph", exact: true }).waitFor({ timeout: 30_000 });
+  await page
+    .getByRole("button", { name: "New graph", exact: true })
+    .waitFor({ timeout: uiTimeout });
   const path = join(outputDirectory, "smoke.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
@@ -306,7 +309,7 @@ async function persistenceExportJourney(page) {
   await page
     .getByRole("button", { name: journeyName, exact: true })
     .first()
-    .waitFor({ timeout: 30_000 });
+    .waitFor({ timeout: uiTimeout });
   check("renamed graph survives reload", "passed", journeyName);
 
   const finalExport = await exportProject(page, "persisted-project.json");
@@ -321,7 +324,7 @@ async function persistenceExportJourney(page) {
   const resetNavigation = page.waitForEvent("framenavigated");
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await resetNavigation;
-  await page.getByText("No graphs yet.", { exact: true }).waitFor({ timeout: 30_000 });
+  await page.getByText("No graphs yet.", { exact: true }).waitFor({ timeout: uiTimeout });
   const resetExport = await exportProject(page, "reset-project.json");
   check(
     "reset clears the local project",
@@ -337,7 +340,7 @@ async function persistenceExportJourney(page) {
   await page
     .getByRole("button", { name: journeyName, exact: true })
     .first()
-    .waitFor({ timeout: 30_000 });
+    .waitFor({ timeout: uiTimeout });
   const importedExport = await exportProject(page, "imported-project.json");
   const importedNames = graphEntries(importedExport).map(([, graph]) => graphName(graph));
   check(
@@ -437,6 +440,7 @@ try {
     error instanceof Error
       ? { message: error.message, stack: error.stack }
       : { message: String(error) };
+  console.error(manifest.error.message);
   process.exitCode = 1;
 } finally {
   await cleanup();
