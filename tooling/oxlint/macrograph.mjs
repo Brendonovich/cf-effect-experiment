@@ -7,7 +7,7 @@ const normalize = (value) => value.replaceAll("\\", "/");
 
 const workspaceUnit = (filename) => {
   const match = normalize(filename).match(
-    /\/(apps\/(?:cloudflare\/frontend|server\/client|[^/]+)|packages\/(?:plugins\/[^/]+|[^/]+))(?:\/|$)/,
+    /\/(apps\/(?:cloudflare\/frontend|server\/client|[^/]+)|packages\/(?:modules\/[^/]+|[^/]+))(?:\/|$)/,
   );
   return match?.[1];
 };
