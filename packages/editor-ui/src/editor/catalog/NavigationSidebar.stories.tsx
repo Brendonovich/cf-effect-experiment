@@ -73,7 +73,6 @@ export const Sections: Story = {
             { label: "Graphs", section: "graphs", selectedPaneId: `graph:${graph.id}` },
             { label: "Modules", section: "packages", selectedPaneId: "package:twitch" },
             { label: "Functions", section: "functions", selectedPaneId: undefined },
-            { label: "Constants", section: "constants", selectedPaneId: undefined },
           ] as const
         }
       >

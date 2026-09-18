@@ -25,7 +25,9 @@ describe("workspace reducer", () => {
 
   it("preserves state identity when focusing the focused pane", () => {
     const state = createWorkspaceState({ type: "settings" });
-    expect(workspaceReducer(state, { type: "focus-pane", paneId: state.focusedPaneId })).toBe(state);
+    expect(workspaceReducer(state, { type: "focus-pane", paneId: state.focusedPaneId })).toBe(
+      state,
+    );
   });
 
   it("builds recursive splits with independent copied graph views", () => {
@@ -188,6 +190,13 @@ describe("workspace storage", () => {
     expect(parseWorkspaceState("{bad")).toBeUndefined();
     expect(parseWorkspaceState(JSON.stringify({ version: -1 }))).toBeUndefined();
     expect(parseWorkspaceState("x".repeat(maxWorkspaceStorageBytes + 1))).toBeUndefined();
+  });
+
+  it("migrates the removed constants navigation section to graphs", () => {
+    const state = createWorkspaceState();
+    expect(
+      parseWorkspaceState(JSON.stringify({ ...state, navSection: "constants" }))?.navSection,
+    ).toBe("graphs");
   });
 
   it("migrates version zero graph selections", () => {

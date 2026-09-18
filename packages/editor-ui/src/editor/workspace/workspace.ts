@@ -1,6 +1,6 @@
 export const workspaceVersion = 2 as const;
 export type PaneDirection = "horizontal" | "vertical";
-export type NavSection = "graphs" | "packages" | "functions" | "constants" | null;
+export type NavSection = "graphs" | "packages" | "functions" | null;
 
 export interface GraphViewState {
   readonly origin: { readonly x: number; readonly y: number };
@@ -517,6 +517,7 @@ export const parseWorkspaceState = (value: string | null): WorkspaceState | unde
     const state = parsed as unknown as WorkspaceState;
     return {
       ...state,
+      navSection: parsed.navSection === "constants" ? "graphs" : state.navSection,
       panes: Object.fromEntries(
         Object.entries(state.panes).map(([paneId, pane]) => [
           paneId,
