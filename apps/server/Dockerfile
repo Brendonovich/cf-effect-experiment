@@ -4,7 +4,7 @@
 FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS build
 
 WORKDIR /workspace
-RUN corepack enable
+RUN corepack enable && install -d -m 0750 /runtime/data
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -27,7 +27,7 @@ ENV NODE_ENV=production \
     MACROGRAPH_BROWSER_OTLP_ENDPOINT=$VITE_OTEL_EXPORTER_OTLP_ENDPOINT
 WORKDIR /app
 COPY --from=build --chown=node:node /workspace/apps/server/dist ./dist
-RUN install -d -o node -g node -m 0750 /data
+COPY --from=build --chown=node:node /runtime /
 
 USER 1000:1000
 VOLUME ["/data"]
