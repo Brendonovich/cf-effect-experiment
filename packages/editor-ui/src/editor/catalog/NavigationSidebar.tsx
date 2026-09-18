@@ -9,6 +9,8 @@ import { Select } from "../../ui/Select";
 import { resourceMarker, searchMarker } from "../markers.stylex.ts";
 import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
+
+const splitMarker = stylex.defineMarker();
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
   to: { opacity: 1, transform: "translateY(0) scale(1)" },
@@ -171,15 +173,23 @@ const styles = stylex.create({
     overflow: "hidden",
   },
   splitHandle: {
-    backgroundColor: {
-      default: colors.gray5,
-      ":hover": colors.focus,
-      ":focus-visible": colors.focus,
-    },
+    alignItems: "center",
+    backgroundColor: "transparent",
     cursor: "row-resize",
+    display: "flex",
     flexShrink: 0,
     height: 5,
     outline: "none",
+  },
+  splitLine: {
+    backgroundColor: {
+      default: colors.gray5,
+      [stylex.when.ancestor(":hover", splitMarker)]: colors.focus,
+      [stylex.when.ancestor(":focus-visible", splitMarker)]: colors.focus,
+    },
+    height: 1,
+    pointerEvents: "none",
+    width: "100%",
   },
   constantsTitleBar: {
     alignItems: "center",
@@ -661,7 +671,7 @@ export function NavigationSidebar(props: {
           aria-valuemax="80"
           aria-valuenow={String(Math.round(navigationPercent()))}
           tabindex="0"
-          sx={styles.splitHandle}
+          sx={[splitMarker, styles.splitHandle]}
           onPointerDown={(event) => {
             event.currentTarget.setPointerCapture(event.pointerId);
             setSplitPointer(event.pointerId);
@@ -687,7 +697,9 @@ export function NavigationSidebar(props: {
               Math.max(20, Math.min(80, current + (event.key === "ArrowDown" ? 5 : -5))),
             );
           }}
-        />
+        >
+          <span sx={styles.splitLine} />
+        </div>
         <section sx={styles.constantsPane} aria-label="Constants">
           <div sx={styles.constantsTitleBar}>
             <span sx={styles.constantsTitle}>Constants</span>
