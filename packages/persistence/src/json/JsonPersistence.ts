@@ -40,7 +40,7 @@ const ProjectMeta = Schema.Struct({
 
 export const layer = (dir: string) =>
   Layer.effect(
-    Persistence.Service,
+    Persistence.Service)(
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;

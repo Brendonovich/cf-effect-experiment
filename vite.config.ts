@@ -6,6 +6,15 @@ export default defineConfig({
     jsPlugins: [{ name: "macrograph", specifier: "./tooling/oxlint/macrograph.mjs" }],
     rules: {
       "macrograph/no-cross-package-relative-imports": "error",
+      "macrograph/no-effect-v3-api": "error",
+      "macrograph/no-private-workspace-subpath-imports": "error",
+      "macrograph/no-schema-class-mutation": "error",
+      "macrograph/prefer-curried-layer-effect": "error",
+      "macrograph/solid-v2-create-effect-signature": "error",
+      "macrograph/solid-v2-no-eager-component-prop-read": "warn",
+      "macrograph/solid-v2-no-mirrored-derived-state": "warn",
+      "macrograph/solid-v2-no-untracked-render-callback-read": "error",
+      "macrograph/solid-v2-prefer-effect-return-cleanup": "error",
       "macrograph/no-forbidden-architecture-imports": [
         "error",
         {
@@ -40,6 +49,10 @@ export default defineConfig({
         },
       ],
       "macrograph/no-node-imports-in-browser": [
+        "error",
+        ["apps/cloudflare/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
+      ],
+      "macrograph/no-unhandled-run-fork": [
         "error",
         ["apps/cloudflare/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
       ],

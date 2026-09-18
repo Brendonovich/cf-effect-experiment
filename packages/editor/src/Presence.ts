@@ -94,7 +94,7 @@ export class Registry extends Context.Service<
 >()("macrograph/PresenceRegistry") {}
 
 export const layer = Layer.effect(
-  Registry,
+  Registry)(
   Effect.gen(function* () {
     const clients = yield* Ref.make<ReadonlyMap<string, RegisteredClient>>(new Map());
     const generations = new Map<string, number>();

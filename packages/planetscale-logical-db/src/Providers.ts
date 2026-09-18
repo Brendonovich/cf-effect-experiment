@@ -19,6 +19,6 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 export const providers = (): EffectLayer<Providers, never, StackServices> =>
-  Layer.effect(Providers, Provider.collection([PostgresLogicalDatabase])).pipe(
+  Layer.effect(Providers)(Provider.collection([PostgresLogicalDatabase])).pipe(
     Layer.provide(PostgresLogicalDatabaseProvider()),
   );

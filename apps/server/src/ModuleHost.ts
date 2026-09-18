@@ -30,7 +30,7 @@ export class Service extends Context.Service<
 >()("macrograph/server/ModuleHost") {}
 
 export const layer = Layer.effect(
-  Service,
+  Service)(
   Effect.gen(function* () {
     const rpcs = yield* Ref.make<ReadonlyMap<string, RpcHttpEffect>>(new Map());
     return Service.of({

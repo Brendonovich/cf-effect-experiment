@@ -124,7 +124,7 @@ export const withMemoryBuffer = <E, R>(
   persistenceLayer: Layer.Layer<Service, E, R>,
 ): Layer.Layer<Service, E, R> =>
   Layer.effect(
-    Service,
+    Service)(
     Effect.gen(function* () {
       const persistence = yield* Service;
       const cache = yield* Ref.make<Option.Option<Project.Model>>(Option.none());
@@ -275,7 +275,7 @@ export const withMemoryBuffer = <E, R>(
   ).pipe(Layer.provide(persistenceLayer));
 
 export const layerMemory = Layer.effect(
-  Service,
+  Service)(
   Effect.gen(function* () {
     const cache = yield* Ref.make<Option.Option<Project.Model>>(Option.none());
 
