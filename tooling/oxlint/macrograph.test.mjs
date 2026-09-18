@@ -43,6 +43,16 @@ tester.run("no-cross-package-relative-imports", noCrossPackageRelativeImports, {
       code: 'export { Graph } from "../../../packages/core/src/Graph.js"',
       errors: [{ messageId: "crossPackage", data: { from: "apps/web", to: "packages/core" } }],
     },
+    {
+      filename: "/repo/packages/modules/list/src/Module.ts",
+      code: 'import MathModule from "../../math/src/Module.ts"',
+      errors: [
+        {
+          messageId: "crossPackage",
+          data: { from: "packages/modules/list", to: "packages/modules/math" },
+        },
+      ],
+    },
   ],
 });
 

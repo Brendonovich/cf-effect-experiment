@@ -18,7 +18,7 @@ export default defineConfig({
       "macrograph/no-forbidden-architecture-imports": [
         "error",
         {
-          "packages/plugin": [
+          "packages/module": [
             "@macrograph/core",
             "@macrograph/editor",
             "@macrograph/editor-ui",
