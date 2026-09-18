@@ -161,6 +161,15 @@ const styles = stylex.create({
     },
   },
   scroll: { flex: 1, minHeight: 0, overflowY: "auto" },
+  footerTabs: {
+    backgroundColor: colors.gray3,
+    borderTopColor: colors.gray5,
+    borderTopStyle: "solid",
+    borderTopWidth: 1,
+    flexShrink: 0,
+    height: 32,
+  },
+  footerTab: { height: "100%", width: "100%" },
   navOption: {
     display: "block",
     fontSize: 12,
@@ -286,7 +295,7 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "constants";
+export type NavigationSection = "graphs" | "packages" | "functions" | "constants";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
@@ -489,7 +498,7 @@ export function NavigationSidebar(props: {
       <div style={{ "flex-shrink": "0" }}>
         <div sx={styles.topTabs}>
           <div sx={styles.tabGrid}>
-            <For each={["graphs", "packages", "constants"] as const}>
+            <For each={["graphs", "packages", "functions"] as const}>
               {(section) => (
                 <button
                   type="button"
@@ -504,8 +513,8 @@ export function NavigationSidebar(props: {
                   {section === "graphs"
                     ? "Graphs"
                     : section === "packages"
-                      ? "Plugins"
-                      : "Constants"}
+                      ? "Modules"
+                      : "Functions"}
                 </button>
               )}
             </For>
@@ -520,31 +529,34 @@ export function NavigationSidebar(props: {
                 props.section === "graphs"
                   ? "Search Graphs"
                   : props.section === "packages"
-                    ? "Search Plugins"
-                    : "Search Constants"
+                    ? "Search Modules"
+                    : props.section === "functions"
+                      ? "Search Functions"
+                      : "Search Constants"
               }
               value={props.search}
               onInput={(event) => props.onSearchChange(event.currentTarget.value)}
             />
           </div>
           <Show when={props.section === "graphs"}>
-            <Show when={props.onCreateFunction && props.canEditGraphs}>
-              <button
-                type="button"
-                sx={[styles.focus, styles.newButton]}
-                aria-label="New function"
-                title="New function"
-                onClick={() => props.onCreateFunction?.()}
-              >
-                fn
-              </button>
-            </Show>
             <button
               type="button"
               sx={[styles.focus, styles.newButton]}
               aria-label="New graph"
               title="New graph"
               onClick={props.onCreateGraph}
+            >
+              <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
+            </button>
+          </Show>
+          <Show when={props.section === "functions" && props.onCreateFunction}>
+            <button
+              type="button"
+              sx={[styles.focus, styles.newButton]}
+              aria-label="New function"
+              title="New function"
+              disabled={!props.canEditGraphs}
+              onClick={() => props.onCreateFunction?.()}
             >
               <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
             </button>
@@ -640,18 +652,26 @@ export function NavigationSidebar(props: {
         </div>
       </div>
       <div sx={styles.scroll}>
-        <Show when={props.section === "graphs"}>
+        <Show when={props.section === "graphs" || props.section === "functions"}>
           <For
-            each={props.graphs}
+            each={props.graphs.filter(([, graph]) =>
+              props.section === "functions" ? graph.kind === "function" : graph.kind !== "function",
+            )}
             fallback={
               <div sx={[styles.navOption, styles.noConstants]}>
-                {props.search.trim() === "" ? "No graphs yet." : "No graphs found."}
+                {props.section === "functions"
+                  ? props.search.trim() === ""
+                    ? "No functions yet."
+                    : "No functions found."
+                  : props.search.trim() === ""
+                    ? "No graphs yet."
+                    : "No graphs found."}
               </div>
             }
           >
             {([id, graph]) => (
               <GraphNavigationOption
-                name={graph.kind === "function" ? `fn ${graph.name}` : graph.name}
+                name={graph.name}
                 selected={props.selectedPaneId === `graph:${id}`}
                 canEdit={props.canEditGraphs}
                 onSelect={() => props.onSelectGraph(id)}
@@ -667,7 +687,7 @@ export function NavigationSidebar(props: {
               when={props.packagesWithSettings.length + props.packagesWithoutSettings.length === 0}
             >
               <div sx={[styles.navOption, styles.noConstants]}>
-                {props.search.trim() === "" ? "No plugins yet." : "No plugins found."}
+                {props.search.trim() === "" ? "No modules yet." : "No modules found."}
               </div>
             </Show>
             <div style={{ "padding-bottom": "4px" }}>
@@ -818,6 +838,21 @@ export function NavigationSidebar(props: {
             </div>
           </div>
         </Show>
+      </div>
+      <div sx={styles.footerTabs}>
+        <button
+          type="button"
+          sx={[
+            styles.focus,
+            styles.tab,
+            styles.footerTab,
+            props.section === "constants" ? styles.activeTab : styles.inactiveTab,
+          ]}
+          aria-pressed={props.section === "constants" ? "true" : "false"}
+          onClick={() => props.onSectionChange("constants")}
+        >
+          Constants
+        </button>
       </div>
     </Sidebar>
   );
