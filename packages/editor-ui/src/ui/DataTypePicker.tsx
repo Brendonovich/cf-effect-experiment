@@ -14,37 +14,45 @@ import {
 const styles = stylex.create({
   root: { minWidth: 0 },
   segments: {
-    display: "flex",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 3,
-    padding: 3,
     backgroundColor: "black",
     borderRadius: 8,
+    display: "flex",
+    flexWrap: "nowrap",
+    fontFamily: "monospace",
+    fontSize: 14,
+    overflowX: "auto",
+    overflowY: "hidden",
+    paddingBlock: 1,
+  },
+  segmentFrame: {
+    alignItems: "center",
+    backgroundColor: "black",
     borderColor: colors.gray6,
+    borderRadius: 8,
     borderStyle: "solid",
     borderWidth: 1,
+    cursor: "pointer",
+    display: "flex",
+    flexShrink: 0,
+    flexWrap: "nowrap",
+    marginBlock: -1,
+    paddingInline: 4,
   },
   segment: {
-    fontFamily: "monospace",
-    fontSize: 12,
-    borderRadius: 6,
-    borderColor: colors.gray6,
-    borderStyle: "solid",
-    borderWidth: 1,
-    paddingBlock: 5,
-    paddingInline: 6,
-    backgroundColor: { default: "black", ":hover": colors.gray4 },
+    backgroundColor: "transparent",
     color: colors.gray12,
+    maxWidth: "100%",
     outline: "none",
-    ":focus-visible": { borderColor: colors.focus },
+    overflowWrap: "anywhere",
+    padding: 4,
+    ":focus-visible": { color: colors.focus },
     "@media (pointer: coarse)": { minHeight: 36 },
   },
   selected: {
     borderColor: colors.focus,
     backgroundColor: "color-mix(in srgb, var(--gray-12) 10%, black)",
   },
-  arrow: { color: colors.gray10, fontSize: 10, marginLeft: 5 },
   menu: {
     position: "fixed",
     zIndex: 100,
@@ -110,6 +118,7 @@ export function DataTypePicker(props: DataTypePickerProps) {
   let searchInput: HTMLInputElement | undefined;
   let trigger: HTMLButtonElement | undefined;
   const [depth, setDepth] = createSignal<number | null>(null);
+  const [hoveredDepth, setHoveredDepth] = createSignal<number | null>(null);
   const [search, setSearch] = createSignal("");
   const [highlight, setHighlight] = createSignal(0);
   const [position, setPosition] = createSignal({
@@ -173,7 +182,8 @@ export function DataTypePicker(props: DataTypePickerProps) {
       };
       const viewport = () => close(true);
       const scroll = (event: Event) => {
-        if (!menu?.contains(event.target as Node)) close();
+        const target = event.target as Node;
+        if (!menu?.contains(target) && !root?.contains(target)) close();
       };
       document.addEventListener("pointerdown", outside);
       window.addEventListener("resize", viewport);
@@ -185,6 +195,56 @@ export function DataTypePicker(props: DataTypePickerProps) {
       };
     },
   );
+
+  function Segment(segmentProps: { readonly index: number }) {
+    return (
+      <div
+        data-type-frame={segmentProps.index}
+        sx={[
+          styles.segmentFrame,
+          depth() === segmentProps.index || hoveredDepth() === segmentProps.index
+            ? styles.selected
+            : null,
+        ]}
+        onMouseMove={(event) => {
+          event.stopPropagation();
+          setHoveredDepth(segmentProps.index);
+        }}
+        onMouseLeave={(event) => {
+          event.stopPropagation();
+          setHoveredDepth(null);
+        }}
+      >
+        <button
+          type="button"
+          disabled={props.disabled}
+          data-type-depth={segmentProps.index}
+          sx={styles.segment}
+          aria-label={`${props.label ?? "Data type"}, ${segmentProps.index === 0 ? "outer" : `nested ${segmentProps.index}`}: ${segments()[segmentProps.index]?._tag}`}
+          aria-haspopup="listbox"
+          aria-expanded={depth() === segmentProps.index ? "true" : "false"}
+          aria-controls={depth() === segmentProps.index ? id : undefined}
+          onClick={(event) =>
+            depth() === segmentProps.index
+              ? close(true)
+              : open(event.currentTarget, segmentProps.index)
+          }
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              open(event.currentTarget, segmentProps.index);
+            }
+          }}
+        >
+          {segments()[segmentProps.index]?._tag}
+        </button>
+        <Show when={segmentProps.index + 1 < segments().length}>
+          <Segment index={segmentProps.index + 1} />
+        </Show>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={root}
@@ -202,36 +262,7 @@ export function DataTypePicker(props: DataTypePickerProps) {
       }}
     >
       <div sx={styles.segments} role="group" aria-label={props.label ?? "Data type"}>
-        <For each={segments().map((_, index) => index)}>
-          {(index) => (
-            <button
-              type="button"
-              disabled={props.disabled}
-              data-type-depth={index}
-              sx={[styles.segment, depth() === index ? styles.selected : null]}
-              aria-label={`${props.label ?? "Data type"}, ${index === 0 ? "outer" : `nested ${index}`}: ${segments()[index]?._tag}`}
-              aria-haspopup="listbox"
-              aria-expanded={depth() === index ? "true" : "false"}
-              aria-controls={depth() === index ? id : undefined}
-              onClick={(event) =>
-                depth() === index ? close(true) : open(event.currentTarget, index)
-              }
-              onKeyDown={(event) => {
-                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                  event.preventDefault();
-                  open(event.currentTarget, index);
-                }
-              }}
-            >
-              {segments()[index]?._tag}
-              <span sx={styles.arrow} aria-hidden="true">
-                {segments()[index]?._tag === "List" || segments()[index]?._tag === "Option"
-                  ? ">"
-                  : "v"}
-              </span>
-            </button>
-          )}
-        </For>
+        <Segment index={0} />
       </div>
       <Show when={depth() !== null}>
         <div ref={menu} sx={styles.menu} style={position()}>
