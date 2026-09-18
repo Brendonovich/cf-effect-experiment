@@ -7,6 +7,7 @@ import { For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { Select } from "../../ui/Select";
+import { FunctionInfo } from "./FunctionInfo";
 import { PropertyControl } from "./PropertyControl";
 import { SchemaInfoButton } from "./SchemaInfoButton";
 
@@ -24,7 +25,6 @@ const styles = stylex.create({
   panel: { alignItems: "stretch", display: "flex", flexDirection: "column", gap: 6, padding: 8 },
   title: { color: colors.gray12, fontSize: 12, fontWeight: 600 },
   field: { display: "flex", flexDirection: "column", gap: 2 },
-  actions: { display: "flex", gap: 12 },
   fieldLabel: { color: colors.gray11, fontSize: 11, fontWeight: 500 },
   value: { color: colors.gray12, fontSize: 12 },
   editable: {
@@ -86,179 +86,77 @@ export function Inspector(props: {
       fallback={
         <Show when={props.graph} fallback={<div sx={styles.empty}>No information available</div>}>
           {(graph) => (
-            <div sx={styles.panel}>
-              <span sx={styles.title}>Graph Info</span>
-              <Show when={props.functionError}>
-                <div role="alert" sx={styles.value}>
-                  {props.functionError}
-                </div>
-              </Show>
-              <div sx={styles.field}>
-                <span sx={styles.fieldLabel}>Name</span>
-                <Show when={props.canEdit} fallback={<span sx={styles.value}>{graph().name}</span>}>
-                  <Show
-                    when={props.editingGraphNameId === graph().id}
-                    fallback={
-                      <button
-                        type="button"
-                        sx={styles.editable}
-                        onClick={() => props.onEditingGraphNameChange(graph().id)}
-                      >
-                        {graph().name}
-                      </button>
-                    }
-                  >
-                    <input
-                      ref={(input) =>
-                        queueMicrotask(() => {
-                          input.focus();
-                          input.select();
-                        })
-                      }
-                      sx={[styles.editable, styles.input]}
-                      value={graph().name}
-                      onBlur={(event) => {
-                        props.onRenameGraph(event.currentTarget.value);
-                        props.onEditingGraphNameChange(null);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
-                        if (event.key === "Escape") {
-                          event.currentTarget.value = graph().name;
-                          event.currentTarget.blur();
-                        }
-                      }}
-                    />
+            <Show
+              when={graph().kind === "function"}
+              fallback={
+                <div sx={styles.panel}>
+                  <span sx={styles.title}>Graph Info</span>
+                  <Show when={props.functionError}>
+                    <div role="alert" sx={styles.value}>
+                      {props.functionError}
+                    </div>
                   </Show>
-                </Show>
-              </div>
-              <div sx={styles.field}>
-                <span sx={styles.fieldLabel}>Total Nodes</span>
-                <span sx={styles.value}>{Object.keys(graph().nodes).length}</span>
-              </div>
-              <Show when={graph().kind === "function"}>
-                <span sx={styles.title}>Function Signature</span>
-                <span sx={styles.fieldLabel}>
-                  Ordered fields use stable IDs. Destructive edits require approval and preserve
-                  caller data.
-                </span>
-                <For each={["inputs", "outputs"] as const}>
-                  {(side) => {
-                    const fields = () => graph().signature?.[side] ?? [];
-                    const update = (next: ReadonlyArray<Graph.FunctionField>) =>
-                      props.onSetFunctionSignature?.({
-                        ...(graph().signature ?? { inputs: [], outputs: [] }),
-                        [side]: next,
-                      });
-                    return (
-                      <section sx={styles.field}>
-                        <span sx={styles.title}>{side === "inputs" ? "Arguments" : "Results"}</span>
-                        <For each={fields()}>
-                          {(field) => (
-                            <div sx={styles.field}>
-                              <input
-                                aria-label={`${side} field name`}
-                                sx={[styles.editable, styles.input]}
-                                value={field.name}
-                                disabled={!props.canEdit}
-                                onBlur={(event) =>
-                                  update(
-                                    fields().map((item) =>
-                                      item.id === field.id
-                                        ? { ...item, name: event.currentTarget.value }
-                                        : item,
-                                    ),
-                                  )
-                                }
-                              />
-                              <Select
-                                placeholder="Select type"
-                                options={["String", "Int", "Float", "Bool", "DateTime"].map(
-                                  (id) => ({ id, name: id }),
-                                )}
-                                value={field.type._tag}
-                                valid
-                                onChange={(value) => {
-                                  if (!props.canEdit) return;
-                                  if (
-                                    value === "String" ||
-                                    value === "Int" ||
-                                    value === "Float" ||
-                                    value === "Bool" ||
-                                    value === "DateTime"
-                                  )
-                                    update(
-                                      fields().map((item) =>
-                                        item.id === field.id
-                                          ? { ...item, type: { _tag: value } }
-                                          : item,
-                                      ),
-                                    );
-                                }}
-                              />
-                              <Show when={props.canEdit}>
-                                <div sx={styles.actions}>
-                                  <button
-                                    type="button"
-                                    sx={styles.editable}
-                                    aria-label={`Move ${field.name} up`}
-                                    disabled={fields()[0]?.id === field.id}
-                                    onClick={() => {
-                                      const next = [...fields()];
-                                      const index = next.findIndex((item) => item.id === field.id);
-                                      if (index > 0) {
-                                        [next[index - 1], next[index]] = [
-                                          next[index]!,
-                                          next[index - 1]!,
-                                        ];
-                                        update(next);
-                                      }
-                                    }}
-                                  >
-                                    Up
-                                  </button>
-                                  <button
-                                    type="button"
-                                    sx={styles.editable}
-                                    aria-label={`Remove ${field.name}`}
-                                    onClick={() =>
-                                      update(fields().filter((item) => item.id !== field.id))
-                                    }
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </Show>
-                            </div>
-                          )}
-                        </For>
-                        <Show when={props.canEdit}>
+                  <div sx={styles.field}>
+                    <span sx={styles.fieldLabel}>Name</span>
+                    <Show
+                      when={props.canEdit}
+                      fallback={<span sx={styles.value}>{graph().name}</span>}
+                    >
+                      <Show
+                        when={props.editingGraphNameId === graph().id}
+                        fallback={
                           <button
                             type="button"
                             sx={styles.editable}
-                            onClick={() =>
-                              update([
-                                ...fields(),
-                                {
-                                  id: crypto.randomUUID(),
-                                  name:
-                                    side === "inputs"
-                                      ? `Argument ${fields().length + 1}`
-                                      : `Result ${fields().length + 1}`,
-                                  type: { _tag: "String" },
-                                },
-                              ])
-                            }
+                            onClick={() => props.onEditingGraphNameChange(graph().id)}
                           >
-                            Add {side === "inputs" ? "argument" : "result"}
+                            {graph().name}
                           </button>
-                        </Show>
-                      </section>
-                    );
-                  }}
-                </For>
-              </Show>
-            </div>
+                        }
+                      >
+                        <input
+                          ref={(input) =>
+                            queueMicrotask(() => {
+                              input.focus();
+                              input.select();
+                            })
+                          }
+                          sx={[styles.editable, styles.input]}
+                          value={graph().name}
+                          onBlur={(event) => {
+                            props.onRenameGraph(event.currentTarget.value);
+                            props.onEditingGraphNameChange(null);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                            if (event.key === "Escape") {
+                              event.currentTarget.value = graph().name;
+                              event.currentTarget.blur();
+                            }
+                          }}
+                        />
+                      </Show>
+                    </Show>
+                  </div>
+                  <div sx={styles.field}>
+                    <span sx={styles.fieldLabel}>Total Nodes</span>
+                    <span sx={styles.value}>{Object.keys(graph().nodes).length}</span>
+                  </div>
+                </div>
+              }
+            >
+              <FunctionInfo
+                graph={graph()}
+                canEdit={props.canEdit}
+                editingName={props.editingGraphNameId === graph().id}
+                error={props.functionError}
+                onEditingNameChange={(editing) =>
+                  props.onEditingGraphNameChange(editing ? graph().id : null)
+                }
+                onRename={props.onRenameGraph}
+                onSetSignature={props.onSetFunctionSignature}
+              />
+            </Show>
           )}
         </Show>
       }
