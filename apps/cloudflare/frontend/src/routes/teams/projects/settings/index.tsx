@@ -58,7 +58,7 @@ export const ProjectSettingsRoute = () => {
   }));
   const [rememberedUserIds, setRememberedUserIds] = createSignal<string[]>();
   const [optimisticAccess, setOptimisticAccess] = createOptimisticStore<State>(
-    () => ({
+    (): State => ({
       context: {
         userIds:
           rememberedUserIds() ??

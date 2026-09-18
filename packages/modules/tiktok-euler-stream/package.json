@@ -21,10 +21,10 @@
   "dependencies": {
     "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
     "effect": "catalog:",
-    "solid-js": "2.0.0-rc.1",
+    "solid-js": "2.0.0-rc.9",
     "tiktok-live-api-sdk": "0.4.0-beta1",
     "tiktok-live-connector": "2.4.4",
     "ws": "^8.18.2"

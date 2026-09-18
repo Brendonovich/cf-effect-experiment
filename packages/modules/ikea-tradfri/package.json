@@ -19,12 +19,12 @@
   "dependencies": {
     "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
     "coap-packet": "^1.1.1",
     "effect": "catalog:",
     "effect-node-dtls": "workspace:*",
-    "solid-js": "2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.9"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

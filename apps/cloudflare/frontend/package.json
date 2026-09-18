@@ -21,16 +21,17 @@
     "@macrograph/module-openai": "workspace:*",
     "@macrograph/module-twitch": "workspace:*",
     "@solidjs/router": "2.0.0-next.17",
-    "@solidjs/web": "2.0.0-rc.1",
+    "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
     "@tanstack/solid-query": "6.0.0-rc.0",
     "effect": "catalog:",
-    "solid-js": "2.0.0-rc.1"
+    "solid-js": "2.0.0-rc.9"
   },
   "devDependencies": {
     "@iconify/json": "2.2.196",
     "@macrograph/icons": "workspace:*",
-    "@solidjs/vite-plugin": "3.0.0-next.31",
+    "@solidjs/diagnostics": "2.0.0-rc.9",
+    "@solidjs/vite-plugin": "3.0.0-next.44",
     "@stylexjs/unplugin": "catalog:",
     "@types/node": "^24",
     "jsdom": "^27.0.0",

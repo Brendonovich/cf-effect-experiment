@@ -11,7 +11,7 @@ import {
   ResourceConstant,
 } from "@macrograph/core";
 import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
-import { createStore } from "solid-js";
+import { createStore, runWithOwner } from "solid-js";
 
 type MutableGraph = {
   id: Canvas.CanvasId;
@@ -53,8 +53,11 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     events: [],
     resourceValues: {},
   });
+  // Editor commands intentionally mutate this store from component-owned callbacks.
+  const setStoreValueUnowned: typeof setStoreValue = (update) =>
+    runWithOwner(null, () => setStoreValue(update));
   const setStore = (update: (store: MutableEditorStore) => MutableEditorStore | undefined | void) =>
-    setStoreValue((current) => {
+    setStoreValueUnowned((current) => {
       const draft: MutableEditorStore = {
         project:
           current.project === null
