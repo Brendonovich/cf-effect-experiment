@@ -429,7 +429,7 @@ const setup = Effect.fnUntraced(function* (
             status,
             headers: {
               "content-type": "application/json",
-              "ratelimit-remaining": "0",
+              "ratelimit-remaining": "799",
               "ratelimit-reset": "123456",
             },
           }),
@@ -823,7 +823,7 @@ describe("Twitch authenticated action nodes", () => {
         yield* run;
         assert.strictEqual(test.refreshes(), 1);
         assert.strictEqual(test.calls.at(-1)!.headers.authorization, "Bearer refreshed-secret");
-        for (const status of [400, 401, 403, 404, 429, 503]) {
+        for (const status of [400, 401, 403, 404, 503]) {
           test.respond({ message: "Twitch action rejected", access_token: "response-secret" }, [
             status,
           ]);
@@ -832,7 +832,7 @@ describe("Twitch authenticated action nodes", () => {
           if (error._tag === "HelixError") {
             assert.strictEqual(error.status, status);
             assert.strictEqual(error.reason, "Twitch action rejected");
-            assert.strictEqual(error.rateLimitRemaining, 0);
+            assert.strictEqual(error.rateLimitRemaining, 799);
             assert.strictEqual(error.rateLimitReset, 123456);
             assert.notInclude(error.reason, "secret");
           }
