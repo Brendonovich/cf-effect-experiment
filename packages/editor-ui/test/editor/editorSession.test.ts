@@ -2,7 +2,7 @@
 
 import type { Presence } from "@macrograph/editor";
 
-import { Graph, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
+import { Canvas, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect, PubSub, Stream } from "effect";
 import { RpcClientError } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
@@ -47,7 +47,7 @@ describe("editor presence lifecycle", () => {
       ProjectEventsStream: () =>
         Stream.succeed({
           _tag: "ProjectSnapshot" as const,
-          snapshot: { project: Project.empty(), nodeIO: {} },
+          snapshot: { project: { ...Project.empty(), graphs: {} }, nodeIO: {} },
         }).pipe(Stream.concat(Stream.never)),
       PresenceStream: () => Stream.fromPubSub(events),
     } satisfies TestClient<
@@ -188,7 +188,7 @@ describe("editor presence lifecycle", () => {
       dispose = cleanup;
       const [selfConnectionId, setSelfConnectionId] = createSignal<string>();
       const editor = createEditorStore();
-      const graph = Graph.empty("graph");
+      const graph = Canvas.empty("graph");
       editor.setProject(
         {
           ...Project.empty(),

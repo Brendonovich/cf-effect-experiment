@@ -1,5 +1,7 @@
 import {
+  Canvas,
   Connection,
+  Function as GraphFunction,
   Graph,
   Node,
   Project,
@@ -10,16 +12,35 @@ import { Effect, FileSystem, Layer, Path, Schema, Semaphore } from "effect";
 
 import { Persistence, PersistenceError } from "../Persistence.ts";
 
+const FunctionMetadata = Schema.Union([
+  Schema.Struct({
+    arguments: Schema.Array(GraphFunction.Field),
+    returns: Schema.Array(GraphFunction.Field),
+    inputPosition: GraphFunction.Model.fields.inputPosition,
+    outputPosition: GraphFunction.Model.fields.outputPosition,
+  }),
+  Schema.Struct({
+    graphId: Schema.String,
+    inputs: Schema.Array(GraphFunction.Field),
+    outputs: Schema.Array(GraphFunction.Field),
+    inputPosition: GraphFunction.Model.fields.inputPosition,
+    outputPosition: GraphFunction.Model.fields.outputPosition,
+  }),
+]);
+
 const ProjectMeta = Schema.Struct({
   name: Schema.String,
   engines: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
+  functions: Schema.optional(
+    Schema.Record(Schema.String, FunctionMetadata),
+  ),
 });
 
 export const layer = (dir: string) =>
   Layer.effect(
-    Persistence.Service,
+    Persistence.Service)(
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
@@ -43,6 +64,17 @@ export const layer = (dir: string) =>
                 engines: project.engines,
                 constants: project.constants,
                 types: project.types,
+                functions: Object.fromEntries(
+                  Object.entries(project.functions).map(([id, fn]) => [
+                    id,
+                    {
+                      arguments: fn.arguments,
+                      returns: fn.returns,
+                      inputPosition: fn.inputPosition,
+                      outputPosition: fn.outputPosition,
+                    },
+                  ]),
+                ),
               },
               null,
               2,
@@ -50,7 +82,7 @@ export const layer = (dir: string) =>
           )
           .pipe(PersistenceError.refail);
 
-        for (const [graphId, graph] of Object.entries(project.graphs)) {
+        for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
           yield* fs
             .writeFileString(graphFilePath(graphId), JSON.stringify(graph, null, 2))
             .pipe(PersistenceError.refail);
@@ -67,6 +99,7 @@ export const layer = (dir: string) =>
         );
 
         const graphs: Record<string, Graph.Model> = {};
+        const functions: Record<string, GraphFunction.Model> = {};
         const graphsExist = yield* fs.exists(graphsDir).pipe(PersistenceError.refail);
         if (graphsExist) {
           const graphFiles = yield* fs.readDirectory(graphsDir).pipe(PersistenceError.refail);
@@ -76,10 +109,19 @@ export const layer = (dir: string) =>
             const content = yield* fs
               .readFileString(graphFilePath(graphId))
               .pipe(PersistenceError.refail);
-            const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
-              PersistenceError.refail,
-            );
-            graphs[graphId] = graph;
+            const canvas = yield* Schema.decodeUnknownEffect(Canvas.Model)(
+              JSON.parse(content),
+            ).pipe(PersistenceError.refail);
+            const metadata = meta.functions?.[graphId];
+            if (metadata === undefined) graphs[graphId] = { canvas };
+            else
+              functions[graphId] = {
+                canvas,
+                arguments: "arguments" in metadata ? metadata.arguments : metadata.inputs,
+                returns: "returns" in metadata ? metadata.returns : metadata.outputs,
+                inputPosition: metadata.inputPosition,
+                outputPosition: metadata.outputPosition,
+              };
           }
         }
 
@@ -87,6 +129,7 @@ export const layer = (dir: string) =>
           // id: ProjectId.make(meta.id),
           name: meta.name,
           graphs,
+          functions,
           engines: meta.engines ?? {},
           constants: meta.constants ?? {},
           types: meta.types ?? {},
@@ -100,7 +143,7 @@ export const layer = (dir: string) =>
         const content = yield* fs
           .readFileString(graphFilePath(graphId))
           .pipe(PersistenceError.refail);
-        return yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        return yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
       }, lock.withPermit);
@@ -112,7 +155,7 @@ export const layer = (dir: string) =>
         const content = yield* fs
           .readFileString(graphFilePath(graphId))
           .pipe(PersistenceError.refail);
-        const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
         const node = graph.nodes[nodeId];
@@ -125,7 +168,7 @@ export const layer = (dir: string) =>
       // 	if (exists) yield* fs.remove(projectDir, { recursive: true }).pipe(PersistenceError.refail);
       // }, lock.withPermit);
 
-      const saveGraph = Effect.fnUntraced(function* (graph: Graph.Model) {
+      const saveGraph = Effect.fnUntraced(function* (graph: Canvas.Model) {
         yield* fs
           .writeFileString(graphFilePath(graph.id), JSON.stringify(graph, null, 2))
           .pipe(PersistenceError.refail);
@@ -139,7 +182,7 @@ export const layer = (dir: string) =>
       const saveNode = Effect.fnUntraced(function* (graphId: string, node: Node.Model) {
         const graphFile = graphFilePath(graphId);
         const content = yield* fs.readFileString(graphFile).pipe(PersistenceError.refail);
-        const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
         const updatedGraph = {
@@ -154,7 +197,7 @@ export const layer = (dir: string) =>
       const deleteNode = Effect.fnUntraced(function* (graphId: string, nodeId: string) {
         const graphFile = graphFilePath(graphId);
         const content = yield* fs.readFileString(graphFile).pipe(PersistenceError.refail);
-        const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
         const { [nodeId]: _, ...nodes } = graph.nodes;
@@ -170,7 +213,7 @@ export const layer = (dir: string) =>
       ) {
         const graphFile = graphFilePath(graphId);
         const content = yield* fs.readFileString(graphFile).pipe(PersistenceError.refail);
-        const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
         const updatedGraph = {
@@ -185,7 +228,7 @@ export const layer = (dir: string) =>
       const deleteConnection = Effect.fnUntraced(function* (graphId: string, connectionId: string) {
         const graphFile = graphFilePath(graphId);
         const content = yield* fs.readFileString(graphFile).pipe(PersistenceError.refail);
-        const graph = yield* Schema.decodeUnknownEffect(Graph.Model)(JSON.parse(content)).pipe(
+        const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
         const connections = graph.connections.filter((c) => c.id !== connectionId);

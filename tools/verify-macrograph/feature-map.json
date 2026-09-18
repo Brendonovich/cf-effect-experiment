@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "application": "MacroGraph playground",
+  "features": [
+    {
+      "id": "playground.boot",
+      "name": "Browser playground boots",
+      "documentation": ".opencode/skills/verify-macrograph/features/playground-boot.md",
+      "status": "covered",
+      "verification": "smoke",
+      "evidence": ["screenshot", "server-log"]
+    },
+    {
+      "id": "project.graph.local-persistence-export",
+      "name": "Graph changes persist locally and export",
+      "documentation": ".opencode/skills/verify-macrograph/features/local-persistence-export.md",
+      "status": "covered",
+      "verification": "journey",
+      "userJourney": ["Create graph", "Rename graph", "Reload browser app", "Export project"],
+      "evidence": ["created-project.json", "persisted-project.json", "screenshot"]
+    },
+    {
+      "id": "project.import",
+      "name": "Import replaces the local project",
+      "documentation": ".opencode/skills/verify-macrograph/features/project-import.md",
+      "status": "covered",
+      "verification": "journey",
+      "evidence": ["persisted-project.json", "imported-project.json", "screenshot"]
+    },
+    {
+      "id": "project.reset",
+      "name": "Reset clears the local project",
+      "documentation": ".opencode/skills/verify-macrograph/features/project-reset.md",
+      "status": "covered",
+      "verification": "journey",
+      "evidence": ["reset-project.json", "screenshot"]
+    }
+  ]
+}

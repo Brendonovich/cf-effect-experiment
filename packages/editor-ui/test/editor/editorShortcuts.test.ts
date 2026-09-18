@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { Graph, Node, PackageId, Project, SchemaId } from "@macrograph/core";
+import { Canvas, Node, PackageId, Project, SchemaId } from "@macrograph/core";
 import { createRoot, flush } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,10 +84,10 @@ const setup = (
         ...Project.empty(),
         graphs: {
           main: {
-            ...Graph.empty("main"),
+            ...Canvas.empty("main"),
             nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
           },
-          other: Graph.empty("other"),
+          other: Canvas.empty("other"),
         },
       },
       {},
@@ -151,7 +151,7 @@ describe("createEditorShortcuts", () => {
 
   it("opens and restores shortcuts without losing graph view or running graph actions", async () => {
     const { layout, commands } = setup();
-    const snapshot = { ...Project.empty(), graphs: { main: Graph.empty("main") } };
+    const snapshot = { ...Project.empty(), graphs: { main: Canvas.empty("main") } };
     layout.setCanvasOrigin({ x: 20, y: 30 });
     layout.setSelectedNodeIds(["expanded"]);
     layout.openShortcuts();

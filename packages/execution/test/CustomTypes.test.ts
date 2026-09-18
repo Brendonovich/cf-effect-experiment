@@ -61,9 +61,10 @@ describe("custom type execution", () => {
         types: definitions,
         graphs: {
           g: {
-            id: "g",
-            name: "Graph",
-            nodes: {
+            canvas: {
+              id: "g",
+              name: "Graph",
+              nodes: {
               event: node("event", "event"),
               sink: node("sink", "sink", {
                 stored: Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(
@@ -71,7 +72,7 @@ describe("custom type execution", () => {
                 ),
               }),
             },
-            connections: [
+              connections: [
               { id: "exec", outNodeId: "event", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "sink", inIoId: "exec" },
               {
                 id: "data",
@@ -80,7 +81,8 @@ describe("custom type execution", () => {
                 inNodeId: "sink",
                 inIoId: "connected",
               },
-            ],
+              ],
+            },
           },
         },
       });

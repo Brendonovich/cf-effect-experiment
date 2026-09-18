@@ -13,6 +13,7 @@ import { Effect, Layer, Schema } from "effect";
 
 import { JsonPersistence, Persistence } from "../src/index";
 import { MemoryFileSystem } from "./MemoryFileSystem";
+import { persistenceContract } from "./PersistenceContract.ts";
 
 const schema = {
   package: PackageId.make("pkg"),
@@ -23,6 +24,8 @@ const TestLayer = Layer.provideMerge(
   JsonPersistence.layer("/test-project"),
   Layer.mergeAll(MemoryFileSystem.layerMemory, NodePath.layer),
 );
+
+persistenceContract("JsonPersistence contract", TestLayer);
 
 describe("JsonPersistence", () => {
   it.effect("preserves named recursive definitions across graph-only saves", () =>
@@ -60,6 +63,7 @@ describe("JsonPersistence", () => {
       });
       expect(project.constants).toEqual({});
       expect(project.types).toEqual({});
+      expect(project.functions).toEqual({});
     }),
   );
 
@@ -119,6 +123,7 @@ describe("JsonPersistence", () => {
       yield* persistence.saveProject({
         name: "Resources",
         graphs: {},
+        functions: {},
         engines: {},
         constants,
         types: {},
@@ -147,7 +152,8 @@ describe("JsonPersistence", () => {
       };
       const project = {
         name: "My Project",
-        graphs: { "graph-1": graph },
+        graphs: { "graph-1": { canvas: graph } },
+        functions: {},
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
         constants: {},
         types: {},
@@ -157,7 +163,7 @@ describe("JsonPersistence", () => {
       const loaded = yield* persistence.loadProject();
       assert.strictEqual(loaded.name, "My Project");
       assert.ok(loaded.graphs["graph-1"]);
-      assert.strictEqual(loaded.graphs["graph-1"].name, "My Graph");
+      assert.strictEqual(loaded.graphs["graph-1"].canvas.name, "My Graph");
       assert.deepStrictEqual(loaded.engines, project.engines);
     }).pipe(Effect.provide(TestLayer)),
   );
@@ -177,6 +183,7 @@ describe("JsonPersistence", () => {
       const project = {
         name: "Empty",
         graphs: {},
+        functions: {},
         engines: {},
         constants: {},
         types: {},
@@ -193,7 +200,7 @@ describe("JsonPersistence", () => {
 
       const loaded = yield* persistence.loadProject();
       assert.ok(loaded.graphs["graph-2"]);
-      assert.strictEqual(loaded.graphs["graph-2"].name, "Second Graph");
+      assert.strictEqual(loaded.graphs["graph-2"].canvas.name, "Second Graph");
     }).pipe(Effect.provide(TestLayer)),
   );
 
@@ -209,7 +216,8 @@ describe("JsonPersistence", () => {
       };
       const project = {
         name: "P",
-        graphs: { "graph-1": graph },
+        graphs: { "graph-1": { canvas: graph } },
+        functions: {},
         engines: {},
         constants: {},
         types: {},
@@ -231,7 +239,7 @@ describe("JsonPersistence", () => {
       yield* persistence.saveNode("graph-1", updatedNode);
 
       const loaded = yield* persistence.loadProject();
-      expect(loaded.graphs["graph-1"]?.nodes["n1"]?.name).toBe("updated");
+      expect(loaded.graphs["graph-1"]?.canvas.nodes["n1"]?.name).toBe("updated");
     }).pipe(Effect.provide(TestLayer)),
   );
 
@@ -248,7 +256,7 @@ describe("JsonPersistence", () => {
   //     const project = ({
   //       id: projectId,
   //       name: "P",
-  //       graphs: { "graph-1": graph },
+  //       graphs: { "graph-1": { canvas: graph } },
   //     });
   //     yield* persistence.saveProject(project);
 
@@ -283,7 +291,8 @@ describe("JsonPersistence", () => {
       };
       const project = {
         name: "P",
-        graphs: { "graph-1": graph },
+        graphs: { "graph-1": { canvas: graph } },
+        functions: {},
         engines: {},
         constants: {},
         types: {},
@@ -291,7 +300,7 @@ describe("JsonPersistence", () => {
       yield* persistence.saveProject(project);
 
       const loaded = yield* persistence.loadProject();
-      const loadedNode = loaded.graphs["graph-1"]?.nodes["test-node"];
+      const loadedNode = loaded.graphs["graph-1"]?.canvas.nodes["test-node"];
       assert(loadedNode !== undefined);
 
       expect(loadedNode.name).toBe("Test Node");

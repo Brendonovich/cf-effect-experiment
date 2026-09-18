@@ -105,58 +105,61 @@ describe("schema execution context", () => {
       const secondActionNodeId = NodeId.make("context-action-2");
       const project: Project.Model = {
         name: "Context",
+        functions: {},
         engines: {},
         constants: {},
         types: {},
         graphs: {
           [graphId]: {
-            id: graphId,
-            name: "Context",
-            nodes: {
-              [eventNodeId]: {
-                id: eventNodeId,
-                name: "Event",
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                schema: { package: PackageId.make("context"), schema: SchemaId.make("event") },
-                position: { x: 0, y: 0 },
+            canvas: {
+              id: graphId,
+              name: "Context",
+              nodes: {
+                [eventNodeId]: {
+                  id: eventNodeId,
+                  name: "Event",
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: { package: PackageId.make("context"), schema: SchemaId.make("event") },
+                  position: { x: 0, y: 0 },
+                },
+                [actionNodeId]: {
+                  id: actionNodeId,
+                  name: "Action",
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
+                  position: { x: 100, y: 0 },
+                },
+                [secondActionNodeId]: {
+                  id: secondActionNodeId,
+                  name: "Second Action",
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
+                  position: { x: 100, y: 100 },
+                },
               },
-              [actionNodeId]: {
-                id: actionNodeId,
-                name: "Action",
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
-                position: { x: 100, y: 0 },
-              },
-              [secondActionNodeId]: {
-                id: secondActionNodeId,
-                name: "Second Action",
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
-                position: { x: 100, y: 100 },
-              },
+              connections: [
+                {
+                  id: ConnectionId.make("context-exec"),
+                  outNodeId: eventNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("exec"),
+                },
+                {
+                  id: ConnectionId.make("context-exec-2"),
+                  outNodeId: eventNodeId,
+                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                  inNodeId: actionNodeId,
+                  inIoId: IoId.make("alternate"),
+                },
+              ],
             },
-            connections: [
-              {
-                id: ConnectionId.make("context-exec"),
-                outNodeId: eventNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("exec"),
-              },
-              {
-                id: ConnectionId.make("context-exec-2"),
-                outNodeId: eventNodeId,
-                outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                inNodeId: actionNodeId,
-                inIoId: IoId.make("alternate"),
-              },
-            ],
           },
         },
       };

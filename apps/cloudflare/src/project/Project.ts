@@ -213,6 +213,7 @@ export const make = (
                 PersistenceError: (error) => Effect.die(error),
               }),
             );
+          if (graph === undefined) return yield* Effect.die("Created graph could not be loaded");
           return { graph };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       getGraph: ({
@@ -362,6 +363,7 @@ export const make = (
                 SchemaNotFoundError: () => new HttpApiError.BadRequest(),
                 InvalidPropertyError: () => new HttpApiError.BadRequest(),
                 InvalidInputDefaultError: () => new HttpApiError.BadRequest(),
+                FunctionEventNodeNotAllowedError: () => new HttpApiError.BadRequest(),
                 ProjectNotFoundError: () => Effect.die("Editor project was not found"),
                 PersistenceError: (error) => Effect.die(error),
               }),

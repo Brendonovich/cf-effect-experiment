@@ -1,4 +1,4 @@
-import { type Graph, type Package, type Project, ResourceConstant } from "@macrograph/core";
+import { type Canvas, type Package, type Project, ResourceConstant } from "@macrograph/core";
 import { Portal } from "@solidjs/web";
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
@@ -88,6 +88,20 @@ const styles = stylex.create({
     outline: "none",
     paddingInline: 6,
     "::placeholder": { color: colors.gray9 },
+  },
+  functionButton: {
+    alignItems: "center",
+    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    borderRadius: 4,
+    color: colors.gray11,
+    display: "flex",
+    flexShrink: 0,
+    fontSize: 14,
+    height: 20,
+    justifyContent: "center",
+    margin: 6,
+    padding: 2,
+    width: 20,
   },
   createRoot: { display: "flex", flexShrink: 0, height: "100%" },
   dialog: {
@@ -332,7 +346,7 @@ export function NavigationSidebar(props: {
   section: NavigationSection;
   search: string;
   selectedPaneId?: string | undefined;
-  graphs: ReadonlyArray<readonly [string, Graph.Model]>;
+  graphs: ReadonlyArray<readonly [string, Canvas.Model]>;
   packagesWithSettings: ReadonlyArray<Package.Model>;
   packagesWithoutSettings: ReadonlyArray<Package.Model>;
   allPackages: ReadonlyArray<Package.Model>;
@@ -341,6 +355,7 @@ export function NavigationSidebar(props: {
   onSearchChange: (search: string) => void;
   onClose: () => void;
   onCreateGraph: () => void;
+  onCreateFunction: () => void;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -656,6 +671,15 @@ export function NavigationSidebar(props: {
               title="New graph"
               onClick={props.onCreateGraph}
             />
+            <button
+              type="button"
+              sx={[styles.focus, styles.functionButton]}
+              aria-label="New function"
+              title="New function"
+              onClick={props.onCreateFunction}
+            >
+              <span aria-hidden="true">ƒ</span>
+            </button>
           </Show>
           <Show when={props.section === "constants"}>
             <div ref={createMenuRoot} sx={styles.createRoot}>

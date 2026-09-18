@@ -31,31 +31,34 @@ const project = Schema.decodeUnknownSync(Project.Model)({
   ...Project.empty(),
   graphs: {
     graph: {
-      id: "graph",
-      name: "Graph",
-      connections: [],
-      nodes: Object.fromEntries(
-        [
-          ["source", { package: "test", schema: "source" }],
-          ["break", { package: Scopes.packageId, schema: "BreakScope" }],
-        ].map(([id, schema]) => [
-          id,
-          {
+      canvas: {
+        id: "graph",
+        name: "Graph",
+        connections: [],
+        nodes: Object.fromEntries(
+          [
+            ["source", { package: "test", schema: "source" }],
+            ["break", { package: Scopes.packageId, schema: "BreakScope" }],
+          ].map(([id, schema]) => [
             id,
-            name: id,
-            schema,
-            properties: {},
-            inputDefaults: {},
-            foldPins: false,
-            position: { x: 0, y: 0 },
-          },
-        ]),
-      ),
+            {
+              id,
+              name: id,
+              schema,
+              properties: {},
+              inputDefaults: {},
+              foldPins: false,
+              position: { x: 0, y: 0 },
+            },
+          ]),
+        ),
+      },
     },
   },
 });
 
 describe("scope authoring", () => {
+  const snapshot = { ...project, graphs: { graph: project.graphs.graph!.canvas } };
   it("lays input and output columns out independently, grouping scope pins in wrappers", () => {
     const twoScopes = graphNodeOutputs(
       {
@@ -106,7 +109,7 @@ describe("scope authoring", () => {
   it("applies collaborative split/bundle events without introducing another node", () =>
     createRoot((dispose) => {
       const editor = createEditorStore();
-      editor.setProject(project, { graph: { source: io, break: Scopes.emptyIO } });
+      editor.setProject(snapshot, { graph: { source: io, break: Scopes.emptyIO } });
       editor.applyEvent({
         _tag: "NodeScopeSplitChanged",
         actor: Actor.system,
@@ -165,7 +168,7 @@ describe("scope authoring", () => {
   it("updates inferred fields after remote connect, source IO change, disconnect, and source deletion", () =>
     createRoot((dispose) => {
       const editor = createEditorStore();
-      editor.setProject(project, { graph: { source: io, break: Scopes.emptyIO } });
+      editor.setProject(snapshot, { graph: { source: io, break: Scopes.emptyIO } });
       const connection = {
         id: ConnectionId.make("scope"),
         outNodeId: "source",

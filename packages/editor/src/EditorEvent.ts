@@ -1,4 +1,13 @@
-import { Actor, Connection, Graph, Node, NodeIO, ResourceConstant, IoId } from "@macrograph/core";
+import {
+  Actor,
+  Canvas,
+  Connection,
+  Function as GraphFunction,
+  IoId,
+  Node,
+  NodeIO,
+  ResourceConstant,
+} from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 
@@ -22,7 +31,7 @@ export type TypeDefinitionsUpdated = typeof TypeDefinitionsUpdated.Type;
 
 export const GraphCreated = Schema.TaggedStruct("GraphCreated", {
   actor,
-  graph: Graph.Model,
+  graph: Canvas.Model,
 });
 export type GraphCreated = typeof GraphCreated.Type;
 
@@ -38,6 +47,20 @@ export const GraphNameChanged = Schema.TaggedStruct("GraphNameChanged", {
   name: Schema.String,
 });
 export type GraphNameChanged = typeof GraphNameChanged.Type;
+
+export const FunctionCreated = Schema.TaggedStruct("FunctionCreated", {
+  actor,
+  graph: Canvas.Model,
+  fn: GraphFunction.Model,
+});
+export type FunctionCreated = typeof FunctionCreated.Type;
+
+export const FunctionUpdated = Schema.TaggedStruct("FunctionUpdated", {
+  actor,
+  fn: GraphFunction.Model,
+  deletedConnectionIds: Schema.Array(Schema.String),
+});
+export type FunctionUpdated = typeof FunctionUpdated.Type;
 
 export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
   actor,
@@ -196,13 +219,15 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 });
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
-export type EditorEvent =
+export type Persistent =
   | TypeDefinitionsUpdated
   | FragmentPasted
   | FragmentDeleted
   | GraphCreated
   | GraphDeleted
   | GraphNameChanged
+  | FunctionCreated
+  | FunctionUpdated
   | NodeCreated
   | NodeDeleted
   | NodeNameChanged
@@ -214,12 +239,23 @@ export type EditorEvent =
   | ConnectionCreated
   | ConnectionDeleted
   | EngineStateChanged
-  | ModuleClientStateDirty
   | ResourceConstantCreated
   | ResourceConstantDefaultChanged
   | ResourceConstantUpdated
-  | ResourceConstantDeleted
-  | ResourceValuesUpdated;
+  | ResourceConstantDeleted;
+
+export type Ephemeral = ModuleClientStateDirty | ResourceValuesUpdated;
+export type EditorEvent = Persistent | Ephemeral;
+
+export const ephemeralTags = ["ModuleClientStateDirty", "ResourceValuesUpdated"] as const;
+
+const ephemeralTagSet: ReadonlySet<EditorEvent["_tag"]> = new Set(ephemeralTags);
+
+/** Events that update live editor state but do not change Project.Model. */
+export const isEphemeral = (event: EditorEvent): event is Ephemeral =>
+  ephemeralTagSet.has(event._tag);
+
+export const isPersistent = (event: EditorEvent): event is Persistent => !isEphemeral(event);
 
 export const is = <Tag extends EditorEvent["_tag"]>(
   event: EditorEvent,

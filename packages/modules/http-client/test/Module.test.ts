@@ -263,74 +263,77 @@ describe("HTTP client module", () => {
         const recordId = NodeId.make("record");
         const project: Project.Model = {
           name: "HTTP",
+          functions: {},
           engines: {},
           constants: {},
           types: {},
           graphs: {
             [graphId]: {
-              id: graphId,
-              name: "HTTP",
-              nodes: {
-                [eventId]: {
-                  id: eventId,
-                  name: "Start",
-                  schema: {
-                    package: PackageId.make(TestModule.id),
-                    schema: SchemaId.make("Start"),
+              canvas: {
+                id: graphId,
+                name: "HTTP",
+                nodes: {
+                  [eventId]: {
+                    id: eventId,
+                    name: "Start",
+                    schema: {
+                      package: PackageId.make(TestModule.id),
+                      schema: SchemaId.make("Start"),
+                    },
+                    properties: {},
+                    inputDefaults: {},
+                    foldPins: false,
+                    position: { x: 0, y: 0 },
                   },
-                  properties: {},
-                  inputDefaults: {},
-                  foldPins: false,
-                  position: { x: 0, y: 0 },
-                },
-                [requestId]: {
-                  id: requestId,
-                  name: "GET",
-                  schema: {
-                    package: PackageId.make(HttpClientModule.id),
-                    schema: SchemaId.make("HttpGet"),
+                  [requestId]: {
+                    id: requestId,
+                    name: "GET",
+                    schema: {
+                      package: PackageId.make(HttpClientModule.id),
+                      schema: SchemaId.make("HttpGet"),
+                    },
+                    properties: {},
+                    inputDefaults: { url: "http://localhost/status" },
+                    foldPins: false,
+                    position: { x: 100, y: 0 },
                   },
-                  properties: {},
-                  inputDefaults: { url: "http://localhost/status" },
-                  foldPins: false,
-                  position: { x: 100, y: 0 },
-                },
-                [recordId]: {
-                  id: recordId,
-                  name: "Record",
-                  schema: {
-                    package: PackageId.make(TestModule.id),
-                    schema: SchemaId.make("Record"),
+                  [recordId]: {
+                    id: recordId,
+                    name: "Record",
+                    schema: {
+                      package: PackageId.make(TestModule.id),
+                      schema: SchemaId.make("Record"),
+                    },
+                    properties: {},
+                    inputDefaults: {},
+                    foldPins: false,
+                    position: { x: 200, y: 0 },
                   },
-                  properties: {},
-                  inputDefaults: {},
-                  foldPins: false,
-                  position: { x: 200, y: 0 },
                 },
+                connections: [
+                  {
+                    id: ConnectionId.make("event-request"),
+                    outNodeId: eventId,
+                    outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                    inNodeId: requestId,
+                    inIoId: IoId.make("exec"),
+                  },
+                  {
+                    id: ConnectionId.make("request-record"),
+                    outNodeId: requestId,
+                    outIo: { _tag: "Port" as const, id: IoId.make("exec") },
+                    inNodeId: recordId,
+                    inIoId: IoId.make("exec"),
+                  },
+                  {
+                    id: ConnectionId.make("status-record"),
+                    outNodeId: requestId,
+                    outIo: { _tag: "Port" as const, id: IoId.make("status") },
+                    inNodeId: recordId,
+                    inIoId: IoId.make("status"),
+                  },
+                ],
               },
-              connections: [
-                {
-                  id: ConnectionId.make("event-request"),
-                  outNodeId: eventId,
-                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                  inNodeId: requestId,
-                  inIoId: IoId.make("exec"),
-                },
-                {
-                  id: ConnectionId.make("request-record"),
-                  outNodeId: requestId,
-                  outIo: { _tag: "Port" as const, id: IoId.make("exec") },
-                  inNodeId: recordId,
-                  inIoId: IoId.make("exec"),
-                },
-                {
-                  id: ConnectionId.make("status-record"),
-                  outNodeId: requestId,
-                  outIo: { _tag: "Port" as const, id: IoId.make("status") },
-                  inNodeId: recordId,
-                  inIoId: IoId.make("status"),
-                },
-              ],
             },
           },
         };
@@ -349,14 +352,16 @@ describe("HTTP client module", () => {
             ...project,
             graphs: {
               [graphId]: {
-                ...project.graphs[graphId]!,
-                nodes: {
-                  ...project.graphs[graphId]!.nodes,
-                  [requestId]: {
-                    ...project.graphs[graphId]!.nodes[requestId]!,
-                    schema: {
-                      package: PackageId.make(HttpClientModule.id),
-                      schema: SchemaId.make(schema),
+                canvas: {
+                  ...project.graphs[graphId]!.canvas,
+                  nodes: {
+                    ...project.graphs[graphId]!.canvas.nodes,
+                    [requestId]: {
+                      ...project.graphs[graphId]!.canvas.nodes[requestId]!,
+                      schema: {
+                        package: PackageId.make(HttpClientModule.id),
+                        schema: SchemaId.make(schema),
+                      },
                     },
                   },
                 },
@@ -372,12 +377,14 @@ describe("HTTP client module", () => {
           ...project,
           graphs: {
             [graphId]: {
-              ...project.graphs[graphId]!,
-              nodes: {
-                ...project.graphs[graphId]!.nodes,
-                [requestId]: {
-                  ...project.graphs[graphId]!.nodes[requestId]!,
-                  inputDefaults: { url: "file:///etc/passwd" },
+              canvas: {
+                ...project.graphs[graphId]!.canvas,
+                nodes: {
+                  ...project.graphs[graphId]!.canvas.nodes,
+                  [requestId]: {
+                    ...project.graphs[graphId]!.canvas.nodes[requestId]!,
+                    inputDefaults: { url: "file:///etc/passwd" },
+                  },
                 },
               },
             },

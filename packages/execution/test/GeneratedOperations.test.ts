@@ -90,10 +90,10 @@ const node = (
 const wire = (
   id: string,
   outNodeId: string,
-  outIoId: string,
+  outPortId: string,
   inNodeId: string,
   inIoId: string,
-) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outIoId }, inNodeId, inIoId });
+) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outPortId }, inNodeId, inIoId });
 
 describe("generated custom operations", () => {
   it.effect(
@@ -404,9 +404,10 @@ describe("generated custom operations", () => {
           types: definitions,
           graphs: {
             g: {
-              id: "g",
-              name: "Graph",
-              nodes: {
+              canvas: {
+                id: "g",
+                name: "Graph",
+                nodes: {
                 event: node("event", module.id, "event"),
                 construct: node(
                   "construct",
@@ -434,7 +435,7 @@ describe("generated custom operations", () => {
                 failureScope: node("failureScope", Scopes.packageId, "BreakScope"),
                 forbidden: node("forbidden", module.id, "forbidden"),
               },
-              connections: [
+                connections: [
                 wire("exec", "event", "exec", "match", "exec"),
                 wire("value", "construct", "value", "match", "value"),
                 wire("success", "match", 'variant:"Success"', "scope", "scope"),
@@ -443,7 +444,8 @@ describe("generated custom operations", () => {
                 wire("updated", "update", "value", "sink", "value"),
                 wire("failure", "match", 'variant:"Failure"', "failureScope", "scope"),
                 wire("failureContinue", "failureScope", "exec", "forbidden", "exec"),
-              ],
+                ],
+              },
             },
           },
         });

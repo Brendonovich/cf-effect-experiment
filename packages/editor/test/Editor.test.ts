@@ -3,6 +3,7 @@ import { assert, describe, expect, it } from "@effect/vitest";
 import {
   Actor,
   ConnectionId,
+  Function as GraphFunction,
   IoId,
   NodeId,
   Package,
@@ -176,11 +177,21 @@ const TestPackage = {
       executionInputs: [{ id: IoId.make("exec") }],
       executionOutputs: [{ id: IoId.make("exec") }],
     },
+    {
+      id: SchemaId.make("event"),
+      name: "Event",
+      type: "event" as const,
+      properties: [],
+      dataInputs: [],
+      dataOutputs: [],
+      executionInputs: [],
+      executionOutputs: [{ id: IoId.make("exec") }],
+    },
   ],
 };
 
 const PackagesLayer = Layer.effect(
-  Packages.Service,
+  Packages.Service)(
   Effect.gen(function* () {
     const packages = yield* Packages.Service;
     yield* packages.loadPackage(TestPackage);
@@ -192,6 +203,7 @@ const SeedLayer = Layer.effectDiscard(
   Effect.flatMap(Persistence.Service, (db) =>
     db.saveProject({
       name: "test",
+      functions: {},
       graphs: {},
       engines: {},
       constants: {},
@@ -364,7 +376,8 @@ describe("Resource defaults", () => {
         property: "account",
       });
       expect(
-        (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[future.node.id]?.properties,
+        (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[future.node.id]
+          ?.properties,
       ).toEqual({});
     }).pipe(Effect.provide(TestLayer)),
   );
@@ -488,6 +501,75 @@ it.layer(TestLayer)((it) => {
         const event = yield* editor.graph.create({});
 
         expect(event.graph.name).toBe("New Graph");
+      }),
+    );
+
+    it.effect("projects function boundaries without persisting them as nodes", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const persistence = yield* Persistence.Service;
+        const created = yield* editor.function.create("Format message");
+        const withInput = yield* editor.function.addField(created.graph.id, "input");
+        const withOutput = yield* editor.function.addField(created.graph.id, "output");
+        const input = withInput.fn.arguments[0]!;
+        const output = withOutput.fn.returns[0]!;
+
+        yield* editor.connection.create({
+          graphID: created.graph.id,
+          connection: {
+            outNodeId: GraphFunction.InputBoundaryNodeId,
+            outIo: { _tag: "Port", id: input.id },
+            inNodeId: GraphFunction.OutputBoundaryNodeId,
+            inIoId: output.id,
+          },
+        });
+
+        const persisted = yield* persistence.loadGraph(created.graph.id);
+        expect(Object.keys(persisted.nodes)).toEqual([]);
+        expect(persisted.connections).toHaveLength(1);
+
+        const snapshot = yield* editor.project.snapshot();
+        expect(Object.keys(snapshot.project.graphs[created.graph.id]!.nodes).sort()).toEqual(
+          [GraphFunction.InputBoundaryNodeId, GraphFunction.OutputBoundaryNodeId].sort(),
+        );
+        expect(snapshot.nodeIO[created.graph.id]?.[GraphFunction.InputBoundaryNodeId]).toEqual(
+          GraphFunction.boundaryIO(withOutput.fn, GraphFunction.InputBoundaryNodeId),
+        );
+
+        yield* editor.node.update({
+          graphID: created.graph.id,
+          nodeID: GraphFunction.InputBoundaryNodeId,
+          position: { x: 123, y: 456 },
+        });
+        expect(
+          (yield* persistence.loadProject()).functions[created.graph.id]?.inputPosition,
+        ).toEqual({ x: 123, y: 456 });
+
+        yield* editor.function.deleteField(created.graph.id, "input", input.id);
+        expect((yield* persistence.loadGraph(created.graph.id)).connections).toEqual([]);
+      }),
+    );
+
+    it.effect("rejects event nodes in functions but allows them in graphs", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const fn = yield* editor.function.create("Handler");
+        const rejected = yield* editor.node
+          .create({
+            graphID: fn.graph.id,
+            node: { schema: { ...schemaRef, schema: SchemaId.make("event") } },
+          })
+          .pipe(Effect.result);
+        assert(Result.isFailure(rejected));
+        if (Result.isFailure(rejected))
+          assert.strictEqual(rejected.failure._tag, "FunctionEventNodeNotAllowedError");
+
+        const graph = yield* editor.graph.create({ name: "Events" });
+        const created = yield* editor.node.create({
+          graphID: graph.graph.id,
+          node: { schema: { ...schemaRef, schema: SchemaId.make("event") } },
+        });
+        assert.strictEqual(created.node.schema.schema, "event");
       }),
     );
 
@@ -658,7 +740,8 @@ it.layer(TestLayer)((it) => {
         );
         assert.deepStrictEqual(changed.inputDefaults[graph.graph.id]?.[node.node.id], {});
         assert.deepStrictEqual(
-          (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[node.node.id]?.inputDefaults,
+          (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[node.node.id]
+            ?.inputDefaults,
           {},
         );
         const inUse = yield* editor.constant.delete(created.constant.id).pipe(Effect.result);
@@ -868,7 +951,9 @@ it.layer(TestLayer)((it) => {
           input: "query",
         });
         expect(yield* PubSub.take(events)).toEqual(clearDefault);
-        const persisted = (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[node.node.id];
+        const persisted = (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[
+          node.node.id
+        ];
         expect(persisted?.inputDefaults).toEqual({});
       }),
     );
@@ -888,7 +973,8 @@ it.layer(TestLayer)((it) => {
           value: "still supported",
         });
         expect(
-          (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[node.node.id]?.properties,
+          (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[node.node.id]
+            ?.properties,
         ).toEqual({ legacy: "still supported" });
       }),
     );
@@ -983,7 +1069,9 @@ it.layer(TestLayer)((it) => {
         if (propertyEvent._tag !== "NodePropertyUpdated") return;
         expect(propertyEvent.deletedConnectionIds).toEqual([connection.connection.id]);
         expect(propertyEvent.io.dataInputs[0]?.type).toEqual(DataType.Int);
-        expect((yield* editor.project.get()).graphs[graph.graph.id]?.connections).toEqual([]);
+        expect((yield* editor.project.get()).graphs[graph.graph.id]?.canvas.connections).toEqual(
+          [],
+        );
       }),
     );
 
@@ -1095,7 +1183,9 @@ it.layer(TestLayer)((it) => {
         const expectedConnectionIds = [incoming.connection.id, outgoing.connection.id].sort();
         expect(deletedEvent.deletedConnectionIds).toEqual(expectedConnectionIds);
         expect(yield* PubSub.take(events)).toEqual(deletedEvent);
-        expect((yield* editor.project.get()).graphs[graph.graph.id]?.connections).toEqual([]);
+        expect((yield* editor.project.get()).graphs[graph.graph.id]?.canvas.connections).toEqual(
+          [],
+        );
       }),
     );
 
@@ -1129,7 +1219,7 @@ it.layer(TestLayer)((it) => {
 
         expect(yield* PubSub.take(events)).toEqual(event);
         const project = yield* editor.project.get();
-        expect(project.graphs[graphEvent.graph.id]?.connections).toEqual([event.connection]);
+        expect(project.graphs[graphEvent.graph.id]?.canvas.connections).toEqual([event.connection]);
 
         const duplicate = yield* Effect.result(
           editor.connection.create({
@@ -1320,7 +1410,7 @@ it.layer(TestLayer)((it) => {
         });
         yield* PubSub.take(events);
         expect(
-          (yield* editor.project.get()).graphs[graphEvent.graph.id]?.nodes[nodeEvent.node.id]
+          (yield* editor.project.get()).graphs[graphEvent.graph.id]?.canvas.nodes[nodeEvent.node.id]
             ?.position,
         ).toEqual({ x: 300, y: 400 });
       }),
@@ -1345,7 +1435,7 @@ it.layer(TestLayer)((it) => {
         });
         expect(yield* PubSub.take(events)).toEqual(event);
         expect(
-          (yield* editor.project.get()).graphs[graphEvent.graph.id]?.nodes[nodeEvent.node.id]
+          (yield* editor.project.get()).graphs[graphEvent.graph.id]?.canvas.nodes[nodeEvent.node.id]
             ?.foldPins,
         ).toBe(true);
       }),
@@ -1359,7 +1449,7 @@ it.layer(TestLayer)((it) => {
         yield* editor.graph.update({ graphID: graphEvent.graph.id, name: "New Name" });
 
         const project = yield* editor.project.get();
-        expect(project.graphs[graphEvent.graph.id]?.name).toBe("New Name");
+        expect(project.graphs[graphEvent.graph.id]?.canvas.name).toBe("New Name");
       }),
     );
 
@@ -1467,7 +1557,8 @@ it.layer(TestLayer)((it) => {
           value: Option.none(),
         });
         expect(
-          (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[node.node.id]?.inputDefaults,
+          (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[node.node.id]
+            ?.inputDefaults,
         ).toEqual({ names: ["one", "two"], optional: { _tag: "None" } });
 
         const rendered = yield* editor.project.rendered();

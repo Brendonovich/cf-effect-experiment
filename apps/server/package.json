@@ -9,8 +9,8 @@
     "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/",
     "typecheck": "tsgo --build",
     "start": "node --env-file-if-exists=.env dist/esm/index.js",
-    "test": "vitest",
-    "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run test/production.test.ts",
+    "test": "vitest run",
+    "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
     "dev": "vite"
   },
   "dependencies": {
@@ -58,6 +58,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@iconify/json": "2.2.196",
+    "@macrograph/server-client": "workspace:*",
     "rolldown": "^1.0.1",
     "typescript": "^5.8",
     "vite": "^8.0.7",

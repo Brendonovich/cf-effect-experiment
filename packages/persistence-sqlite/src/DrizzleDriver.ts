@@ -15,7 +15,7 @@ export class Service extends Context.Service<
 
 export const layerNodeSqlite = (dbPath: string, migrationsFolder: string) =>
   Layer.effect(
-    Service,
+    Service)(
     Effect.gen(function* () {
       const nodeDrizzle = yield* Effect.promise(() => import("drizzle-orm/node-sqlite"));
       const migrator = yield* Effect.promise(() => import("drizzle-orm/node-sqlite/migrator"));

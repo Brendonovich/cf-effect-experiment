@@ -2,7 +2,7 @@ import { DataType } from "@macrograph/module/DataType";
 import * as Registration from "@macrograph/module/Registration";
 import { Effect, Option, Result, Schema } from "effect";
 
-import type { Graph } from "./Graph.ts";
+import type { Canvas } from "./Canvas.ts";
 import type { Node } from "./Node.ts";
 import type * as Package from "./Package.ts";
 import type * as SchemaAuthoring from "./SchemaAuthoring.ts";
@@ -441,7 +441,7 @@ export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = O
 );
 
 /** Output declarations derived from the solved input, never a persisted Type property. */
-export const derivedOutputs = (graph: Graph.Model, definitions: DataType.Definitions) => ({
+export const derivedOutputs = (graph: Canvas.Model, definitions: DataType.Definitions) => ({
   key: JSON.stringify([
     definitions,
     Object.values(graph.nodes)

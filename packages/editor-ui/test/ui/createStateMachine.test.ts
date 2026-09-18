@@ -1,3 +1,4 @@
+import { flush } from "solid-js";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { createStateMachine } from "../../src/ui/createStateMachine";
@@ -26,11 +27,13 @@ describe("createStateMachine", () => {
 
     expect(actions.setName("updated")).toBeUndefined();
     actions.increment(2);
+    flush();
 
     expect(state.context.name).toBe("updated");
     expect(state.count).toBe(2);
 
     actions.reset();
+    flush();
 
     expect(state.context.name).toBe("initial");
     expect(state.count).toBe(0);

@@ -1,4 +1,4 @@
-import { OutputRef, type Graph, type NodeIO, type RenderedGraph } from "@macrograph/core";
+import { OutputRef, type Canvas, type NodeIO, type RenderedGraph } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { For, createMemo, createSignal, type Component } from "solid-js";
 
@@ -8,15 +8,15 @@ import { GraphNode } from "./GraphNode.tsx";
 import { connectedPortIds, connectionPath, graphConnections, wireColor } from "./graphPresentation";
 
 interface SnapshotGraphCanvasProps {
-  readonly graph: Graph.Model | RenderedGraph.Model;
+  readonly graph: Canvas.Model | RenderedGraph.Model;
 }
 
 const noop = () => {};
 const noSuggestions = async (): Promise<ReadonlyArray<string>> => [];
 const isRenderedNode = (
-  node: Graph.Model["nodes"][string] | RenderedGraph.Node,
+  node: Canvas.Model["nodes"][string] | RenderedGraph.Node,
 ): node is RenderedGraph.Node => "io" in node;
-const isRenderedGraph = (graph: Graph.Model | RenderedGraph.Model): graph is RenderedGraph.Model =>
+const isRenderedGraph = (graph: Canvas.Model | RenderedGraph.Model): graph is RenderedGraph.Model =>
   "schemas" in graph;
 
 export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) => {
@@ -67,7 +67,7 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
     }
     return result;
   });
-  const schemaForNode = (node: Graph.Model["nodes"][string] | RenderedGraph.Node) =>
+  const schemaForNode = (node: Canvas.Model["nodes"][string] | RenderedGraph.Node) =>
     isRenderedGraph(props.graph)
       ? props.graph.schemas[node.schema.package]?.[node.schema.schema]
       : undefined;

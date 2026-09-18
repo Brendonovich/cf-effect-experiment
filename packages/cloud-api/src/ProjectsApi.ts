@@ -1,6 +1,6 @@
 import {
+  Canvas,
   Connection,
-  Graph,
   GraphId,
   Node,
   NodeIO,
@@ -77,7 +77,7 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
   HttpApiEndpoint.post("createGraph", "/api/projects/:projectId/graphs", {
     params: { projectId: Schema.String },
     payload: CreateGraphRequest,
-    success: Schema.Struct({ graph: Graph.Model }).pipe(HttpApiSchema.status("Created")),
+    success: Schema.Struct({ graph: Canvas.Model }).pipe(HttpApiSchema.status("Created")),
     error: [ProjectNotFound, HttpApiError.BadRequest],
   })
     .annotate(
@@ -88,12 +88,15 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
   HttpApiEndpoint.get("getGraph", "/api/projects/:projectId/graphs/:graphId", {
     params: { projectId: Schema.String, graphId: Schema.String },
     success: Schema.Struct({
-      graph: Graph.Model,
+      graph: Canvas.Model,
       nodeIO: Schema.Record(Schema.String, NodeIO),
     }),
     error: [ProjectNotFound, HttpApiError.NotFound],
   })
-    .annotate(OpenApi.Description, "Get a graph, its nodes and connections, and resolved node ports.")
+    .annotate(
+      OpenApi.Description,
+      "Get a graph, its nodes and connections, and resolved node ports.",
+    )
     .middleware(Authentication),
   HttpApiEndpoint.delete("deleteGraph", "/api/projects/:projectId/graphs/:graphId", {
     params: { projectId: Schema.String, graphId: Schema.String },
@@ -199,6 +202,9 @@ export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(
     success: Schema.Struct({ project: ProjectRecord, userIds: Schema.Array(Schema.String) }),
     error: [ProjectNotFound, HttpApiError.Forbidden, HttpApiError.BadRequest],
   })
-    .annotate(OpenApi.Description, "Update a project's access mode and explicitly authorized users.")
+    .annotate(
+      OpenApi.Description,
+      "Update a project's access mode and explicitly authorized users.",
+    )
     .middleware(Authentication),
 ) {}

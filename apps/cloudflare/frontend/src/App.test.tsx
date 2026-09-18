@@ -27,18 +27,22 @@ vi.mock("./Auth", () => ({
 }));
 vi.mock("./editorConnection", () => ({ makeEditorConnection: () => Effect.never }));
 vi.mock("virtual:macrograph-module-settings", () => ({ default: [] }));
-vi.mock("@macrograph/editor-ui", async () => ({
-  ...(await import("../../../../packages/editor-ui/src/ui/createStateMachine")),
-  AccountMenu: () => null,
-  Editor: () => <div data-editor />,
-  LoadingState: (props: { label: string }) => <div role="status">{props.label}</div>,
-  macrographLogo: "",
-  createEditorController: () => {
-    mocks.editor();
-    onCleanup(mocks.disposeEditor);
-    return {};
-  },
-}));
+vi.mock("@macrograph/editor-ui", async () => {
+  const actual =
+    await vi.importActual<typeof import("@macrograph/editor-ui")>("@macrograph/editor-ui");
+  return {
+    ...actual,
+    AccountMenu: () => null,
+    Editor: () => <div data-editor />,
+    LoadingState: (props: { label: string }) => <div role="status">{props.label}</div>,
+    macrographLogo: "",
+    createEditorController: () => {
+      mocks.editor();
+      onCleanup(mocks.disposeEditor);
+      return {};
+    },
+  };
+});
 
 let dispose = () => {};
 afterEach(() => {

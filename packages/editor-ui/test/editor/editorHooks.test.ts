@@ -2,7 +2,7 @@
 
 import {
   Actor,
-  Graph,
+  Canvas,
   IoId,
   Node,
   PackageId,
@@ -67,7 +67,7 @@ const setup = () =>
   createRoot((cleanup) => {
     dispose = cleanup;
     const editor = createEditorStore();
-    editor.setProject({ ...Project.empty(), graphs: { main: Graph.empty("main") } }, {});
+    editor.setProject({ ...Project.empty(), graphs: { main: Canvas.empty("main") } }, {});
     const leaveGraph = vi.fn();
     const layout = createEditorWorkspace(
       {
@@ -93,7 +93,10 @@ describe("editor concern hooks", () => {
         projectSettings: true,
       });
     });
-    controller.editor.setProject({ ...Project.empty(), graphs: { main: Graph.empty("main") } }, {});
+    controller.editor.setProject(
+      { ...Project.empty(), graphs: { main: Canvas.empty("main") } },
+      {},
+    );
     flush();
     controller.layout.setSelectedGraphId("main");
     await Promise.resolve();
@@ -219,7 +222,7 @@ describe("editor concern hooks", () => {
             ...Project.empty(),
             graphs: {
               main: {
-                ...Graph.empty("main"),
+                ...Canvas.empty("main"),
                 nodes: Object.fromEntries(nodes.map((n) => [n.id, n])),
               },
             },
@@ -315,7 +318,7 @@ describe("editor concern hooks", () => {
           ...Project.empty(),
           graphs: {
             main: {
-              ...Graph.empty("main"),
+              ...Canvas.empty("main"),
               nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
             },
           },
@@ -453,7 +456,7 @@ describe("editor concern hooks", () => {
             ...Project.empty(),
             graphs: {
               main: {
-                ...Graph.empty("main"),
+                ...Canvas.empty("main"),
                 nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
               },
             },
@@ -568,7 +571,7 @@ describe("editor concern hooks", () => {
             ...Project.empty(),
             graphs: {
               main: {
-                ...Graph.empty("main"),
+                ...Canvas.empty("main"),
                 nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
               },
             },
@@ -737,7 +740,7 @@ describe("editor concern hooks", () => {
           dataOutputs: [{ id: IoId.make("value"), type: { _tag: "String" as const } }],
         };
         editor.setProject(
-          { ...Project.empty(), graphs: { main: Graph.empty("main") } },
+          { ...Project.empty(), graphs: { main: Canvas.empty("main") } },
           { main: { source: io } },
         );
         const pkg = {
@@ -864,7 +867,7 @@ describe("editor concern hooks", () => {
         dispose = cleanup;
         const editor = createEditorStore();
         editor.setProject(
-          { ...Project.empty(), graphs: { main: Graph.empty("main") } },
+          { ...Project.empty(), graphs: { main: Canvas.empty("main") } },
           {
             main: {
               source: {

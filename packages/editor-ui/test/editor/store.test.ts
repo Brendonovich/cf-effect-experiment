@@ -1,8 +1,8 @@
 import {
   Actor,
+  Canvas,
   ConnectionId,
   CustomTypes,
-  Graph,
   IoId,
   NodeId,
   PackageId,
@@ -43,7 +43,7 @@ describe("editor store", () => {
         inNodeId: "node",
         inIoId: IoId.make("old"),
       };
-      const graph = { ...Graph.empty("graph"), nodes: { node }, connections: [connection] };
+      const graph = { ...Canvas.empty("graph"), nodes: { node }, connections: [connection] };
       editor.setProject({ ...Project.empty(), types, graphs: { graph } }, {});
       editor.setPackages([]);
       expect(
@@ -97,10 +97,11 @@ describe("editor store", () => {
         isDefault: true,
       });
       setProject(
-        Project.Model.make({
+        {
           ...Project.empty(),
+          graphs: {},
           constants: { first, second, other },
-        }),
+        },
         {},
       );
       applyEvent({
@@ -141,7 +142,10 @@ describe("editor store", () => {
       expect(store.resourceValues[resourceValuesKey("twitch", "account")]).toEqual([
         { id: "account-1", display: "Streamer" },
       ]);
-      setProject(Project.empty(), {});
+      setProject(
+        { name: "New Project", graphs: {}, functions: {}, engines: {}, constants: {}, types: {} },
+        {},
+      );
       expect(store.project?.name).toBe("New Project");
       expect(store.resourceValues[resourceValuesKey("twitch", "account")]).toHaveLength(1);
       dispose();

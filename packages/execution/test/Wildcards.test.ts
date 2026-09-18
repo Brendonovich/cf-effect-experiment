@@ -62,9 +62,10 @@ const project = (unresolved = false) =>
     ...Project.empty(),
     graphs: {
       graph: {
-        id: "graph",
-        name: "Graph",
-        nodes: Object.fromEntries(
+        canvas: {
+          id: "graph",
+          name: "Graph",
+          nodes: Object.fromEntries(
           (unresolved ? ["unresolved"] : ["event", "identity", "sink"]).map((id) => [
             id,
             {
@@ -78,20 +79,21 @@ const project = (unresolved = false) =>
             },
           ]),
         ),
-        connections: unresolved
-          ? []
-          : [
+          connections: unresolved
+            ? []
+            : [
               ["event", "exec", "identity", "exec"],
               ["identity", "exec", "sink", "exec"],
               ["event", "out", "identity", "in"],
               ["identity", "out", "sink", "in"],
-            ].map(([from, out, to, input], i) => ({
+              ].map(([from, out, to, input], i) => ({
               id: String(i),
               outNodeId: from,
               outIo: { _tag: "Port", id: out },
               inNodeId: to,
               inIoId: input,
-            })),
+              })),
+        },
       },
     },
   });
@@ -181,11 +183,17 @@ it.effect(
         graphs: {
           graph: {
             ...graph,
-            nodes: {
-              ...graph.nodes,
-              sink: {
-                ...graph.nodes.sink!,
-                schema: { ...graph.nodes.sink!.schema, schema: SchemaId.make("stringSink") },
+            canvas: {
+              ...graph.canvas,
+              nodes: {
+                ...graph.canvas.nodes,
+                sink: {
+                  ...graph.canvas.nodes.sink!,
+                  schema: {
+                    ...graph.canvas.nodes.sink!.schema,
+                    schema: SchemaId.make("stringSink"),
+                  },
+                },
               },
             },
           },
@@ -221,37 +229,43 @@ for (const reached of [false, true])
           graphs: {
             graph: {
               ...graph,
-              nodes: {
-                ...graph.nodes,
-                detached: { ...graph.nodes.identity!, id: NodeId.make("detached") },
-                typed: { ...graph.nodes.sink!, id: NodeId.make("typed") },
-                string: {
-                  ...graph.nodes.sink!,
-                  id: NodeId.make("string"),
-                  schema: { ...graph.nodes.sink!.schema, schema: SchemaId.make("stringSink") },
+              canvas: {
+                ...graph.canvas,
+                nodes: {
+                  ...graph.canvas.nodes,
+                  detached: { ...graph.canvas.nodes.identity!, id: NodeId.make("detached") },
+                  typed: { ...graph.canvas.nodes.sink!, id: NodeId.make("typed") },
+                  string: {
+                    ...graph.canvas.nodes.sink!,
+                    id: NodeId.make("string"),
+                    schema: {
+                      ...graph.canvas.nodes.sink!.schema,
+                      schema: SchemaId.make("stringSink"),
+                    },
+                  },
                 },
+                connections: [
+                  ...graph.canvas.connections,
+                  ...["typed", "string"].map((target) => ({
+                    id: ConnectionId.make(target),
+                    outNodeId: "detached",
+                    outIo: OutputRef.port("out"),
+                    inNodeId: target,
+                    inIoId: IoId.make("in"),
+                  })),
+                  ...(reached
+                    ? [
+                        {
+                          id: ConnectionId.make("reach"),
+                          outNodeId: "sink",
+                          outIo: OutputRef.port("exec"),
+                          inNodeId: "detached",
+                          inIoId: IoId.make("exec"),
+                        },
+                      ]
+                    : []),
+                ],
               },
-              connections: [
-                ...graph.connections,
-                ...["typed", "string"].map((target) => ({
-                  id: ConnectionId.make(target),
-                  outNodeId: "detached",
-                  outIo: OutputRef.port("out"),
-                  inNodeId: target,
-                  inIoId: IoId.make("in"),
-                })),
-                ...(reached
-                  ? [
-                      {
-                        id: ConnectionId.make("reach"),
-                        outNodeId: "sink",
-                        outIo: OutputRef.port("exec"),
-                        inNodeId: "detached",
-                        inIoId: IoId.make("exec"),
-                      },
-                    ]
-                  : []),
-              ],
             },
           },
         });

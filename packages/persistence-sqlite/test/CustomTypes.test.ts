@@ -9,7 +9,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { test } from "node:test";
+import { test } from "vitest";
 import { fileURLToPath } from "node:url";
 
 import { DrizzleDriver } from "../src/DrizzleDriver.ts";
@@ -43,32 +43,52 @@ const project = Schema.decodeUnknownSync(Project.Model)({
   },
   graphs: {
     graph: {
-      id: "graph",
-      name: "Graph",
-      nodes: {
-        node: {
-          id: "node",
-          name: "Preserved node",
-          schema: { package: "CustomTypes", schema: "StringifyJson" },
-          position: { x: 10, y: 20 },
-          properties: { type: "result" },
-          foldPins: false,
-          splitScopeOutputs: ["found"],
-          inputDefaults: {
-            value: {
-              _type: "result",
-              _tag: "Found",
-              leaf: { _type: "leaf", label: "keep", children: [] },
+      canvas: {
+        id: "graph",
+        name: "Graph",
+        nodes: {
+          node: {
+            id: "node",
+            name: "Preserved node",
+            schema: { package: "CustomTypes", schema: "StringifyJson" },
+            position: { x: 10, y: 20 },
+            properties: { type: "result" },
+            foldPins: false,
+            splitScopeOutputs: ["found"],
+            inputDefaults: {
+              value: {
+                _type: "result",
+                _tag: "Found",
+                leaf: { _type: "leaf", label: "keep", children: [] },
+              },
+              orphan: "never discard",
             },
-            orphan: "never discard",
           },
         },
+        connections: [
+          {
+            id: "wire",
+            outNodeId: "node",
+            outIo: { _tag: "Port", id: "removed" },
+            inNodeId: "node",
+            inIoId: "orphan",
+          },
+          {
+            id: "scope-exec",
+            outNodeId: "node",
+            outIo: { _tag: "ScopeExec", scope: "found" },
+            inNodeId: "node",
+            inIoId: "exec",
+          },
+          {
+            id: "scope-field",
+            outNodeId: "node",
+            outIo: { _tag: "ScopeField", scope: "found", field: "value" },
+            inNodeId: "node",
+            inIoId: "value",
+          },
+        ],
       },
-      connections: [
-        { id: "wire", outNodeId: "node", outIo: { _tag: "Port" as const, id: "removed" }, inNodeId: "node", inIoId: "orphan" },
-        { id: "scope-exec", outNodeId: "node", outIo: { _tag: "ScopeExec", scope: "found" }, inNodeId: "node", inIoId: "exec" },
-        { id: "scope-field", outNodeId: "node", outIo: { _tag: "ScopeField", scope: "found", field: "value" }, inNodeId: "node", inIoId: "value" },
-      ],
     },
   },
 });
@@ -114,12 +134,12 @@ test("SQLite roundtrips recursive tagged types, preserved invalid defaults and w
       Effect.gen(function* () {
         const persistence = yield* Persistence.Service;
         const current = yield* persistence.loadProject();
-        yield* persistence.saveGraph(current.graphs.graph!);
+        yield* persistence.saveGraph(current.graphs.graph!.canvas);
         return yield* persistence.loadProject();
       }),
     );
     assert.deepEqual(reopened, deleted);
-    assert.equal(reopened.graphs.graph!.nodes.node!.inputDefaults.orphan, "never discard");
+    assert.equal(reopened.graphs.graph!.canvas.nodes.node!.inputDefaults.orphan, "never discard");
     assert.equal(Object.hasOwn(reopened.types, "leaf"), false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -174,8 +194,8 @@ test("generated migrations upgrade populated projects without changing saved def
       ),
     );
     assert.deepEqual(loaded.types, {});
-    assert.deepEqual(loaded.graphs.old!.nodes.node!.inputDefaults, JSON.parse(defaults));
-    assert.deepEqual(loaded.graphs.old!.connections, [
+    assert.deepEqual(loaded.graphs.old!.canvas.nodes.node!.inputDefaults, JSON.parse(defaults));
+    assert.deepEqual(loaded.graphs.old!.canvas.connections, [
       {
         id: "wire",
         outNodeId: "node",

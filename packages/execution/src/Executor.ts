@@ -1,6 +1,6 @@
 import {
+  Canvas,
   CustomTypes,
-  Graph,
   Node,
   OutputRef,
   Project,
@@ -317,7 +317,7 @@ export const make = Effect.fnUntraced(function* (
     });
 
     const generateUnresolvedNodeIO = Effect.fnUntraced(function* (
-      graph: Graph.Model,
+      graph: Canvas.Model,
       node: Node.Model,
       schema: Registration.RegisteredSchema,
       properties: Readonly<Record<string, unknown>>,
@@ -342,7 +342,7 @@ export const make = Effect.fnUntraced(function* (
       );
       const wire = wires.length === 1 ? wires[0] : undefined;
       if (wire === undefined) return io;
-      const source = yield* Graph.getNode(graph, wire.outNodeId);
+      const source = yield* Canvas.getNode(graph, wire.outNodeId);
       const sourceSchema = yield* getSchema(registeredModules, source);
       const sourceIO = yield* generate(
         sourceSchema,
@@ -365,7 +365,7 @@ export const make = Effect.fnUntraced(function* (
     // live input/output checks and durable-result encoding/decoding alike.
     const wildcardGraphs = new Map<string, Wildcards.Cache>();
     const generateNodeIO = Effect.fnUntraced(function* (
-      graph: Graph.Model,
+      graph: Canvas.Model,
       node: Node.Model,
       schema: Registration.RegisteredSchema,
       properties: Readonly<Record<string, unknown>>,
@@ -438,7 +438,7 @@ export const make = Effect.fnUntraced(function* (
     // Validate only the event's execution closure and its upstream data dependencies.
     // No schema.run, execution driver, or resource lookup may happen during this pass.
     const validateEventGraph = Effect.fnUntraced(function* (
-      graph: Graph.Model,
+      graph: Canvas.Model,
       eventNode: Node.Model,
     ): Effect.fn.Return<void, ExecutorError> {
       const inspected = new Map<
@@ -454,7 +454,7 @@ export const make = Effect.fnUntraced(function* (
       const inspect = Effect.fnUntraced(function* (id: string) {
         const cached = inspected.get(id);
         if (cached !== undefined) return cached;
-        const node = yield* Graph.getNode(graph, id);
+        const node = yield* Canvas.getNode(graph, id);
         const schema = yield* getSchema(registeredModules, node);
         const properties = yield* resolveProperties(node, schema, false);
         const io = yield* generateNodeIO(graph, node, schema, properties);
@@ -683,7 +683,7 @@ export const make = Effect.fnUntraced(function* (
     });
 
     const executeEventNode = Effect.fn("Executor.executeEventNode")(function* (
-      graph: Graph.Model,
+      graph: Canvas.Model,
       eventNode: Node.Model,
       eventSchema: Registration.RegisteredSchema,
     ): Effect.fn.Return<void, ExecutorError> {
@@ -1087,7 +1087,7 @@ export const make = Effect.fnUntraced(function* (
           "macrograph.source.node.id": connection.outNodeId,
           "macrograph.source.output.id": OutputRef.parentId(connection.outIo),
         });
-        const sourceNode = yield* Graph.getNode(graph, connection.outNodeId);
+        const sourceNode = yield* Canvas.getNode(graph, connection.outNodeId);
         const sourceSchema = yield* getSchema(registeredModules, sourceNode);
         if (sourceSchema.type === "pure")
           yield* runPureNode(
@@ -1209,7 +1209,7 @@ export const make = Effect.fnUntraced(function* (
                 reason: `Input ${connection.inIoId} has multiple connections`,
               });
 
-            const nextNode = yield* Graph.getNode(graph, connection.inNodeId);
+            const nextNode = yield* Canvas.getNode(graph, connection.inNodeId);
             if (path.has(nextNode.id)) return yield* new ExecutionCycle({ nodeId: nextNode.id });
             const nextSchema = yield* getSchema(registeredModules, nextNode);
             if (nextSchema.type !== "exec" && nextSchema.type !== "base")
@@ -1278,10 +1278,11 @@ export const make = Effect.fnUntraced(function* (
     });
 
     yield* Effect.forEach(
-      Object.values(currentProject.graphs),
-      (graph) =>
-        Effect.forEach(
-          Object.values(graph.nodes).filter((node) => node.schema.package === definition.id),
+      Object.entries(currentProject.graphs),
+      ([, graph]) => {
+        const canvas = graph.canvas;
+        return Effect.forEach(
+          Object.values(canvas.nodes).filter((node) => node.schema.package === definition.id),
           (node) =>
             Effect.gen(function* () {
               const schema = registeredModules
@@ -1296,17 +1297,18 @@ export const make = Effect.fnUntraced(function* (
                 Effect.withSpan("Executor.matchEvent", {
                   attributes: {
                     "macrograph.project.id": projectId,
-                    "macrograph.graph.id": graph.id,
+                    "macrograph.graph.id": canvas.id,
                     "macrograph.node.id": node.id,
                     "macrograph.module.id": node.schema.package,
                     "macrograph.schema.id": node.schema.schema,
                   },
                 }),
               );
-              if (matches) yield* executeEventNode(graph, node, schema);
+              if (matches) yield* executeEventNode(canvas, node, schema);
             }),
           { concurrency: "unbounded", discard: true },
-        ),
+        );
+      },
       { concurrency: "unbounded", discard: true },
     );
   });

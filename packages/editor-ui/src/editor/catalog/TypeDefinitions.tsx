@@ -267,7 +267,7 @@ function Fields(props: {
 }
 
 export function TypeDefinitions(props: {
-  project: Pick<Project.Model, "types" | "graphs"> | null;
+  project: Pick<Project.Model, "types"> | null;
   canEdit: boolean;
   onPreview: (change: TypeDefinition.Change) => Promise<TypeDefinition.Impact>;
   onConfirm: (token: string) => Promise<unknown>;

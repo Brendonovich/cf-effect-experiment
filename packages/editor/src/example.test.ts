@@ -52,7 +52,7 @@ namespace Persistence {
 
   export const layerMemory = (project: Project.Model) =>
     Layer.effect(
-      Service,
+      Service)(
       Effect.gen(function* () {
         const projectRef = yield* Ref.make(project);
 
@@ -68,7 +68,7 @@ namespace Persistence {
               ...project,
               graphs: {
                 ...project.graphs,
-                [graph.id]: graph,
+                [graph.canvas.id]: graph,
               },
             }));
           }),
@@ -111,7 +111,9 @@ namespace ProjectEditor {
           const id = Graph.GraphId.make(Math.random().toString(36).slice(0, 8));
 
           yield* persistence.saveGraph(
-            Graph.Model.make({ id, name: opts.name, nodes: {}, connections: [] }),
+            Graph.Model.make({
+              canvas: { id, name: opts.name, nodes: {}, connections: [] },
+            }),
           );
         }),
         update: Effect.fn(function* () {}),
@@ -130,7 +132,7 @@ namespace ProjectEditor {
     });
   });
 
-  export const layer = () => Layer.effect(Service, make());
+  export const layer = () => Layer.effect(Service)(make());
 }
 
 namespace Engine {

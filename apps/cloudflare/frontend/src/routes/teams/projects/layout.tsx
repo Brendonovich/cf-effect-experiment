@@ -38,22 +38,28 @@ const ProjectLayoutContent = (props: {
     workspace
       .projects()
       .find((candidate) => candidate.id === props.projectId && candidate.teamId === props.teamId);
-  const projectPath = `/teams/${encodeURIComponent(props.teamId)}/projects/${encodeURIComponent(props.projectId)}`;
+  const projectPath = () =>
+    `/teams/${encodeURIComponent(props.teamId)}/projects/${encodeURIComponent(props.projectId)}`;
   const deploymentPath = (deploymentId?: string, graphId?: string) =>
-    `${projectPath}/deployments${deploymentId === undefined ? "" : `/${encodeURIComponent(deploymentId)}`}${graphId === undefined ? "" : `/${encodeURIComponent(graphId)}`}`;
+    `${projectPath()}/deployments${deploymentId === undefined ? "" : `/${encodeURIComponent(deploymentId)}`}${graphId === undefined ? "" : `/${encodeURIComponent(graphId)}`}`;
   const context: ProjectContextValue = {
-    projectId: props.projectId,
+    get projectId() {
+      return props.projectId;
+    },
     project,
     deploymentPath,
     openEditor: (replace) =>
-      navigate(`${projectPath}/editor`, replace === undefined ? undefined : { replace }),
+      navigate(`${projectPath()}/editor`, replace === undefined ? undefined : { replace }),
     openDeployments: (deploymentId, graphId, replace) =>
-      navigate(deploymentPath(deploymentId, graphId), replace === undefined ? undefined : { replace }),
+      navigate(
+        deploymentPath(deploymentId, graphId),
+        replace === undefined ? undefined : { replace },
+      ),
     openEvents: (eventId) =>
       navigate(
-        `${projectPath}/events${eventId === undefined ? "" : `/${encodeURIComponent(eventId)}`}`,
+        `${projectPath()}/events${eventId === undefined ? "" : `/${encodeURIComponent(eventId)}`}`,
       ),
-    openSettings: () => navigate(`${projectPath}/settings`),
+    openSettings: () => navigate(`${projectPath()}/settings`),
   };
 
   return (

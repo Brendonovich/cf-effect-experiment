@@ -1,6 +1,6 @@
 import type { EditorEvent, Presence } from "@macrograph/editor";
 
-import { IoId, type Graph, type Node, type SchemaRef } from "@macrograph/core";
+import { IoId, type Canvas, type Node, type SchemaRef } from "@macrograph/core";
 import { Effect } from "effect";
 import { createMemo, createSignal, onSettled } from "solid-js";
 
@@ -46,7 +46,7 @@ export interface EditorCanvasOptions {
   readonly canEdit: () => boolean;
   readonly publishPointer: (cursor: Presence.Cursor | null, final?: boolean) => void;
   readonly selectedGraphId: () => string | null;
-  readonly selectedGraph: () => Graph.Model | null;
+  readonly selectedGraph: () => Canvas.Model | null;
   readonly nodes: () => ReadonlyArray<Node.Model>;
   readonly selectedNodeIds: () => string[];
   readonly setSelectedNodeIds: (next: string[] | ((current: string[]) => string[])) => void;

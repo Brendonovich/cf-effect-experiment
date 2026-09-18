@@ -2,8 +2,8 @@
 import {
   Clipboard,
   Actor,
+  Canvas,
   ConnectionId,
-  Graph,
   IoId,
   Node,
   NodeId,
@@ -58,11 +58,11 @@ const setup = (canEdit = true) =>
         ...Project.empty(),
         graphs: {
           source: {
-            ...Graph.empty("source"),
+            ...Canvas.empty("source"),
             nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
             connections: [edge],
           },
-          other: Graph.empty("other"),
+          other: Canvas.empty("other"),
         },
       },
       { source: {} },

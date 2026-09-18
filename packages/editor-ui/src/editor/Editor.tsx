@@ -5,7 +5,7 @@ import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
-import { TypeDefinition, OutputRef } from "@macrograph/core";
+import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Errored, For, Show } from "solid-js";
 
@@ -583,6 +583,7 @@ function EditorContent(
                   onSearchChange={controller.catalog.setNavSearch}
                   onClose={() => controller.layout.setNavSection(null)}
                   onCreateGraph={controller.commands.createGraph}
+                  onCreateFunction={controller.commands.createFunction}
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}
@@ -804,6 +805,7 @@ function EditorContent(
                                     positioning={
                                       active() && controller.commands.isNodePositioning(node().id)
                                     }
+                                    allowInputDefaults={!GraphFunction.isBoundaryNodeId(node().id)}
                                     presenceColor={
                                       remotePresence().find((entry) =>
                                         entry.selectedNodeIds.includes(node().id),
@@ -847,6 +849,7 @@ function EditorContent(
                                       });
                                     }}
                                     onContextMenu={(event, nodeId) => {
+                                      if (GraphFunction.isBoundaryNodeId(nodeId)) return;
                                       canvas.selectNode(nodeId, false);
                                       canvas.setNodeContextMenu({
                                         nodeId,
@@ -1133,6 +1136,11 @@ function EditorContent(
                 }
                 onSaveDefault={controller.commands.setInputDefault}
                 onRemoveDefault={controller.commands.clearInputDefault}
+                fn={
+                  controller.editor.store.project?.functions[
+                    controller.layout.selectedGraphId() ?? ""
+                  ]
+                }
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>
@@ -1146,6 +1154,9 @@ function EditorContent(
                 onRenameNode={controller.commands.renameNode}
                 onSetNodeProperty={controller.commands.setNodeProperty}
                 onClearNodeProperty={controller.commands.clearNodeProperty}
+                onAddFunctionField={controller.commands.addFunctionField}
+                onUpdateFunctionField={controller.commands.updateFunctionField}
+                onDeleteFunctionField={controller.commands.deleteFunctionField}
               />
             </Sidebar>
           </div>

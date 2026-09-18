@@ -1,8 +1,9 @@
 import {
   BuiltinAuthoring,
+  type Canvas,
+  type Function as GraphFunction,
   type SchemaAuthoring,
   TypeDefinition,
-  type Graph,
   type Node,
   type NodeIO,
   type Package,
@@ -69,10 +70,107 @@ const styles = stylex.create({
   schemaLabel: { display: "block", marginBottom: 4 },
   properties: { display: "flex", flexDirection: "column", gap: 8, marginTop: 16 },
   warning: { color: colors.red11, fontSize: 11, overflowWrap: "anywhere" },
+  signature: { display: "flex", flexDirection: "column", gap: 8, marginTop: 12 },
+  signatureHeader: { display: "flex", alignItems: "center", justifyContent: "space-between" },
+  signatureList: { display: "flex", flexDirection: "column", gap: 6 },
+  signatureRow: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 76px 24px", gap: 4 },
+  fieldInput: {
+    minWidth: 0,
+    height: 24,
+    borderRadius: 2,
+    backgroundColor: colors.gray2,
+    boxShadow: `0 0 0 1px ${colors.gray6}`,
+    paddingInline: 4,
+    fontSize: 11,
+    color: colors.gray12,
+    outline: "none",
+  },
+  fieldButton: {
+    height: 24,
+    borderRadius: 2,
+    backgroundColor: { default: colors.gray3, ":hover": colors.gray4 },
+    color: colors.gray11,
+    fontSize: 12,
+  },
 });
 
+const scalarTypes = [
+  DataType.String,
+  DataType.Int,
+  DataType.Float,
+  DataType.Bool,
+  DataType.DateTime,
+];
+
+function SignatureFields(props: {
+  title: string;
+  direction: "input" | "output";
+  fields: ReadonlyArray<GraphFunction.Field>;
+  canEdit: boolean;
+  onAdd: (direction: "input" | "output") => void;
+  onUpdate: (direction: "input" | "output", field: GraphFunction.Field) => void;
+  onDelete: (direction: "input" | "output", fieldId: string) => void;
+}) {
+  return (
+    <div sx={styles.signature}>
+      <div sx={styles.signatureHeader}>
+        <span sx={styles.title}>{props.title}</span>
+        <Show when={props.canEdit}>
+          <button
+            type="button"
+            sx={styles.fieldButton}
+            onClick={() => props.onAdd(props.direction)}
+          >
+            Add
+          </button>
+        </Show>
+      </div>
+      <div sx={styles.signatureList}>
+        <For each={props.fields}>
+          {(field) => (
+            <div sx={styles.signatureRow}>
+              <input
+                sx={styles.fieldInput}
+                value={field.name}
+                disabled={!props.canEdit}
+                onBlur={(event) =>
+                  props.onUpdate(props.direction, { ...field, name: event.currentTarget.value })
+                }
+              />
+              <select
+                sx={styles.fieldInput}
+                value={field.type._tag}
+                disabled={!props.canEdit}
+                onChange={(event) => {
+                  const type = scalarTypes.find((type) => type._tag === event.currentTarget.value);
+                  if (type !== undefined) props.onUpdate(props.direction, { ...field, type });
+                }}
+              >
+                <For each={scalarTypes}>
+                  {(type) => <option value={type._tag}>{type._tag}</option>}
+                </For>
+              </select>
+              <Show when={props.canEdit}>
+                <button
+                  type="button"
+                  aria-label={`Delete ${field.name}`}
+                  title="Delete field"
+                  sx={styles.fieldButton}
+                  onClick={() => props.onDelete(props.direction, field.id)}
+                >
+                  ×
+                </button>
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
 export function Inspector(props: {
-  graph: Graph.Model | null;
+  graph: Canvas.Model | null;
   node: Node.Model | null;
   packages: ReadonlyArray<Package.Model>;
   authoring?: SchemaAuthoring.Registry;
@@ -82,6 +180,7 @@ export function Inspector(props: {
   nodeIO?: Readonly<Record<string, NodeIO>>;
   onSaveDefault?: (nodeId: string, input: string, value: unknown) => Promise<unknown>;
   onRemoveDefault?: (nodeId: string, input: string) => Promise<unknown>;
+  fn?: GraphFunction.Model | undefined;
   canEdit: boolean;
   editingGraphNameId: string | null;
   onEditingGraphNameChange: (id: string | null) => void;
@@ -91,6 +190,9 @@ export function Inspector(props: {
   onRenameNode: (name: string) => void;
   onSetNodeProperty: (property: string, value: unknown) => void;
   onClearNodeProperty: (property: string) => void;
+  onAddFunctionField: (direction: "input" | "output") => void;
+  onUpdateFunctionField: (direction: "input" | "output", field: GraphFunction.Field) => void;
+  onDeleteFunctionField: (direction: "input" | "output", fieldId: string) => void;
 }) {
   const schemaForNode = (node: Node.Model) =>
     props.packages
@@ -148,6 +250,30 @@ export function Inspector(props: {
                 <span sx={styles.fieldLabel}>Total Nodes</span>
                 <span sx={styles.value}>{Object.keys(graph().nodes).length}</span>
               </div>
+              <Show when={props.fn}>
+                {(fn) => (
+                  <>
+                    <SignatureFields
+                      title="Inputs"
+                      direction="input"
+                      fields={fn().arguments}
+                      canEdit={props.canEdit}
+                      onAdd={props.onAddFunctionField}
+                      onUpdate={props.onUpdateFunctionField}
+                      onDelete={props.onDeleteFunctionField}
+                    />
+                    <SignatureFields
+                      title="Outputs"
+                      direction="output"
+                      fields={fn().returns}
+                      canEdit={props.canEdit}
+                      onAdd={props.onAddFunctionField}
+                      onUpdate={props.onUpdateFunctionField}
+                      onDelete={props.onDeleteFunctionField}
+                    />
+                  </>
+                )}
+              </Show>
             </div>
           )}
         </Show>

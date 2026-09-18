@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsgo --build",
     "typecheck": "tsgo --build",
-    "test": "node --experimental-transform-types --test test/*.test.ts",
+    "test": "vitest run",
     "clean": "rm -rf dist",
     "db:generate": "drizzle-kit generate"
   },
@@ -22,8 +22,10 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "^24",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
-    "typescript": "^5.8"
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
   }
 }

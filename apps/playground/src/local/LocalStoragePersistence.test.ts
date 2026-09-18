@@ -59,23 +59,25 @@ describe("local browser project persistence", () => {
       },
       graphs: {
         graph: {
-          id: "graph",
-          name: "Preserved",
-          connections: [],
-          nodes: {
-            node: {
-              id: "node",
-              name: "Invalid but retained",
-              schema: { package: "CustomTypes", schema: "StringifyJson" },
-              position: { x: 0, y: 0 },
-              properties: { type: "result" },
-              inputDefaults: {
-                value: {
-                  _type: "result",
-                  _tag: "Found",
-                  record: { _type: "deleted", label: "keep" },
+          canvas: {
+            id: "graph",
+            name: "Preserved",
+            connections: [],
+            nodes: {
+              node: {
+                id: "node",
+                name: "Invalid but retained",
+                schema: { package: "CustomTypes", schema: "StringifyJson" },
+                position: { x: 0, y: 0 },
+                properties: { type: "result" },
+                inputDefaults: {
+                  value: {
+                    _type: "result",
+                    _tag: "Found",
+                    record: { _type: "deleted", label: "keep" },
+                  },
+                  removed: "keep orphan",
                 },
-                removed: "keep orphan",
               },
             },
           },

@@ -2,6 +2,7 @@ import type {
   ProjectEventRecord,
   ProjectExecutionNodeRecord as ExecutionNodeRecord,
   ProjectExecutionRecord as ExecutionRecord,
+  ProjectSnapshot,
 } from "@macrograph/cloud-api";
 
 import { Button, LoadingState, SnapshotGraphCanvas } from "@macrograph/editor-ui";
@@ -20,6 +21,11 @@ interface ExecutionDetail {
   readonly event: ProjectEventRecord;
   readonly nodes: ReadonlyArray<ExecutionNodeRecord>;
 }
+
+type SnapshotGraph = (typeof ProjectSnapshot.Type)["graphs"][string];
+
+const snapshotGraphCanvas = (graph: SnapshotGraph) =>
+  "canvas" in graph ? graph.canvas : graph;
 
 interface DeploymentBrowserProps {
   projectId: string;
@@ -200,7 +206,8 @@ export const DeploymentBrowser: Component<DeploymentBrowserProps> = (props) => {
   const selectedGraph = () => {
     const project = snapshot();
     const graphId = selectedGraphId();
-    return project && graphId ? project.graphs[graphId] : undefined;
+    const graph = project && graphId ? project.graphs[graphId] : undefined;
+    return graph === undefined ? undefined : snapshotGraphCanvas(graph);
   };
   const selectedExecutions = () =>
     executions().filter((execution) => execution.deploymentId === selectedDeploymentId());
@@ -217,8 +224,12 @@ export const DeploymentBrowser: Component<DeploymentBrowserProps> = (props) => {
         return styles.pending;
     }
   };
-  const nodeName = (node: ExecutionNodeRecord) =>
-    snapshot()?.graphs[node.graphId]?.nodes[node.nodeId]?.name ?? node.nodeId;
+  const nodeName = (node: ExecutionNodeRecord) => {
+    const graph = snapshot()?.graphs[node.graphId];
+    return graph === undefined
+      ? node.nodeId
+      : (snapshotGraphCanvas(graph).nodes[node.nodeId]?.name ?? node.nodeId);
+  };
 
   return (
     <div sx={styles.root}>
@@ -310,9 +321,11 @@ export const DeploymentBrowser: Component<DeploymentBrowserProps> = (props) => {
                   </div>
                   <div sx={styles.graphList}>
                     <For
-                      each={Object.values(project.graphs).filter((graph) =>
-                        graph.name.toLowerCase().includes(graphSearch().trim().toLowerCase()),
-                      )}
+                      each={Object.values(project.graphs)
+                        .map(snapshotGraphCanvas)
+                        .filter((graph) =>
+                          graph.name.toLowerCase().includes(graphSearch().trim().toLowerCase()),
+                        )}
                     >
                       {(graph) => (
                         <button

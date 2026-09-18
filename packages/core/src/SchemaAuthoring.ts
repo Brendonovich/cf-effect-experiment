@@ -1,7 +1,7 @@
 import { DataType } from "@macrograph/module/DataType";
 import { Result } from "effect";
 
-import type { Graph } from "./Graph.ts";
+import type { Canvas } from "./Canvas.ts";
 import type { Node } from "./Node.ts";
 import type { Package } from "./Package.ts";
 
@@ -72,7 +72,7 @@ export class Registry {
 }
 
 export const inputScope =
-  (graph: Graph.Model, nodeId: string, ioForNode: (id: string) => NodeIO | undefined) =>
+  (graph: Canvas.Model, nodeId: string, ioForNode: (id: string) => NodeIO | undefined) =>
   (input: string): NodeIO["dataOutputs"] | undefined => {
     const wires = graph.connections.filter(
       (wire) => wire.inNodeId === nodeId && wire.inIoId === input,
@@ -100,7 +100,7 @@ export class GraphResolver {
   constructor(readonly registry: Registry) {}
 
   resolve(
-    graph: Graph.Model,
+    graph: Canvas.Model,
     declared: Readonly<Record<string, NodeIO>>,
     definitions: DataType.Definitions,
   ): Resolution {

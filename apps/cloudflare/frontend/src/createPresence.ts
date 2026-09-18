@@ -1,6 +1,6 @@
 import type { Accessor } from "solid-js";
 
-import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { createEffect, createSignal, untrack } from "solid-js";
 
 type PresenceState = "present" | "hiding" | "hidden";
 
@@ -49,10 +49,10 @@ export const createPresence = (props: {
     };
     element.addEventListener("animationend", finish);
     element.addEventListener("animationcancel", finish);
-    onCleanup(() => {
+    return () => {
       element.removeEventListener("animationend", finish);
       element.removeEventListener("animationcancel", finish);
-    });
+    };
   });
 
   return {

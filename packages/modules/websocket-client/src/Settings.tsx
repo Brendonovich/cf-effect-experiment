@@ -1,4 +1,4 @@
-import { Button } from "@macrograph/editor-ui";
+import { Button } from "@macrograph/editor-ui/Button";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { ClientSettings } from "@macrograph/module/ClientSettings";
 import * as stylex from "@stylexjs/stylex";

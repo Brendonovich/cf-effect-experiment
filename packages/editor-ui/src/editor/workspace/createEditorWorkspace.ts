@@ -1,3 +1,4 @@
+import { Function as GraphFunction } from "@macrograph/core";
 import { createEffect, createSignal, onSettled, untrack } from "solid-js";
 
 import type { EditorControllerOptions } from "../createEditorController";
@@ -319,6 +320,7 @@ export function createEditorWorkspace(
   };
   const selectedNode = () => {
     const id = selectedNodeId();
+    if (id !== null && GraphFunction.isBoundaryNodeId(id)) return null;
     return id ? (selectedGraph()?.nodes[id] ?? null) : null;
   };
   createEffect(

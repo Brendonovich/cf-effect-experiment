@@ -1,4 +1,4 @@
-import { Graph, Node } from "@macrograph/core";
+import { Function as GraphFunction, Node, Project } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { Effect } from "effect";
 
@@ -7,7 +7,7 @@ import { EditorEvent } from "./EditorEvent.ts";
 export type ApplyError = PersistenceError;
 
 export const apply = (
-  persistence: Persistence.Service["Service"],
+  persistence: Persistence.Interface,
   event: EditorEvent.EditorEvent,
 ): Effect.Effect<void, ApplyError> => {
   switch (event._tag) {
@@ -21,7 +21,12 @@ export const apply = (
           const deleted = new Set(connectionIds);
           graphs[graphId] = {
             ...graph,
-            connections: graph.connections.filter((connection) => !deleted.has(connection.id)),
+            canvas: {
+              ...graph.canvas,
+              connections: graph.canvas.connections.filter(
+                (connection) => !deleted.has(connection.id),
+              ),
+            },
           };
         }
         return yield* persistence.saveProject({ ...project, types: event.types, graphs });
@@ -56,13 +61,47 @@ export const apply = (
       return persistence.saveGraph(event.graph);
 
     case "GraphDeleted":
-      return persistence.deleteGraph(event.graphId);
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const { [event.graphId]: _graph, ...graphs } = project.graphs;
+        const { [event.graphId]: _function, ...functions } = project.functions;
+        yield* persistence.deleteGraph(event.graphId);
+        return yield* persistence.saveProject({ ...project, graphs, functions });
+      }).pipe(PersistenceError.refail);
 
     case "GraphNameChanged":
       return Effect.gen(function* () {
         const graph = yield* persistence.loadGraph(event.graphId);
-        const updated: Graph.Model = { ...graph, name: event.name };
+        const updated = { ...graph, name: event.name };
         return yield* persistence.saveGraph(updated);
+      }).pipe(PersistenceError.refail);
+
+    case "FunctionCreated":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        return yield* persistence.saveProject({
+          ...project,
+          functions: { ...project.functions, [event.fn.canvas.id]: event.fn },
+        });
+      }).pipe(PersistenceError.refail);
+
+    case "FunctionUpdated":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const deleted = new Set(event.deletedConnectionIds);
+        const fn = {
+          ...event.fn,
+          canvas: {
+            ...event.fn.canvas,
+            connections: event.fn.canvas.connections.filter(
+              (connection) => !deleted.has(connection.id),
+            ),
+          },
+        };
+        return yield* persistence.saveProject({
+          ...project,
+          functions: { ...project.functions, [fn.canvas.id]: fn },
+        });
       }).pipe(PersistenceError.refail);
 
     case "NodeCreated":
@@ -77,6 +116,22 @@ export const apply = (
 
     case "NodePositionChanged":
       return Effect.gen(function* () {
+        if (GraphFunction.isBoundaryNodeId(event.nodeId)) {
+          const project = yield* persistence.loadProject();
+          const fn = project.functions[event.graphId];
+          if (fn === undefined) return yield* new Node.NotFoundError({ id: event.nodeId });
+          const position = { x: event.x, y: event.y };
+          return yield* persistence.saveProject({
+            ...project,
+            functions: {
+              ...project.functions,
+              [event.graphId]:
+                event.nodeId === GraphFunction.InputBoundaryNodeId
+                  ? { ...fn, inputPosition: position }
+                  : { ...fn, outputPosition: position },
+            },
+          });
+        }
         const node = yield* persistence.loadNode(event.graphId, event.nodeId);
         const updated: Node.Model = {
           ...node,
@@ -175,29 +230,28 @@ export const apply = (
     case "ResourceConstantUpdated":
       return Effect.gen(function* () {
         const project = yield* persistence.loadProject();
-        const graphs = { ...project.graphs };
+        let updatedProject = project;
         for (const [graphId, defaultsByNode] of Object.entries(event.inputDefaults)) {
-          const graph = graphs[graphId];
+          const graph = Project.canvases(updatedProject)[graphId];
           if (graph === undefined) continue;
           const nodes = { ...graph.nodes };
           for (const [nodeId, inputDefaults] of Object.entries(defaultsByNode)) {
             const node = nodes[nodeId];
             if (node !== undefined) nodes[nodeId] = { ...node, inputDefaults };
           }
-          graphs[graphId] = { ...graph, nodes };
+          updatedProject = Project.replaceCanvas(updatedProject, { ...graph, nodes });
         }
         for (const [graphId, connectionIds] of Object.entries(event.deletedConnectionIds)) {
-          const graph = graphs[graphId];
+          const graph = Project.canvases(updatedProject)[graphId];
           if (graph === undefined) continue;
           const deleted = new Set(connectionIds);
-          graphs[graphId] = {
+          updatedProject = Project.replaceCanvas(updatedProject, {
             ...graph,
             connections: graph.connections.filter((connection) => !deleted.has(connection.id)),
-          };
+          });
         }
         return yield* persistence.saveProject({
-          ...project,
-          graphs,
+          ...updatedProject,
           constants: { ...project.constants, [event.constant.id]: event.constant },
         });
       }).pipe(PersistenceError.refail);

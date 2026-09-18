@@ -35,10 +35,10 @@ const node = (
 const wire = (
   id: string,
   outNodeId: string,
-  outIoId: string,
+  outPortId: string,
   inNodeId: string,
   inIoId: string,
-) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outIoId }, inNodeId, inIoId });
+) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outPortId }, inNodeId, inIoId });
 
 describe("event graph preflight", () => {
   it.effect(
@@ -241,7 +241,7 @@ describe("event graph preflight", () => {
           const project = yield* Schema.decodeUnknownEffect(Project.Model)({
             ...Project.empty(),
             types: variant.types,
-            graphs: { g: variant.graph },
+            graphs: { g: { canvas: variant.graph } },
           });
           const executor = yield* Executor.make(project, {
             executionDriver: {
@@ -300,16 +300,23 @@ describe("event graph preflight", () => {
         },
         graphs: {
           g: {
-            id: "g",
-            name: "Valid",
-            nodes: { event: node("event", "event"), disconnected: node("disconnected", "deleted") },
-            connections: [],
+            canvas: {
+              id: "g",
+              name: "Valid",
+              nodes: {
+                event: node("event", "event"),
+                disconnected: node("disconnected", "deleted"),
+              },
+              connections: [],
+            },
           },
           other: {
-            id: "other",
-            name: "Unrelated",
-            nodes: { invalid: node("invalid", "deleted", {}, CustomTypes.packageId) },
-            connections: [],
+            canvas: {
+              id: "other",
+              name: "Unrelated",
+              nodes: { invalid: node("invalid", "deleted", {}, CustomTypes.packageId) },
+              connections: [],
+            },
           },
         },
       });
@@ -345,7 +352,14 @@ describe("event graph preflight", () => {
         ...Project.empty(),
         types: definitions,
         graphs: {
-          g: { id: "g", name: "Graph", nodes: { event: node("event", "event") }, connections: [] },
+          g: {
+            canvas: {
+              id: "g",
+              name: "Graph",
+              nodes: { event: node("event", "event") },
+              connections: [],
+            },
+          },
         },
       });
       for (const value of [
@@ -424,16 +438,18 @@ describe("event graph preflight", () => {
         },
         graphs: {
           g: {
-            id: "g",
-            name: "Graph",
-            nodes: {
+            canvas: {
+              id: "g",
+              name: "Graph",
+              nodes: {
               event: { ...node("event", "event"), properties: { selector: "selector" } },
               resource: {
                 ...node("resource", "resource", { "selected-port": 2 }),
                 properties: { selector: "selector" },
               },
             },
-            connections: [wire("exec", "event", "exec", "resource", "exec")],
+              connections: [wire("exec", "event", "exec", "resource", "exec")],
+            },
           },
         },
       });
@@ -463,9 +479,15 @@ describe("event graph preflight", () => {
         graphs: {
           g: {
             ...graph,
-            nodes: {
-              ...graph.nodes,
-              resource: { ...graph.nodes.resource!, inputDefaults: { "selected-port": "invalid" } },
+            canvas: {
+              ...graph.canvas,
+              nodes: {
+                ...graph.canvas.nodes,
+                resource: {
+                  ...graph.canvas.nodes.resource!,
+                  inputDefaults: { "selected-port": "invalid" },
+                },
+              },
             },
           },
         },
@@ -528,17 +550,19 @@ describe("event graph preflight", () => {
             types: recursive,
             graphs: {
               g: {
-                id: "g",
-                name: "Graph",
-                nodes: {
+                canvas: {
+                  id: "g",
+                  name: "Graph",
+                  nodes: {
                   event: node("event", "event"),
                   pure: node("pure", "pure"),
                   sink: node("sink", "sink"),
                 },
-                connections: [
+                  connections: [
                   wire("exec", "event", "exec", "sink", "exec"),
                   wire("data", pure ? "pure" : "event", "value", "sink", "value"),
-                ],
+                  ],
+                },
               },
             },
           });

@@ -1,7 +1,8 @@
-export { Editor } from "./Editor.ts";
+export { Editor, ProjectSnapshot } from "./Editor.ts";
 export { EditorEvents } from "./EditorEvents.ts";
 export { Packages } from "./Packages.ts";
 export { EditorEvent } from "./EditorEvent.ts";
+export * as ProjectEventProjection from "./projectEventProjection.ts";
 export * as EditorRpc from "./EditorRpc.ts";
 export * as DualProtocol from "./DualProtocol.ts";
 export * as EditorServer from "./EditorServer.ts";

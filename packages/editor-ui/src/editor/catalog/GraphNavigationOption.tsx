@@ -254,7 +254,10 @@ export function GraphNavigationOption(props: {
               input.select();
             })
           }
-          onBlur={(event) => finishRename(event.currentTarget.value)}
+          onBlur={(event) => {
+            const value = event.currentTarget.value;
+            queueMicrotask(() => finishRename(value));
+          }}
           onKeyDown={(event) => {
             event.stopPropagation();
             if (event.key === "Enter") {

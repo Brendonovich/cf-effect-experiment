@@ -4,12 +4,13 @@
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./test-contract": "./test/PersistenceContract.ts"
   },
   "scripts": {
     "build": "tsgo --build",
     "typecheck": "tsgo --build",
-    "test": "vitest",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {

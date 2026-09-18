@@ -1,44 +1,35 @@
 import { Effect, Schema } from "effect";
 
-import * as Connection from "./Connection.ts";
-import { Node } from "./Node.ts";
+import type { Model as NodeModel } from "./Node.ts";
+import type { SchemaModel } from "./Package.ts";
 
-export const GraphId = Schema.String.pipe(Schema.brand("GraphId"));
-export type GraphId = typeof GraphId.Type;
+import { Canvas } from "./Canvas.ts";
+
+/** @deprecated Use CanvasId. */
+export const GraphId = Canvas.CanvasId;
+/** @deprecated Use CanvasId. */
+export type GraphId = Canvas.CanvasId;
 
 export const Model = Schema.Struct({
-  id: GraphId,
-  name: Schema.String,
-  nodes: Schema.Record(Schema.String, Node.Model),
-  connections: Schema.Array(Connection.Model),
+  canvas: Canvas.Model,
 });
 export type Model = typeof Model.Type;
 
-export const CreateInput = Schema.Struct({
-  name: Schema.optional(Schema.String),
-  nodes: Schema.optional(Schema.Record(Schema.String, Node.Model)),
-  connections: Schema.optional(Schema.Array(Connection.Model)),
-});
+export const CreateInput = Canvas.CreateInput;
 export type CreateInput = typeof CreateInput.Type;
 
 export const empty = (id: string): Model => ({
-  id: GraphId.make(id),
-  name: id,
-  nodes: {},
-  connections: [],
+  canvas: Canvas.empty(id),
 });
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("GraphNotFoundError", {
   id: Schema.String,
 }) {}
 
-export const getNode = (
-  graph: Model,
-  nodeId: string,
-): Effect.Effect<Node.Model, Node.NotFoundError> => {
-  const node = graph.nodes[nodeId];
-  if (node) return Effect.succeed(node);
-  return Effect.fail(new Node.NotFoundError({ id: nodeId }));
-};
+export const validateNode = (
+  _graph: Model,
+  _node: NodeModel,
+  _schema: SchemaModel,
+): Effect.Effect<void> => Effect.void;
 
 export * as Graph from "./Graph.ts";

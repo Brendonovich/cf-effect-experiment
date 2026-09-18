@@ -101,7 +101,8 @@ it.effect(
       });
       expect(split.splitScopeOutputs).toEqual([scope]);
       expect(
-        (yield* editor.project.get()).graphs.graph?.nodes[match.node.id]?.splitScopeOutputs,
+        Project.canvases(yield* editor.project.get()).graph?.nodes[match.node.id]
+          ?.splitScopeOutputs,
       ).toEqual([scope]);
       const exec = yield* editor.connection.create({
         graphID: "graph",
@@ -131,7 +132,7 @@ it.effect(
           }),
         ),
       ).toBeInstanceOf(Connection.InvalidError);
-      const graph = (yield* editor.project.get()).graphs.graph!;
+      const graph = Project.canvases(yield* editor.project.get()).graph!;
       const pasted = yield* editor.fragment.paste({
         graphID: "graph",
         position: { x: 300, y: 0 },
@@ -240,7 +241,7 @@ it.effect(
       yield* connect(editor, unpack.node.id, 'field:"value"', sink.node.id, "value");
       yield* connect(editor, unpack.node.id, "exec", sink.node.id, "exec");
       const project = yield* editor.project.get();
-      const graph = project.graphs.graph!;
+      const graph = Project.canvases(project).graph!;
       const pasted = yield* editor.fragment.paste({
         graphID: "graph",
         position: { x: 300, y: 0 },
@@ -257,9 +258,8 @@ it.effect(
         { id: 'field:"value"', name: "value", type: DataType.String },
       ]);
       expect(
-        Schema.decodeUnknownSync(Project.Model)(yield* editor.project.get()).graphs.graph?.nodes[
-          broken.id
-        ]?.properties,
+        Project.canvases(Schema.decodeUnknownSync(Project.Model)(yield* editor.project.get())).graph
+          ?.nodes[broken.id]?.properties,
       ).toEqual({});
     }).pipe(Effect.provide(TestLayer)),
 );

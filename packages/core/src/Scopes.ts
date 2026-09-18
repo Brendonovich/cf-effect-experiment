@@ -1,7 +1,7 @@
 import * as Registration from "@macrograph/module/Registration";
 import { Effect, Result } from "effect";
 
-import type { Graph } from "./Graph.ts";
+import type { Canvas } from "./Canvas.ts";
 import type { Node } from "./Node.ts";
 import type { Package } from "./Package.ts";
 import type * as SchemaAuthoring from "./SchemaAuthoring.ts";
@@ -82,7 +82,7 @@ export const packageModel: Package.Model = {
 
 /** Derived from the wire, never persisted as a second copy of its source's type. */
 export const resolveIO = (
-  graph: Graph.Model,
+  graph: Canvas.Model,
   nodeId: string,
   ioForNode: (nodeId: string) => NodeIO | undefined,
 ): NodeIO | undefined => {

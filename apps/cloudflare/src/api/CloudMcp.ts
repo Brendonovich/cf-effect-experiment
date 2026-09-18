@@ -5,8 +5,8 @@ import {
   ProjectRecord,
 } from "@macrograph/cloud-api";
 import {
+  Canvas,
   Connection,
-  Graph,
   GraphId,
   Node,
   NodeIO,
@@ -26,7 +26,9 @@ const projectParameters = {
 };
 const graphParameters = {
   ...projectParameters,
-  graphId: Schema.String.annotate({ description: "Graph ID returned by listGraphs or createGraph." }),
+  graphId: Schema.String.annotate({
+    description: "Graph ID returned by listGraphs or createGraph.",
+  }),
 };
 
 export const toolkit = Toolkit.make(
@@ -65,7 +67,7 @@ export const toolkit = Toolkit.make(
     description:
       "Inspect a graph, including all nodes, connections, and resolved node inputs and outputs.",
     parameters: Schema.Struct(graphParameters),
-    success: Schema.Struct({ graph: Graph.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
+    success: Schema.Struct({ graph: Canvas.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
     failure: Schema.Unknown,
   })
     .addDependency(CurrentUser)
@@ -74,7 +76,7 @@ export const toolkit = Toolkit.make(
     description:
       "PREFERRED: Create an entire graph in one request, including its name, nodes, and connections. Nodes are keyed by temporary local IDs, and connections reference those IDs. Node schemas use { package, schema }; resource properties use matching resource IDs returned by searchSchemas. Use searchSchemas only if schema IDs, ports, or resources are unknown. Prefer this compound tool over separate createNode/createConnection calls.",
     parameters: Schema.Struct({ ...projectParameters, ...CreateGraphRequest.fields }),
-    success: Schema.Struct({ graph: Graph.Model }),
+    success: Schema.Struct({ graph: Canvas.Model }),
     failure: Schema.Unknown,
   }).addDependency(CurrentUser),
   Tool.make("deleteGraph", {

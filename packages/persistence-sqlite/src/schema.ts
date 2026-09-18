@@ -17,9 +17,37 @@ export const projectMeta = sqliteTable("project_meta", {
     .default({}),
 });
 
-export const graphs = sqliteTable("graphs", {
+export const canvases = sqliteTable("canvases", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+});
+
+export const graphs = sqliteTable("graphs", {
+  canvasId: text("canvas_id")
+    .primaryKey()
+    .references(() => canvases.id, { onDelete: "cascade" }),
+});
+
+export const functions = sqliteTable("functions", {
+  canvasId: text("canvas_id")
+    .primaryKey()
+    .references(() => canvases.id, { onDelete: "cascade" }),
+  arguments: text("arguments", { mode: "json" })
+    .notNull()
+    .$type<
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+    >(),
+  returns: text("returns", { mode: "json" })
+    .notNull()
+    .$type<
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+    >(),
+  inputPosition: text("input_position", { mode: "json" })
+    .notNull()
+    .$type<{ readonly x: number; readonly y: number }>(),
+  outputPosition: text("output_position", { mode: "json" })
+    .notNull()
+    .$type<{ readonly x: number; readonly y: number }>(),
 });
 
 export const nodes = sqliteTable("nodes", {
@@ -36,7 +64,7 @@ export const nodes = sqliteTable("nodes", {
   schemaSchema: text("schema_schema").notNull(),
   positionX: real("position_x").notNull(),
   positionY: real("position_y").notNull(),
-  graphId: text("graph_id").notNull(),
+  canvasId: text("canvas_id").notNull(),
 });
 
 export const connections = sqliteTable("connections", {
@@ -45,5 +73,5 @@ export const connections = sqliteTable("connections", {
   outIo: text("out_io", { mode: "json" }).notNull().$type<OutputRef.Model>(),
   inNodeId: text("in_node_id").notNull(),
   inIoId: text("in_io_id").notNull(),
-  graphId: text("graph_id").notNull(),
+  canvasId: text("canvas_id").notNull(),
 });
