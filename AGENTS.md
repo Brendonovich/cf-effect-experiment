@@ -1,63 +1,46 @@
 # MacroGraph
 
-## Effect API Reference
+MacroGraph is a pnpm monorepo for authoring and running typed visual automation graphs across the browser, self-hosted server, and Cloudflare runtimes.
 
-The Effect v4 monorepo is checked in as a git submodule at `lib/effect-smol` (effect-ts/effect-smol, on branch `@effect/ai-anthropic@4.0.0-beta.66`). Use this submodule to look up Effect APIs when writing or refactoring code. Key entry points:
+## Source of Truth
 
-- `packages/effect/src/Schema.ts` — Schema, Schema.Class, Schema.Struct, brands, etc.
-- `packages/effect/src/Effect.ts` — core Effect module
-- `packages/effect/src/Layer.ts` — Layer module
-- Other packages under `packages/` for platform, sql, cli, rpc, etc.
+- Effect v4 changes quickly. Inspect the checked-in `lib/effect-smol` submodule instead of relying on remembered APIs. Start with `packages/effect/src/Schema.ts`, `Effect.ts`, and `Layer.ts`, then read the relevant package source.
+- Prefer current code, public package exports, tests, and generated schemas over prose descriptions of implementation details.
 
-## Hard Rules
+## Workflow
 
-- **Backwards compatibility is not required at this stage.** Prefer clean changes over compatibility layers, legacy fallbacks, or migrations solely to support old APIs or saved formats, unless explicitly requested.
-- **NEVER use `as any`**. Use `{BrandedType}.make(value)` for branded types, or restructure types to avoid the cast.
-- **NEVER mutate Schema.Class instances**. All properties are readonly. Create new instances with `new Model({ ...existing, field: newValue })`.
-- **EntityNotFoundError classes live in the core package**, under their respective namespace (`Project.NotFoundError`, `Graph.NotFoundError`, `Node.NotFoundError`).
+- Follow the user's requested order; do not silently reorder work.
+- Backwards compatibility is not required at this stage. Prefer a clean design over compatibility layers, legacy fallbacks, or migrations for old APIs and saved formats unless explicitly requested.
+- Keep changes scoped. Do not modify, discard, or incorporate unrelated worktree changes.
 
-## Effect v4 API Notes
+## Coding
 
-- **`Effect.catchAll` does not exist in v4**. Use `Effect.catchCause` and filter via `Cause.findFail`. For sync error handling, prefer `Effect.try({ try, catch })`.
-- **`Effect.try` requires a `catch`** — the catch handler is not optional. Use `catch: (error) => error` for pass-through.
-- **`Effect.fnUntraced` returns a function**, not an Effect. Call it to get the Effect: `make()`. It also accepts piped handlers as a second arg: `Effect.fnUntraced(function*() { ... }, PersistenceError.refail)`.
-- **`Schema.TaggedClass`** for typed tagged classes. **`Schema.TaggedError`** for tagged error classes.
-- **`Result` uses `success`/`failure` properties** (not `value`/`error` from v3). `Result.Success` has `.success`, `Result.Failure` has `.failure`.
-- **`Context.Service` class-based services**: each file exports `class Service extends Context.Service<Service, { ... }>()("key") {}` and `export * as X from "./X.js"` at the bottom.
+- Never use `as any`. Use branded constructors such as `NodeId.make(value)` or restructure the types.
+- Never mutate `Schema.Class` instances. Construct a new instance with the changed fields.
+- Keep entity not-found errors in `@macrograph/core` under their namespace, such as `Project.NotFoundError`, `Graph.NotFoundError`, and `Node.NotFoundError`.
+- Define class-based services as `Context.Service` classes and expose their interface through the namespace. Inline private service implementations in `Layer.effect`; extract a `make` function only when it is exported.
+- Generate database migrations with `drizzle-kit generate`. Do not hand-write migration SQL. Use `DatabaseSync` transactions for atomic SQLite writes.
+- Track client actions with TanStack Query `useMutation`, deriving pending and error state from the mutation. Set mutation `networkMode` to `"always"`; connectivity belongs in the transport layer.
 
-## Layer Composition
+## Build and Verification
 
-- **Use `Layer.effect(Tag)(effect)` (curried form)** to avoid `NoInfer` type inference issues with the two-arg form.
-- **Per-project layers over global ones**: `DrizzleLayer.layer(basePath, projectId)` scopes a layer to a specific project. `drizzle.use(impl)` doesn't need a projectId param.
+Run the narrowest relevant test while developing, then use the repository commands below as the supported verification interface.
 
-## Schema & Branded Types
+| Situation | Command |
+| --- | --- |
+| Any code change | `pnpm typecheck` |
+| Changed packages and dependents | `pnpm test:affected` |
+| Full unit and type validation | `pnpm check:fast` |
+| PR or release readiness | `pnpm check:ci` |
+| Formatting | `pnpm format` |
 
-- **Branded types have `.make()`**: `NodeId.make("some-id")`, `GraphId.make("some-id")`, etc. Don't cast strings with `as any`.
-- **Schema.Struct for inline types**: `Schema.Struct({ id: Schema.String, name: Schema.String })` for simple metadata schemas.
-- **`Schema.decodeUnknownEffect` / `Schema.encodeUnknownEffect`** for serialization. For Schemas with no service requirements, both produce `Effect<A, SchemaError>`.
+- Verify observable behavior through the real artifact; compilation alone is not proof of runtime or user-visible behavior.
+- Do not declare completion when required verification could not run. Report the blocker and what remains unverified.
 
-## Drizzle + SQLite
+## Skills
 
-- **Use `drizzle-kit generate`** for migrations, not raw `CREATE TABLE` SQL.
-- **Per-project SQLite files**: no `projects` table, just a `project_meta` (single-row `name`) and `graphs`/`nodes` tables. One `.sqlite` file per project.
-- **Drizzle `db:generate` script** in package.json: `"db:generate": "drizzle-kit generate"`. Config at `drizzle.config.ts`.
-- **`node:sqlite`'s `DatabaseSync`** with `drizzle-orm/node-sqlite` driver. Use `db.transaction((tx) => { ... })` for atomic writes, not manual BEGIN/COMMIT.
+| Skill | Use when |
+| --- | --- |
+| `.opencode/skills/verify-macrograph/SKILL.md` | A change affects the playground UI, editor startup, local persistence, import/export, reset, or another behavior covered by its feature map. |
 
-## Persistence
-
-- **`PersistenceError`** has `{ cause: Schema.Defect }`. Its `refail` static method catches any `Cause` via `Effect.catchCause` and wraps with `Cause.squash`.
-- **`withMemoryBuffer(layer)` wraps a persistence layer** with an in-memory `Ref<Map<ProjectId, Project.Model>>` cache — load hits cache first, saves update it.
-- **`saveGraph` is for efficiency** — writes a single graph without touching the full project on disk. For JSON, it writes one file; for SQLite, one transaction.
-
-## Service Implementation
-
-- **Don't extract private `make` functions**. Inline the implementation directly in `Layer.effect(Service, Effect.gen(function* () { ... }))` unless the `make` function is exported.
-
-## Client Async State
-
-- **Use TanStack Query `useMutation` to track client async actions**. Derive pending/error state from the mutation instead of maintaining manual busy flags or error signals.
-- **Set `defaultOptions.mutations.networkMode` to `"always"` on QueryClients**. Handle connectivity in the transport/service layer, not by pausing mutations based on browser online status.
-
-## Verification
-
-- **Always run `pnpm typecheck` after making changes** to ensure types are correct.
+For playground verification, run `doctor`, select the relevant file under `.opencode/skills/verify-macrograph/features/`, exercise the production user path, and report the generated manifest and evidence paths. Screenshots alone are not proof. Update the feature map in the same change when covered user behavior changes.
