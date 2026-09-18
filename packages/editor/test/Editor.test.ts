@@ -191,7 +191,7 @@ const TestPackage = {
 };
 
 const PackagesLayer = Layer.effect(
-  Packages.Service,
+  Packages.Service)(
   Effect.gen(function* () {
     const packages = yield* Packages.Service;
     yield* packages.loadPackage(TestPackage);

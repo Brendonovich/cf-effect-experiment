@@ -35,7 +35,7 @@ export const contextLayer = <
   },
 ) =>
   Layer.effect(
-    definition.EngineContext,
+    definition.EngineContext)(
     Effect.gen(function* () {
       const lock = yield* Semaphore.make(1);
       const save = (state: Storage["Type"]) =>

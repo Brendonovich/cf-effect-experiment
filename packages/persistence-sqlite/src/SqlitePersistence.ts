@@ -20,7 +20,7 @@ import { DrizzleDriver, type DbDriver } from "./DrizzleDriver.ts";
 import * as schema from "./schema.ts";
 
 export const layer = Layer.effect(
-  Persistence.Service,
+  Persistence.Service)(
   Effect.gen(function* () {
     const { driver: db } = yield* DrizzleDriver.Service;
 
