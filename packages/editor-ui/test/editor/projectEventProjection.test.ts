@@ -9,6 +9,7 @@ import {
   Project,
   ResourceConstant,
   SchemaId,
+  OutputRef,
 } from "@macrograph/core";
 import { EditorEvent, ProjectEventProjection } from "@macrograph/editor";
 import { Effect } from "effect";
@@ -33,7 +34,7 @@ const node = (id: string): Node.Model => ({
 const connection = (id: string, outNodeId: string, inNodeId: string): Connection.Model => ({
   id: Connection.ConnectionId.make(id),
   outNodeId,
-  outIoId: IoId.make("out"),
+  outIo: OutputRef.port("out"),
   inNodeId,
   inIoId: IoId.make("in"),
 });
@@ -246,7 +247,7 @@ describe("project event projections", () => {
         graphId: fnCanvas.id,
         name: "Renamed Function",
       },
-      { _tag: "EngineStateChanged", actor: Actor.system, pluginId: "test", state: { on: true } },
+      { _tag: "EngineStateChanged", actor: Actor.system, moduleId: "test", state: { on: true } },
       { _tag: "ResourceConstantCreated", actor: Actor.system, constant },
       {
         _tag: "ResourceConstantUpdated",
@@ -307,6 +308,7 @@ describe("project event projections", () => {
             functions,
             engines: view.engines,
             constants: view.constants,
+            types: view.types,
           }).toEqual(persisted);
         }
       }),
@@ -324,12 +326,12 @@ describe("project event projections", () => {
         resource: "account",
         values: [{ id: "one", display: "One" }],
       },
-      { _tag: "PluginClientStateDirty", actor: Actor.system, pluginId: "test" },
+      { _tag: "ModuleClientStateDirty", actor: Actor.system, moduleId: "test" },
     ];
 
     expect(ephemeral.map((event) => [event._tag, EditorEvent.isEphemeral(event)])).toEqual([
       ["ResourceValuesUpdated", true],
-      ["PluginClientStateDirty", true],
+      ["ModuleClientStateDirty", true],
     ]);
 
     const initial = initialProject();
