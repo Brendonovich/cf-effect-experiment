@@ -26,3 +26,5 @@ catalog:
 minimumReleaseAge: 0
 minimumReleaseAgeExclude:
   - "@types/node@26.4.1"
+overrides:
+  "@types/node": 24.13.3
