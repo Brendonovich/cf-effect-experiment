@@ -1,10 +1,14 @@
-import type { Graph, ResourceConstant } from "@macrograph/core";
+import type { Graph, Queue, ResourceConstant } from "@macrograph/core";
 import type { Schema } from "effect";
 
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
   name: text("name").notNull(),
+  queues: text("queues", { mode: "json" })
+    .notNull()
+    .$type<Record<string, Queue.Model>>()
+    .default({}),
   engines: text("engines", { mode: "json" })
     .notNull()
     .$type<Record<string, Schema.Json>>()

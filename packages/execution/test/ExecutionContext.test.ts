@@ -105,6 +105,7 @@ describe("schema execution context", () => {
       const secondActionNodeId = NodeId.make("context-action-2");
       const project: Project.Model = {
         name: "Context",
+        queues: {},
         engines: {},
         constants: {},
         graphs: {

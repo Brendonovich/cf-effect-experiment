@@ -12,11 +12,13 @@ import {
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import * as Database from "../database/Database.ts";
+import FunctionExecutionWorkflow from "../execution/FunctionExecutionWorkflow.ts";
+import * as FunctionQueueTransport from "../execution/FunctionQueueTransport.ts";
 import { IngressApi } from "../ingress/IngressApi.ts";
 import * as IngressHandlers from "../ingress/IngressHandlers.ts";
 import { ProjectIngressDOLayer } from "../ingress/ProjectIngressDO.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import { DatabaseHyperdrive, DeploymentSnapshotsBucket } from "../Storage.ts";
+import { DatabaseHyperdrive, DeploymentSnapshotsBucket, FunctionWorkQueue } from "../Storage.ts";
 import {
 	ClientIdConfig as TwitchClientIdConfig,
 	ClientSecretConfig as TwitchClientSecretConfig,
@@ -41,6 +43,7 @@ export default Layer.unwrap(
 	Effect.gen(function* () {
 		const databaseResource = yield* DatabaseHyperdrive;
 		const deploymentsResource = yield* DeploymentSnapshotsBucket;
+		const functionQueueResource = yield* FunctionWorkQueue;
 
 		return IngressWorker.make(
 			{
@@ -52,6 +55,9 @@ export default Layer.unwrap(
 				dev: { port: 1338, strictPort: true },
 			},
 			Effect.gen(function* () {
+				yield* FunctionExecutionWorkflow;
+				yield* Cloudflare.Queues.WriteQueue(functionQueueResource);
+				yield* FunctionQueueTransport.consume(functionQueueResource);
 				const workerOperations =
 					yield* CloudWorkerOperations.make(deploymentsResource);
 				const app = yield* HttpApiBuilder.layer(IngressApi).pipe(
@@ -90,6 +96,8 @@ export default Layer.unwrap(
 				Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
 				Effect.provide(Cloudflare.R2.ReadBucketBinding),
 				Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
+				Effect.provide(Cloudflare.Queues.WriteQueueBinding),
+				Effect.provide(Cloudflare.Queues.EventSourceLive),
 				Effect.provide(ObservabilityLayer),
 			),
 		);

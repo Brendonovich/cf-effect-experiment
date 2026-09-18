@@ -1,6 +1,6 @@
 export const workspaceVersion = 2 as const;
 export type PaneDirection = "horizontal" | "vertical";
-export type NavSection = "graphs" | "packages" | "functions" | null;
+export type NavSection = "graphs" | "packages" | "functions" | "queues" | null;
 
 export interface GraphViewState {
   readonly origin: { readonly x: number; readonly y: number };
@@ -503,7 +503,7 @@ export const parseWorkspaceState = (value: string | null): WorkspaceState | unde
     )
       return undefined;
     if (
-      ![null, "graphs", "packages", "functions", "constants"].includes(
+      ![null, "graphs", "packages", "functions", "queues", "constants"].includes(
         parsed.navSection as string | null,
       ) ||
       typeof parsed.inspectorOpen !== "boolean"

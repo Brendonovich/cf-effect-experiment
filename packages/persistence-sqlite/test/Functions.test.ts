@@ -1,4 +1,4 @@
-import { FunctionGraph, Graph, Project } from "@macrograph/core";
+import { FunctionGraph, Graph, Project, Queue } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { strict as assert } from "node:assert";
@@ -32,12 +32,19 @@ test("generated migrations default ordinary graphs and round-trip function signa
         },
         () => crypto.randomUUID(),
       );
-      yield* persistence.saveProject({ ...Project.empty(), graphs: { ordinary, function: fn } });
+      const queues = { work: { id: Queue.QueueId.make("work"), name: "Work" } };
+      yield* persistence.saveProject({
+        ...Project.empty(),
+        graphs: { ordinary, function: fn },
+        queues,
+      });
       const loaded = yield* persistence.loadProject();
       assert.equal(loaded.graphs.ordinary?.kind, "ordinary");
       assert.deepEqual(loaded.graphs.function, fn);
+      assert.deepEqual(loaded.queues, queues);
       yield* persistence.saveGraph({ ...fn, name: "Renamed" });
       assert.deepEqual((yield* persistence.loadGraph(fn.id)).signature, fn.signature);
+      assert.deepEqual((yield* persistence.loadProject()).queues, queues);
     }).pipe(Effect.provide(layer)),
   );
 });

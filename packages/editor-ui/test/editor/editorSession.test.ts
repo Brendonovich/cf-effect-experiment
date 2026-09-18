@@ -38,6 +38,7 @@ describe("editor presence lifecycle", () => {
       GetIngressEndpoints: () => Effect.succeed([]),
       GetPluginSettingsCapabilities: () => Effect.succeed([]),
       ProjectEventsStream: () => Stream.never,
+      QueueStateStream: () => Stream.succeed([]).pipe(Stream.concat(Stream.never)),
       PresenceStream: () =>
         Stream.succeed({
           _tag: "PresenceSnapshot",
@@ -74,6 +75,7 @@ describe("editor presence lifecycle", () => {
       | "GetIngressEndpoints"
       | "GetPluginSettingsCapabilities"
       | "ProjectEventsStream"
+      | "QueueStateStream"
       | "PresenceStream"
     >;
     const connection = createRoot((cleanup) => {

@@ -101,7 +101,10 @@ describe("workspace runtime activity access", () => {
             assert.strictEqual(calls, 1);
             assert.deepStrictEqual(yield* activity.snapshot, [original]);
           }
-          assert.deepStrictEqual(yield* client.GetPackages({}), []);
+          assert.deepStrictEqual(
+            (yield* client.GetPackages({})).map((pkg) => pkg.id),
+            ["macrograph-functions", "macrograph-queues"],
+          );
           const presence = yield* client.PresenceStream().pipe(Stream.runHead);
           assert.isTrue(Option.isSome(presence));
         }).pipe(

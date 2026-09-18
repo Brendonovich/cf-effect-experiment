@@ -11,6 +11,7 @@ import {
   EditorServer,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { Persistence } from "@macrograph/persistence";
 import { SqlitePersistence } from "@macrograph/persistence-sqlite";
@@ -52,6 +53,7 @@ import * as CloudPlugins from "../plugins/CloudPlugins.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
+import * as CloudQueueRuntime from "./CloudQueueRuntime.ts";
 
 const UtilitiesDeployment = Engine.deployment(
   UtilitiesPlugin,
@@ -422,6 +424,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         EditorRpc.connectionMiddlewareLayer,
         MountPlugins,
       ).pipe(
+        Layer.provide(Layer.succeed(QueueRuntime.Service, CloudQueueRuntime.make(() => activeProjectId, {
+          queueSnapshot: (projectId) => ingress.queueSnapshot(projectId).pipe(Effect.provide(runtimeContext)),
+          queuePause: (projectId, queueId, paused) => ingress.queuePause(projectId, queueId, paused).pipe(Effect.provide(runtimeContext)),
+          queueAdvance: (projectId, queueId) => ingress.queueAdvance(projectId, queueId).pipe(Effect.provide(runtimeContext)),
+          queueRemove: (projectId, queueId, itemId) => ingress.queueRemove(projectId, queueId, itemId).pipe(Effect.provide(runtimeContext)),
+          queueClear: (projectId, queueId) => ingress.queueClear(projectId, queueId).pipe(Effect.provide(runtimeContext)),
+        }))),
         Layer.provide(Layer.succeed(Engine.Credentials, credentials)),
         Layer.provide(
           Layer.succeed(

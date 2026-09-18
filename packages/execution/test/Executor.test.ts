@@ -74,6 +74,7 @@ describe("Executor", () => {
       const actionNodeId = NodeId.make("resource-action");
       const project: Project.Model = {
         name: "Resources",
+        queues: {},
         engines: {},
         constants: {
           account: {
@@ -249,6 +250,7 @@ describe("Executor", () => {
       const actionNodeId = NodeId.make("action");
       const project: Project.Model = {
         name: "Executor test",
+        queues: {},
         engines: {},
         constants: {},
         graphs: {
@@ -475,6 +477,7 @@ describe("Executor", () => {
       const recordId = NodeId.make("dynamic-record");
       const project: Project.Model = {
         name: "Dynamic execution",
+        queues: {},
         engines: {},
         constants: {},
         graphs: {

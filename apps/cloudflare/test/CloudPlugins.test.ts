@@ -74,7 +74,7 @@ describe("Cloud plugins", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              newIds,
+              [...newIds, "macrograph-functions", "macrograph-queues"].sort(),
             );
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
@@ -121,7 +121,7 @@ describe("Cloud plugins", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              newIds,
+              [...newIds, "macrograph-functions", "macrograph-queues"].sort(),
             );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, saved);

@@ -103,6 +103,7 @@ describe("Logic execution", () => {
         for (const item of nodes) assert.deepStrictEqual(item.inputDefaults, {});
         const project: Project.Model = {
           name: "Defaults",
+          queues: {},
           engines: {},
           constants: {},
           graphs: {
@@ -198,6 +199,7 @@ describe("Logic execution", () => {
         };
         const project: Project.Model = {
           name: "Logic",
+          queues: {},
           engines: {},
           constants: {},
           graphs: { [graphId]: graph },

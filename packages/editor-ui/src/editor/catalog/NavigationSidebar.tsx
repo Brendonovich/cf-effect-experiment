@@ -1,4 +1,5 @@
 import type { Graph, Package, Project, ResourceConstant } from "@macrograph/core";
+import type { JSX } from "@solidjs/web";
 
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
@@ -323,7 +324,7 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "functions";
+export type NavigationSection = "graphs" | "packages" | "functions" | "queues";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
@@ -339,6 +340,8 @@ export function NavigationSidebar(props: {
   onClose: () => void;
   onCreateGraph: () => void;
   onCreateFunction?: () => void;
+  onCreateQueue?: () => void;
+  queuesPanel?: JSX.Element;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -525,7 +528,7 @@ export function NavigationSidebar(props: {
           <div style={{ "flex-shrink": "0" }}>
             <div sx={styles.topTabs}>
               <div sx={styles.tabGrid}>
-                <For each={["graphs", "packages", "functions"] as const}>
+                <For each={["graphs", "packages", "functions", "queues"] as const}>
                   {(section) => (
                     <button
                       type="button"
@@ -541,7 +544,9 @@ export function NavigationSidebar(props: {
                         ? "Graphs"
                         : section === "packages"
                           ? "Modules"
-                          : "Functions"}
+                          : section === "functions"
+                            ? "Functions"
+                            : "Queues"}
                     </button>
                   )}
                 </For>
@@ -557,7 +562,9 @@ export function NavigationSidebar(props: {
                       ? "Search Graphs"
                       : props.section === "packages"
                         ? "Search Modules"
-                        : "Search Functions"
+                        : props.section === "functions"
+                          ? "Search Functions"
+                          : "Search Queues"
                   }
                   value={props.search}
                   onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -582,6 +589,18 @@ export function NavigationSidebar(props: {
                   title="New function"
                   disabled={!props.canEditGraphs}
                   onClick={() => props.onCreateFunction?.()}
+                >
+                  <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
+                </button>
+              </Show>
+              <Show when={props.section === "queues" && props.onCreateQueue}>
+                <button
+                  type="button"
+                  sx={[styles.focus, styles.newButton]}
+                  aria-label="New queue"
+                  title="New queue"
+                  disabled={!props.canEditGraphs}
+                  onClick={() => props.onCreateQueue?.()}
                 >
                   <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
                 </button>
@@ -660,6 +679,7 @@ export function NavigationSidebar(props: {
                 </Show>
               </div>
             </Show>
+            <Show when={props.section === "queues"}>{props.queuesPanel}</Show>
           </div>
         </div>
         <div

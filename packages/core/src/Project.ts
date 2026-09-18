@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 
 import { Graph } from "./Graph.ts";
+import { Collection as Queues } from "./Queue.ts";
 import { Collection as ResourceConstants } from "./ResourceConstant.ts";
 
 export const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"));
@@ -13,6 +14,7 @@ export const Model = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed({})),
   ),
   constants: ResourceConstants,
+  queues: Queues,
 });
 export type Model = typeof Model.Type;
 
@@ -21,6 +23,7 @@ export const empty = (): Model => ({
   graphs: {},
   engines: {},
   constants: {},
+  queues: {},
 });
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(

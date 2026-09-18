@@ -13,6 +13,7 @@ import { traceDatasetName } from "./src/Observability.ts";
 import {
 	DatabaseHyperdrive,
 	DeploymentSnapshotsBucket,
+	FunctionWorkQueue,
 	LegacyLogicalDatabase,
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
@@ -40,6 +41,7 @@ export default Alchemy.Stack(
 		const ctx = yield* Alchemy.AlchemyContext;
 		yield* DatabaseHyperdrive;
 		yield* DeploymentSnapshotsBucket;
+		yield* FunctionWorkQueue;
 		const legacyDatabase = yield* LegacyLogicalDatabase;
 
 		const frontendBuild = !ctx.dev

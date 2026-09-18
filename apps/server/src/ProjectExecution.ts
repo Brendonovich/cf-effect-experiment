@@ -1,9 +1,9 @@
 import { Project } from "@macrograph/core";
-import { Editor, EditorEvents } from "@macrograph/editor";
+import { Editor, EditorEvents, QueueRuntime } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
-import { ProjectExecutor } from "@macrograph/project-host";
-import { Context, Effect, Layer, Stream } from "effect";
+import { ProjectQueues } from "@macrograph/project-host";
+import { Context, Effect, Layer, Option, Stream } from "effect";
 
 /** Provides the project executor and keeps it synchronized with persisted editor changes. */
 export class Service extends Context.Service<Service, Executor.Service>()(
@@ -22,7 +22,7 @@ export const layer = Layer.effect(Service)(
         return persistence.saveProject(project).pipe(Effect.as(project));
       }),
     );
-    const executor = yield* ProjectExecutor.make(project, {
+    const { executor, queues } = yield* ProjectQueues.make(project, {
       executionDriver: activity.executionDriver,
       engineClient: (pluginId) =>
         Effect.succeed(
@@ -44,6 +44,8 @@ export const layer = Layer.effect(Service)(
           ),
         ),
     });
+    const mount = yield* Effect.serviceOption(QueueRuntime.Mount);
+    if (Option.isSome(mount)) yield* mount.value.set(queues);
     yield* Stream.fromSubscription(yield* events.subscribe).pipe(
       Stream.runForEach(() =>
         persistence.loadProject().pipe(Effect.flatMap(executor.loadProject), Effect.orDie),

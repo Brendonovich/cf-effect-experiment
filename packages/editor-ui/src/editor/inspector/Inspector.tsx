@@ -57,6 +57,7 @@ const styles = stylex.create({
 export function Inspector(props: {
   graph: Graph.Model | null;
   functions?: ReadonlyArray<Graph.Model>;
+  queues?: Project.Model["queues"];
   onSetFunctionSignature?: (signature: Graph.FunctionSignature) => void;
   functionError?: string | null;
   nodeIO?: Readonly<Record<string, import("@macrograph/core").NodeIO>>;
@@ -179,6 +180,26 @@ export function Inspector(props: {
               </span>
             </Show>
             <Show when={FunctionGraph.isCall(node())}>
+              <Show when={FunctionGraph.isQueuedCall(node())}>
+                <label sx={styles.field}>
+                  <span sx={styles.fieldLabel}>Queue</span>
+                  <Select
+                    options={Object.values(props.queues ?? {})}
+                    value={
+                      typeof node().properties.queue === "string"
+                        ? String(node().properties.queue)
+                        : ""
+                    }
+                    valid={Object.values(props.queues ?? {}).some(
+                      (queue) => queue.id === node().properties.queue,
+                    )}
+                    placeholder="Select queue"
+                    onChange={(value) => {
+                      if (props.canEdit) props.onSetNodeProperty("queue", value);
+                    }}
+                  />
+                </label>
+              </Show>
               <For
                 each={Object.keys(node().inputDefaults).filter((id) => {
                   const target = (props.functions ?? []).find(
