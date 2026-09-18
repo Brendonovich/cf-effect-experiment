@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { FunctionGraph, Project, SchemaId } from "@macrograph/core";
+import { FunctionGraph, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Result } from "effect";
 
@@ -10,6 +10,55 @@ const layer = Editor.defaultLayer.pipe(
   Layer.provideMerge(Persistence.layerMemory),
 );
 it.layer(layer)((it) => {
+  it.effect("treats function references as ordinary schema properties", () =>
+    Effect.gen(function* () {
+      const persistence = yield* Persistence.Service;
+      yield* persistence.saveProject(Project.empty());
+      const editor = yield* Editor.Service;
+      const packages = yield* Packages.Service;
+      yield* packages.loadPackage({
+        id: PackageId.make("function-property-test"),
+        name: "Function Property Test",
+        resources: [],
+        schemas: [
+          {
+            id: SchemaId.make("consumer"),
+            name: "Consumer",
+            type: "exec",
+            properties: [
+              { id: "target", name: "Function", function: true, optional: true },
+            ],
+            dataInputs: [],
+            dataOutputs: [],
+            executionInputs: [],
+            executionOutputs: [],
+          },
+        ],
+      });
+      const target = yield* editor.graph.create({ kind: "function", name: "Target" });
+      const graph = yield* editor.graph.create({});
+      const created = yield* editor.node.create({
+        graphID: graph.graph.id,
+        node: {
+          schema: {
+            package: PackageId.make("function-property-test"),
+            schema: SchemaId.make("consumer"),
+          },
+          properties: { target: target.graph.id },
+        },
+      });
+      expect(created.node.properties.target).toBe(target.graph.id);
+      const invalid = yield* editor.node
+        .create({
+          graphID: graph.graph.id,
+          node: { ...created.node, properties: { target: graph.graph.id } },
+        })
+        .pipe(Effect.result);
+      expect(invalid._tag).toBe("Failure");
+      if (Result.isFailure(invalid)) expect(invalid.failure._tag).toBe("InvalidPropertyError");
+    }),
+  );
+
   it.effect("generates protected boundaries, hydrates IO, and retains in-use data", () =>
     Effect.gen(function* () {
       const persistence = yield* Persistence.Service;

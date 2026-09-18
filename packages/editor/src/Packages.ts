@@ -196,6 +196,16 @@ export const defaultLayer = Layer.effect(
 							normalized[definition.id] = value;
 							continue;
 						}
+						if ("function" in definition) {
+							if (typeof value !== "string") {
+								return yield* new Package.InvalidPropertyError({
+									property: definition.id,
+									reason: "Expected a function id",
+								});
+							}
+							normalized[definition.id] = value;
+							continue;
+						}
 						if (!DataType.isValue(definition.type, value)) {
 							return yield* new Package.InvalidPropertyError({
 								property: definition.id,
@@ -214,7 +224,7 @@ export const defaultLayer = Layer.effect(
 									}),
 							),
 						);
-					} else if ("resource" in definition) {
+					} else if ("resource" in definition || "function" in definition) {
 						continue;
 					} else if (definition.defaultValue !== undefined) {
 						if (!DataType.isValue(definition.type, definition.defaultValue)) {

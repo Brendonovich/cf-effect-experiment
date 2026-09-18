@@ -372,26 +372,35 @@ export const layer = Layer.effect(Service)(
         Effect.flatMap((properties) => packages.getNodeIO(node.schema, properties)),
       );
     });
-    const validateFunctionTarget = Effect.fnUntraced(function* (
-      node: Pick<Node.Model, "schema" | "properties">,
+    const validateFunctionBindings = Effect.fnUntraced(function* (
+      schemaRef: Node.Model["schema"],
+      properties: Readonly<Record<string, Schema.Json>>,
     ) {
-      if (FunctionGraph.isQueuedCall(node) && node.properties.queue !== undefined) {
-        const queueId = node.properties.queue;
-        const project = yield* persistence.loadProject();
+      const schema = yield* packages
+        .getSchema(schemaRef)
+        .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
+      if (schema === undefined) return;
+      const definitions = schema.properties.filter((property) => "function" in property);
+      const isQueuedCall = FunctionGraph.isQueuedCall({ schema: schemaRef });
+      if (definitions.length === 0 && !isQueuedCall) return;
+      const project = yield* persistence.loadProject();
+      if (isQueuedCall && properties.queue !== undefined) {
+        const queueId = properties.queue;
         if (typeof queueId !== "string" || project.queues[queueId] === undefined)
           return yield* new Package.InvalidPropertyError({
             property: "queue",
             reason: "Selected queue does not exist",
           });
       }
-      if (!FunctionGraph.isCall(node) || node.properties.function === undefined) return;
-      const target = node.properties.function;
-      const project = yield* persistence.loadProject();
-      if (typeof target !== "string" || project.graphs[target]?.kind !== "function")
+      for (const definition of definitions) {
+        const target = properties[definition.id];
+        if (target === undefined) continue;
+        if (typeof target === "string" && project.graphs[target]?.kind === "function") continue;
         return yield* new Package.InvalidPropertyError({
-          property: "function",
+          property: definition.id,
           reason: "Selected function does not exist",
         });
+      }
     });
     const validateSignature = (graphId: string, signature: Graph.FunctionSignature) => {
       for (const fields of [signature.inputs, signature.outputs]) {
@@ -486,7 +495,7 @@ export const layer = Layer.effect(Service)(
             graphId,
             reason: "System-owned nodes cannot be imported or copied",
           });
-        yield* validateFunctionTarget(node).pipe(
+        yield* validateFunctionBindings(node.schema, node.properties).pipe(
           Effect.mapError((error) => new Graph.FunctionError({ graphId, reason: String(error) })),
         );
       }
@@ -616,7 +625,7 @@ export const layer = Layer.effect(Service)(
         options.node.properties ?? {},
       );
       yield* validateResourceBindings(options.node.schema, properties);
-      yield* validateFunctionTarget({ schema: options.node.schema, properties });
+      yield* validateFunctionBindings(options.node.schema, properties);
       const inputDefaults: Record<string, Schema.Json> = {};
       const ioProperties = yield* resolveIOProperties(options.node.schema, properties);
       const functionIO = FunctionGraph.isFunctionNode(options.node)
@@ -758,7 +767,7 @@ export const layer = Layer.effect(Service)(
           graphId: graph.id,
           reason: "Boundary properties are system-owned",
         });
-      yield* validateFunctionTarget({ ...node, properties });
+      yield* validateFunctionBindings(node.schema, properties);
       yield* validateResourceBindings(node.schema, properties);
       const updated: Node.Model = {
         ...node,
