@@ -21,7 +21,12 @@ export const apply = (
           const deleted = new Set(connectionIds);
           graphs[graphId] = {
             ...graph,
-            connections: graph.connections.filter((connection) => !deleted.has(connection.id)),
+            canvas: {
+              ...graph.canvas,
+              connections: graph.canvas.connections.filter(
+                (connection) => !deleted.has(connection.id),
+              ),
+            },
           };
         }
         return yield* persistence.saveProject({ ...project, types: event.types, graphs });

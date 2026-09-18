@@ -10,26 +10,29 @@ const project = Schema.decodeUnknownSync(Project.Model)({
   ...Project.empty(),
   graphs: {
     graph: {
-      id: "graph",
-      name: "Graph",
-      connections: [],
-      nodes: Object.fromEntries(
-        ["a", "b", "source"].map((id) => [
-          id,
-          {
+      canvas: {
+        id: "graph",
+        name: "Graph",
+        connections: [],
+        nodes: Object.fromEntries(
+          ["a", "b", "source"].map((id) => [
             id,
-            name: id,
-            schema: { package: "test", schema: id },
-            properties: {},
-            inputDefaults: {},
-            position: { x: 0, y: 0 },
-            foldPins: false,
-          },
-        ]),
-      ),
+            {
+              id,
+              name: id,
+              schema: { package: "test", schema: id },
+              properties: {},
+              inputDefaults: {},
+              position: { x: 0, y: 0 },
+              foldPins: false,
+            },
+          ]),
+        ),
+      },
     },
   },
 });
+const snapshot = { ...project, graphs: { graph: project.graphs.graph!.canvas } };
 const io = (type: t.Any): NodeIO => ({
   dataInputs: [{ id: IoId.make("in"), type }],
   dataOutputs: [{ id: IoId.make("out"), type }],
@@ -41,7 +44,7 @@ it("updates inferred IO on collaborative events, without feeding resolved types 
   createRoot((dispose) => {
     const editor = createEditorStore(),
       wildcard = t.Wildcard("T");
-    editor.setProject(project, {
+    editor.setProject(snapshot, {
       graph: { a: io(wildcard), b: io(wildcard), source: io(t.String) },
     });
     const connect = (id: string, from: string, to: string) =>
@@ -93,7 +96,9 @@ it("updates inferred IO on collaborative events, without feeding resolved types 
     });
     expect(type("b")._tag).toBe("Wildcard");
     expect(editor.store.nodeIO.graph!.a).toBeUndefined();
-    editor.setProject(project, { graph: { a: io(wildcard), b: io(wildcard), source: io(t.Bool) } });
+    editor.setProject(snapshot, {
+      graph: { a: io(wildcard), b: io(wildcard), source: io(t.Bool) },
+    });
     expect(type("b")).toEqual(wildcard);
     dispose();
   }));
@@ -118,8 +123,8 @@ it("never renders stale inference for invalid authoritative IO and recovers afte
     };
     editor.setProject(
       {
-        ...project,
-        graphs: { graph: { ...project.graphs.graph!, connections: [anchor, downstream] } },
+        ...snapshot,
+        graphs: { graph: { ...snapshot.graphs.graph, connections: [anchor, downstream] } },
       },
       {
         graph: { a: io(wildcard), b: io(t.String), source: io(t.String) },

@@ -500,7 +500,7 @@ export const layer = Layer.effect(Service)(
     });
     const wildcardCaches = new Map<string, Wildcards.Cache>();
     const graphWildcards = Effect.fnUntraced(function* (
-      graph: Graph.Model,
+      graph: Canvas.Model,
       overrides: Readonly<Record<string, NodeIO>> = {},
       cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(),
       definitions?: DataType.Definitions,
@@ -1206,7 +1206,7 @@ export const layer = Layer.effect(Service)(
             ? (fragment.externalConnections ?? [])
             : [];
         // Infer Break Scope pins from the complete proposed fragment, independent of wire order.
-        const proposedGraph: Graph.Model = {
+        const proposedGraph: Canvas.Model = {
           ...graph,
           nodes: { ...graph.nodes, ...Object.fromEntries(nodes.map((node) => [node.id, node])) },
           connections: [

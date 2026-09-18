@@ -47,7 +47,7 @@ describe("editor presence lifecycle", () => {
       ProjectEventsStream: () =>
         Stream.succeed({
           _tag: "ProjectSnapshot" as const,
-          snapshot: { project: Project.empty(), nodeIO: {} },
+          snapshot: { project: { ...Project.empty(), graphs: {} }, nodeIO: {} },
         }).pipe(Stream.concat(Stream.never)),
       PresenceStream: () => Stream.fromPubSub(events),
     } satisfies TestClient<

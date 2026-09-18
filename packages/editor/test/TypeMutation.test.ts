@@ -117,42 +117,48 @@ const seed: Project.Model = {
   types: definitions,
   constants: {},
   engines: {},
+  functions: {},
   graphs: {
     first: {
-      id: GraphId.make("first"),
-      name: "First",
-      nodes: {
-        make: node("make", make, { [field]: "Ada" }, { type: personId }),
-        break: node("break", breakRef, { value: { _type: "person", name: "Ada" } }),
-        string: node("string", { package: pkg.id, schema: SchemaId.make("string") }),
-      },
-      connections: [
-        breakAnchor,
-        {
-          id: ConnectionId.make("wire"),
-          outNodeId: NodeId.make("break"),
-          outIo: { _tag: "Port" as const, id: field },
-          inNodeId: NodeId.make("string"),
-          inIoId: IoId.make("value"),
+      canvas: {
+        id: GraphId.make("first"),
+        name: "First",
+        nodes: {
+          make: node("make", make, { [field]: "Ada" }, { type: personId }),
+          break: node("break", breakRef, { value: { _type: "person", name: "Ada" } }),
+          string: node("string", { package: pkg.id, schema: SchemaId.make("string") }),
         },
-      ],
+        connections: [
+          breakAnchor,
+          {
+            id: ConnectionId.make("wire"),
+            outNodeId: NodeId.make("break"),
+            outIo: { _tag: "Port" as const, id: field },
+            inNodeId: NodeId.make("string"),
+            inIoId: IoId.make("value"),
+          },
+        ],
+      },
     },
     second: {
-      id: GraphId.make("second"),
-      name: "Second",
-      nodes: {
-        sink: node("sink", { package: pkg.id, schema: SchemaId.make("sink") }),
-        property: node(
-          "property",
-          { package: pkg.id, schema: SchemaId.make("string") },
-          {},
-          { type: JSON.stringify(DataType.List(DataType.Option(DataType.Custom(personId)))) },
-        ),
+      canvas: {
+        id: GraphId.make("second"),
+        name: "Second",
+        nodes: {
+          sink: node("sink", { package: pkg.id, schema: SchemaId.make("sink") }),
+          property: node(
+            "property",
+            { package: pkg.id, schema: SchemaId.make("string") },
+            {},
+            { type: JSON.stringify(DataType.List(DataType.Option(DataType.Custom(personId)))) },
+          ),
+        },
+        connections: [],
       },
-      connections: [],
     },
   },
 };
+const seedCanvases = Project.canvases(seed);
 const seedLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     yield* (yield* Persistence.Service).saveProject(seed);
@@ -204,7 +210,7 @@ describe("type authoring preserve-invalid", () => {
           value: personId,
         });
         expect(selected.io.dataInputs).toEqual([
-          { id: "value", name: "Person", type: DataType.Custom(personId) },
+          { id: "value", type: DataType.Custom(personId) },
           {
             id: field,
             name: "name",
@@ -241,9 +247,9 @@ describe("type authoring preserve-invalid", () => {
         expect(changed.deletedConnectionIds).toEqual([]);
         const snapshot = yield* editor.project.snapshot();
         const graph = snapshot.project.graphs.first!;
-        expect(graph.connections).toEqual(seed.graphs.first!.connections);
+        expect(graph.connections).toEqual(seedCanvases.first!.connections);
         expect(graph.nodes.break!.inputDefaults).toEqual(
-          seed.graphs.first!.nodes.break!.inputDefaults,
+          seedCanvases.first!.nodes.break!.inputDefaults,
         );
         expect(
           TypeDefinition.nodeDiagnostics(
@@ -261,10 +267,12 @@ describe("type authoring preserve-invalid", () => {
           value: personId,
         });
         expect(restored.deletedConnectionIds).toEqual([]);
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual(graph.connections);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+          graph.connections,
+        );
         expect(
           TypeDefinition.nodeDiagnostics(
-            seed.graphs.first!.nodes.break!,
+            seedCanvases.first!.nodes.break!,
             (yield* editor.project.rendered()).graphs.first!.nodes.break!.io,
             definitions,
           ),
@@ -333,7 +341,7 @@ describe("type authoring preserve-invalid", () => {
         expect(yield* packages.getNodeIO(push.schema, push.properties)).toEqual(
           snapshot.nodeIO.second![push.id],
         );
-        expect((yield* persistence.loadProject()).graphs).toEqual(snapshot.project.graphs);
+        expect(Project.canvases(yield* persistence.loadProject())).toEqual(snapshot.project.graphs);
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.nodeIO.second![push.id]).toEqual(proposedPushIO);
         const deleted = yield* editor.project.snapshot();
@@ -426,7 +434,7 @@ describe("type authoring preserve-invalid", () => {
         expect(impact.affectedTypes).toContain("required");
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.types.required).toEqual(dependent);
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
         expect(TypeDefinition.validate(event.types)).toEqual([]);
         const unsafe: TypeDefinition.Change = {
@@ -488,16 +496,16 @@ describe("type authoring preserve-invalid", () => {
         const impact = yield* editor.typeDefinition.preview({ _tag: "Delete", id });
         expect(impact.nodes.map((node) => node.nodeId).sort()).toEqual(created.sort());
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
-        expect((yield* editor.project.get()).graphs.second!.nodes).toEqual(
-          before.graphs.second!.nodes,
+        expect(Project.canvases(yield* editor.project.get()).second!.nodes).toEqual(
+          Project.canvases(before).second!.nodes,
         );
-        expect((yield* editor.project.get()).graphs.second!.connections).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).second!.connections).toEqual([]);
         for (const nodeId of created.filter(
-          (nodeId) => !CustomTypes.isBreakStruct(before.graphs.second!.nodes[nodeId]!),
+          (nodeId) => !CustomTypes.isBreakStruct(Project.canvases(before).second!.nodes[nodeId]!),
         ))
           expect(
             TypeDefinition.nodeDiagnostics(
-              before.graphs.second!.nodes[nodeId]!,
+              Project.canvases(before).second!.nodes[nodeId]!,
               event.nodeIO.second![nodeId]!,
               event.types,
             ).some((reason) => reason.includes("Missing type")),
@@ -560,19 +568,21 @@ describe("type authoring preserve-invalid", () => {
           ),
         ).toEqual(event);
         const project = yield* editor.project.get();
-        expect(project.graphs.first!.connections).toEqual([breakAnchor]);
+        expect(Project.canvases(project).first!.connections).toEqual([breakAnchor]);
         expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
         expect((yield* editor.project.snapshot()).nodeIO).toEqual(event.nodeIO);
         expect(
           TypeDefinition.nodeDiagnostics(
-            project.graphs.first!.nodes.break!,
+            Project.canvases(project).first!.nodes.break!,
             event.nodeIO.first!.break!,
             project.types,
           ).some((r) => r.includes("Invalid default")),
         ).toBe(true);
         yield* apply(yield* Persistence.Service, event);
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([breakAnchor]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
+          breakAnchor,
+        ]);
       }).pipe(Effect.provide(testLayer)),
   );
 
@@ -583,26 +593,28 @@ describe("type authoring preserve-invalid", () => {
         const editor = yield* Editor.Service;
         const event = yield* mutate(editor, { _tag: "Delete", id: personId });
         expect(Object.keys(event.types)).toEqual(["group", "team"]);
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
         expect((yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs).toEqual(
           [],
         );
         const diagnostics = TypeDefinition.nodeDiagnostics(
-          seed.graphs.second!.nodes.sink!,
+          seedCanvases.second!.nodes.sink!,
           event.nodeIO.second!.sink!,
           event.types,
         );
         expect(diagnostics).toContain("Missing type person");
         expect(
           TypeDefinition.nodeDiagnostics(
-            seed.graphs.first!.nodes.make!,
+            seedCanvases.first!.nodes.make!,
             event.nodeIO.first!.make!,
             event.types,
           ).some((r) => r.includes("Missing type")),
         ).toBe(true);
         yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
-        expect((yield* editor.project.get()).graphs.first!.nodes.make!.inputDefaults).toEqual({});
-        expect((yield* editor.project.get()).graphs.first!.connections).toEqual([]);
+        expect(
+          Project.canvases(yield* editor.project.get()).first!.nodes.make!.inputDefaults,
+        ).toEqual({});
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
         yield* mutate(editor, fresh);
         yield* mutate(editor, { _tag: "Upsert", definition: person });
         const repaired = yield* editor.project.snapshot();
@@ -623,10 +635,12 @@ describe("type authoring preserve-invalid", () => {
         _tag: "Upsert",
         definition: { ...person, fields: [{ name: "name", type: DataType.Int }] },
       });
-      expect((yield* editor.project.get()).graphs.first!.connections).toEqual([breakAnchor]);
+      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
+        breakAnchor,
+      ]);
       expect(
         TypeDefinition.nodeDiagnostics(
-          seed.graphs.first!.nodes.make!,
+          seedCanvases.first!.nodes.make!,
           event.nodeIO.first!.make!,
           event.types,
         ).some((r) => r.includes("Invalid default")),
@@ -665,7 +679,9 @@ describe("type authoring preserve-invalid", () => {
         property: "label",
         value: "repair context",
       });
-      expect((yield* editor.project.get()).graphs.first!.connections).toEqual([breakAnchor]);
+      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
+        breakAnchor,
+      ]);
       const event = yield* editor.node.setProperty({
         graphID: "second",
         nodeID: "property",
@@ -673,9 +689,9 @@ describe("type authoring preserve-invalid", () => {
         value: "String",
       });
       expect(event.deletedConnectionIds).toEqual([]);
-      expect((yield* editor.project.get()).graphs.first!.nodes.make!.inputDefaults).toEqual(
-        seed.graphs.first!.nodes.make!.inputDefaults,
-      );
+      expect(
+        Project.canvases(yield* editor.project.get()).first!.nodes.make!.inputDefaults,
+      ).toEqual(seedCanvases.first!.nodes.make!.inputDefaults);
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -739,7 +755,7 @@ describe("type authoring preserve-invalid", () => {
         ).toBe(true);
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect((yield* editor.project.get()).graphs.first).toEqual(before.graphs.first);
-        expect((yield* editor.project.get()).graphs.second!.connections).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).second!.connections).toEqual([]);
         expect(event.deletedConnectionIds).toEqual({ second: [wire.connection.id] });
         expect(
           TypeDefinition.nodeDiagnostics(
@@ -820,11 +836,23 @@ describe("type authoring preserve-invalid", () => {
           (p) => ({ ...p, engines: { engine: { state: true } } }),
           (p) => ({
             ...p,
-            graphs: { ...p.graphs, second: { ...p.graphs.second!, name: "changed" } },
+            graphs: {
+              ...p.graphs,
+              second: {
+                ...p.graphs.second!,
+                canvas: { ...p.graphs.second!.canvas, name: "changed" },
+              },
+            },
           }),
           (p) => ({
             ...p,
-            graphs: { ...p.graphs, first: { ...p.graphs.first!, connections: [] } },
+            graphs: {
+              ...p.graphs,
+              first: {
+                ...p.graphs.first!,
+                canvas: { ...p.graphs.first!.canvas, connections: [] },
+              },
+            },
           }),
           (p) => ({
             ...p,
@@ -832,9 +860,15 @@ describe("type authoring preserve-invalid", () => {
               ...p.graphs,
               second: {
                 ...p.graphs.second!,
-                nodes: {
-                  ...p.graphs.second!.nodes,
-                  property: { ...p.graphs.second!.nodes.property!, properties: { type: "Int" } },
+                canvas: {
+                  ...p.graphs.second!.canvas,
+                  nodes: {
+                    ...p.graphs.second!.canvas.nodes,
+                    property: {
+                      ...p.graphs.second!.canvas.nodes.property!,
+                      properties: { type: "Int" },
+                    },
+                  },
                 },
               },
             },
@@ -845,9 +879,15 @@ describe("type authoring preserve-invalid", () => {
               ...p.graphs,
               first: {
                 ...p.graphs.first!,
-                nodes: {
-                  ...p.graphs.first!.nodes,
-                  make: { ...p.graphs.first!.nodes.make!, inputDefaults: { [field]: "Grace" } },
+                canvas: {
+                  ...p.graphs.first!.canvas,
+                  nodes: {
+                    ...p.graphs.first!.canvas.nodes,
+                    make: {
+                      ...p.graphs.first!.canvas.nodes.make!,
+                      inputDefaults: { [field]: "Grace" },
+                    },
+                  },
                 },
               },
             },
@@ -917,7 +957,7 @@ describe("type authoring preserve-invalid", () => {
         );
         expect(results.map((result) => result._tag).sort()).toEqual(["Failure", "Success"]);
         expect(
-          (yield* editor.project.get()).graphs.first!.connections.some(
+          Project.canvases(yield* editor.project.get()).first!.connections.some(
             (wire) => wire.id === "wire",
           ),
         ).toBe(false);
@@ -1055,7 +1095,9 @@ describe("type authoring preserve-invalid", () => {
         const results = yield* Fiber.join(stream);
         expect(results[0]!._tag).toBe("ProjectSnapshot");
         expect(results[1]).toEqual(event);
-        expect((yield* client.GetProject({})).graphs.first!.connections).toEqual([breakAnchor]);
+        expect(Project.canvases(yield* client.GetProject({})).first!.connections).toEqual([
+          breakAnchor,
+        ]);
       }).pipe(
         Effect.scoped,
         Effect.provide(

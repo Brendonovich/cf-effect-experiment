@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/plugin/DataType";
+import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 
 import type { SchemaModel } from "./Package.ts";

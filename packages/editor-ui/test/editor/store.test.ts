@@ -97,10 +97,11 @@ describe("editor store", () => {
         isDefault: true,
       });
       setProject(
-        Project.Model.make({
+        {
           ...Project.empty(),
+          graphs: {},
           constants: { first, second, other },
-        }),
+        },
         {},
       );
       applyEvent({
@@ -142,7 +143,7 @@ describe("editor store", () => {
         { id: "account-1", display: "Streamer" },
       ]);
       setProject(
-        { name: "New Project", graphs: {}, functions: {}, engines: {}, constants: {} },
+        { name: "New Project", graphs: {}, functions: {}, engines: {}, constants: {}, types: {} },
         {},
       );
       expect(store.project?.name).toBe("New Project");

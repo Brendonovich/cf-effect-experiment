@@ -23,10 +23,10 @@ const node = (id: string, packageId: string, schema: string) => ({
 const wire = (
   id: string,
   outNodeId: string,
-  outIoId: string,
+  outPortId: string,
   inNodeId: string,
   inIoId: string,
-) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outIoId }, inNodeId, inIoId });
+) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outPortId }, inNodeId, inIoId });
 
 const fixture = (captured: unknown[]) =>
   Module.make({
@@ -73,23 +73,25 @@ const project = (target = "break") =>
     ...Project.empty(),
     graphs: {
       graph: {
-        id: "graph",
-        name: "Scopes",
-        nodes: {
+        canvas: {
+          id: "graph",
+          name: "Scopes",
+          nodes: {
           event: node("event", "scope-test", "event"),
           break: node("break", Scopes.packageId, "BreakScope"),
           sink: node("sink", "scope-test", "sink"),
           scopeSink: node("scopeSink", "scope-test", "scopeSink"),
           wrongSink: node("wrongSink", "scope-test", "wrongSink"),
         },
-        connections:
-          target === "break"
-            ? [
+          connections:
+            target === "break"
+              ? [
                 wire("scope", "event", "payload", "break", "scope"),
                 wire("exec", "break", "exec", "sink", "exec"),
                 wire("data", "break", "value", "sink", "value"),
               ]
-            : [wire("scope", "event", "payload", target, target === "sink" ? "exec" : "payload")],
+              : [wire("scope", "event", "payload", target, target === "sink" ? "exec" : "payload")],
+        },
       },
     },
   });
@@ -113,13 +115,15 @@ describe("scope execution", () => {
         ...Project.empty(),
         graphs: {
           graph: {
-            id: "graph",
-            name: "Empty scope",
-            nodes: {
+            canvas: {
+              id: "graph",
+              name: "Empty scope",
+              nodes: {
               event: node("event", module.id, "event"),
               break: node("break", Scopes.packageId, "BreakScope"),
             },
-            connections: [wire("scope", "event", "empty", "break", "scope")],
+              connections: [wire("scope", "event", "empty", "break", "scope")],
+            },
           },
         },
       });
@@ -170,10 +174,12 @@ describe("scope execution", () => {
         ...Project.empty(),
         graphs: {
           graph: {
-            id: "graph",
-            name: "Missing type",
-            nodes: { event: node("event", module.id, "event") },
-            connections: [],
+            canvas: {
+              id: "graph",
+              name: "Missing type",
+              nodes: { event: node("event", module.id, "event") },
+              connections: [],
+            },
           },
         },
       });

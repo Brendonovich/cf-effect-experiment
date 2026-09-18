@@ -53,26 +53,28 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       },
       graphs: {
         graph: {
-          id: "graph",
-          name: "Graph",
-          connections: [],
-          nodes: Object.fromEntries(
-            [
-              ["source", "test", "source"],
-              ["break", CustomTypes.packageId, "BreakStruct"],
-            ].map(([id, pkg, schema]) => [
-              id,
-              {
+          canvas: {
+            id: "graph",
+            name: "Graph",
+            connections: [],
+            nodes: Object.fromEntries(
+              [
+                ["source", "test", "source"],
+                ["break", CustomTypes.packageId, "BreakStruct"],
+              ].map(([id, pkg, schema]) => [
                 id,
-                name: id,
-                schema: { package: pkg, schema },
-                properties: {},
-                inputDefaults: {},
-                foldPins: false,
-                position: { x: 0, y: 0 },
-              },
-            ]),
-          ),
+                {
+                  id,
+                  name: id,
+                  schema: { package: pkg, schema },
+                  properties: {},
+                  inputDefaults: {},
+                  foldPins: false,
+                  position: { x: 0, y: 0 },
+                },
+              ]),
+            ),
+          },
         },
       },
     });
@@ -82,12 +84,17 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       executionInputs: [],
       executionOutputs: [],
     };
-    const node = project.graphs.graph!.nodes.break!;
+    const canvas = project.graphs.graph!.canvas;
+    const node = canvas.nodes.break!;
     const editor = createEditorStore();
-    editor.setProject(project, {
-      graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
-    });
+    editor.setProject(
+      { ...project, graphs: { graph: canvas } },
+      {
+        graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
+      },
+    );
     const output = () => editor.store.nodeIO.graph!.break!.dataOutputs;
+    const inferredOutput = [{ id: IoId.make('field:"text"'), name: "text", type: t.String }];
     expect(output()).toEqual([]);
     const connection = {
       id: ConnectionId.make("anchor"),
@@ -102,15 +109,18 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       graphId: "graph",
       connection,
     });
-    expect(output()).toEqual([{ id: 'field:"text"', name: "text", type: t.String }]);
+    expect(output()).toEqual(inferredOutput);
     const snapshot = {
       ...project,
-      graphs: { graph: { ...project.graphs.graph!, connections: [connection] } },
+      graphs: { graph: { ...canvas, connections: [connection] } },
     };
     editor.setProject(snapshot, {
       graph: {
         source,
-        break: { ...CustomTypes.nodeIO(node.schema, {}, project.types)!, dataOutputs: output() },
+        break: {
+          ...CustomTypes.nodeIO(node.schema, {}, project.types)!,
+          dataOutputs: inferredOutput,
+        },
       },
     });
     editor.applyEvent({

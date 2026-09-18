@@ -376,7 +376,8 @@ describe("Resource defaults", () => {
         property: "account",
       });
       expect(
-        (yield* editor.project.get()).graphs[graph.graph.id]?.nodes[future.node.id]?.properties,
+        (yield* editor.project.get()).graphs[graph.graph.id]?.canvas.nodes[future.node.id]
+          ?.properties,
       ).toEqual({});
     }).pipe(Effect.provide(TestLayer)),
   );

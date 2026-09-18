@@ -55,9 +55,10 @@ it.effect(
         },
         graphs: {
           graph: {
-            id: "graph",
-            name: "Graph",
-            nodes: Object.fromEntries(
+            canvas: {
+              id: "graph",
+              name: "Graph",
+              nodes: Object.fromEntries(
               [
                 ["event", "test", "event"],
                 ["sink", "test", "sink"],
@@ -76,18 +77,19 @@ it.effect(
                 },
               ]),
             ),
-            connections: [
+              connections: [
               ["b", 'field:"text"', "sink", "in"],
               ["a", 'field:"child"', "b", "value"],
               ["event", "out", "a", "value"],
               ["event", "exec", "sink", "exec"],
-            ].map(([source, output, target, input], index) => ({
+              ].map(([source, output, target, input], index) => ({
               id: String(index),
               outNodeId: source,
               outIo: { _tag: "Port", id: output },
               inNodeId: target,
               inIoId: input,
-            })),
+              })),
+            },
           },
         },
       });

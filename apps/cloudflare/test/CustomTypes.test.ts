@@ -39,23 +39,31 @@ describe("hosted custom types", () => {
         types,
         graphs: {
           graph: {
-            id: "graph",
-            name: "Hosted custom types",
-            nodes: {
-              tick: makeNode("tick", "util", "Tick"),
-              match: makeNode(
-                "match",
-                CustomTypes.packageId,
-                "MatchEnum",
+            canvas: {
+              id: "graph",
+              name: "Hosted custom types",
+              nodes: {
+                tick: makeNode("tick", "util", "Tick"),
+                match: makeNode(
+                  "match",
+                  CustomTypes.packageId,
+                  "MatchEnum",
+                  {
+                    value: { _type: "result", _tag: "Found", items: [1, 2, 3] },
+                  },
+                  { type: "result" },
+                ),
+              },
+              connections: [
                 {
-                  value: { _type: "result", _tag: "Found", items: [1, 2, 3] },
+                  id: "exec",
+                  outNodeId: "tick",
+                  outIo: { _tag: "Port" as const, id: "exec" },
+                  inNodeId: "match",
+                  inIoId: "exec",
                 },
-                { type: "result" },
-              ),
+              ],
             },
-            connections: [
-              { id: "exec", outNodeId: "tick", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "match", inIoId: "exec" },
-            ],
           },
         },
       });

@@ -10,12 +10,12 @@ const meta: Meta<typeof TypeDefinitions> = {
   title: "Editor/Navigation/TypeDefinitions",
   component: TypeDefinitions,
   args: {
-    project: { types: {}, graphs: {} },
+    project: { types: {} },
     canEdit: true,
   },
   render: (args) => {
-    const [saved, setSaved] = createSignal<Pick<Project.Model, "types" | "graphs"> | null>(null);
-    const project = createMemo(() => saved() ?? args.project ?? { types: {}, graphs: {} });
+    const [saved, setSaved] = createSignal<Pick<Project.Model, "types"> | null>(null);
+    const project = createMemo(() => saved() ?? args.project ?? { types: {} });
     const pending = new Map<string, TypeDefinition.Change>();
     return (
       <>
@@ -173,7 +173,6 @@ export const CreateFieldTypes: Story = {
 export const ImpactfulChanges: Story = {
   args: {
     project: {
-      graphs: {},
       types: {
         person: {
           _tag: "Struct",

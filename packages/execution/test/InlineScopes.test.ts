@@ -30,9 +30,10 @@ const model = (connections: readonly ReturnType<typeof wire>[]) =>
     ...Project.empty(),
     graphs: {
       graph: {
-        id: "graph",
-        name: "Inline",
-        nodes: Object.fromEntries(
+        canvas: {
+          id: "graph",
+          name: "Inline",
+          nodes: Object.fromEntries(
           [
             node("event"),
             node("source"),
@@ -43,7 +44,8 @@ const model = (connections: readonly ReturnType<typeof wire>[]) =>
             node("both"),
           ].map((node) => [node.id, node]),
         ),
-        connections,
+          connections,
+        },
       },
     },
   });

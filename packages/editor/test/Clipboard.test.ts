@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import {
+  Canvas,
   Clipboard,
   ConnectionId,
   Graph,
@@ -91,7 +92,7 @@ it.layer(TestLayer)((it) => {
         const editor = yield* setup;
         const persistence = yield* Persistence.Service;
         const existing = node("existing", 0);
-        yield* persistence.saveGraph({ ...Graph.empty("destination"), nodes: { existing } });
+        yield* persistence.saveGraph({ ...Canvas.empty("destination"), nodes: { existing } });
         const session = yield* editor.fragment.identity();
         const incoming = {
           ...fragment.connections[0]!,
@@ -126,7 +127,7 @@ it.layer(TestLayer)((it) => {
           position: { x: 0, y: 0 },
         });
         expect(unrelated.connections).toHaveLength(1);
-        yield* persistence.saveGraph({ ...Graph.empty("other"), nodes: { existing } });
+        yield* persistence.saveGraph({ ...Canvas.empty("other"), nodes: { existing } });
         expect(
           (yield* editor.fragment.paste({
             graphID: "other",
@@ -141,7 +142,7 @@ it.layer(TestLayer)((it) => {
           inNodeId: "existing",
         };
         yield* persistence.saveGraph({
-          ...Graph.empty("destination"),
+          ...Canvas.empty("destination"),
           nodes: { existing },
           connections: [{ ...outgoing, outNodeId: "existing" }],
         });
@@ -270,7 +271,9 @@ it.layer(TestLayer)((it) => {
         expect(pasted.nodes).toHaveLength(1);
         expect(pasted.nodes[0]!.schema).toEqual(ref);
         expect(pasted.connections).toEqual([]);
-        expect(Object.values((yield* editor.project.get()).graphs.destination!.nodes)).toEqual(
+        expect(
+          Object.values((yield* editor.project.get()).graphs.destination!.canvas.nodes),
+        ).toEqual(
           pasted.nodes,
         );
       }),
@@ -310,16 +313,16 @@ it.layer(TestLayer)((it) => {
           ),
         ).toEqual(pasted);
         const graph = (yield* editor.project.get()).graphs.destination!;
-        expect(Object.values(graph.nodes)).toEqual(pasted.nodes);
-        expect(graph.connections).toEqual(pasted.connections);
+        expect(Object.values(graph.canvas.nodes)).toEqual(pasted.nodes);
+        expect(graph.canvas.connections).toEqual(pasted.connections);
         const deleted = yield* editor.fragment.delete({
           graphID: "destination",
           nodeIds: [pasted.nodes[0]!.id],
         });
         expect(yield* PubSub.take(subscription)).toEqual(deleted);
         expect(deleted.deletedConnectionIds).toEqual([pasted.connections[0]!.id]);
-        expect((yield* editor.project.get()).graphs.destination!.connections).toEqual([]);
-        expect(Object.keys((yield* editor.project.get()).graphs.destination!.nodes)).toEqual([
+        expect((yield* editor.project.get()).graphs.destination!.canvas.connections).toEqual([]);
+        expect(Object.keys((yield* editor.project.get()).graphs.destination!.canvas.nodes)).toEqual([
           pasted.nodes[1]!.id,
         ]);
       }),

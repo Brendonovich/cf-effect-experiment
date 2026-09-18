@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import {
+  Canvas,
   CustomTypes,
   Graph,
   IoId,
@@ -154,7 +155,7 @@ it.effect("rejects non-struct input connections and reacts to changed definition
 
 it("commits derived groups only after a whole Break chain stabilizes and reuses unchanged groups", () => {
   const graph = {
-    ...Graph.empty("graph"),
+    ...Canvas.empty("graph"),
     nodes: Object.fromEntries(
       ["a", "b"].map((id) => [
         id,
