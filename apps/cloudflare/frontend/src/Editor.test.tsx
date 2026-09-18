@@ -5,8 +5,8 @@ import { flush } from "solid-js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
+  Canvas,
   ConnectionId,
-  Graph,
   IoId,
   Node,
   PackageId,
@@ -46,8 +46,8 @@ const io: NodeIO = {
   executionInputs: [{ id: IoId.make("in") }],
   executionOutputs: [{ id: IoId.make("out") }],
 };
-const graph: Graph.Model = {
-  ...Graph.empty("main"),
+const graph: Canvas.Model = {
+  ...Canvas.empty("main"),
   nodes: { [firstNode.id]: firstNode, [secondNode.id]: secondNode },
   connections: [
     {
@@ -59,7 +59,7 @@ const graph: Graph.Model = {
     },
   ],
 };
-const secondaryGraph = Graph.empty("other");
+const secondaryGraph = Canvas.empty("other");
 const nodeIds = (pane: Element) =>
   new Set(
     [...pane.querySelectorAll("[data-node-id]")].map((pin) => pin.getAttribute("data-node-id")),
