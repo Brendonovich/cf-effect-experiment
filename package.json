@@ -44,7 +44,7 @@
 		"format": "vp fmt . --write"
 	},
 	"devDependencies": {
-		"@brendonovich/vite-plugin-opencode": "^0.1.0",
+		"@brendonovich/vite-plugin-opencode": "^0.1.4",
 		"@types/node": "^24",
 		"@typescript/native-preview": "7.0.0-dev.20260514.1",
 		"playwright": "1.63.0",
