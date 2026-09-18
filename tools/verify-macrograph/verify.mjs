@@ -280,6 +280,7 @@ async function exportProject(page, filename) {
 
 async function persistenceExportJourney(page) {
   const journeyName = "Verification Journey Graph";
+  await page.getByRole("button", { name: "Graphs", exact: true }).click();
   await page.getByRole("button", { name: "New graph", exact: true }).click();
   await page.getByText("No graphs yet.", { exact: true }).waitFor({ state: "hidden" });
 
