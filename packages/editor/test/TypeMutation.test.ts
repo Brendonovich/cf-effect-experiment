@@ -15,12 +15,12 @@ import {
 } from "@macrograph/core";
 import { Engine } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
+import ListModule from "@macrograph/module-list";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { RpcTest } from "effect/unstable/rpc";
 
-import ListModule from "../../modules/list/src/Module.ts";
 import {
   Editor,
   EditorAccess,
