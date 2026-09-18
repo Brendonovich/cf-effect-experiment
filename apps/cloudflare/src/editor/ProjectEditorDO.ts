@@ -12,8 +12,6 @@ import {
   Packages,
   Presence,
 } from "@macrograph/editor";
-import { Persistence } from "@macrograph/persistence";
-import { SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
 import HttpClientModule from "@macrograph/module-http-client";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
@@ -29,6 +27,8 @@ import { EventSubEndpoint } from "@macrograph/module-twitch/EventSub/Webhook";
 import UtilitiesModule from "@macrograph/module-utilities";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { make as makeUtilitiesEngine } from "@macrograph/module-utilities/Engine";
+import { Persistence } from "@macrograph/persistence";
+import { SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -36,12 +36,7 @@ import * as Drizzle from "alchemy/Drizzle";
 import { HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
-import {
-  FetchHttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
+import { FetchHttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Rpc, RpcGroup, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts";
@@ -617,44 +612,40 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           id: userId,
         });
 
-      const fetch = HttpRouter.add(
-        "*",
-        "/rpc",
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          const credentialsSessionChanged = yield* configureRequest(request);
-          const name = request.headers["x-macrograph-project-name"] ?? "New Project";
-          const storedProject = yield* persistence.loadProject().pipe(Effect.orDie);
-          const project = storedProject.name === name ? storedProject : { ...storedProject, name };
-          if (project !== storedProject) {
-            yield* persistence.saveProject(project).pipe(Effect.orDie);
-          }
-          yield* reconcileEditorIngress(project.engines).pipe(
-            Effect.flatMap(editor.engine.setEndpoints),
-            // A provider failure must not prevent opening the editor to repair its settings.
-            Effect.catchCause((cause) =>
-              Effect.logError("Failed to reconcile editor ingress", cause),
-            ),
-          );
-          if (credentialsSessionChanged) {
-            yield* durableState
-              .waitUntil(
-                credentialsChanged().pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logError("Failed to refresh editor credentials", cause),
-                  ),
+      const fetch = Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const credentialsSessionChanged = yield* configureRequest(request);
+        const name = request.headers["x-macrograph-project-name"] ?? "New Project";
+        const storedProject = yield* persistence.loadProject().pipe(Effect.orDie);
+        const project = storedProject.name === name ? storedProject : { ...storedProject, name };
+        if (project !== storedProject) {
+          yield* persistence.saveProject(project).pipe(Effect.orDie);
+        }
+        yield* reconcileEditorIngress(project.engines).pipe(
+          Effect.flatMap(editor.engine.setEndpoints),
+          // A provider failure must not prevent opening the editor to repair its settings.
+          Effect.catchCause((cause) =>
+            Effect.logError("Failed to reconcile editor ingress", cause),
+          ),
+        );
+        if (credentialsSessionChanged) {
+          yield* durableState
+            .waitUntil(
+              credentialsChanged().pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logError("Failed to refresh editor credentials", cause),
                 ),
-              )
-              .pipe(Effect.provide(runtimeContext));
-          }
+              ),
+            )
+            .pipe(Effect.provide(runtimeContext));
+        }
 
-          if (request.headers.upgrade?.toLowerCase() === "websocket") {
-            return yield* rpcWs.httpEffect;
-          }
+        if (request.headers.upgrade?.toLowerCase() === "websocket") {
+          return yield* rpcWs.httpEffect;
+        }
 
-          return HttpServerResponse.empty({ status: 426 });
-        }),
-      ).pipe(HttpRouter.toHttpEffect);
+        return HttpServerResponse.empty({ status: 426 });
+      });
 
       return {
         fetch,
