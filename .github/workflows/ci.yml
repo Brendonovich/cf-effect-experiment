@@ -27,5 +27,16 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
       - name: Validate
         run: pnpm check:ci
+        env:
+          MACROGRAPH_VERIFY_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Upload playground verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macrograph-playground-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tools/verify-macrograph/artifacts/ci-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: warn
