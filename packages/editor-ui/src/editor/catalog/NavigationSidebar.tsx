@@ -6,11 +6,10 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { colors } from "../../tokens.stylex.ts";
 import { createStateMachine } from "../../ui/createStateMachine.ts";
 import { Select } from "../../ui/Select";
-import { resourceMarker, searchMarker } from "../markers.stylex.ts";
+import { resourceMarker, searchMarker, splitMarker } from "../markers.stylex.ts";
 import { Sidebar } from "../workspace/Layout";
 import { GraphNavigationOption } from "./GraphNavigationOption";
 
-const splitMarker = stylex.defineMarker();
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-4px) scale(.95)" },
   to: { opacity: 1, transform: "translateY(0) scale(1)" },

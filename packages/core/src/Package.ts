@@ -30,9 +30,17 @@ const ResourcePropertyDefinition = Schema.Struct({
   resource: Schema.String,
   optional: Schema.Literal(false),
 });
+const FunctionPropertyDefinition = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  function: Schema.Literal(true),
+  optional: Schema.Boolean,
+});
 export const PropertyDefinition = Schema.Union([
   ScalarPropertyDefinition,
   ResourcePropertyDefinition,
+  FunctionPropertyDefinition,
 ]);
 export type PropertyDefinition = typeof PropertyDefinition.Type;
 

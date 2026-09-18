@@ -72,7 +72,7 @@ export const pkg: Package.Model = {
     internal: id !== "call",
     properties:
       id === "call"
-        ? [{ id: "function", name: "Function", type: { _tag: "String" }, optional: true }]
+        ? [{ id: "function", name: "Function", function: true, optional: true }]
         : [],
     ...io(id),
   })),

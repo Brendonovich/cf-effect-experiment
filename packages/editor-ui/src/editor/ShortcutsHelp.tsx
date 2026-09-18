@@ -9,8 +9,10 @@ const styles = stylex.create({
     display: "flex",
     justifyContent: "flex-end",
     flexShrink: 0,
-    borderTop: `1px solid ${colors.gray5}`,
-    backgroundColor: colors.gray2,
+    borderTopColor: colors.gray5,
+    borderTopStyle: "solid",
+    borderTopWidth: 1,
+    backgroundColor: colors.gray3,
     paddingInline: 8,
   },
   button: {

@@ -6,6 +6,7 @@ import { createSignal, For, Show } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
+import { functionFieldMarker } from "../markers.stylex.ts";
 
 const styles = stylex.create({
   panel: { alignItems: "stretch", display: "flex", flexDirection: "column", gap: 6, padding: 8 },
@@ -62,12 +63,20 @@ const styles = stylex.create({
     borderWidth: 1,
     display: "grid",
     gap: 4,
-    gridTemplateColumns: "22px minmax(0, 1fr) 22px",
+    gridTemplateColumns: "14px minmax(0, 1fr) 22px",
     padding: 4,
   },
   draggingField: { opacity: 0.45 },
-  dragHandle: { cursor: "grab", ":active": { cursor: "grabbing" } },
-  dragIcon: { height: 16, rotate: "90deg", width: 16 },
+  dragHandle: {
+    alignItems: "center",
+    alignSelf: "center",
+    cursor: "grab",
+    display: "flex",
+    gridRow: "1 / 3",
+    justifyContent: "center",
+    ":active": { cursor: "grabbing" },
+  },
+  dragIcon: { height: 14, rotate: "90deg", width: 14 },
   fieldName: {
     borderRadius: 2,
     fontSize: 12,
@@ -89,6 +98,13 @@ const styles = stylex.create({
     boxShadow: `inset 0 0 0 1px ${colors.focus}`,
   },
   typePicker: { gridColumn: "2 / 4", minWidth: 0 },
+  deleteButton: {
+    visibility: {
+      default: "hidden",
+      [stylex.when.ancestor(":hover", functionFieldMarker)]: "visible",
+      ":focus": "visible",
+    },
+  },
 });
 
 type FieldLocation = { readonly side: "inputs" | "outputs"; readonly id: string };
@@ -197,7 +213,11 @@ export function FunctionInfo(props: {
                       draggedField()?.side === side && draggedField()?.id === field.id;
                     return (
                       <div
-                        sx={[styles.functionField, dragging() ? styles.draggingField : null]}
+                        sx={[
+                          functionFieldMarker,
+                          styles.functionField,
+                          dragging() ? styles.draggingField : null,
+                        ]}
                         onDragOver={(event) => {
                           if (draggedField()?.side === side) event.preventDefault();
                         }}
@@ -217,11 +237,9 @@ export function FunctionInfo(props: {
                           update(next);
                         }}
                       >
-                        <button
-                          type="button"
+                        <div
                           draggable={props.canEdit ? "true" : "false"}
-                          disabled={!props.canEdit}
-                          sx={[styles.iconButton, styles.dragHandle]}
+                          sx={styles.dragHandle}
                           aria-label={`Drag ${field.name} to reorder`}
                           title="Drag to reorder"
                           onDragStart={(event) => {
@@ -242,7 +260,7 @@ export function FunctionInfo(props: {
                             aria-hidden="true"
                             {...stylex.attrs(styles.dragIcon)}
                           />
-                        </button>
+                        </div>
                         <Show
                           when={editing()}
                           fallback={
@@ -288,7 +306,7 @@ export function FunctionInfo(props: {
                         </Show>
                         <button
                           type="button"
-                          sx={styles.iconButton}
+                          sx={[styles.iconButton, styles.deleteButton]}
                           disabled={!props.canEdit}
                           aria-label={`Remove ${field.name}`}
                           title="Remove"

@@ -179,33 +179,6 @@ export function Inspector(props: {
               </span>
             </Show>
             <Show when={FunctionGraph.isCall(node())}>
-              <label sx={styles.field}>
-                <span sx={styles.fieldLabel}>Function</span>
-                <Select
-                  options={props.functions ?? []}
-                  value={
-                    typeof node().properties.function === "string"
-                      ? String(node().properties.function)
-                      : ""
-                  }
-                  valid={(props.functions ?? []).some(
-                    (graph) => graph.id === node().properties.function,
-                  )}
-                  placeholder="Select function"
-                  onChange={(value) => {
-                    if (props.canEdit) props.onSetNodeProperty("function", value);
-                  }}
-                />
-              </label>
-              <Show
-                when={
-                  !(props.functions ?? []).some((graph) => graph.id === node().properties.function)
-                }
-              >
-                <div role="alert" sx={styles.value}>
-                  Missing function target. Select a replacement function to repair this caller.
-                </div>
-              </Show>
               <For
                 each={Object.keys(node().inputDefaults).filter((id) => {
                   const target = (props.functions ?? []).find(
@@ -336,7 +309,7 @@ export function Inspector(props: {
                     schema={schema()}
                     packageName={pkg()?.name ?? "Unknown Plugin"}
                   />
-                  <Show when={schema().properties.length > 0 && !FunctionGraph.isCall(node())}>
+                  <Show when={schema().properties.length > 0}>
                     <div sx={styles.properties}>
                       <span sx={styles.title}>Properties</span>
                       <For each={schema().properties}>
@@ -348,9 +321,12 @@ export function Inspector(props: {
                                 property={
                                   property as Extract<
                                     Package.PropertyDefinition,
-                                    { readonly type: unknown }
+                                    { readonly type: unknown } | { readonly function: true }
                                   >
                                 }
+                                {...(props.functions === undefined
+                                  ? {}
+                                  : { functions: props.functions })}
                                 value={node().properties[property.id]}
                                 onSet={(value) => props.onSetNodeProperty(property.id, value)}
                                 onClear={() => props.onClearNodeProperty(property.id)}
