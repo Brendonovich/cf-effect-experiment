@@ -2,8 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { Executor } from "@macrograph/execution";
-import { Persistence } from "@macrograph/persistence";
 import { DataType, Module } from "@macrograph/module";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
 import { ModuleMount } from "../src/ModuleMount.ts";
@@ -30,7 +30,7 @@ it.effect("registers an engine-less module without engine services, RPC clients,
     const catalog = yield* packages.getPackages();
     assert.deepStrictEqual(
       catalog.map((pkg) => pkg.id),
-      ["CustomTypes", "Scopes", "stateless"],
+      ["CustomTypes", "macrograph-functions", "Scopes", "stateless"],
     );
     assert.deepStrictEqual(catalog.find((pkg) => pkg.id === "stateless")?.resources, []);
     assert.deepStrictEqual(

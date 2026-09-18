@@ -2,7 +2,6 @@ import { NodeServices, NodeSocket } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
-import { Persistence } from "@macrograph/persistence";
 import { Engine } from "@macrograph/module";
 import Discord from "@macrograph/module-discord/Deployment";
 import ElevenLabs from "@macrograph/module-elevenlabs/Deployment";
@@ -30,6 +29,7 @@ import Voicemod from "@macrograph/module-voicemod/Deployment";
 import VTubeStudio from "@macrograph/module-vtube-studio/Deployment";
 import WebSocketClient from "@macrograph/module-websocket-client/Deployment/Local";
 import WebSocketServer from "@macrograph/module-websocket-server/Deployment";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { RpcSerialization } from "effect/unstable/rpc";
@@ -137,6 +137,7 @@ describe("Self-hosted modules", () => {
         catalog.map((module) => module.id).sort(),
         [
           "CustomTypes",
+          "macrograph-functions",
           "Scopes",
           ...deployments.map((deployment) => deployment.moduleId),
           ...statelessModules.map((module) => module.id),

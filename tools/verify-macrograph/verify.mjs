@@ -244,10 +244,18 @@ async function smoke(page) {
   await page
     .getByRole("button", { name: "New graph", exact: true })
     .waitFor({ timeout: uiTimeout });
+  await page.getByRole("button", { name: "Functions", exact: true }).click();
+  await page.getByRole("button", { name: "New function", exact: true }).click();
+  await page.getByRole("button", { name: "New Function", exact: true }).first().waitFor();
+  await page.getByRole("region", { name: "Constants", exact: true }).waitFor();
+  await page
+    .getByRole("separator", { name: "Resize navigation and constants", exact: true })
+    .waitFor();
   const path = join(outputDirectory, "smoke.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
   check("playground shell and editor are visible", "passed");
+  check("function navigation and split constants are visible", "passed");
 }
 
 function graphEntries(projectExport) {
@@ -272,6 +280,7 @@ async function exportProject(page, filename) {
 
 async function persistenceExportJourney(page) {
   const journeyName = "Verification Journey Graph";
+  await page.getByRole("button", { name: "Graphs", exact: true }).click();
   await page.getByRole("button", { name: "New graph", exact: true }).click();
   await page.getByText("No graphs yet.", { exact: true }).waitFor({ state: "hidden" });
 

@@ -2,6 +2,8 @@ import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 
 import type { SchemaModel } from "./Package.ts";
+import type { Package } from "./Package.ts";
+import type * as SchemaAuthoring from "./SchemaAuthoring.ts";
 
 import { Canvas } from "./Canvas.ts";
 import { IoId, type NodeIO } from "./IO.ts";
@@ -12,6 +14,11 @@ import { PackageId, SchemaId } from "./SchemaRef.ts";
 export const InputBoundaryNodeId = NodeId.make("$function:input");
 export const OutputBoundaryNodeId = NodeId.make("$function:output");
 export const ExecutionIoId = IoId.make("exec");
+export const packageId = PackageId.make("macrograph-functions");
+export const CallSchemaId = SchemaId.make("call");
+
+export const isCall = (node: Pick<NodeModel, "schema">): boolean =>
+  node.schema.package === packageId && node.schema.schema === CallSchemaId;
 
 export const Field = Schema.Struct({
   id: IoId,
@@ -55,6 +62,30 @@ export const boundaryIO = (fn: Model, nodeId: string): NodeIO | undefined => {
   return undefined;
 };
 
+export const callIO = (fn: Model | undefined): NodeIO => ({
+  executionInputs: [{ id: ExecutionIoId }],
+  executionOutputs: [{ id: ExecutionIoId }],
+  dataInputs: fn?.arguments ?? [],
+  dataOutputs: fn?.returns ?? [],
+});
+
+export const packageModel: Package.Model = {
+  id: packageId,
+  name: "Functions",
+  resources: [],
+  schemas: [
+    {
+      id: CallSchemaId,
+      name: "Execute Function",
+      type: "exec",
+      properties: [{ id: "function", name: "Function", function: true, optional: true }],
+      ...callIO(undefined),
+    },
+  ],
+};
+
+export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = {};
+
 const boundarySchema = {
   package: PackageId.make("$macrograph"),
   schema: SchemaId.make("function-boundary"),
@@ -96,6 +127,11 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Function
 export class EventNodeNotAllowedError extends Schema.TaggedError<EventNodeNotAllowedError>()(
   "FunctionEventNodeNotAllowedError",
   { nodeId: Schema.String },
+) {}
+
+export class InvocationError extends Schema.TaggedError<InvocationError>()(
+  "FunctionInvocationError",
+  { canvasId: Schema.String, reason: Schema.String },
 ) {}
 
 export const validateNode = (

@@ -221,6 +221,16 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
               normalized[definition.id] = value;
               continue;
             }
+            if ("function" in definition) {
+              if (typeof value !== "string" || value.length === 0) {
+                return yield* new Package.InvalidPropertyError({
+                  property: definition.id,
+                  reason: "Expected a function id",
+                });
+              }
+              normalized[definition.id] = value;
+              continue;
+            }
             if (!DataType.isValue(definition.type, value)) {
               return yield* new Package.InvalidPropertyError({
                 property: definition.id,
@@ -238,6 +248,13 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
               ),
             );
           } else if ("resource" in definition) {
+            continue;
+          } else if ("function" in definition) {
+            if (!definition.optional)
+              return yield* new Package.InvalidPropertyError({
+                property: definition.id,
+                reason: "Required property has no value",
+              });
             continue;
           } else if (definition.defaultValue !== undefined) {
             if (!DataType.isValue(definition.type, definition.defaultValue)) {

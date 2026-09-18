@@ -5,6 +5,7 @@ Use this map to choose the narrowest real-browser verification. A feature is onl
 | Feature                                  | Status  | Mode      | Details                                                    |
 | ---------------------------------------- | ------- | --------- | ---------------------------------------------------------- |
 | Browser playground boots                 | Covered | `smoke`   | [playground-boot.md](playground-boot.md)                   |
+| Function navigation and split constants  | Covered | `smoke`   | [function-navigation.md](function-navigation.md)           |
 | Graph changes persist locally and export | Covered | `journey` | [local-persistence-export.md](local-persistence-export.md) |
 | Import replaces the local project        | Covered | `journey` | [project-import.md](project-import.md)                     |
 | Reset clears the local project           | Covered | `journey` | [project-reset.md](project-reset.md)                       |

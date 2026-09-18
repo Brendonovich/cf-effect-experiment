@@ -184,6 +184,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             store.project.graphs = graphs;
             delete store.project.functions[event.graphId];
             delete store.nodeIO[event.graphId];
+            for (const [graphId, graph] of Object.entries(store.project.graphs))
+              for (const node of Object.values(graph.nodes))
+                if (GraphFunction.isCall(node) && node.properties.function === event.graphId)
+                  (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(undefined);
           }
         });
         break;
@@ -225,6 +229,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             GraphFunction.boundaryIO(event.fn, GraphFunction.InputBoundaryNodeId)!;
           store.nodeIO[event.fn.canvas.id]![GraphFunction.OutputBoundaryNodeId] =
             GraphFunction.boundaryIO(event.fn, GraphFunction.OutputBoundaryNodeId)!;
+          for (const [graphId, caller] of Object.entries(store.project.graphs))
+            for (const node of Object.values(caller.nodes))
+              if (GraphFunction.isCall(node) && node.properties.function === event.fn.canvas.id)
+                (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(event.fn);
         });
         break;
       case "GraphNameChanged": {

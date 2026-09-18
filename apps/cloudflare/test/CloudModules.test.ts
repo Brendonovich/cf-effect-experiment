@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
-import { Persistence } from "@macrograph/persistence";
 import { Engine } from "@macrograph/module";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
@@ -9,6 +8,7 @@ import { KofiEngine } from "@macrograph/module-kofi/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import { TwitchEngine } from "@macrograph/module-twitch/Definition";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { RpcTest } from "effect/unstable/rpc";
@@ -74,11 +74,10 @@ describe("Cloud modules", () => {
             const context = yield* Layer.build(CloudModules.editorLayer);
             const editor = yield* Editor.Service;
             const packages = yield* Packages.Service;
-            assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
-              "CustomTypes",
-              "Scopes",
-              ...newIds,
-            ]);
+            assert.deepStrictEqual(
+              (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
+              ["CustomTypes", "Scopes", "macrograph-functions", ...newIds].sort(),
+            );
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
               configured: false,
@@ -122,11 +121,10 @@ describe("Cloud modules", () => {
             yield* Layer.build(CloudModules.editorLayer);
             const editor = yield* Editor.Service;
             const packages = yield* Packages.Service;
-            assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
-              "CustomTypes",
-              "Scopes",
-              ...newIds,
-            ]);
+            assert.deepStrictEqual(
+              (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
+              ["CustomTypes", "Scopes", "macrograph-functions", ...newIds].sort(),
+            );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, {
               ...saved,

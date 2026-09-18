@@ -11,6 +11,15 @@
       "evidence": ["screenshot", "server-log"]
     },
     {
+      "id": "function.navigation",
+      "name": "Functions use dedicated navigation beside split constants",
+      "documentation": ".opencode/skills/verify-macrograph/features/function-navigation.md",
+      "status": "covered",
+      "verification": "smoke",
+      "userJourney": ["Open Functions tab", "Create function", "Observe split Constants pane"],
+      "evidence": ["screenshot", "server-log"]
+    },
+    {
       "id": "project.graph.local-persistence-export",
       "name": "Graph changes persist locally and export",
       "documentation": ".opencode/skills/verify-macrograph/features/local-persistence-export.md",

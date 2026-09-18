@@ -13,6 +13,7 @@ declare global {
   const IconTablerArrowsDiagonal: typeof import('~icons/tabler/arrows-diagonal.jsx').default
   const IconTablerArrowsDiagonalMinimize2: typeof import('~icons/tabler/arrows-diagonal-minimize2.jsx').default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
+  const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
   const IconTablerStar: typeof import('~icons/tabler/star.jsx').default

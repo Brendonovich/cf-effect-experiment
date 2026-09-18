@@ -60,6 +60,7 @@ const graph: Canvas.Model = {
   ],
 };
 const secondaryGraph = Canvas.empty("other");
+const functionGraph = { ...Canvas.empty("format-date"), name: "Format Date" };
 const nodeIds = (pane: Element) =>
   new Set(
     [...pane.querySelectorAll("[data-node-id]")].map((pin) => pin.getAttribute("data-node-id")),
@@ -111,6 +112,16 @@ const setup = (direction: PaneDirection) => {
         [secondaryGraph.id]: {
           ...secondaryGraph,
           nodes: { [firstNode.id]: { ...firstNode, name: "Other graph node" } },
+        },
+        [functionGraph.id]: functionGraph,
+      },
+      functions: {
+        [functionGraph.id]: {
+          canvas: functionGraph,
+          arguments: [],
+          returns: [],
+          inputPosition: { x: -200, y: 0 },
+          outputPosition: { x: 200, y: 0 },
         },
       },
     },
@@ -212,4 +223,24 @@ it("renders each pane's graph and IO instead of duplicating the focused graph", 
   flush();
   expect(nodeIds(pane(otherPaneId))).toEqual(new Set([firstNode.id]));
   expect(pane(otherPaneId).textContent).toContain("Other graph node");
+});
+
+it("shows a function icon only on function graph tabs", () => {
+  const { controller, graphPaneId, pane } = setup("horizontal");
+  controller.layout.dispatchWorkspace({
+    type: "open-tab",
+    paneId: graphPaneId,
+    tab: { type: "graph", graphId: functionGraph.id },
+  });
+  flush();
+
+  const graphTab = [...pane(graphPaneId).querySelectorAll("button")].find(
+    (button) => button.textContent === graph.name,
+  );
+  const functionTab = [...pane(graphPaneId).querySelectorAll("button")].find(
+    (button) => button.textContent === functionGraph.name,
+  );
+
+  expect(graphTab?.querySelector("svg")).toBeNull();
+  expect(functionTab?.querySelector("svg")).not.toBeNull();
 });

@@ -352,6 +352,10 @@ function SettingsTabIcon() {
   return <IconTablerSettings {...stylex.attrs(styles.tabIcon)} />;
 }
 
+function FunctionTabIcon() {
+  return <IconTablerFunction {...stylex.attrs(styles.tabIcon)} />;
+}
+
 export type EditorRpcClient = RpcClient.FromGroup<
   typeof EditorRpc.EditorRpcs,
   RpcClientError.RpcClientError
@@ -447,6 +451,10 @@ function EditorContent(
       return {
         id: tab.id,
         title: controller.editor.store.project?.graphs[tab.graphId]?.name ?? tab.graphId,
+        icon:
+          controller.editor.store.project?.functions[tab.graphId] === undefined ? undefined : (
+            <FunctionTabIcon />
+          ),
       };
     if (tab.type === "package")
       return {
@@ -575,6 +583,9 @@ function EditorContent(
                   search={controller.catalog.navSearch()}
                   selectedPaneId={controller.layout.selectedPaneId()}
                   graphs={controller.catalog.filteredGraphs()}
+                  functionIds={
+                    new Set(Object.keys(controller.editor.store.project?.functions ?? {}))
+                  }
                   packagesWithSettings={controller.catalog.filteredPackagesWithSettings()}
                   packagesWithoutSettings={controller.catalog.filteredPackagesWithoutSettings()}
                   allPackages={controller.editor.store.packages}
@@ -1141,6 +1152,7 @@ function EditorContent(
                     controller.layout.selectedGraphId() ?? ""
                   ]
                 }
+                functions={Object.values(controller.editor.store.project?.functions ?? {})}
                 canEdit={controller.connection.canEdit()}
                 editingGraphNameId={controller.commands.editingGraphNameId()}
                 onEditingGraphNameChange={(id) =>

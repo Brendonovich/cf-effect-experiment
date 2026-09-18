@@ -12,10 +12,10 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { Persistence } from "@macrograph/persistence";
 import { DataType, Engine, Module, Resource } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -190,8 +190,7 @@ const TestPackage = {
   ],
 };
 
-const PackagesLayer = Layer.effect(
-  Packages.Service)(
+const PackagesLayer = Layer.effect(Packages.Service)(
   Effect.gen(function* () {
     const packages = yield* Packages.Service;
     yield* packages.loadPackage(TestPackage);
@@ -570,6 +569,39 @@ it.layer(TestLayer)((it) => {
           node: { schema: { ...schemaRef, schema: SchemaId.make("event") } },
         });
         assert.strictEqual(created.node.schema.schema, "event");
+      }),
+    );
+
+    it.effect("generates Execute Function pins from its selected function property", () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        const fn = yield* editor.function.create("Format");
+        const input = yield* editor.function.addField(fn.graph.id, "input");
+        const output = yield* editor.function.addField(fn.graph.id, "output");
+        const graph = yield* editor.graph.create({ name: "Caller" });
+        const call = yield* editor.node.create({
+          graphID: graph.graph.id,
+          node: {
+            schema: {
+              package: GraphFunction.packageId,
+              schema: GraphFunction.CallSchemaId,
+            },
+          },
+        });
+
+        const selected = yield* editor.node.setProperty({
+          graphID: graph.graph.id,
+          nodeID: call.node.id,
+          property: "function",
+          value: fn.graph.id,
+        });
+
+        expect(selected.io).toEqual(
+          GraphFunction.callIO({
+            ...output.fn,
+            arguments: input.fn.arguments,
+          }),
+        );
       }),
     );
 
