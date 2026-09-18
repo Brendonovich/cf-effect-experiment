@@ -52,7 +52,7 @@ namespace Persistence {
 
   export const layerMemory = (project: Project.Model) =>
     Layer.effect(
-      Service,
+      Service)(
       Effect.gen(function* () {
         const projectRef = yield* Ref.make(project);
 
@@ -132,7 +132,7 @@ namespace ProjectEditor {
     });
   });
 
-  export const layer = () => Layer.effect(Service, make());
+  export const layer = () => Layer.effect(Service)(make());
 }
 
 namespace Engine {

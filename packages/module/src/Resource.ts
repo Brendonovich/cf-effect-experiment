@@ -51,7 +51,7 @@ export const make = <Self, Shape extends Schema.Json>() =>
 
       static toLayer(load: Effect.Effect<ReadonlyArray<Value<Shape>>>) {
         return Layer.effect(
-          HandlerTag,
+          HandlerTag)(
           Effect.gen(function* () {
             const state = yield* SubscriptionRef.make<ReadonlyArray<Value<Shape>>>([]);
             const lock = yield* Semaphore.make(1);

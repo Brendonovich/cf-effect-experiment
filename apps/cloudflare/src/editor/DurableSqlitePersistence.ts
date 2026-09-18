@@ -6,7 +6,7 @@ import { Effect, Layer } from "effect";
 
 export const layer = (migrations: Record<string, string>) =>
   Layer.effect(
-    DrizzleDriver.Service,
+    DrizzleDriver.Service)(
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       const driver = drizzle(state.raw.storage);
