@@ -40,8 +40,7 @@ export const unavailableWebhookEndpoints = Layer.succeed(WebhookEndpoints, {
     ),
 });
 
-export const webhookEndpointsLayer = Layer.effect(
-  WebhookEndpoints,
+export const webhookEndpointsLayer = Layer.effect(WebhookEndpoints)(
   Effect.gen(function* () {
     const endpoints = yield* HttpEndpoint.Host;
     return WebhookEndpoints.of({
