@@ -69,7 +69,9 @@ export default Layer.unwrap(
     const ingressPublicOrigin = Option.getOrUndefined(
       yield* Effect.serviceOption(IngressPublicOrigin),
     );
-    const credentialOAuthStateSecret = yield* CredentialOAuthStateSecret;
+    const credentialOAuthStateSecret = Option.getOrUndefined(
+      yield* Effect.serviceOption(CredentialOAuthStateSecret),
+    );
     const databaseResource = yield* DatabaseHyperdrive;
     const deploymentsResource = yield* DeploymentObjectsBucket;
     const credentialEnvironment = Object.fromEntries(
@@ -108,7 +110,8 @@ export default Layer.unwrap(
       },
       Effect.gen(function* () {
         const runtimeContext = yield* Alchemy.RuntimeContext;
-        yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
+        if (credentialOAuthStateSecret !== undefined)
+          yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
         const policies = Layer.mergeAll(
           CredentialPolicy.layer,

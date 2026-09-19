@@ -13,7 +13,5 @@ it("reads the provider from a signed-state payload", () => {
 
 it("rejects malformed or missing provider state", () => {
   expect(providerFromState("not-base64.signature")).toBeUndefined();
-  expect(
-    providerFromState(`${encode(JSON.stringify({ provider: 1 }))}.signature`),
-  ).toBeUndefined();
+  expect(providerFromState(`${encode(JSON.stringify({ provider: 1 }))}.signature`)).toBeUndefined();
 });
