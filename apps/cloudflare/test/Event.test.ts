@@ -12,7 +12,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { Service as WorkerOperations } from "../src/worker/CloudWorkerOperations.ts";
 
 import * as Database from "../src/database/Database.ts";
-import { deploymentObjectKey } from "../src/deployment/DeploymentObjectKey.ts";
+import { deploymentProjectObjectKey } from "../src/deployment/DeploymentObjectKey.ts";
 import * as Event from "../src/execution/Event.ts";
 import * as EventPolicy from "../src/execution/EventPolicy.ts";
 import * as ProjectPolicy from "../src/project/ProjectPolicy.ts";
@@ -130,7 +130,7 @@ describe("Event.make replay", () => {
                     assert.strictEqual(sql, deploymentSql);
                     assert.deepStrictEqual(params, ["project", 1]);
                     const deploymentId = `current-deployment-${replayNumber}`;
-                    return [[deploymentId, deploymentObjectKey("project", deploymentId)]];
+                    return [[deploymentId, deploymentProjectObjectKey("project", deploymentId)]];
                   }),
                 ),
               );
@@ -156,7 +156,7 @@ describe("Event.make replay", () => {
                   projectEventId: result.projectEventId,
                   projectId: "project",
                   deploymentId: result.deploymentId,
-                  r2Key: deploymentObjectKey("project", result.deploymentId),
+                  r2Key: deploymentProjectObjectKey("project", result.deploymentId),
                   source: "replay",
                   moduleId: "captured-module",
                   eventType: "captured-type",
@@ -229,7 +229,7 @@ describe("Event.make replay", () => {
             databaseLayer((sql) => {
               if (sql === eventSql(kind)) return [["module", "type", "{}", null, null, null]];
               assert.strictEqual(sql, deploymentSql);
-              return [["deployment", deploymentObjectKey("project", "deployment")]];
+              return [["deployment", deploymentProjectObjectKey("project", "deployment")]];
             }),
           ),
         );

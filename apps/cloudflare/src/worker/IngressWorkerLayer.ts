@@ -16,7 +16,7 @@ import { IngressApi } from "../ingress/IngressApi.ts";
 import * as IngressHandlers from "../ingress/IngressHandlers.ts";
 import { ProjectIngressDOLayer } from "../ingress/ProjectIngressDO.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import { DatabaseHyperdrive, DeploymentSnapshotsBucket } from "../Storage.ts";
+import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
 import {
 	ClientIdConfig as TwitchClientIdConfig,
 	ClientSecretConfig as TwitchClientSecretConfig,
@@ -40,7 +40,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 export default Layer.unwrap(
 	Effect.gen(function* () {
 		const databaseResource = yield* DatabaseHyperdrive;
-		const deploymentsResource = yield* DeploymentSnapshotsBucket;
+		const deploymentsResource = yield* DeploymentObjectsBucket;
 
 		return IngressWorker.make(
 			{

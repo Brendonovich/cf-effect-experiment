@@ -400,7 +400,7 @@ export const make = (
       remove: (projectId: string) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
-          const snapshots = yield* database
+          const deploymentRows = yield* database
             .select({ id: projectDeployments.id, r2Key: projectDeployments.r2Key })
             .from(projectDeployments)
             .where(eq(projectDeployments.projectId, project.id))
@@ -408,18 +408,18 @@ export const make = (
           yield* workerOperations.undeployProject(project.id);
           yield* database.delete(projects).where(eq(projects.id, project.id)).pipe(Effect.orDie);
           yield* Effect.forEach(
-            snapshots,
-            (snapshot) =>
+            deploymentRows,
+            (deployment) =>
               Effect.all(
                 [
-                  deployments.delete(snapshot.r2Key),
-                  deployments.delete(deploymentSnapshotObjectKey(project.id, snapshot.id)),
+                  deployments.delete(deployment.r2Key),
+                  deployments.delete(deploymentSnapshotObjectKey(project.id, deployment.id)),
                 ],
                 { discard: true },
               )
                 .pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logError("Failed to remove project deployment snapshot", cause),
+                    Effect.logError("Failed to remove project deployment objects", cause),
                   ),
                 ),
             { discard: true },

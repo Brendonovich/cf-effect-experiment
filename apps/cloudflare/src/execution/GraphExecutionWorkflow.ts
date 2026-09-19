@@ -19,7 +19,7 @@ import {
 	projectExecutions,
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
-import { DeploymentSnapshotsBucket } from "../Storage.ts";
+import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
@@ -62,9 +62,9 @@ export const nodeStepName = (
 export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExecutionWorkflow>()(
 	"GraphExecutionWorkflow",
 	Effect.gen(function* () {
-		const snapshotsResource = yield* DeploymentSnapshotsBucket;
+		const deploymentObjectsResource = yield* DeploymentObjectsBucket;
 		const database = yield* Database.Service;
-		const snapshots = yield* Cloudflare.R2.ReadBucket(snapshotsResource);
+		const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
 
 		const updateExecution = (
 			executionId: string,
@@ -178,9 +178,9 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 					}).pipe(Effect.orDie),
 				);
 				const project = yield* Cloudflare.Workflows.task(
-					`runtime-project-v2/${input.projectId}/${input.deploymentId}`,
+					`runtime-project-v1/${input.projectId}/${input.deploymentId}`,
 					Effect.gen(function* () {
-						const object = yield* snapshots.get(input.r2Key);
+						const object = yield* deploymentObjects.get(input.r2Key);
 						if (object === null)
 							return yield* Effect.die(
 								`Project deployment ${input.r2Key} not found`,

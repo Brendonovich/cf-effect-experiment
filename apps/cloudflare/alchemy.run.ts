@@ -12,7 +12,7 @@ import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigratio
 import { traceDatasetName } from "./src/Observability.ts";
 import {
 	DatabaseHyperdrive,
-	DeploymentSnapshotsBucket,
+	DeploymentObjectsBucket,
 	LegacyLogicalDatabase,
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
@@ -39,7 +39,7 @@ export default Alchemy.Stack(
 	Effect.gen(function* () {
 		const ctx = yield* Alchemy.AlchemyContext;
 		yield* DatabaseHyperdrive;
-		yield* DeploymentSnapshotsBucket;
+		yield* DeploymentObjectsBucket;
 		const legacyDatabase = yield* LegacyLogicalDatabase;
 
 		const frontendBuild = !ctx.dev

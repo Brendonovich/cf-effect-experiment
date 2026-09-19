@@ -140,10 +140,11 @@ describe("hosted deployment snapshots", () => {
       const deployed = Schema.decodeUnknownSync(Project.Model)(
         JSON.parse(JSON.stringify(Schema.encodeUnknownSync(Project.Model)(project))),
       );
-      Schema.decodeUnknownSync(RenderedProject.Model)(
+      const deployedSnapshot = Schema.decodeUnknownSync(RenderedProject.Model)(
         JSON.parse(JSON.stringify(Schema.encodeUnknownSync(RenderedProject.Model)(rendered))),
       );
       assert.deepStrictEqual(deployed.types, types);
+      assert.deepStrictEqual(deployedSnapshot.types, types);
       const recorded: Array<{ node: string; output: unknown }> = [];
       const executor = yield* ProjectExecutor.make(
         { ...project, types: deployed.types },

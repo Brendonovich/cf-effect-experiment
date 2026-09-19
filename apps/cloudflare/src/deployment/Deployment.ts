@@ -20,7 +20,7 @@ import {
 } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
 import {
-  deploymentObjectKey,
+  deploymentProjectObjectKey,
   deploymentSnapshotObjectKey,
 } from "./DeploymentObjectKey.ts";
 import * as DeploymentPolicy from "./DeploymentPolicy.ts";
@@ -102,7 +102,7 @@ export const make = (
           const executable = yield* projectEditor.getProject(project.name).pipe(Effect.orDie);
           const snapshot = yield* projectEditor.getRenderedProject(project.name).pipe(Effect.orDie);
           const deploymentId = crypto.randomUUID();
-          const r2Key = deploymentObjectKey(project.id, deploymentId);
+          const r2Key = deploymentProjectObjectKey(project.id, deploymentId);
           const snapshotKey = deploymentSnapshotObjectKey(project.id, deploymentId);
           const createdAt = new Date().toISOString();
           const deployment: ProjectDeploymentRecord = {
@@ -196,7 +196,7 @@ export const make = (
                         .pipe(
                           Effect.catchCause((cleanupCause) =>
                             Effect.logError(
-                              "Failed to remove rejected deployment snapshot",
+                              "Failed to remove rejected deployment objects",
                               cleanupCause,
                             ),
                           ),
