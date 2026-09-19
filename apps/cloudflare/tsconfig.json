@@ -12,6 +12,7 @@
   "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
     { "path": "../../packages/modules/elevenlabs" },
+    { "path": "../../packages/modules/github" },
     { "path": "../../packages/modules/json" },
     { "path": "../../packages/modules/list" },
     { "path": "../../packages/modules/logic" },
@@ -50,6 +51,9 @@
     },
     {
       "path": "../../packages/project-host"
+    },
+    {
+      "path": "../../packages/workflow-runtime"
     },
     {
       "path": "../../packages/modules/twitch"

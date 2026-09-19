@@ -151,55 +151,21 @@ export async function selectors(context) {
     await menu.waitFor({ state: "detached" });
 
     const make = await create(page, "Make Struct", 80, 80);
-    await page.getByRole("group", { name: "Target type", exact: true }).getByRole("button").click();
-    assert.deepEqual(await page.getByRole("option").allTextContents(), ["Address", "Person"]);
-    await page.getByRole("option", { name: "Person", exact: true }).click();
-    await pin(page, make, "input", 'field:"age"').waitFor();
-    assert.equal(await pin(page, make, "output", "value").getAttribute("title"), "Person");
-    await choose(page, "Target type", "Address");
-    await pin(page, make, "input", 'field:"city"').waitFor();
-    assert.equal(await pin(page, make, "input", 'field:"age"').count(), 0);
-    await choose(page, "Target type", "Person");
-    await pin(page, make, "input", 'field:"name"').waitFor();
-
-    const update = await create(page, "Update Struct", 400, 80);
-    await choose(page, "Target type", "Person");
-    await pin(page, update, "input", 'field:"nickname"').waitFor();
-    assert.match(
-      await pin(page, update, "input", 'field:"name"').getAttribute("title"),
-      /Option.*String/,
-    );
-    assert.match(
-      await pin(page, update, "input", 'field:"nickname"').getAttribute("title"),
-      /Option.*Option.*String/,
-    );
-    assert.equal(await graphNode(page, update).locator('[data-io-direction="input"]').count(), 4);
-
-    const construct = await create(page, "Construct Enum", 80, 330);
-    await page.getByRole("group", { name: "Target type", exact: true }).getByRole("button").click();
-    assert.deepEqual(await page.getByRole("option").allTextContents(), ["Result"]);
-    await page.getByRole("option", { name: "Result", exact: true }).click();
-    await choose(page, "Enum variant", "Success");
-    await pin(page, construct, "input", 'field:"person"').waitFor();
-    await choose(page, "Enum variant", "Failure");
-    await pin(page, construct, "input", 'field:"message"').waitFor();
-    assert.equal(await pin(page, construct, "input", 'field:"person"').count(), 0);
-
+    assert.equal(await page.getByRole("group", { name: "Target type", exact: true }).count(), 0);
+    assert.deepEqual((await saved(page)).graphs.demo.nodes[make].properties, {});
+    await create(page, "Update Struct", 400, 80);
+    await create(page, "Construct Enum", 80, 330);
     const match = await create(page, "Match Enum", 400, 330);
-    await choose(page, "Target type", "Result");
-    await pin(page, match, "output", 'variant:"Success"').waitFor();
-    await pin(page, match, "output", 'variant:"Failure"').waitFor();
+    await create(page, "Parse JSON", 720, 80);
+    await create(page, "Stringify JSON", 720, 330);
+    assert.equal(await page.getByRole("group", { name: "Target type", exact: true }).count(), 0);
     await waitSaved(page, (project) =>
-      Object.values(project.graphs.demo.nodes).every((node) => node.properties.type),
+      Object.values(project.graphs.demo.nodes).every((node) => !("type" in node.properties)),
     );
     const before = await saved(page);
     await page.reload();
     await page.locator(`[data-node-header=${JSON.stringify(match)}]`).waitFor();
-    await select(page, construct);
-    await button(
-      page.getByRole("group", { name: "Enum variant", exact: true }),
-      "Failure",
-    ).waitFor();
+    await select(page, match);
     assert.deepEqual((await saved(page)).graphs, before.graphs);
     assert.deepEqual(errors, []);
   } catch (error) {
@@ -216,7 +182,7 @@ export async function optionalUpdates(context) {
         "MakeStruct",
         40,
         40,
-        { type: "person" },
+        {},
         {
           'field:"name"': "Ada",
           'field:"age"': 37,
@@ -224,8 +190,8 @@ export async function optionalUpdates(context) {
         },
       ),
       some: node("some", "MakeSome", 40, 280, { type: "String" }, { in: "Grace" }, "logic"),
-      update: node("update", "UpdateStruct", 350, 40, { type: "person" }),
-      stringify: node("stringify", "StringifyJson", 650, 40, { type: "person" }),
+      update: node("update", "UpdateStruct", 350, 40),
+      stringify: node("stringify", "StringifyJson", 650, 40),
       tick: node("tick", "Tick", 350, 300, {}, {}, "util"),
       print: node("print", "Print", 650, 300, {}, {}, "util"),
     },
@@ -297,12 +263,15 @@ export async function optionalUpdates(context) {
 }
 
 export async function breakStructOutputs(context) {
-  const { page, errors } = await open(context, project({
-    person: node("person", "MakeStruct", 60, 80, { type: "person" }),
-    address: node("address", "MakeStruct", 60, 440, { type: "address" }),
-    break: node("break", "BreakStruct", 430, 80),
-    print: node("print", "Print", 780, 80, {}, {}, "util"),
-  }));
+  const { page, errors } = await open(
+    context,
+    project({
+      person: node("person", "UpdateStruct", 60, 80),
+      address: node("address", "UpdateStruct", 60, 440),
+      break: node("break", "BreakStruct", 430, 80),
+      print: node("print", "Print", 780, 80, {}, {}, "util"),
+    }),
+  );
   const outputs = () => page.locator('[data-node-id="break"][data-io-direction="output"]');
   const connect = async (from, output, to, input) => {
     const source = await pin(page, from, "output", output).boundingBox();
@@ -324,7 +293,11 @@ export async function breakStructOutputs(context) {
     await waitSaved(page, (project) => project.graphs.demo.connections.length === 1);
     for (const field of ["name", "age", "nickname"])
       await pin(page, "break", "output", `field:${JSON.stringify(field)}`).waitFor();
-    assert.equal(await outputs().count(), 3, "connecting Person must immediately generate its fields");
+    assert.equal(
+      await outputs().count(),
+      3,
+      "connecting Person must immediately generate its fields",
+    );
     assert.equal(await pin(page, "break", "output", 'field:"age"').getAttribute("title"), "Int");
     assert.deepEqual((await saved(page)).graphs.demo.nodes.break.properties, {});
 

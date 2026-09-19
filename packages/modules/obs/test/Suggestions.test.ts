@@ -5,10 +5,7 @@ import { Effect, Result } from "effect";
 import { RequestFailed, SocketAddress } from "../src/Definition.ts";
 import OBSModule from "../src/Module.ts";
 
-const resolver = Effect.fnUntraced(function* (
-  schemaId: string,
-  inputId: string,
-) {
+const resolver = Effect.fnUntraced(function* (schemaId: string, inputId: string) {
   const schemas = yield* Registration.collect(OBSModule.effect);
   const input = schemas
     .find(({ id }) => id === schemaId)
@@ -102,19 +99,9 @@ describe("OBS suggestions", () => {
           ["GetSceneCollectionList"],
           ["Default", "Live"],
         ],
-        [
-          "SetCurrentProgramScene",
-          "sceneName",
-          ["GetSceneList"],
-          ["Intro", "Live"],
-        ],
+        ["SetCurrentProgramScene", "sceneName", ["GetSceneList"], ["Intro", "Live"]],
         ["SetInputVolume", "inputName", ["GetInputList"], ["Mic", "Camera"]],
-        [
-          "CreateInput",
-          "inputKind",
-          ["GetInputKindList"],
-          ["image_source", "browser_source"],
-        ],
+        ["CreateInput", "inputKind", ["GetInputKindList"], ["image_source", "browser_source"]],
         [
           "GetInputDefaultSettings",
           "inputKind",
@@ -163,170 +150,155 @@ describe("OBS suggestions", () => {
     }),
   );
 
-  it.effect(
-    "uses the latest source and scene defaults for dependent lists",
-    () =>
-      Effect.gen(function* () {
-        const cases = [
-          [
-            "SetSourceFilterIndex",
-            "filterName",
-            "sourceName",
-            "GetSourceFilterList",
-            "filters",
-            "filterName",
-          ],
-          [
-            "GetSceneItemId",
-            "sourceName",
-            "sceneName",
-            "GetSceneItemList",
-            "sceneItems",
-            "sourceName",
-          ],
-        ] as const;
-        const address = SocketAddress.make("ws://localhost:4455");
-        for (const [
-          schemaId,
-          inputId,
-          dependency,
-          requestType,
-          list,
-          name,
-        ] of cases) {
-          const suggest = yield* resolver(schemaId, inputId);
-          const calls: Array<Call> = [];
-          for (const value of ["First", "Second"]) {
-            assert.deepStrictEqual(
-              yield* suggest({
-                properties: { socket: address },
-                inputDefaults: { [dependency]: value },
-                engine: {
-                  Call: (payload: Call) =>
-                    Effect.sync(() => {
-                      calls.push(payload);
-                      return {
-                        [list]: [
-                          {
-                            [name]: `${payload.requestData?.[dependency]} result`,
-                          },
-                        ],
-                      };
-                    }),
-                },
-              }),
-              [`${value} result`],
-            );
-          }
+  it.effect("uses the latest source and scene defaults for dependent lists", () =>
+    Effect.gen(function* () {
+      const cases = [
+        [
+          "SetSourceFilterIndex",
+          "filterName",
+          "sourceName",
+          "GetSourceFilterList",
+          "filters",
+          "filterName",
+        ],
+        [
+          "GetSceneItemId",
+          "sourceName",
+          "sceneName",
+          "GetSceneItemList",
+          "sceneItems",
+          "sourceName",
+        ],
+      ] as const;
+      const address = SocketAddress.make("ws://localhost:4455");
+      for (const [schemaId, inputId, dependency, requestType, list, name] of cases) {
+        const suggest = yield* resolver(schemaId, inputId);
+        const calls: Array<Call> = [];
+        for (const value of ["First", "Second"]) {
           assert.deepStrictEqual(
-            calls,
-            ["First", "Second"].map((value) => ({
-              address,
-              requestType,
-              requestData: { [dependency]: value },
-            })),
+            yield* suggest({
+              properties: { socket: address },
+              inputDefaults: { [dependency]: value },
+              engine: {
+                Call: (payload: Call) =>
+                  Effect.sync(() => {
+                    calls.push(payload);
+                    return {
+                      [list]: [
+                        {
+                          [name]: `${payload.requestData?.[dependency]} result`,
+                        },
+                      ],
+                    };
+                  }),
+              },
+            }),
+            [`${value} result`],
           );
         }
-      }),
-  );
-
-  it.effect(
-    "does not call OBS when a dependency is absent, empty, or non-string",
-    () =>
-      Effect.gen(function* () {
-        for (const [schemaId, inputId, dependency] of [
-          ["GetSourceFilter", "filterName", "sourceName"],
-          ["GetSceneItemId", "sourceName", "sceneName"],
-        ] as const) {
-          const suggest = yield* resolver(schemaId, inputId);
-          const calls: Array<Call> = [];
-          for (const value of [undefined, null, "", 42, false, {}, []]) {
-            assert.deepStrictEqual(
-              yield* suggest({
-                properties: {
-                  socket: SocketAddress.make("ws://localhost:4455"),
-                },
-                inputDefaults:
-                  value === undefined ? {} : { [dependency]: value },
-                engine: {
-                  Call: (payload: Call) =>
-                    Effect.sync(() => calls.push(payload)),
-                },
-              }),
-              [],
-            );
-          }
-          assert.deepStrictEqual(calls, []);
-        }
-      }),
-  );
-
-  it.effect(
-    "keeps creation and renamed names freeform and wires current pins",
-    () =>
-      Effect.gen(function* () {
-        const schemas = yield* Registration.collect(OBSModule.effect);
-        for (const [schemaId, inputId] of [
-          ["CreateSceneCollection", "sceneCollectionName"],
-          ["CreateScene", "sceneName"],
-          ["CreateInput", "inputName"],
-          ["CreateSourceFilter", "filterName"],
-          ["SetSceneName", "newSceneName"],
-          ["SetInputName", "newInputName"],
-          ["SetSourceFilterName", "newFilterName"],
-          ["SaveSourceScreenshot", "imageFilePath"],
-          ["GetGroupSceneItemList", "sceneName"],
-        ]) {
-          const input = schemas
-            .find(({ id }) => id === schemaId)
-            ?.dataInputs.find(({ id }) => id === inputId);
-          assert.isDefined(input, `${schemaId}.${inputId}`);
-          assert.isUndefined(input.suggestions, `${schemaId}.${inputId}`);
-        }
-        for (const [schemaId, inputId] of [
-          ["SetSceneSceneTransitionOverride", "sceneName"],
-          ["SetCurrentPreviewScene", "sceneName"],
-          ["RemoveScene", "sceneName"],
-          ["SetSceneName", "sceneName"],
-          ["CreateInput", "sceneName"],
-          ["GetSceneItemList", "sceneName"],
-          ["GetSceneItemSource", "sceneName"],
-          ["DuplicateSceneItem", "destinationSceneName"],
-          ["SetSceneItemTransform", "sceneName"],
-          ["SetSceneItemEnabled", "sceneName"],
-          ["SetSceneItemLocked", "sceneName"],
-          ["SetSceneItemIndex", "sceneName"],
-          ["SetSceneItemBlendMode", "sceneName"],
-          ["RemoveInput", "inputName"],
-          ["SetInputName", "inputName"],
-          ["GetInputSettings", "inputName"],
-          ["SetInputSettings", "inputName"],
-          ["GetInputMute", "inputName"],
-          ["SetInputMute", "inputName"],
-          ["ToggleInputMute", "inputName"],
-          ["GetInputVolume", "inputName"],
-          ["CreateSourceFilter", "sourceName"],
-          ["RemoveSourceFilter", "filterName"],
-          ["SetSourceFilterName", "filterName"],
-          ["SetSourceFilterSettings", "filterName"],
-          ["SetSourceFilterEnabled", "filterName"],
-        ]) {
-          const input = schemas
-            .find(({ id }) => id === schemaId)
-            ?.dataInputs.find(({ id }) => id === inputId);
-          assert.isDefined(input?.suggestions, `${schemaId}.${inputId}`);
-          assert.strictEqual(input.type._tag, "String");
-        }
-        const destination = schemas
-          .find(({ id }) => id === "DuplicateSceneItem")
-          ?.dataInputs.find(({ id }) => id === "destinationSceneName");
-        assert.strictEqual(destination?.defaultValue, "");
-        assert.isTrue(
-          schemas.every(({ dataOutputs }) =>
-            dataOutputs.every((output) => !("suggestions" in output)),
-          ),
+        assert.deepStrictEqual(
+          calls,
+          ["First", "Second"].map((value) => ({
+            address,
+            requestType,
+            requestData: { [dependency]: value },
+          })),
         );
-      }),
+      }
+    }),
+  );
+
+  it.effect("does not call OBS when a dependency is absent, empty, or non-string", () =>
+    Effect.gen(function* () {
+      for (const [schemaId, inputId, dependency] of [
+        ["GetSourceFilter", "filterName", "sourceName"],
+        ["GetSceneItemId", "sourceName", "sceneName"],
+      ] as const) {
+        const suggest = yield* resolver(schemaId, inputId);
+        const calls: Array<Call> = [];
+        for (const value of [undefined, null, "", 42, false, {}, []]) {
+          assert.deepStrictEqual(
+            yield* suggest({
+              properties: {
+                socket: SocketAddress.make("ws://localhost:4455"),
+              },
+              inputDefaults: value === undefined ? {} : { [dependency]: value },
+              engine: {
+                Call: (payload: Call) => Effect.sync(() => calls.push(payload)),
+              },
+            }),
+            [],
+          );
+        }
+        assert.deepStrictEqual(calls, []);
+      }
+    }),
+  );
+
+  it.effect("keeps creation and renamed names freeform and wires current pins", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect(OBSModule.effect);
+      for (const [schemaId, inputId] of [
+        ["CreateSceneCollection", "sceneCollectionName"],
+        ["CreateScene", "sceneName"],
+        ["CreateInput", "inputName"],
+        ["CreateSourceFilter", "filterName"],
+        ["SetSceneName", "newSceneName"],
+        ["SetInputName", "newInputName"],
+        ["SetSourceFilterName", "newFilterName"],
+        ["SaveSourceScreenshot", "imageFilePath"],
+        ["GetGroupSceneItemList", "sceneName"],
+      ]) {
+        const input = schemas
+          .find(({ id }) => id === schemaId)
+          ?.dataInputs.find(({ id }) => id === inputId);
+        assert.isDefined(input, `${schemaId}.${inputId}`);
+        assert.isUndefined(input.suggestions, `${schemaId}.${inputId}`);
+      }
+      for (const [schemaId, inputId] of [
+        ["SetSceneSceneTransitionOverride", "sceneName"],
+        ["SetCurrentPreviewScene", "sceneName"],
+        ["RemoveScene", "sceneName"],
+        ["SetSceneName", "sceneName"],
+        ["CreateInput", "sceneName"],
+        ["GetSceneItemList", "sceneName"],
+        ["GetSceneItemSource", "sceneName"],
+        ["DuplicateSceneItem", "destinationSceneName"],
+        ["SetSceneItemTransform", "sceneName"],
+        ["SetSceneItemEnabled", "sceneName"],
+        ["SetSceneItemLocked", "sceneName"],
+        ["SetSceneItemIndex", "sceneName"],
+        ["SetSceneItemBlendMode", "sceneName"],
+        ["RemoveInput", "inputName"],
+        ["SetInputName", "inputName"],
+        ["GetInputSettings", "inputName"],
+        ["SetInputSettings", "inputName"],
+        ["GetInputMute", "inputName"],
+        ["SetInputMute", "inputName"],
+        ["ToggleInputMute", "inputName"],
+        ["GetInputVolume", "inputName"],
+        ["CreateSourceFilter", "sourceName"],
+        ["RemoveSourceFilter", "filterName"],
+        ["SetSourceFilterName", "filterName"],
+        ["SetSourceFilterSettings", "filterName"],
+        ["SetSourceFilterEnabled", "filterName"],
+      ]) {
+        const input = schemas
+          .find(({ id }) => id === schemaId)
+          ?.dataInputs.find(({ id }) => id === inputId);
+        assert.isDefined(input?.suggestions, `${schemaId}.${inputId}`);
+        assert.strictEqual(input.type._tag, "String");
+      }
+      const destination = schemas
+        .find(({ id }) => id === "DuplicateSceneItem")
+        ?.dataInputs.find(({ id }) => id === "destinationSceneName");
+      assert.strictEqual(destination?.defaultValue, "");
+      assert.isTrue(
+        schemas.every(({ dataOutputs }) =>
+          dataOutputs.every((output) => !("suggestions" in output)),
+        ),
+      );
+    }),
   );
 
   it.effect("only returns strings from OBS's unknown response payloads", () =>
@@ -346,12 +318,7 @@ describe("OBS suggestions", () => {
         ],
       ] as const) {
         const suggest = yield* resolver(schemaId, inputId);
-        for (const response of [
-          null,
-          {},
-          { [list]: "not a list" },
-          { [list]: values },
-        ]) {
+        for (const response of [null, {}, { [list]: "not a list" }, { [list]: values }]) {
           assert.deepStrictEqual(
             yield* suggest({
               properties: { socket: SocketAddress.make("ws://localhost:4455") },

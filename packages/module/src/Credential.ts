@@ -59,9 +59,9 @@ export interface AuthController {
   readonly disconnect: Effect.Effect<void, AuthError>;
 }
 
-export const unavailable = (
-  code: UnavailableReason["code"],
-  message: string,
-): Catalog => ({ _tag: "CredentialCatalogUnavailable", reason: { code, message } });
+export const unavailable = (code: UnavailableReason["code"], message: string): Catalog => ({
+  _tag: "CredentialCatalogUnavailable",
+  reason: { code, message },
+});
 
 export * as Credential from "./Credential.ts";

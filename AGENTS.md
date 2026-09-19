@@ -26,21 +26,33 @@ MacroGraph is a pnpm monorepo for authoring and running typed visual automation 
 
 Run the narrowest relevant test while developing, then use the repository commands below as the supported verification interface.
 
-| Situation | Command |
-| --- | --- |
-| Any code change | `pnpm typecheck` |
+| Situation                       | Command              |
+| ------------------------------- | -------------------- |
+| Any code change                 | `pnpm typecheck`     |
 | Changed packages and dependents | `pnpm test:affected` |
-| Full unit and type validation | `pnpm check:fast` |
-| PR or release readiness | `pnpm check:ci` |
-| Formatting | `pnpm format` |
+| Full unit and type validation   | `pnpm check:fast`    |
+| PR or release readiness         | `pnpm check:ci`      |
+| Formatting                      | `pnpm format`        |
 
+- Choose playground browser verification by affected behavior:
+
+  | Change area                                      | Command                                      |
+  | ------------------------------------------------ | -------------------------------------------- |
+  | Startup, app shell, or general playground sanity | `pnpm verify:playground:smoke`               |
+  | Function navigation or split constants           | `pnpm verify:playground:function-navigation` |
+  | Module info, settings, or reference browsing     | `pnpm verify:playground:module-reference`    |
+  | Local persistence, export, import, or reset      | `pnpm verify:playground:journey`             |
+  | Multiple covered areas, CI, PR, or release       | `pnpm verify:playground`                     |
+
+- Do not use `pnpm verify:playground` as the default for a focused change. Run the narrowest mode that proves the changed behavior; use `smoke` only for startup/shell confidence, not as a substitute for a feature-specific mode.
+- If a browser mode fails, inspect its generated manifest and evidence before changing the test or rerunning it. Avoid blind retries of the full suite.
 - Verify observable behavior through the real artifact; compilation alone is not proof of runtime or user-visible behavior.
 - Do not declare completion when required verification could not run. Report the blocker and what remains unverified.
 
 ## Skills
 
-| Skill | Use when |
-| --- | --- |
+| Skill                                         | Use when                                                                                                                                     |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `.opencode/skills/verify-macrograph/SKILL.md` | A change affects the playground UI, editor startup, local persistence, import/export, reset, or another behavior covered by its feature map. |
 
 For playground verification, run `doctor`, select the relevant file under `.opencode/skills/verify-macrograph/features/`, exercise the production user path, and report the generated manifest and evidence paths. Screenshots alone are not proof. Update the feature map in the same change when covered user behavior changes.

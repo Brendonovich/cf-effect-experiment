@@ -3,6 +3,7 @@ import { defineConfig } from "rolldown";
 
 const serverDeployments = new Set([
   "@macrograph/module-http-client",
+  "@macrograph/module-github",
   "@macrograph/module-obs",
   "@macrograph/module-twitch",
   "@macrograph/module-utilities",

@@ -13,6 +13,7 @@ const checked = Effect.fnUntraced(function* (value: number, type: DataType.Int |
 const MathModule = Module.make({
   id: "math",
   name: "Math",
+  description: "Perform arithmetic, comparisons, rounding, and other numeric operations.",
   effect: Effect.fnUntraced(function* (context) {
     for (const [suffix, type] of [
       ["Ints", DataType.Int],
@@ -234,7 +235,9 @@ const MathModule = Module.make({
         description:
           "Samples epoch milliseconds from the Effect clock on execution, rather than as a pure value.",
         io: (io) => ({
-          output: io.data.out("out", DataType.Int, { name: id === "DateNow" ? "Time (ms)" : "Timestamp" }),
+          output: io.data.out("out", DataType.Int, {
+            name: id === "DateNow" ? "Time (ms)" : "Timestamp",
+          }),
         }),
         run: ({ io }) => Clock.currentTimeMillis.pipe(Effect.map((value) => io.output(value))),
       });

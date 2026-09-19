@@ -2,14 +2,13 @@ import type * as S from "effect/Schema";
 import type { Rpc } from "effect/unstable/rpc";
 
 import { Editor } from "@macrograph/editor";
-import { Persistence } from "@macrograph/persistence";
+import { LiveRuntime } from "@macrograph/live-runtime";
 import { Engine, Resource, type Module } from "@macrograph/module";
+import { Persistence } from "@macrograph/persistence";
 import { EngineHost, ModuleMount } from "@macrograph/project-host";
 import { Context, Effect, Layer, Option, Ref, Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
-
-import { ProjectExecution } from "./ProjectExecution.ts";
 
 type RpcHttpEffect = Effect.Effect<
   HttpServerResponse.HttpServerResponse,
@@ -29,8 +28,7 @@ export class Service extends Context.Service<
   }
 >()("macrograph/server/ModuleHost") {}
 
-export const layer = Layer.effect(
-  Service)(
+export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const rpcs = yield* Ref.make<ReadonlyMap<string, RpcHttpEffect>>(new Map());
     return Service.of({
@@ -89,7 +87,7 @@ export const rpcRoute = (
 
 export const moduleLayer = (module: Module.Module<never>) =>
   Layer.effectDiscard(
-    Effect.flatMap(ProjectExecution.Service, (executor) => ModuleMount.register(executor, module)),
+    Effect.flatMap(LiveRuntime.Service, (executor) => ModuleMount.register(executor, module)),
   );
 
 export const deploymentLayer = <
@@ -115,7 +113,7 @@ export const deploymentLayer = <
   EngineError,
   | Editor.Service
   | Persistence.Service
-  | ProjectExecution.Service
+  | LiveRuntime.Service
   | Service
   | Engine.Credentials
   | Rpc.Middleware<ClientRpcs>
@@ -126,7 +124,7 @@ export const deploymentLayer = <
   const module = deployment.module;
   const context = Layer.unwrap(
     Effect.gen(function* () {
-      const executor = yield* ProjectExecution.Service;
+      const executor = yield* LiveRuntime.Service;
       const options = {
         emit: (event: Event) =>
           executor
@@ -143,7 +141,7 @@ export const deploymentLayer = <
   const engine = EngineHost.layer(deployment, context);
   const register = Layer.effectDiscard(
     Effect.gen(function* () {
-      const executor = yield* ProjectExecution.Service;
+      const executor = yield* LiveRuntime.Service;
       const instance = yield* deployment.definition;
       const registry = yield* Service;
       yield* ModuleMount.register(executor, module, deployment, instance.client.state);
@@ -179,7 +177,7 @@ export const mount = <
   EngineError,
   | Editor.Service
   | Persistence.Service
-  | ProjectExecution.Service
+  | LiveRuntime.Service
   | Service
   | Engine.Credentials
   | Rpc.Middleware<ClientRpcs>

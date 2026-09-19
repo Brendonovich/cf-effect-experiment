@@ -47,26 +47,21 @@ describe("KofiEngine", () => {
       assert.deepStrictEqual(yield* engine.client.state, {
         webhooks: [{ id: webhookId, name: "Main alerts" }],
       });
-      assert.deepStrictEqual(
-        yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)),
-        [{ id: webhookId, display: "Main alerts" }],
-      );
+      assert.deepStrictEqual(yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)), [
+        { id: webhookId, display: "Main alerts" },
+      ]);
 
       yield* client.KofiRenameWebhook({ webhookId, name: "Shop alerts" });
       assert.deepStrictEqual(yield* engine.client.state, {
         webhooks: [{ id: webhookId, name: "Shop alerts" }],
       });
-      assert.deepStrictEqual(
-        yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)),
-        [{ id: webhookId, display: "Shop alerts" }],
-      );
+      assert.deepStrictEqual(yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)), [
+        { id: webhookId, display: "Shop alerts" },
+      ]);
 
       yield* client.KofiRemoveWebhook({ webhookId });
       assert.deepStrictEqual(storage, { webhooks: {} });
-      assert.deepStrictEqual(
-        yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)),
-        [],
-      );
+      assert.deepStrictEqual(yield* KofiWebhook.values.pipe(Effect.provide(engine.resources)), []);
       assert.strictEqual(refresh.mock.calls.length, 3);
       assert.deepStrictEqual(refreshResource.mock.calls, [
         [KofiWebhook],

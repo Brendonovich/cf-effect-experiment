@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "21c025dc-7d68-4c15-b0f2-5cc06e915274",
-  "prevIds": [
-    "0cc7e454-8c54-453d-9ac1-8db6719d9c10"
-  ],
+  "prevIds": ["0cc7e454-8c54-453d-9ac1-8db6719d9c10"],
   "ddl": [
     {
       "name": "connections",
@@ -257,36 +255,28 @@
       "table": "project_meta"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "connections_pk",
       "table": "connections",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "graphs_pk",
       "table": "graphs",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "http_endpoints_pk",
       "table": "http_endpoints",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "nodes_pk",
       "table": "nodes",

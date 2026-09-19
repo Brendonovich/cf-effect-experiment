@@ -53,6 +53,7 @@ const extract = (
 const JsonModule = Module.make({
   id: "json",
   name: "JSON",
+  description: "Build, inspect, and transform JSON values.",
   effect: Effect.fnUntraced(function* (context) {
     for (const [id, name, type] of [
       ["ParseJSON", "Parse JSON", "exec"],

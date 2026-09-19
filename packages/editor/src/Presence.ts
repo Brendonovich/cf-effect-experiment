@@ -34,10 +34,9 @@ export const Update = Schema.Struct({
 });
 export type Update = typeof Update.Type;
 
-export class InvalidUpdate extends Schema.TaggedError<InvalidUpdate>()(
-  "InvalidPresenceUpdate",
-  { reason: Schema.String },
-) {}
+export class InvalidUpdate extends Schema.TaggedError<InvalidUpdate>()("InvalidPresenceUpdate", {
+  reason: Schema.String,
+}) {}
 
 type RegisteredClient = Client & { readonly projectId: string };
 
@@ -80,9 +79,7 @@ export class Registry extends Context.Service<
     readonly register: Effect.Effect<void, never, EditorAccess.Connection | Scope.Scope>;
     readonly snapshot: Effect.Effect<ReadonlyArray<Client>, never, EditorAccess.Connection>;
     readonly subscribe: Effect.Effect<PubSub.Subscription<string>, never, Scope.Scope>;
-    readonly graphDeleted: (
-      graphId: string,
-    ) => Effect.Effect<void, never, EditorAccess.Connection>;
+    readonly graphDeleted: (graphId: string) => Effect.Effect<void, never, EditorAccess.Connection>;
     readonly nodeDeleted: (
       graphId: string,
       nodeId: string,
@@ -93,8 +90,7 @@ export class Registry extends Context.Service<
   }
 >()("macrograph/PresenceRegistry") {}
 
-export const layer = Layer.effect(
-  Registry)(
+export const layer = Layer.effect(Registry)(
   Effect.gen(function* () {
     const clients = yield* Ref.make<ReadonlyMap<string, RegisteredClient>>(new Map());
     const generations = new Map<string, number>();
@@ -168,9 +164,7 @@ export const layer = Layer.effect(
           cursor: null,
           selectedNodeIds: [],
         };
-        yield* Ref.update(clients, (current) =>
-          new Map(current).set(key, client),
-        );
+        yield* Ref.update(clients, (current) => new Map(current).set(key, client));
         yield* PubSub.publish(changes, identity.projectId);
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {

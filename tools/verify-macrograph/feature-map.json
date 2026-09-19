@@ -15,8 +15,27 @@
       "name": "Functions use dedicated navigation beside split constants",
       "documentation": ".opencode/skills/verify-macrograph/features/function-navigation.md",
       "status": "covered",
-      "verification": "smoke",
+      "verification": "function-navigation",
       "userJourney": ["Open Functions tab", "Create function", "Observe split Constants pane"],
+      "evidence": ["screenshot", "server-log"]
+    },
+    {
+      "id": "module.reference",
+      "name": "Module panes expose info, settings, and configurable node and resource references",
+      "documentation": ".opencode/skills/verify-macrograph/features/module-reference.md",
+      "status": "covered",
+      "verification": "module-reference",
+      "userJourney": [
+        "Open Modules tab",
+        "Open Utilities module",
+        "Observe module metadata under the Module title",
+        "Select Reference",
+        "Observe resources above nodes with the shared section header style",
+        "Observe nodes grouped by variant",
+        "Select an exposed node",
+        "Reload and observe the same module view and reference selection",
+        "Observe its preview and configurable wildcard types and value properties"
+      ],
       "evidence": ["screenshot", "server-log"]
     },
     {

@@ -75,13 +75,13 @@ export interface Group {
   readonly resolve: (node: string, type: DataType.Any) => DataType.Any;
 }
 
-export interface DerivedOutputs {
+export interface DerivedIO {
   /** Changes when external definitions or the set of dynamic nodes changes. */
   readonly key: string;
-  readonly outputs: (
+  readonly ports: (
     node: string,
     resolve: (type: DataType.Any) => DataType.Any,
-  ) => Result.Result<NodeIO["dataOutputs"] | undefined, string>;
+  ) => Result.Result<NodeIO | undefined, string>;
 }
 
 const solve = (
@@ -187,11 +187,20 @@ export class Cache {
   // Include non-data wires too: an IO change can turn an exec port into a data port.
   private incident = new Map<string, ReadonlyMap<string, Connection.Model>>();
   private byNode = new Map<string, Group>();
-  private outputDeclarations = new Map<string, NodeIO["dataOutputs"]>();
+  private derivedDeclarations = new Map<string, NodeIO>();
   private sourceKey: string | undefined;
 
+  derivedInputs(node: string): NodeIO["dataInputs"] | undefined {
+    return this.derivedDeclarations.get(node)?.dataInputs;
+  }
   derivedOutputs(node: string): NodeIO["dataOutputs"] | undefined {
-    return this.outputDeclarations.get(node);
+    return this.derivedDeclarations.get(node)?.dataOutputs;
+  }
+  derivedIO(node: string): NodeIO | undefined {
+    return this.derivedDeclarations.get(node);
+  }
+  setDerivedIO(node: string, io: NodeIO): void {
+    this.derivedDeclarations.set(node, io);
   }
 
   get groups(): ReadonlySet<Group> {
@@ -211,23 +220,23 @@ export class Cache {
   update(
     io: ReadonlyMap<string, IO>,
     connections: ReadonlyArray<Connection.Model>,
-    derive?: DerivedOutputs,
+    derive?: DerivedIO,
   ): Result.Result<void, ReadonlyArray<Conflict>> {
     if (derive === undefined) {
       const result = this.updateOnce(io, connections);
       if (Result.isSuccess(result)) {
-        this.outputDeclarations = new Map();
+        this.derivedDeclarations = new Map();
         this.sourceKey = undefined;
       }
       return result;
     }
     // Start from declarations without last snapshot's inferred fields. Otherwise a
-    // disconnected Break chain could keep itself anchored through its stale outputs.
+    // disconnected Make/Break chain could keep itself anchored through stale field ports.
     let declarations = new Map(io);
     for (const [id, ports] of io) {
-      const output = derive.outputs(id, (type) => type);
-      if (Result.isSuccess(output) && output.success !== undefined)
-        declarations.set(id, { ...ports, dataOutputs: output.success });
+      const derived = derive.ports(id, (type) => type);
+      if (Result.isSuccess(derived) && derived.success !== undefined)
+        declarations.set(id, { ...ports, ...derived.success });
     }
     const sourceKey = JSON.stringify([
       derive.key,
@@ -244,22 +253,22 @@ export class Cache {
       const result = staged.updateOnce(declarations, connections);
       if (Result.isFailure(result)) return result;
       const next = new Map(declarations);
-      const outputs = new Map<string, NodeIO["dataOutputs"]>();
+      const derivedDeclarations = new Map<string, NodeIO>();
       const conflicts: Conflict[] = [];
       let changed = false;
       for (const [id, ports] of declarations) {
-        const output = derive.outputs(id, (type) => staged.resolve(id, type));
-        if (Result.isFailure(output)) {
+        const derived = derive.ports(id, (type) => staged.resolve(id, type));
+        if (Result.isFailure(derived)) {
           conflicts.push({
             nodes: staged.group(id)?.nodes ?? new Set([id]),
             connectionId: connections.find((wire) => wire.inNodeId === id)?.id ?? "",
-            reason: output.failure,
+            reason: derived.failure,
           });
-        } else if (output.success !== undefined) {
-          outputs.set(id, output.success);
-          if (JSON.stringify(ports.dataOutputs) !== JSON.stringify(output.success)) {
+        } else if (derived.success !== undefined) {
+          derivedDeclarations.set(id, derived.success);
+          if (JSON.stringify(ports) !== JSON.stringify(derived.success)) {
             changed = true;
-            next.set(id, { ...ports, dataOutputs: output.success });
+            next.set(id, { ...ports, ...derived.success });
           }
         }
       }
@@ -269,7 +278,7 @@ export class Cache {
         this.wires = staged.wires;
         this.incident = staged.incident;
         this.byNode = staged.byNode;
-        this.outputDeclarations = outputs;
+        this.derivedDeclarations = derivedDeclarations;
         this.sourceKey = sourceKey;
         return Result.succeed(undefined);
       }

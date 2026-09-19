@@ -56,18 +56,21 @@ export const make = <State, Rpcs extends Rpc.Any, View>(options: {
     load: (getState) =>
       getState(options.module.id).pipe(Effect.flatMap(Schema.decodeUnknownEffect(options.state))),
     render: (state, context) =>
-      options.render(() => {
-        const decoded = Schema.decodeUnknownOption(options.state)(state());
-        return Option.isSome(decoded) ? decoded.value : options.initial;
-      }, {
-        get endpoints() {
-          return context.endpoints;
+      options.render(
+        () => {
+          const decoded = Schema.decodeUnknownOption(options.state)(state());
+          return Option.isSome(decoded) ? decoded.value : options.initial;
         },
-        get onChanged() {
-          return context.onChanged;
+        {
+          get endpoints() {
+            return context.endpoints;
+          },
+          get onChanged() {
+            return context.onChanged;
+          },
+          rpc,
         },
-        rpc,
-      }),
+      ),
   });
   return {
     id: options.module.id,

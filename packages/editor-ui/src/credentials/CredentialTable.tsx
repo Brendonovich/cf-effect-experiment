@@ -60,10 +60,25 @@ const styles = stylex.create({
     fontSize: 11,
     color: colors.gray10,
   },
+  actionsHeader: { width: 80 },
+  actionsCell: { paddingBlock: 4, paddingInline: 10, textAlign: "right" },
+  removeButton: {
+    border: 0,
+    borderRadius: 4,
+    backgroundColor: "transparent",
+    paddingBlock: 4,
+    paddingInline: 7,
+    fontSize: 11,
+    color: colors.red10,
+    cursor: "pointer",
+    ":disabled": { cursor: "default", opacity: 0.5 },
+  },
 });
 
 export interface CredentialTableProps {
   readonly credentials: ReadonlyArray<Credential.Summary>;
+  readonly onRemove?: (credential: Credential.Summary) => void;
+  readonly removing?: (credential: Credential.Summary) => boolean;
 }
 
 export function CredentialTable(props: CredentialTableProps) {
@@ -75,6 +90,9 @@ export function CredentialTable(props: CredentialTableProps) {
             <th sx={[styles.tableHeader, styles.nameColumn]}>Name</th>
             <th sx={[styles.tableHeader, styles.providerColumn]}>Provider</th>
             <th sx={styles.tableHeader}>ID</th>
+            {props.onRemove === undefined ? null : (
+              <th sx={[styles.tableHeader, styles.actionsHeader]}>Actions</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -82,7 +100,7 @@ export function CredentialTable(props: CredentialTableProps) {
             each={props.credentials}
             fallback={
               <tr sx={styles.tableRow}>
-                <td sx={styles.emptyCell} colspan="3">
+                <td sx={styles.emptyCell} colspan={props.onRemove === undefined ? 3 : 4}>
                   No credentials available.
                 </td>
               </tr>
@@ -97,6 +115,18 @@ export function CredentialTable(props: CredentialTableProps) {
                   <span sx={styles.provider}>{credential.provider}</span>
                 </td>
                 <td sx={[styles.cell, styles.idCell]}>{credential.id}</td>
+                {props.onRemove === undefined ? null : (
+                  <td sx={styles.actionsCell}>
+                    <button
+                      type="button"
+                      sx={styles.removeButton}
+                      disabled={props.removing?.(credential) ?? false}
+                      onClick={() => props.onRemove?.(credential)}
+                    >
+                      {props.removing?.(credential) ? "Removing..." : "Remove"}
+                    </button>
+                  </td>
+                )}
               </tr>
             )}
           </For>

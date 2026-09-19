@@ -31,6 +31,7 @@ Reusable engine builders accept `mg: Engine.ContextOf<typeof MyEngine>` directly
 | `elgato-key-light`    | Key Light state, power, brightness, and temperature controls            | Server with reachable Key Lights   |
 | `fs`                  | File/folder listing and UTF-8 text reads and opt-in writes              | Server                             |
 | `goxlr`               | Mixer controls and status events                                        | Server with reachable GoXLR daemon |
+| `github`              | Repository, issue, pull request REST nodes and signed webhooks          | Server and Cloudflare              |
 | `ikea-tradfri`        | TRADFRI gateway light control                                           | Server with reachable gateway      |
 | `json`                | JSON parsing, querying, typed extraction, and immutable object edits    | Server, browser, and Cloudflare    |
 | `lifx`                | LIFX LAN state, power, color, and brightness controls                   | Server with reachable LIFX lights  |
@@ -135,7 +136,7 @@ through the Filesystem module on an opted-in server.
 - Variables and custom events need project/graph domain models and event registries.
 - Generic Map, wildcard collections, struct/enum builders, and scope-based loops
   need type-system and execution-model extensions.
-- GitHub, Google, Patreon, and Spotify were OAuth settings shells with no graph
+- Google, Patreon, and Spotify were OAuth settings shells with no graph
   nodes in the reference; no placeholder integrations are added.
 - HTTP, OBS, and Twitch are expanded but do not claim full Electron parity.
   HTTP adds text/header IO and URL helpers, Twitch adds 30 actions and richer chat

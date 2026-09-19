@@ -1,5 +1,6 @@
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
 import { HttpEndpoint, HttpIngress } from "@macrograph/module";
+import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
 import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
@@ -9,8 +10,8 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
-import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
+import { serviceSpanAnnotations } from "../Observability.ts";
 import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../TwitchCredentials.ts";
 import { DurableObjectHttpEndpointHost } from "./DurableObjectHttpEndpointHost.ts";
 
@@ -129,9 +130,10 @@ export const projectIngressImplementation = Effect.gen(function* () {
     const ingressRegistry = yield* HttpIngress.makeRegistry([
       ...twitchDeployment.httpIngress.handlers,
       ...kofiDeployment.httpIngress.handlers,
+      ...githubDeployment.httpIngress.handlers,
     ]).pipe(Effect.provide(layerWebCrypto(globalThis.crypto)), Effect.orDie);
     const ingressRuntime = yield* HttpIngressRuntime.make(
-      [twitchDeployment, kofiDeployment],
+      [twitchDeployment, kofiDeployment, githubDeployment],
       ingressRegistry,
       endpointHost,
     ).pipe(Effect.orDie);
@@ -447,10 +449,12 @@ export const projectIngressImplementation = Effect.gen(function* () {
       // Track both old and attempted resources until every mount and cleanup has succeeded.
       yield* durableState.storage.put(previewDeploymentKey, {
         ...next,
-        manifest: yield* ingressRuntime.mergeManifests([
-          Option.match(previous, { onNone: () => [], onSome: (value) => value.manifest }),
-          manifest,
-        ]).pipe(Effect.orDie),
+        manifest: yield* ingressRuntime
+          .mergeManifests([
+            Option.match(previous, { onNone: () => [], onSome: (value) => value.manifest }),
+            manifest,
+          ])
+          .pipe(Effect.orDie),
       } satisfies PreviewDeployment);
       const desiredProvider = yield* providerManifest(production, Option.some(next)).pipe(
         Effect.orDie,

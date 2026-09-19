@@ -2,16 +2,14 @@ import type { ResourceConstant } from "@macrograph/core";
 
 import { createSignal } from "solid-js";
 
-import type { createEditorConnection } from "../session/createEditorConnection";
 import type { createEditorWorkspace } from "../workspace/createEditorWorkspace";
 
-import { rankedSearch } from "./search";
 import { type createEditorStore, resourceValuesKey } from "../store";
+import { rankedSearch } from "./search";
 
 export function createEditorCatalog(
   editor: ReturnType<typeof createEditorStore>,
   graphs: ReturnType<typeof createEditorWorkspace>["graphs"],
-  moduleSettingsById: ReturnType<typeof createEditorConnection>["moduleSettingsById"],
 ) {
   const { store } = editor;
   const [navSearch, setNavSearch] = createSignal("");
@@ -37,10 +35,6 @@ export function createEditorCatalog(
         ],
       })),
     );
-  const filteredPackagesWithSettings = () =>
-    filteredPackages().filter((pkg) => moduleSettingsById().has(pkg.id));
-  const filteredPackagesWithoutSettings = () =>
-    filteredPackages().filter((pkg) => !moduleSettingsById().has(pkg.id));
   const resourceDefinition = (resource: ResourceConstant.ResourceRef) => {
     const pkg = store.packages.find((candidate) => candidate.id === resource.package);
     const definition = pkg?.resources.find((candidate) => candidate.id === resource.resource);
@@ -53,8 +47,7 @@ export function createEditorCatalog(
     navSearch,
     setNavSearch,
     filteredGraphs,
-    filteredPackagesWithSettings,
-    filteredPackagesWithoutSettings,
+    filteredPackages,
     resourceDefinition,
     valuesFor,
   };

@@ -13,9 +13,9 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { Engine } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { Engine, Module } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
+import { DataType } from "@macrograph/module/DataType";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -81,6 +81,16 @@ const pkg: Package.Model = {
       executionInputs: [],
       executionOutputs: [],
     },
+    {
+      id: SchemaId.make("person-source"),
+      name: "Person Source",
+      type: "pure",
+      properties: [],
+      dataInputs: [],
+      dataOutputs: [{ id: IoId.make("value"), type: DataType.Custom(personId) }],
+      executionInputs: [],
+      executionOutputs: [],
+    },
   ],
 };
 const generatedRef = (name: string) => {
@@ -102,9 +112,16 @@ const node = (
   foldPins: false,
   position: { x: 0, y: 0 },
 });
-const make = generatedRef("Make Struct");
+const make = generatedRef("Update Struct");
 const breakRef = generatedRef("Break Struct");
-const field = CustomTypes.nodeIO(make, { type: personId }, definitions)!.dataInputs[0]!.id;
+const field = IoId.make('field:"name"');
+const sourceAnchor = {
+  id: ConnectionId.make("source-anchor"),
+  outNodeId: "source",
+  outIo: { _tag: "Port" as const, id: IoId.make("value") },
+  inNodeId: "make",
+  inIoId: IoId.make("value"),
+};
 const breakAnchor = {
   id: ConnectionId.make("anchor"),
   outNodeId: "make",
@@ -112,6 +129,7 @@ const breakAnchor = {
   inNodeId: "break",
   inIoId: IoId.make("value"),
 };
+const anchoredConnections = [sourceAnchor, breakAnchor];
 const seed: Project.Model = {
   name: "Types",
   types: definitions,
@@ -124,11 +142,13 @@ const seed: Project.Model = {
         id: GraphId.make("first"),
         name: "First",
         nodes: {
-          make: node("make", make, { [field]: "Ada" }, { type: personId }),
+          make: node("make", make, { [field]: { _tag: "Some", value: "Ada" } }),
+          source: node("source", { package: pkg.id, schema: SchemaId.make("person-source") }),
           break: node("break", breakRef, { value: { _type: "person", name: "Ada" } }),
           string: node("string", { package: pkg.id, schema: SchemaId.make("string") }),
         },
         connections: [
+          sourceAnchor,
           breakAnchor,
           {
             id: ConnectionId.make("wire"),
@@ -189,110 +209,64 @@ const mutate = (editor: Editor.Interface, change: TypeDefinition.Change) =>
     .pipe(Effect.flatMap((impact) => editor.typeDefinition.confirm({ token: impact.token })));
 
 describe("type authoring preserve-invalid", () => {
-  it.effect(
-    "selects target types through properties and exposes None defaults for every update field",
-    () =>
-      Effect.gen(function* () {
-        const editor = yield* Editor.Service;
-        const created = yield* editor.node.create({
-          graphID: "second",
-          node: { schema: generatedRef("Update Struct") },
-        });
-        expect(created.node.properties).toEqual({ type: "" });
-        expect(created.io.dataInputs).toEqual([]);
-        expect(TypeDefinition.nodeDiagnostics(created.node, created.io, definitions)).toContain(
-          "Select a target type",
-        );
-        const selected = yield* editor.node.setProperty({
-          graphID: "second",
-          nodeID: created.node.id,
-          property: "type",
-          value: personId,
-        });
-        expect(selected.io.dataInputs).toEqual([
-          { id: "value", type: DataType.Custom(personId) },
-          {
-            id: field,
-            name: "name",
-            type: DataType.Option(DataType.String),
-            defaultValue: { _tag: "None" },
-          },
-        ]);
-        yield* editor.node.setInputDefault({
-          graphID: "second",
-          nodeID: created.node.id,
-          input: field,
-          value: Option.some("Grace"),
-        });
-        const snapshot = yield* editor.project.snapshot();
-        expect(
-          snapshot.project.graphs.second!.nodes[created.node.id]!.inputDefaults[field],
-        ).toEqual({ _tag: "Some", value: "Grace" });
-        expect(snapshot.nodeIO.second![created.node.id]).toEqual(selected.io);
-        yield* Schema.encodeUnknownEffect(EditorEvent.NodePropertyUpdated)(selected);
-      }).pipe(Effect.provide(testLayer)),
+  it.effect("infers Update Struct and exposes None defaults for every update field", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const project = yield* editor.project.get();
+      const rendered = yield* editor.project.rendered();
+      const update = Project.canvases(project).first!.nodes.make!;
+      const io = rendered.graphs.first!.nodes.make!.io;
+      expect(update.properties).toEqual({});
+      expect(io.dataInputs).toEqual([
+        { id: "value", type: DataType.Custom(personId) },
+        {
+          id: field,
+          name: "name",
+          type: DataType.Option(DataType.String),
+          defaultValue: { _tag: "None" },
+        },
+      ]);
+      yield* editor.node.setInputDefault({
+        graphID: "first",
+        nodeID: update.id,
+        input: field,
+        value: Option.some("Grace"),
+      });
+      const snapshot = yield* editor.project.snapshot();
+      expect(snapshot.project.graphs.first!.nodes[update.id]!.inputDefaults[field]).toEqual({
+        _tag: "Some",
+        value: "Grace",
+      });
+      expect(snapshot.nodeIO.first![update.id]!.dataInputs[1]).toEqual(io.dataInputs[1]);
+    }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect(
-    "preserves defaults and wires when the Break input's source changes type and is restored",
-    () =>
-      Effect.gen(function* () {
-        const editor = yield* Editor.Service;
-        const changed = yield* editor.node.setProperty({
+  it.effect("rejects the removed target type property", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const error = yield* Effect.flip(
+        editor.node.setProperty({
           graphID: "first",
           nodeID: "make",
           property: "type",
           value: groupId,
-        });
-        expect(changed.deletedConnectionIds).toEqual([]);
-        const snapshot = yield* editor.project.snapshot();
-        const graph = snapshot.project.graphs.first!;
-        expect(graph.connections).toEqual(seedCanvases.first!.connections);
-        expect(graph.nodes.break!.inputDefaults).toEqual(
-          seedCanvases.first!.nodes.break!.inputDefaults,
-        );
-        expect(
-          TypeDefinition.nodeDiagnostics(
-            graph.nodes.break!,
-            (yield* editor.project.rendered()).graphs.first!.nodes.break!.io,
-            definitions,
-          ),
-        ).toContain(
-          "Invalid default value: value does not match the current input type (including obsolete fields)",
-        );
-        const restored = yield* editor.node.setProperty({
-          graphID: "first",
-          nodeID: "make",
-          property: "type",
-          value: personId,
-        });
-        expect(restored.deletedConnectionIds).toEqual([]);
-        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
-          graph.connections,
-        );
-        expect(
-          TypeDefinition.nodeDiagnostics(
-            seedCanvases.first!.nodes.break!,
-            (yield* editor.project.rendered()).graphs.first!.nodes.break!.io,
-            definitions,
-          ),
-        ).toEqual([]);
-      }).pipe(Effect.provide(testLayer)),
+        }),
+      );
+      expect(error._tag).toBe("InvalidPropertyError");
+    }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("keeps update IO renderable when a nested dependency is deleted", () =>
+  it.effect("keeps unresolved update IO renderable when a nested dependency is deleted", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       const created = yield* editor.node.create({
         graphID: "second",
-        node: { schema: generatedRef("Update Struct"), properties: { type: groupId } },
+        node: { schema: generatedRef("Update Struct") },
       });
       const event = yield* mutate(editor, { _tag: "Delete", id: personId });
       const io = event.nodeIO.second![created.node.id]!;
-      expect(io.dataInputs[1]!.defaultValue).toEqual({ _tag: "None" });
-      expect(TypeDefinition.nodeDiagnostics(created.node, io, event.types)).toContain(
-        "Missing type person",
-      );
+      expect(io.dataInputs).toEqual([{ id: "value", type: DataType.Wildcard("Struct") }]);
+      expect(TypeDefinition.nodeDiagnostics(created.node, io, event.types)).toEqual([]);
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -345,8 +319,8 @@ describe("type authoring preserve-invalid", () => {
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.nodeIO.second![push.id]).toEqual(proposedPushIO);
         const deleted = yield* editor.project.snapshot();
-        expect(deleted.project.graphs.first!.connections).toEqual([]);
-        expect(event.deletedConnectionIds).toEqual({ first: ["anchor", "wire"] });
+        expect(deleted.project.graphs.first!.connections).toEqual(anchoredConnections);
+        expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
         expect(deleted.nodeIO).toEqual(event.nodeIO);
         expect(deleted.nodeIO.second![create.id]!.dataInputs[0]!.defaultValue).toBeUndefined();
         expect(
@@ -434,8 +408,12 @@ describe("type authoring preserve-invalid", () => {
         expect(impact.affectedTypes).toContain("required");
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
         expect(event.types.required).toEqual(dependent);
-        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
-        expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+          anchoredConnections,
+        );
+        expect(event.nodeIO.first!.make!.dataInputs).toEqual([
+          { id: "value", type: DataType.Wildcard("Struct") },
+        ]);
         expect(TypeDefinition.validate(event.types)).toEqual([]);
         const unsafe: TypeDefinition.Change = {
           _tag: "Upsert",
@@ -457,60 +435,48 @@ describe("type authoring preserve-invalid", () => {
       }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect(
-    "empty struct make and break nodes remain in impact despite their empty field port side",
-    () =>
-      Effect.gen(function* () {
-        const editor = yield* Editor.Service;
-        const id = DataType.DefinitionId.make("empty");
-        yield* mutate(editor, {
-          _tag: "Upsert",
-          definition: { _tag: "Struct", id, name: "Empty", fields: [] },
-        });
-        const catalog = (yield* (yield* Packages.Service).getPackages()).find(
-          (pkg) => pkg.id === CustomTypes.packageId,
-        )!;
-        const created: string[] = [];
-        for (const name of ["Make Struct", "Break Struct"]) {
-          const schema = catalog.schemas.find((schema) => schema.name === name)!;
-          created.push(
-            (yield* editor.node.create({
-              graphID: "second",
-              node: {
-                schema: { package: CustomTypes.packageId, schema: schema.id },
-                properties: name === "Break Struct" ? {} : { type: id },
-              },
-            })).node.id,
-          );
-        }
-        yield* editor.connection.create({
-          graphID: "second",
-          connection: {
-            outNodeId: created[0]!,
-            outIo: { _tag: "Port", id: IoId.make("value") },
-            inNodeId: created[1]!,
-            inIoId: IoId.make("value"),
-          },
-        });
-        const before = yield* editor.project.get();
-        const impact = yield* editor.typeDefinition.preview({ _tag: "Delete", id });
-        expect(impact.nodes.map((node) => node.nodeId).sort()).toEqual(created.sort());
-        const event = yield* editor.typeDefinition.confirm({ token: impact.token });
-        expect(Project.canvases(yield* editor.project.get()).second!.nodes).toEqual(
-          Project.canvases(before).second!.nodes,
+  it.effect("unanchored wildcard nodes do not retain a hidden type dependency", () =>
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const id = DataType.DefinitionId.make("empty");
+      yield* mutate(editor, {
+        _tag: "Upsert",
+        definition: { _tag: "Struct", id, name: "Empty", fields: [] },
+      });
+      const catalog = (yield* (yield* Packages.Service).getPackages()).find(
+        (pkg) => pkg.id === CustomTypes.packageId,
+      )!;
+      const created: string[] = [];
+      for (const name of ["Update Struct", "Break Struct"]) {
+        const schema = catalog.schemas.find((schema) => schema.name === name)!;
+        created.push(
+          (yield* editor.node.create({
+            graphID: "second",
+            node: {
+              schema: { package: CustomTypes.packageId, schema: schema.id },
+              properties: {},
+            },
+          })).node.id,
         );
-        expect(Project.canvases(yield* editor.project.get()).second!.connections).toEqual([]);
-        for (const nodeId of created.filter(
-          (nodeId) => !CustomTypes.isBreakStruct(Project.canvases(before).second!.nodes[nodeId]!),
-        ))
-          expect(
-            TypeDefinition.nodeDiagnostics(
-              Project.canvases(before).second!.nodes[nodeId]!,
-              event.nodeIO.second![nodeId]!,
-              event.types,
-            ).some((reason) => reason.includes("Missing type")),
-          ).toBe(true);
-      }).pipe(Effect.provide(testLayer)),
+      }
+      yield* editor.connection.create({
+        graphID: "second",
+        connection: {
+          outNodeId: created[0]!,
+          outIo: { _tag: "Port", id: IoId.make("value") },
+          inNodeId: created[1]!,
+          inIoId: IoId.make("value"),
+        },
+      });
+      const before = yield* editor.project.get();
+      const impact = yield* editor.typeDefinition.preview({ _tag: "Delete", id });
+      expect(impact.nodes).toEqual([]);
+      yield* editor.typeDefinition.confirm({ token: impact.token });
+      expect(Project.canvases(yield* editor.project.get()).second!.nodes).toEqual(
+        Project.canvases(before).second!.nodes,
+      );
+      expect(Project.canvases(yield* editor.project.get()).second!.connections).toHaveLength(1);
+    }).pipe(Effect.provide(testLayer)),
   );
 
   it.effect(
@@ -525,6 +491,7 @@ describe("type authoring preserve-invalid", () => {
         expect(impact.nodes.map((n) => `${n.graphId}/${n.nodeId}`)).toEqual([
           "first/break",
           "first/make",
+          "first/source",
           "first/string",
           "second/property",
           "second/sink",
@@ -568,9 +535,11 @@ describe("type authoring preserve-invalid", () => {
           ),
         ).toEqual(event);
         const project = yield* editor.project.get();
-        expect(Project.canvases(project).first!.connections).toEqual([breakAnchor]);
+        expect(Project.canvases(project).first!.connections).toEqual(anchoredConnections);
         expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
-        expect(event.nodeIO.first!.make!.dataInputs).toEqual([]);
+        expect(event.nodeIO.first!.make!.dataInputs).toEqual([
+          { id: "value", type: DataType.Wildcard("Struct") },
+        ]);
         expect((yield* editor.project.snapshot()).nodeIO).toEqual(event.nodeIO);
         expect(
           TypeDefinition.nodeDiagnostics(
@@ -580,9 +549,9 @@ describe("type authoring preserve-invalid", () => {
           ).some((r) => r.includes("Invalid default")),
         ).toBe(true);
         yield* apply(yield* Persistence.Service, event);
-        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
-          breakAnchor,
-        ]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+          anchoredConnections,
+        );
       }).pipe(Effect.provide(testLayer)),
   );
 
@@ -593,10 +562,12 @@ describe("type authoring preserve-invalid", () => {
         const editor = yield* Editor.Service;
         const event = yield* mutate(editor, { _tag: "Delete", id: personId });
         expect(Object.keys(event.types)).toEqual(["group", "team"]);
-        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
-        expect((yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs).toEqual(
-          [],
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+          anchoredConnections,
         );
+        expect(
+          (yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs[0]!.type,
+        ).toEqual(DataType.Wildcard("Struct"));
         const diagnostics = TypeDefinition.nodeDiagnostics(
           seedCanvases.second!.nodes.sink!,
           event.nodeIO.second!.sink!,
@@ -608,13 +579,15 @@ describe("type authoring preserve-invalid", () => {
             seedCanvases.first!.nodes.make!,
             event.nodeIO.first!.make!,
             event.types,
-          ).some((r) => r.includes("Missing type")),
+          ).some((r) => r.includes("Orphan default")),
         ).toBe(true);
         yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
         expect(
           Project.canvases(yield* editor.project.get()).first!.nodes.make!.inputDefaults,
         ).toEqual({});
-        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([]);
+        expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+          anchoredConnections,
+        );
         yield* mutate(editor, fresh);
         yield* mutate(editor, { _tag: "Upsert", definition: person });
         const repaired = yield* editor.project.snapshot();
@@ -635,9 +608,9 @@ describe("type authoring preserve-invalid", () => {
         _tag: "Upsert",
         definition: { ...person, fields: [{ name: "name", type: DataType.Int }] },
       });
-      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
-        breakAnchor,
-      ]);
+      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+        anchoredConnections,
+      );
       expect(
         TypeDefinition.nodeDiagnostics(
           seedCanvases.first!.nodes.make!,
@@ -649,7 +622,7 @@ describe("type authoring preserve-invalid", () => {
         graphID: "first",
         nodeID: "make",
         input: field,
-        value: 42,
+        value: Option.some(42),
       });
       yield* editor.node.setInputDefault({
         graphID: "first",
@@ -665,7 +638,7 @@ describe("type authoring preserve-invalid", () => {
           repaired.project.types,
         ),
       ).toEqual([]);
-      expect(repaired.project.graphs.first!.connections).toEqual([breakAnchor]);
+      expect(repaired.project.graphs.first!.connections).toEqual(anchoredConnections);
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -679,9 +652,9 @@ describe("type authoring preserve-invalid", () => {
         property: "label",
         value: "repair context",
       });
-      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual([
-        breakAnchor,
-      ]);
+      expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
+        anchoredConnections,
+      );
       const event = yield* editor.node.setProperty({
         graphID: "second",
         nodeID: "property",
@@ -711,6 +684,18 @@ describe("type authoring preserve-invalid", () => {
           ],
         };
         yield* mutate(editor, { _tag: "Upsert", definition });
+        yield* editor.module(
+          Module.make({
+            id: "enum-test",
+            effect: (context) =>
+              context.schema.register({
+                id: "anchor",
+                type: "pure",
+                io: (io) => ({ value: io.data.in("value", DataType.Custom(enumId)) }),
+                run: () => Effect.void,
+              }),
+          }),
+        );
         const catalog = (yield* (yield* Packages.Service).getPackages()).find(
           (pkg) => pkg.id === CustomTypes.packageId,
         )!;
@@ -720,17 +705,36 @@ describe("type authoring preserve-invalid", () => {
           graphID: "second",
           node: {
             schema: { package: CustomTypes.packageId, schema: constructSchema.id },
-            properties: { type: enumId, variant: "Found" },
-            inputDefaults: { 'field:"name"': "Ada" },
+            properties: { variant: "Found" },
           },
         });
         const match = yield* editor.node.create({
           graphID: "second",
           node: {
             schema: { package: CustomTypes.packageId, schema: matchSchema.id },
-            properties: { type: enumId },
-            inputDefaults: { value: { _type: "result", _tag: "Found", name: "Ada" } },
+            properties: {},
           },
+        });
+        const anchor = yield* editor.node.create({
+          graphID: "second",
+          node: {
+            schema: { package: PackageId.make("enum-test"), schema: SchemaId.make("anchor") },
+          },
+        });
+        yield* editor.connection.create({
+          graphID: "second",
+          connection: {
+            outNodeId: construct.node.id,
+            outIo: { _tag: "Port" as const, id: IoId.make("value") },
+            inNodeId: anchor.node.id,
+            inIoId: IoId.make("value"),
+          },
+        });
+        yield* editor.node.setInputDefault({
+          graphID: "second",
+          nodeID: construct.node.id,
+          input: IoId.make('field:"name"'),
+          value: "Ada",
         });
         const wire = yield* editor.connection.create({
           graphID: "second",
@@ -749,21 +753,14 @@ describe("type authoring preserve-invalid", () => {
         expect(
           impact.nodes.some(
             (n) =>
-              n.nodeId === construct.node.id &&
-              n.reasons.some((r) => r.includes("Missing variant")),
+              n.nodeId === construct.node.id && n.reasons.some((r) => r.includes("Orphan default")),
           ),
         ).toBe(true);
-        const event = yield* editor.typeDefinition.confirm({ token: impact.token });
+        yield* editor.typeDefinition.confirm({ token: impact.token });
         expect((yield* editor.project.get()).graphs.first).toEqual(before.graphs.first);
-        expect(Project.canvases(yield* editor.project.get()).second!.connections).toEqual([]);
-        expect(event.deletedConnectionIds).toEqual({ second: [wire.connection.id] });
-        expect(
-          TypeDefinition.nodeDiagnostics(
-            match.node,
-            event.nodeIO.second![match.node.id]!,
-            event.types,
-          ).some((r) => r.includes("Invalid default")),
-        ).toBe(true);
+        expect(Project.canvases(yield* editor.project.get()).second!.connections).toContainEqual(
+          wire.connection,
+        );
         yield* editor.node.clearInputDefault({
           graphID: "second",
           nodeID: construct.node.id,
@@ -1095,9 +1092,9 @@ describe("type authoring preserve-invalid", () => {
         const results = yield* Fiber.join(stream);
         expect(results[0]!._tag).toBe("ProjectSnapshot");
         expect(results[1]).toEqual(event);
-        expect(Project.canvases(yield* client.GetProject({})).first!.connections).toEqual([
-          breakAnchor,
-        ]);
+        expect(Project.canvases(yield* client.GetProject({})).first!.connections).toEqual(
+          anchoredConnections,
+        );
       }).pipe(
         Effect.scoped,
         Effect.provide(
@@ -1176,8 +1173,10 @@ describe("type authoring preserve-invalid", () => {
         yield* Effect.gen(function* () {
           const editor = yield* Editor.Service;
           const snapshot = yield* editor.project.snapshot();
-          expect(snapshot.project.graphs.first!.connections).toEqual([]);
-          expect(snapshot.nodeIO.first!.make!.dataInputs).toEqual([]);
+          expect(snapshot.project.graphs.first!.connections).toEqual(anchoredConnections);
+          expect(snapshot.nodeIO.first!.make!.dataInputs).toEqual([
+            { id: "value", type: DataType.Wildcard("Struct") },
+          ]);
           yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
         }).pipe(
           Effect.provide(

@@ -30,8 +30,16 @@ it("keeps credential reads read-only and authorizes refetch as a mutation", () =
     canEdit: true,
     canManageCredentials: false,
   };
-  assert.isTrue(Result.isSuccess(Effect.runSync(Effect.result(EditorRpc.authorize(identity, "GetCredentialAuth")))));
-  assert.isTrue(Result.isFailure(Effect.runSync(Effect.result(EditorRpc.authorize(identity, "DisconnectCredentialAuth")))));
+  assert.isTrue(
+    Result.isSuccess(
+      Effect.runSync(Effect.result(EditorRpc.authorize(identity, "GetCredentialAuth"))),
+    ),
+  );
+  assert.isTrue(
+    Result.isFailure(
+      Effect.runSync(Effect.result(EditorRpc.authorize(identity, "DisconnectCredentialAuth"))),
+    ),
+  );
   assert.isTrue(
     Result.isSuccess(
       Effect.runSync(

@@ -7,107 +7,93 @@ import { retain } from "alchemy/RemovalPolicy";
 import { Effect } from "effect";
 
 export const Database = Planetscale.PostgresDatabase("AppPostgresDatabase", {
-	name: "macrograph",
-	clusterSize: "PS_5",
-	region: { slug: "aws-ap-southeast-2" },
-	replicas: 0,
+  name: "macrograph",
+  clusterSize: "PS_5",
+  region: { slug: "aws-ap-southeast-2" },
+  replicas: 0,
 }).pipe(adopt(true), retain());
 
 const DatabaseAdminRole = Planetscale.PostgresRole(
-	"AppDatabaseAdminRole",
-	Database.pipe(
-		Effect.map((database) => ({
-			database,
-			inheritedRoles: ["postgres"],
-			successor: "postgres",
-		})),
-	),
+  "AppDatabaseAdminRole",
+  Database.pipe(
+    Effect.map((database) => ({
+      database,
+      inheritedRoles: ["postgres"],
+      successor: "postgres",
+    })),
+  ),
 );
 
 export const DatabaseRole = Planetscale.PostgresRole(
-	"AppDatabaseRuntimeRole",
-	Database.pipe(
-		Effect.map((database) => ({
-			database,
-			inheritedRoles: [],
-			successor: "postgres",
-		})),
-	),
+  "AppDatabaseRuntimeRole",
+  Database.pipe(
+    Effect.map((database) => ({
+      database,
+      inheritedRoles: [],
+      successor: "postgres",
+    })),
+  ),
 );
 
 const LogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
-	"AppLogicalDatabase",
-	Effect.gen(function* () {
-		const adminRole = yield* DatabaseAdminRole;
-		const appRole = yield* DatabaseRole;
+  "AppLogicalDatabase",
+  Effect.gen(function* () {
+    const adminRole = yield* DatabaseAdminRole;
+    const appRole = yield* DatabaseRole;
 
-		return {
-			adminOrigin: adminRole.origin,
-			appRoleName: Output.map(
-				appRole.username,
-				PlanetscaleLogicalDb.postgresRoleNameFromUsername,
-			),
-			migrationsDir: "./migrations-postgres",
-		};
-	}),
+    return {
+      adminOrigin: adminRole.origin,
+      appRoleName: Output.map(appRole.username, PlanetscaleLogicalDb.postgresRoleNameFromUsername),
+      migrationsDir: "./migrations-postgres",
+    };
+  }),
 );
 
 export const LegacyDatabaseRole = Planetscale.PostgresRole(
-	"LegacyDatabaseRuntimeRole",
-	Database.pipe(
-		Effect.map((database) => ({
-			database,
-			inheritedRoles: [],
-			successor: "postgres",
-		})),
-	),
+  "LegacyDatabaseRuntimeRole",
+  Database.pipe(
+    Effect.map((database) => ({
+      database,
+      inheritedRoles: [],
+      successor: "postgres",
+    })),
+  ),
 ).pipe(retain());
 
-// Dev and prod intentionally share this database; the old web app owns its schema.
+// Retained read-only rollback source. Omitting appRoleName prevents future
+// deployments from re-granting writes to the retired legacy runtime role.
 export const LegacyLogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
-	"LegacyLogicalDatabase",
-	Effect.gen(function* () {
-		const adminRole = yield* DatabaseAdminRole;
-		const appRole = yield* LegacyDatabaseRole;
+  "LegacyLogicalDatabase",
+  Effect.gen(function* () {
+    const adminRole = yield* DatabaseAdminRole;
 
-		return {
-			name: "macrograph_legacy",
-			adminOrigin: adminRole.origin,
-			appRoleName: Output.map(
-				appRole.username,
-				PlanetscaleLogicalDb.postgresRoleNameFromUsername,
-			),
-		};
-	}),
+    return {
+      name: "macrograph_legacy",
+      adminOrigin: adminRole.origin,
+    };
+  }),
 ).pipe(retain());
 
 export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
-	"AppDatabaseHyperdrive",
-	Effect.gen(function* () {
-		const role = yield* DatabaseRole;
-		const database = yield* LogicalDatabase;
+  "AppDatabaseHyperdrive",
+  Effect.gen(function* () {
+    const role = yield* DatabaseRole;
+    const database = yield* LogicalDatabase;
 
-		return {
-			origin: Output.map(
-				Output.all(role.origin, database.name),
-				([origin, name]) => ({
-					...origin,
-					database: name,
-				}),
-			),
-			dev: Output.map(
-				Output.all(role.pooledOrigin, database.name),
-				([origin, name]) => ({
-					...origin,
-					database: name,
-					sslmode: "verify-full" as const,
-				}),
-			),
-			mtls: { sslmode: "require" as const },
-			caching: { disabled: true },
-		};
-	}),
+    return {
+      origin: Output.map(Output.all(role.origin, database.name), ([origin, name]) => ({
+        ...origin,
+        database: name,
+      })),
+      dev: Output.map(Output.all(role.pooledOrigin, database.name), ([origin, name]) => ({
+        ...origin,
+        database: name,
+        sslmode: "verify-full" as const,
+      })),
+      mtls: { sslmode: "require" as const },
+      caching: { disabled: true },
+    };
+  }),
 );
 
-export const DeploymentObjectsBucket =
-	Cloudflare.R2.Bucket("RevisionSnapshots");
+export const DeploymentObjectsBucket = Cloudflare.R2.Bucket("RevisionSnapshots");

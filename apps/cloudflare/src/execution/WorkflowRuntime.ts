@@ -4,6 +4,8 @@ import * as Executor from "@macrograph/execution/Executor";
 import ElevenLabsModule from "@macrograph/module-elevenlabs";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { layer as elevenLabsLayer } from "@macrograph/module-elevenlabs/Engine";
+import GitHubModule from "@macrograph/module-github";
+import { unavailableRuntimeClient as unavailableGitHubRuntime } from "@macrograph/module-github/Engine";
 import HttpClientModule from "@macrograph/module-http-client";
 import { makeRuntimeClient as makeHttpClientRuntime } from "@macrograph/module-http-client/Engine";
 import { secureLayer as secureHttpUrlPolicy } from "@macrograph/module-http-client/UrlPolicy";
@@ -87,13 +89,15 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
             ? elevenLabsClient
             : moduleId === TwitchModule.id
               ? unavailableTwitchRuntime
-              : new Proxy(
-                  {},
-                  {
-                    get: () => () =>
-                      Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
-                  },
-                ),
+              : moduleId === GitHubModule.id
+                ? unavailableGitHubRuntime
+                : new Proxy(
+                    {},
+                    {
+                      get: () => () =>
+                        Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
+                    },
+                  ),
     );
   return engineClient;
 });

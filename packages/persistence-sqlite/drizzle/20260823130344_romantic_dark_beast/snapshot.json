@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "584878d7-81fd-4255-97e1-57ce6639163f",
-  "prevIds": [
-    "104b72fa-cc84-4897-a1ca-c78deea5fa14"
-  ],
+  "prevIds": ["104b72fa-cc84-4897-a1ca-c78deea5fa14"],
   "ddl": [
     {
       "name": "connections",
@@ -223,27 +221,21 @@
       "table": "project_meta"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "connections_pk",
       "table": "connections",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "graphs_pk",
       "table": "graphs",
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "nodes_pk",
       "table": "nodes",

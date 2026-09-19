@@ -65,40 +65,45 @@ describe("custom type execution", () => {
               id: "g",
               name: "Graph",
               nodes: {
-              event: node("event", "event"),
-              sink: node("sink", "sink", {
-                stored: Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(
-                  value,
-                ),
-              }),
-            },
-              connections: [
-              { id: "exec", outNodeId: "event", outIo: { _tag: "Port" as const, id: "exec" }, inNodeId: "sink", inIoId: "exec" },
-              {
-                id: "data",
-                outNodeId: "event",
-                outIo: { _tag: "Port" as const, id: "value" },
-                inNodeId: "sink",
-                inIoId: "connected",
+                event: node("event", "event"),
+                sink: node("sink", "sink", {
+                  stored: Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(
+                    value,
+                  ),
+                }),
               },
+              connections: [
+                {
+                  id: "exec",
+                  outNodeId: "event",
+                  outIo: { _tag: "Port" as const, id: "exec" },
+                  inNodeId: "sink",
+                  inIoId: "exec",
+                },
+                {
+                  id: "data",
+                  outNodeId: "event",
+                  outIo: { _tag: "Port" as const, id: "value" },
+                  inNodeId: "sink",
+                  inIoId: "connected",
+                },
               ],
             },
           },
         },
       });
       const executor = yield* Executor.make(project, {
-        executionDriver: {
-          executeNode: (_key, effect) =>
-            effect.pipe(
-              Effect.map((result) => ({
-                ...result,
-                outputs: result.outputs.map((output) => ({
-                  ...output,
-                  value: JSON.parse(JSON.stringify(output.value)),
-                })),
+        executionEnvironment: Executor.durableExecution((_key, executor) =>
+          executor.executeNode(_key).pipe(
+            Effect.map((result) => ({
+              ...result,
+              outputs: result.outputs.map((output) => ({
+                ...output,
+                value: JSON.parse(JSON.stringify(output.value)),
               })),
-            ),
-        },
+            })),
+          ),
+        ),
       });
       yield* executor.module(
         module,

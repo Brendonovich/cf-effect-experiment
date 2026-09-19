@@ -275,6 +275,15 @@ export interface Interface {
       EditorEvent.FunctionUpdated,
       PersistenceError | Project.NotFoundError | Graph.NotFoundError | GraphFunction.NotFoundError
     >;
+    readonly reorderField: (
+      graphId: string,
+      direction: "input" | "output",
+      fieldId: string,
+      targetFieldId: string,
+    ) => Effect.Effect<
+      EditorEvent.FunctionUpdated,
+      PersistenceError | Project.NotFoundError | GraphFunction.NotFoundError
+    >;
     readonly deleteField: (
       graphId: string,
       direction: "input" | "output",
@@ -482,32 +491,19 @@ export const layer = Layer.effect(Service)(
       definitions?: DataType.Definitions,
     ) {
       const io = yield* getBaseNodeIO(node, definitions);
-      if (!Scopes.isBreakScope(node) && !CustomTypes.isBreakStruct(node)) return io;
+      if (!Scopes.isBreakScope(node) && !CustomTypes.isOperationNode(node)) return io;
       const project = yield* persistence.loadProject();
       const graph = Object.values(Project.canvases(project)).find((graph) =>
         Object.hasOwn(graph.nodes, node.id),
       );
       if (graph === undefined) return io;
-      if (CustomTypes.isBreakStruct(node)) {
-        const { declarations } = yield* graphWildcards(
-          graph,
-          { [node.id]: io },
-          undefined,
-          definitions,
-        );
-        return declarations.get(node.id) ?? io;
-      }
-      const wire = graph.connections.find(
-        (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
+      const { declarations } = yield* graphWildcards(
+        graph,
+        { [node.id]: io },
+        undefined,
+        definitions,
       );
-      const source = wire === undefined ? undefined : graph.nodes[wire.outNodeId];
-      const sourceIO =
-        source === undefined
-          ? undefined
-          : yield* getBaseNodeIO(source, definitions).pipe(
-              Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
-            );
-      return Scopes.resolveIO(graph, node.id, (id) => (id === source?.id ? sourceIO : io)) ?? io;
+      return declarations.get(node.id) ?? io;
     });
     const wildcardCaches = new Map<string, Wildcards.Cache>();
     const graphWildcards = Effect.fnUntraced(function* (
@@ -537,16 +533,22 @@ export const layer = Layer.effect(Service)(
         const io = Scopes.resolveIO(graph, node.id, (id) => declarations.get(id));
         if (io !== undefined) declarations.set(node.id, io);
       }
-      const result = cache.update(
-        declarations,
-        graph.connections,
-        CustomTypes.derivedOutputs(graph, definitions ?? (yield* persistence.loadProject()).types),
+      const derive = CustomTypes.derivedIO(
+        graph,
+        definitions ?? (yield* persistence.loadProject()).types,
       );
+      let result = cache.update(declarations, graph.connections, derive);
       if (Result.isSuccess(result)) {
         for (const [id, io] of declarations) {
-          const outputs = cache.derivedOutputs(id);
-          if (outputs !== undefined) declarations.set(id, { ...io, dataOutputs: outputs });
+          const derived = cache.derivedIO(id);
+          if (derived !== undefined) declarations.set(id, { ...io, ...derived });
         }
+        for (const node of Object.values(graph.nodes)) {
+          if (!Scopes.isBreakScope(node)) continue;
+          const io = Scopes.resolveIO(graph, node.id, (id) => declarations.get(id));
+          if (io !== undefined) declarations.set(node.id, io);
+        }
+        result = cache.update(declarations, graph.connections, derive);
       }
       wildcardCaches.set(graph.id, cache);
       return { cache, declarations, result };
@@ -667,27 +669,15 @@ export const layer = Layer.effect(Service)(
           reasons.set(nodeId, entry);
         };
         for (const node of Object.values(graph.nodes)) {
-          const io =
-            node.schema.package === CustomTypes.packageId && !CustomTypes.isBreakStruct(node)
-              ? (CustomTypes.nodeIO(node.schema, node.properties, project.types) ?? emptyNodeIO)
-              : yield* getNodeIO(node, project.types).pipe(
-                  Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
-                );
+          const io = yield* getNodeIO(node, project.types).pipe(
+            Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+          );
           before[node.id] = io;
-          const nextIO =
-            node.schema.package === CustomTypes.packageId && !CustomTypes.isBreakStruct(node)
-              ? (CustomTypes.nodeIO(node.schema, node.properties, types) ?? emptyNodeIO)
-              : yield* getNodeIO(node, types).pipe(
-                  Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
-                );
+          const nextIO = yield* getNodeIO(node, types).pipe(
+            Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
+          );
           after[node.id] = nextIO;
           if (!definitionsChanged) continue;
-          if (
-            node.schema.package === CustomTypes.packageId &&
-            typeof node.properties.type === "string" &&
-            affected.has(node.properties.type)
-          )
-            add(node.id, `Selected type ${node.properties.type} is affected`);
           for (const port of [
             ...io.dataInputs,
             ...io.dataOutputs,
@@ -999,6 +989,26 @@ export const layer = Layer.effect(Service)(
         deletedConnectionIds,
       });
     }, lock.withPermit);
+    const functionReorderField = Effect.fn("Editor.function.reorderField")(function* (
+      graphId: string,
+      direction: "input" | "output",
+      fieldId: string,
+      targetFieldId: string,
+    ) {
+      const fn = yield* getFunction(graphId);
+      const fields = [...functionFields(fn, direction)];
+      const from = fields.findIndex((field) => field.id === fieldId);
+      const to = fields.findIndex((field) => field.id === targetFieldId);
+      if (from < 0 || to < 0) return yield* new GraphFunction.NotFoundError({ canvasId: graphId });
+      const [moved] = fields.splice(from, 1);
+      if (moved === undefined) return yield* new GraphFunction.NotFoundError({ canvasId: graphId });
+      fields.splice(to, 0, moved);
+      return yield* events.publish({
+        _tag: "FunctionUpdated",
+        fn: withFunctionFields(fn, direction, fields),
+        deletedConnectionIds: [],
+      });
+    }, lock.withPermit);
 
     const nodeCreate = Effect.fn("Editor.node.create")(function* (options: NodeCreateOptions) {
       yield* persistence.loadGraph(options.graphID);
@@ -1250,7 +1260,7 @@ export const layer = Layer.effect(Service)(
           nodeIO[node.id] =
             Scopes.resolveIO(proposedGraph, node.id, (id) => sourceIO[id]) ?? Scopes.emptyIO;
         }
-        if (nodes.some(CustomTypes.isBreakStruct)) {
+        if (nodes.some(CustomTypes.isOperationNode)) {
           const inferred = yield* graphWildcards(proposedGraph, nodeIO);
           for (const node of nodes) {
             const io = inferred.declarations.get(node.id);
@@ -1617,7 +1627,7 @@ export const layer = Layer.effect(Service)(
           reason: "Input is not an unambiguous data input",
         });
       const value =
-        declared !== undefined && DataType.hasWildcard(declared.type) && input !== undefined
+        input !== undefined
           ? yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
               options.value,
               { onExcessProperty: "error" },
@@ -2080,6 +2090,7 @@ export const layer = Layer.effect(Service)(
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
+          ...(definition.description === undefined ? {} : { description: definition.description }),
           resources: resources.map((resource) => ({
             id: resource.key,
             name: resource.definition.name,
@@ -2228,6 +2239,7 @@ export const layer = Layer.effect(Service)(
         create: functionCreate,
         addField: functionAddField,
         updateField: functionUpdateField,
+        reorderField: functionReorderField,
         deleteField: functionDeleteField,
       },
       node: {

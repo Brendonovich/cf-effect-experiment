@@ -1,4 +1,5 @@
 import type { Engine } from "@macrograph/module";
+
 import {
   Cause,
   Deferred,
@@ -30,11 +31,7 @@ import {
   WebSocketClientEngine,
   WebSocketConnection,
 } from "./Definition.ts";
-import {
-  Service as UrlPolicy,
-  localLayer as localPolicyLayer,
-  secureLayer,
-} from "./UrlPolicy.ts";
+import { Service as UrlPolicy, localLayer as localPolicyLayer, secureLayer } from "./UrlPolicy.ts";
 
 type Session = {
   readonly generation: number;
@@ -51,8 +48,7 @@ type Entry = {
   readonly session?: Session;
 };
 
-const connectionFailureReason =
-  "The WebSocket connection failed or closed during setup";
+const connectionFailureReason = "The WebSocket connection failed or closed during setup";
 
 const safeInput = (input: string) =>
   input.replace(/^([a-z][a-z\d+.-]*:\/\/)[^/?#]*@/i, "$1[redacted]@");
@@ -77,25 +73,20 @@ const utf8Size = (input: string) => {
   return size;
 };
 
-export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof WebSocketClientEngine>) {
+export const make = Effect.fnUntraced(function* (
+  mg: Engine.ContextOf<typeof WebSocketClientEngine>,
+) {
   const policy = yield* UrlPolicy;
-  const socketContext = yield* Effect.context<
-    Scope.Scope | Socket.WebSocketConstructor
-  >();
-  const state = yield* SubscriptionRef.make<ReadonlyMap<ConnectionId, Entry>>(
-    new Map(),
-  );
+  const socketContext = yield* Effect.context<Scope.Scope | Socket.WebSocketConstructor>();
+  const state = yield* SubscriptionRef.make<ReadonlyMap<ConnectionId, Entry>>(new Map());
   const lock = yield* Semaphore.make(1);
 
-  yield* Stream.runForEach(
-    SubscriptionRef.changes(state),
-    () => mg.client.refresh,
-  ).pipe(Effect.forkScoped);
+  yield* Stream.runForEach(SubscriptionRef.changes(state), () => mg.client.refresh).pipe(
+    Effect.forkScoped,
+  );
 
   const getEntry = (id: ConnectionId) =>
-    SubscriptionRef.get(state).pipe(
-      Effect.map((entries) => Option.fromNullishOr(entries.get(id))),
-    );
+    SubscriptionRef.get(state).pipe(Effect.map((entries) => Option.fromNullishOr(entries.get(id))));
 
   const updateEntry = (id: ConnectionId, update: (entry: Entry) => Entry) =>
     SubscriptionRef.modifySome(state, (entries) => {
@@ -132,11 +123,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
     });
     yield* policy
       .check(url)
-      .pipe(
-        Effect.mapError(
-          (error) => new InvalidConnection({ reason: error.reason }),
-        ),
-      );
+      .pipe(Effect.mapError((error) => new InvalidConnection({ reason: error.reason })));
     url.username = "";
     url.password = "";
     return { ...definition, name, url: url.href };
@@ -174,10 +161,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
         }));
         yield* save;
       }
-      if (
-        current.value.status === "connected" ||
-        current.value.status === "connecting"
-      )
+      if (current.value.status === "connected" || current.value.status === "connecting")
         return Option.none<{
           readonly definition: ConnectionDefinition;
           readonly generation: number;
@@ -193,14 +177,11 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
     if (Option.isNone(prepared)) return;
 
     const { definition, generation } = prepared.value;
-    const failed = () =>
-      new ConnectionFailed({ id, reason: connectionFailureReason });
+    const failed = () => new ConnectionFailed({ id, reason: connectionFailureReason });
     const socket = yield* Socket.makeWebSocket(definition.url, {
       openTimeout: "10 seconds",
     }).pipe(Effect.provideContext(socketContext));
-    const write = yield* socket.writer.pipe(
-      Effect.provideContext(socketContext),
-    );
+    const write = yield* socket.writer.pipe(Effect.provideContext(socketContext));
     const opened = yield* Deferred.make<void, ConnectionFailed>();
     const closed = yield* Deferred.make<void>();
     const finish = Deferred.succeed(closed, undefined).pipe(
@@ -232,14 +213,11 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
               return;
             const size = utf8Size(data);
             if (size > MAX_MESSAGE_BYTES)
-              return yield* Effect.logWarning(
-                "Dropped oversized WebSocket message",
-                {
-                  connectionId: id,
-                  size,
-                  limit: MAX_MESSAGE_BYTES,
-                },
-              );
+              return yield* Effect.logWarning("Dropped oversized WebSocket message", {
+                connectionId: id,
+                size,
+                limit: MAX_MESSAGE_BYTES,
+              });
             yield* mg.emit(new MessageReceived({ connectionId: id, data }));
           }),
         { onOpen: Deferred.succeed(opened, undefined).pipe(Effect.asVoid) },
@@ -247,16 +225,11 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
       .pipe(
         Effect.catchCause(() => {
           const error = failed();
-          return Deferred.fail(opened, error).pipe(
-            Effect.andThen(Effect.fail(error)),
-          );
+          return Deferred.fail(opened, error).pipe(Effect.andThen(Effect.fail(error)));
         }),
         Effect.ensuring(finish),
       );
-    const fiber = yield* run.pipe(
-      Effect.forkScoped,
-      Effect.provideContext(socketContext),
-    );
+    const fiber = yield* run.pipe(Effect.forkScoped, Effect.provideContext(socketContext));
     const close = Deferred.fail(opened, failed()).pipe(
       Effect.andThen(Fiber.interrupt(fiber)),
       Effect.asVoid,
@@ -314,9 +287,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
           status: "error",
           error: result.failure.reason,
         };
-    yield* SubscriptionRef.update(state, (entries) =>
-      new Map(entries).set(definition.id, entry),
-    );
+    yield* SubscriptionRef.update(state, (entries) => new Map(entries).set(definition.id, entry));
   }
   for (const entry of (yield* SubscriptionRef.get(state)).values()) {
     if (entry.definition.connectOnStartup && entry.status === "disconnected")
@@ -347,12 +318,8 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
               limit: MAX_MESSAGE_BYTES,
             });
           const entry = yield* getEntry(connectionId);
-          if (Option.isNone(entry))
-            return yield* new ConnectionNotFound({ id: connectionId });
-          if (
-            entry.value.status !== "connected" ||
-            entry.value.session === undefined
-          )
+          if (Option.isNone(entry)) return yield* new ConnectionNotFound({ id: connectionId });
+          if (entry.value.status !== "connected" || entry.value.session === undefined)
             return yield* new NotConnected({ id: connectionId });
           const session = entry.value.session;
           yield* Effect.raceFirst(
@@ -415,8 +382,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
           Effect.gen(function* () {
             const definition = yield* validate(input);
             const current = yield* getEntry(input.id);
-            if (Option.isNone(current))
-              return yield* new ConnectionNotFound({ id: input.id });
+            if (Option.isNone(current)) return yield* new ConnectionNotFound({ id: input.id });
             const close = current.value.session?.close;
             yield* updateEntry(input.id, (entry) => ({
               definition,
@@ -430,8 +396,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
         WebSocketRemoveConnection: ({ id }) =>
           Effect.gen(function* () {
             const current = yield* getEntry(id);
-            if (Option.isNone(current))
-              return yield* new ConnectionNotFound({ id });
+            if (Option.isNone(current)) return yield* new ConnectionNotFound({ id });
             const close = current.value.session?.close;
             yield* SubscriptionRef.update(state, (entries) => {
               const next = new Map(entries);
@@ -443,8 +408,7 @@ export const make = Effect.fnUntraced(function* (mg: Engine.ContextOf<typeof Web
             yield* mg.resource.refresh(WebSocketConnection);
           }).pipe(lock.withPermit),
         WebSocketConnect: ({ id }) => connect(id, true),
-        WebSocketDisconnect: ({ id }) =>
-          disconnectUnsafe(id).pipe(lock.withPermit),
+        WebSocketDisconnect: ({ id }) => disconnectUnsafe(id).pipe(lock.withPermit),
       }),
     },
   });

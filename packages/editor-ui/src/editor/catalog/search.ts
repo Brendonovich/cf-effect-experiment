@@ -6,7 +6,9 @@ export interface SearchDocument<T> {
 }
 
 const words = (value: string) =>
-  value.match(/\p{Lu}?\p{Ll}+|\p{Lu}+(?!\p{Ll})|[\p{Lo}\p{Lm}]+|\p{N}+/gu)?.map((part) => part.toLowerCase()) ?? [];
+  value
+    .match(/\p{Lu}?\p{Ll}+|\p{Lu}+(?!\p{Ll})|[\p{Lo}\p{Lm}]+|\p{N}+/gu)
+    ?.map((part) => part.toLowerCase()) ?? [];
 
 export const tokenizeSearch = (value: string): ReadonlyArray<string> =>
   value
@@ -59,8 +61,11 @@ export const rankedSearch = <T>(
       const score = searchScore(tokens, document.fields, document.terms);
       return score === undefined ? [] : [{ ...document, index, score }];
     })
-    .sort((left, right) =>
-      right.score - left.score || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0) || left.index - right.index,
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        (left.key < right.key ? -1 : left.key > right.key ? 1 : 0) ||
+        left.index - right.index,
     )
     .map(({ item }) => item);
 };

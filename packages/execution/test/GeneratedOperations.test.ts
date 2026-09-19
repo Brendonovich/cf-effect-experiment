@@ -39,17 +39,25 @@ const operation = (name: string) => {
 const run = (
   schema: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>>,
-  properties: Readonly<Record<string, unknown>> = { type: recordId },
+  properties: Readonly<Record<string, unknown>> = {},
 ) =>
   Effect.gen(function* () {
     const outputs = new Map<string, unknown>();
     const selected = yield* schema.run({
-      types: { resolve: (type) => (type._tag === "Wildcard" ? recordType : type), definitions },
+      types: {
+        resolve: (type) =>
+          type._tag !== "Wildcard"
+            ? type
+            : type.id === "Enum"
+              ? DataType.Custom(enumId)
+              : recordType,
+        definitions,
+      },
       input: (port) => (Object.hasOwn(inputs, port.id) ? inputs[port.id] : port.defaultValue),
       output: (port, value) => {
         outputs.set(port.id, value);
       },
-      properties: schema.id === "BreakStruct" ? {} : properties,
+      properties,
       event: undefined,
       engine: undefined,
       execution: { projectId: "p", graphId: "g", eventNodeId: "event", traceId: "execution" },
@@ -127,33 +135,23 @@ describe("generated custom operations", () => {
       }),
   );
 
-  it.effect(
-    "rejects missing, wrong-kind and stale selections rather than choosing an arbitrary type",
-    () =>
-      Effect.gen(function* () {
-        for (const [name, properties] of [
-          ["Make Struct", {}],
-          ["Make Struct", { type: "deleted" }],
-          ["Update Struct", { type: enumId }],
-          ["Match Enum", { type: recordId }],
-          ["Construct Enum", { type: enumId }],
-          ["Construct Enum", { type: enumId, variant: "deleted" }],
-          ["Parse JSON", { type: "constructor" }],
-        ] as const) {
-          const schema = operation(name);
-          expect(
-            CustomTypes.nodeIO(
-              { package: CustomTypes.packageId, schema: SchemaId.make(schema.id) },
-              properties,
-              definitions,
-            ),
-          ).toBeUndefined();
-          expect(() => schema.generateIO(properties)).toThrow();
-          expect(yield* Effect.flip(run(schema, {}, properties))).toBeInstanceOf(
-            CustomTypes.CodecError,
-          );
-        }
-      }),
+  it.effect("declares no target type properties and leaves unresolved IO as wildcards", () =>
+    Effect.gen(function* () {
+      for (const schema of CustomTypes.packageModel.schemas)
+        expect(schema.properties.map((property) => property.id)).toEqual(
+          schema.id === "ConstructEnum" ? ["variant"] : [],
+        );
+      expect(CustomTypes.selectionError("ConstructEnum", {}, definitions)).toBe(
+        "Select an enum variant",
+      );
+      expect(
+        CustomTypes.nodeIO(
+          { package: CustomTypes.packageId, schema: SchemaId.make("UpdateStruct") },
+          {},
+          definitions,
+        )?.dataInputs[0]?.type,
+      ).toEqual(DataType.Wildcard("Struct"));
+    }),
   );
 
   it.effect(
@@ -173,8 +171,8 @@ describe("generated custom operations", () => {
           package: CustomTypes.packageId,
           schema: SchemaId.make(operation("Make Struct").id),
         };
-        expect(CustomTypes.nodeIO(ref, { type: recordId }, registry)).toEqual(
-          CustomTypes.nodeIO(ref, { type: recordId }, definitions),
+        expect(CustomTypes.nodeIO(ref, {}, registry)).toEqual(
+          CustomTypes.nodeIO(ref, {}, definitions),
         );
         for (const id of [
           "{",
@@ -203,16 +201,16 @@ describe("generated custom operations", () => {
             return Reflect.get(target, key, receiver);
           },
         });
-        expect(CustomTypes.nodeIO(ref, { type: recordId }, ioOnly)?.dataInputs[0]?.type).toEqual(
-          custom,
-        );
+        expect(CustomTypes.nodeIO(ref, {}, ioOnly)).toEqual({
+          dataInputs: [],
+          dataOutputs: [{ id: "value", type: CustomTypes.makeWildcard }],
+          executionInputs: [],
+          executionOutputs: [],
+        });
         const update = { ...ref, schema: SchemaId.make("UpdateStruct") };
-        expect(CustomTypes.nodeIO(update, { type: recordId }, ioOnly)?.dataInputs[1]).toMatchObject(
-          {
-            type: DataType.Option(custom),
-            defaultValue: { _tag: "None" },
-          },
-        );
+        expect(CustomTypes.nodeIO(update, {}, ioOnly)?.dataInputs).toEqual([
+          { id: "value", type: DataType.Wildcard("Struct") },
+        ]);
       }),
   );
   it.effect("shares serializable catalog IO and stable nominal IDs across editor/runtime", () =>
@@ -222,10 +220,7 @@ describe("generated custom operations", () => {
       expect(model.schemas).toHaveLength(7);
       expect(model.schemas).toHaveLength(CustomTypes.operations.length);
       for (const schema of model.schemas) {
-        const properties =
-          schema.id === "ConstructEnum" || schema.id === "MatchEnum"
-            ? { type: enumId, variant: "Success" }
-            : { type: recordId };
+        const properties = schema.id === "ConstructEnum" ? { variant: "Success" } : {};
         const io = CustomTypes.nodeIO(
           { package: CustomTypes.packageId, schema: schema.id },
           properties,
@@ -248,10 +243,10 @@ describe("generated custom operations", () => {
       expect(
         CustomTypes.nodeIO(
           { package: CustomTypes.packageId, schema: SchemaId.make(operation("Make Struct").id) },
-          { type: recordId },
           {},
-        ),
-      ).toBeUndefined();
+          {},
+        )?.dataOutputs[0]?.type,
+      ).toEqual(CustomTypes.makeWildcard);
     }),
   );
 
@@ -301,12 +296,11 @@ describe("generated custom operations", () => {
         ["Empty", {}, {}],
       ] as const) {
         const constructed = yield* run(operation("Construct Enum"), inputs, {
-          type: enumId,
           variant,
         });
         const result = constructed.outputs.get("value");
         expect(result).toEqual({ _type: enumId, _tag: variant, ...payload });
-        const matched = yield* run(operation("Match Enum"), { value: result }, { type: enumId });
+        const matched = yield* run(operation("Match Enum"), { value: result });
         expect(matched.selected?.id).toBe(`variant:${JSON.stringify(variant)}`);
         expect([...matched.outputs.keys()]).toEqual([]);
         expect(
@@ -322,16 +316,12 @@ describe("generated custom operations", () => {
       }
       expect(
         operation("Match Enum")
-          .generateIO({ type: enumId })
+          .generateIO({})
           .executionOutputs.map((port) => port.id),
       ).not.toContain("exec");
       expect(
         yield* Effect.flip(
-          run(
-            operation("Match Enum"),
-            { value: { _type: enumId, _tag: "Deleted" } },
-            { type: enumId },
-          ),
+          run(operation("Match Enum"), { value: { _type: enumId, _tag: "Deleted" } }, {}),
         ),
       ).toBeInstanceOf(CustomTypes.CodecError);
     }),
@@ -389,6 +379,12 @@ describe("generated custom operations", () => {
                 }),
             });
             yield* context.schema.register({
+              id: "enum-anchor",
+              type: "pure",
+              io: (io) => ({ value: io.data.in("value", DataType.Custom(enumId)) }),
+              run: () => Effect.void,
+            });
+            yield* context.schema.register({
               id: "forbidden",
               io: () => ({}),
               run: () => Effect.die("Unselected branch must not execute"),
@@ -408,63 +404,58 @@ describe("generated custom operations", () => {
                 id: "g",
                 name: "Graph",
                 nodes: {
-                event: node("event", module.id, "event"),
-                construct: node(
-                  "construct",
-                  CustomTypes.packageId,
-                  operation("Construct Enum").id,
-                  { 'field:"item"': stored },
-                  { type: enumId, variant: "Success" },
-                ),
-                match: node(
-                  "match",
-                  CustomTypes.packageId,
-                  operation("Match Enum").id,
-                  {},
-                  { type: enumId },
-                ),
-                update: node(
-                  "update",
-                  CustomTypes.packageId,
-                  "UpdateStruct",
-                  { 'field:"name"': { _tag: "Some", value: "updated" } },
-                  { type: recordId },
-                ),
-                sink: node("sink", module.id, "sink"),
-                scope: node("scope", Scopes.packageId, "BreakScope"),
-                failureScope: node("failureScope", Scopes.packageId, "BreakScope"),
-                forbidden: node("forbidden", module.id, "forbidden"),
-              },
+                  event: node("event", module.id, "event"),
+                  construct: node(
+                    "construct",
+                    CustomTypes.packageId,
+                    operation("Construct Enum").id,
+                    { 'field:"item"': stored },
+                    { variant: "Success" },
+                  ),
+                  match: node("match", CustomTypes.packageId, operation("Match Enum").id, {}, {}),
+                  update: node(
+                    "update",
+                    CustomTypes.packageId,
+                    "UpdateStruct",
+                    { 'field:"name"': { _tag: "Some", value: "updated" } },
+                    {},
+                  ),
+                  sink: node("sink", module.id, "sink"),
+                  scope: node("scope", Scopes.packageId, "BreakScope"),
+                  failureScope: node("failureScope", Scopes.packageId, "BreakScope"),
+                  forbidden: node("forbidden", module.id, "forbidden"),
+                  enumAnchor: node("enumAnchor", module.id, "enum-anchor"),
+                },
                 connections: [
-                wire("exec", "event", "exec", "match", "exec"),
-                wire("value", "construct", "value", "match", "value"),
-                wire("success", "match", 'variant:"Success"', "scope", "scope"),
-                wire("continue", "scope", "exec", "sink", "exec"),
-                wire("payload", "scope", 'field:"item"', "update", "value"),
-                wire("updated", "update", "value", "sink", "value"),
-                wire("failure", "match", 'variant:"Failure"', "failureScope", "scope"),
-                wire("failureContinue", "failureScope", "exec", "forbidden", "exec"),
+                  wire("exec", "event", "exec", "match", "exec"),
+                  wire("value", "construct", "value", "match", "value"),
+                  wire("enum-anchor", "construct", "value", "enumAnchor", "value"),
+                  wire("success", "match", 'variant:"Success"', "scope", "scope"),
+                  wire("continue", "scope", "exec", "sink", "exec"),
+                  wire("payload", "scope", 'field:"item"', "update", "value"),
+                  wire("updated", "update", "value", "sink", "value"),
+                  wire("failure", "match", 'variant:"Failure"', "failureScope", "scope"),
+                  wire("failureContinue", "failureScope", "exec", "forbidden", "exec"),
                 ],
               },
             },
           },
         });
-        const checkpoints = new Map<string, Executor.NodeExecutionResult>();
-        const driver: Executor.ExecutionDriver = {
-          executeNode: (key, effect) => {
-            const cached = checkpoints.get(key.nodeId);
-            return cached === undefined
-              ? effect.pipe(
-                  Effect.tap((result) =>
-                    Effect.sync(() => {
-                      checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
-                    }),
-                  ),
-                )
-              : Effect.succeed(cached);
-          },
-        };
-        const executor = yield* Executor.make(project, { executionDriver: driver });
+        const checkpoints = new Map<string, Executor.SerializedNodeExecutionResult>();
+        const driver = Executor.durableExecution((key, executor) => {
+          const effect = executor.executeNode(key);
+          const cached = checkpoints.get(key.nodeId);
+          return cached === undefined
+            ? effect.pipe(
+                Effect.tap((result) =>
+                  Effect.sync(() => {
+                    checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
+                  }),
+                ),
+              )
+            : Effect.succeed(cached);
+        });
+        const executor = yield* Executor.make(project, { executionEnvironment: driver });
         yield* executor.module(
           module,
           Engine.deployment(
@@ -491,5 +482,80 @@ describe("generated custom operations", () => {
         );
         expect(captured).toHaveLength(2);
       }),
+  );
+
+  it.effect("executes Make Struct from an output-inferred type without properties", () =>
+    Effect.gen(function* () {
+      const id = DataType.DefinitionId.make("made");
+      const type = DataType.Custom(id);
+      const types: DataType.Definitions = {
+        [id]: {
+          _tag: "Struct",
+          id,
+          name: "Made",
+          fields: [{ name: "label", type: DataType.String }],
+        },
+      };
+      const captured: unknown[] = [];
+      const module = Module.make({
+        id: "make-inference-test",
+        engine: TestEngine,
+        effect: Effect.fnUntraced(function* (context) {
+          yield* context.schema.register({
+            id: "event",
+            type: "event",
+            event: () => Effect.succeed(true),
+            io: () => ({}),
+            run: () => Effect.void,
+          });
+          yield* context.schema.register({
+            id: "sink",
+            io: (io) => ({ value: io.data.in("value", type) }),
+            run: ({ io }) =>
+              Effect.sync(() => {
+                captured.push(io.value);
+              }),
+          });
+        }),
+      });
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
+        ...Project.empty(),
+        types,
+        graphs: {
+          g: {
+            canvas: {
+              id: "g",
+              name: "Graph",
+              nodes: {
+                event: node("event", module.id, "event"),
+                make: node(
+                  "make",
+                  CustomTypes.packageId,
+                  "MakeStruct",
+                  { 'field:"label"': "inferred" },
+                  {},
+                ),
+                sink: node("sink", module.id, "sink"),
+              },
+              connections: [
+                wire("exec", "event", "exec", "sink", "exec"),
+                wire("value", "make", "value", "sink", "value"),
+              ],
+            },
+          },
+        },
+      });
+      const executor = yield* Executor.make(project);
+      yield* executor.module(
+        module,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        ),
+      );
+      yield* executor.handleEvent(module, new Trigger({}));
+      expect(captured).toEqual([{ _type: id, label: "inferred" }]);
+      expect(Project.canvases(project).g!.nodes.make!.properties).toEqual({});
+    }),
   );
 });

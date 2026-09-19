@@ -5,8 +5,7 @@ import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { Effect, Layer } from "effect";
 
 export const layer = (migrations: Record<string, string>) =>
-  Layer.effect(
-    DrizzleDriver.Service)(
+  Layer.effect(DrizzleDriver.Service)(
     Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       const driver = drizzle(state.raw.storage);

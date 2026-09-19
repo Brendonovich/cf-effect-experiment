@@ -36,7 +36,7 @@ export function createEditorController(options: EditorControllerOptions) {
     selectedNodeIds: layout.selectedNodeIds,
     activeWorkspaceView: layout.activeWorkspaceView,
   });
-  const catalog = createEditorCatalog(editor, layout.graphs, connection.moduleSettingsById);
+  const catalog = createEditorCatalog(editor, layout.graphs);
   const commands = createEditorCommands(editor, connection, layout);
 
   return {

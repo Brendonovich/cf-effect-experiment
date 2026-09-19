@@ -319,13 +319,18 @@ export function createEditorCommands(
   const addFunctionField = (direction: "input" | "output") => {
     const c = client();
     const graphId = selectedGraphId();
-    if (!c || !graphId || !canEdit()) return;
-    runFork(
+    if (!c || !graphId || !canEdit()) return Promise.resolve(undefined);
+    return runPromise(
       applyMutation(c.AddFunctionField({ graphId, direction })).pipe(
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
-    );
+    )
+      .then((event) => {
+        const fields = direction === "input" ? event.fn.arguments : event.fn.returns;
+        return fields.at(-1)?.id;
+      })
+      .catch(() => undefined);
   };
   const updateFunctionField = (direction: "input" | "output", field: GraphFunction.Field) => {
     const c = client();
@@ -344,6 +349,21 @@ export function createEditorCommands(
     if (!c || !graphId || !canEdit()) return;
     runFork(
       applyMutation(c.DeleteFunctionField({ graphId, direction, fieldId })).pipe(
+        Effect.tapError(Effect.log),
+        Effect.tapDefect(Effect.log),
+      ),
+    );
+  };
+  const reorderFunctionField = (
+    direction: "input" | "output",
+    fieldId: string,
+    targetFieldId: string,
+  ) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (!c || !graphId || !canEdit()) return;
+    runFork(
+      applyMutation(c.ReorderFunctionField({ graphId, direction, fieldId, targetFieldId })).pipe(
         Effect.tapError(Effect.log),
         Effect.tapDefect(Effect.log),
       ),
@@ -598,6 +618,7 @@ export function createEditorCommands(
     createFunction,
     addFunctionField,
     updateFunctionField,
+    reorderFunctionField,
     deleteFunctionField,
     createNode,
     deleteNode,

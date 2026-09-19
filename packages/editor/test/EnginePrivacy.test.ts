@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Actor, GraphId, Project } from "@macrograph/core";
-import { Persistence } from "@macrograph/persistence";
 import { Engine } from "@macrograph/module";
+import { Persistence } from "@macrograph/persistence";
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import { RpcGroup, RpcSerialization, RpcTest } from "effect/unstable/rpc";

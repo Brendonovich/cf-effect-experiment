@@ -2,7 +2,7 @@ import { CredentialTable, LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useNavigate, useParams } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { createQuery, useQueryClient } from "@tanstack/solid-query";
+import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { For, Show, Loading, action, createOptimisticStore, createSignal } from "solid-js";
 
 import { runApi, runApiResult } from "../../../../api";
@@ -22,7 +22,6 @@ export const ProjectSettingsRoute = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [deleteState, setDeleteState] = createSignal<"idle" | "deleting" | "error">("idle");
-  const [refreshingCredentials, setRefreshingCredentials] = createSignal(false);
   const canManage = () => workspace.selectedTeam()?.role === "owner";
   const canManageCredentials = () => {
     const role = workspace.selectedTeam()?.role;
@@ -55,6 +54,11 @@ export const ProjectSettingsRoute = () => {
       return catalog;
     },
     retry: false,
+  }));
+  const credentialProvidersQuery = createQuery(() => ({
+    queryKey: ["credential-providers"],
+    queryFn: async () => (await runApi(workspace.api.credentials.providers())) ?? [],
+    staleTime: 5 * 60 * 1000,
   }));
   const [rememberedUserIds, setRememberedUserIds] = createSignal<string[]>();
   const [optimisticAccess, setOptimisticAccess] = createOptimisticStore<State>(
@@ -155,18 +159,82 @@ export const ProjectSettingsRoute = () => {
     }
   });
 
-  const refetchCredentials = action(async function* () {
-    setRefreshingCredentials(true);
-    const catalog = await runApi(
-      workspace.api.credentials.refetch({ params: { projectId: projectId() } }),
-    );
-    yield;
-    setRefreshingCredentials(false);
-    if (catalog !== undefined) {
+  const refetchCredentials = useMutation(() => ({
+    networkMode: "always" as const,
+    mutationFn: async () => {
+      const catalog = await runApi(
+        workspace.api.credentials.refetch({ params: { projectId: projectId() } }),
+      );
+      if (catalog === undefined) throw new Error("Could not refresh credentials");
+      return catalog;
+    },
+    onSuccess: (catalog) => {
       queryClient.setQueryData(credentialsKey(), catalog);
-      yield workspace.refreshEditorModuleData(projectId());
-    }
-  });
+      void workspace.refreshEditorModuleData(projectId());
+    },
+  }));
+  const connectCredential = useMutation(() => ({
+    networkMode: "always" as const,
+    mutationFn: async (provider: string) => {
+      const popup = window.open(
+        "about:blank",
+        "macrograph-credential",
+        "popup,width=720,height=760",
+      );
+      if (popup === null) throw new Error("Your browser blocked the credential window");
+      sessionStorage.setItem("macrograph-credential-provider", provider);
+      const connection = await runApi(
+        workspace.api.credentials.connect({ params: { projectId: projectId(), provider } }),
+      );
+      if (connection === undefined) {
+        popup.close();
+        throw new Error("Could not start credential connection");
+      }
+      popup.location.replace(connection.authorizationUrl);
+      await new Promise<void>((resolve, reject) => {
+        const receive = (event: MessageEvent) => {
+          if (
+            event.origin !== location.origin ||
+            event.source !== popup ||
+            event.data?.type !== "macrograph-credential-connected"
+          )
+            return;
+          window.removeEventListener("message", receive);
+          resolve();
+        };
+        window.addEventListener("message", receive);
+        const closed = window.setInterval(() => {
+          if (!popup.closed) return;
+          window.clearInterval(closed);
+          window.removeEventListener("message", receive);
+          reject(new Error("Credential connection was cancelled"));
+        }, 500);
+      });
+    },
+    onSuccess: () => {
+      void credentialsQuery.refetch();
+      void workspace.refreshEditorModuleData(projectId());
+    },
+  }));
+  const removeCredential = useMutation(() => ({
+    networkMode: "always" as const,
+    mutationFn: async (credential: { readonly provider: string; readonly id: string }) => {
+      const removed = await runApiResult(
+        workspace.api.credentials.remove({
+          params: {
+            projectId: projectId(),
+            provider: credential.provider,
+            credentialId: credential.id,
+          },
+        }),
+      );
+      if (!removed) throw new Error("Could not remove credential");
+    },
+    onSuccess: () => {
+      void credentialsQuery.refetch();
+      void workspace.refreshEditorModuleData(projectId());
+    },
+  }));
 
   return (
     <div sx={styles.root}>
@@ -272,21 +340,42 @@ export const ProjectSettingsRoute = () => {
                   : 0}
               </span>
             </div>
-            <button
-              type="button"
-              disabled={
-                !canManageCredentials() || refreshingCredentials() || credentialsQuery.isPending
-              }
-              sx={styles.refetch}
-              title={
-                canManageCredentials()
-                  ? "Reload credentials from the provider"
-                  : "Only the project creator with an owner or member role can refresh credentials"
-              }
-              onClick={() => void refetchCredentials()}
-            >
-              {refreshingCredentials() ? "Refreshing..." : "Refresh"}
-            </button>
+            <div sx={styles.credentialActions}>
+              <Show when={canManageCredentials()}>
+                <select
+                  sx={styles.providerSelect}
+                  disabled={connectCredential.isPending}
+                  value=""
+                  onChange={(event) => {
+                    const provider = event.currentTarget.value;
+                    event.currentTarget.value = "";
+                    if (provider !== "") connectCredential.mutate(provider);
+                  }}
+                >
+                  <option value="">Add credential...</option>
+                  <For each={credentialProvidersQuery.data ?? []}>
+                    {(provider) => <option value={provider.id}>{provider.displayName}</option>}
+                  </For>
+                </select>
+              </Show>
+              <button
+                type="button"
+                disabled={
+                  !canManageCredentials() ||
+                  refetchCredentials.isPending ||
+                  credentialsQuery.isPending
+                }
+                sx={styles.refetch}
+                title={
+                  canManageCredentials()
+                    ? "Reload credentials"
+                    : "Only the project creator with an owner or member role can refresh credentials"
+                }
+                onClick={() => refetchCredentials.mutate()}
+              >
+                {refetchCredentials.isPending ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
           <Show
             when={!credentialsQuery.isPending}
@@ -306,7 +395,17 @@ export const ProjectSettingsRoute = () => {
                 <Show when={availableCredentials(catalog())}>
                   {(credentials) => (
                     <div sx={styles.tableContainer}>
-                      <CredentialTable credentials={credentials()} />
+                      <CredentialTable
+                        credentials={credentials()}
+                        {...(canManageCredentials()
+                          ? { onRemove: (credential) => removeCredential.mutate(credential) }
+                          : {})}
+                        removing={(credential) =>
+                          removeCredential.isPending &&
+                          removeCredential.variables?.provider === credential.provider &&
+                          removeCredential.variables.id === credential.id
+                        }
+                      />
                     </div>
                   )}
                 </Show>
@@ -443,6 +542,16 @@ const styles = stylex.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 16,
+  },
+  credentialActions: { display: "flex", alignItems: "center", gap: 8 },
+  providerSelect: {
+    border: `1px solid ${colors.gray7}`,
+    borderRadius: 6,
+    backgroundColor: colors.gray2,
+    paddingBlock: 6,
+    paddingInline: 9,
+    fontSize: 12,
+    color: colors.gray12,
   },
   tableHeading: { display: "flex", alignItems: "center", gap: 6 },
   credentialHeading: { margin: 0, fontSize: 14, fontWeight: 500, color: colors.gray12 },

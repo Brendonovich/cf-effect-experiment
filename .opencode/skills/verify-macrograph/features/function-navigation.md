@@ -10,4 +10,4 @@
 
 ## Verification
 
-`pnpm verify:playground:smoke` asserts this path in an isolated Chromium profile and records the resulting editor screenshot and server log.
+`pnpm verify:playground:function-navigation` asserts this path in an isolated Chromium profile and records the resulting editor screenshot and server log.

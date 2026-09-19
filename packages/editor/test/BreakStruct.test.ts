@@ -40,6 +40,18 @@ const setup = Effect.gen(function* () {
   });
   const editor = yield* Editor.Service;
   yield* editor.project.get();
+  yield* editor.module(
+    Module.make({
+      id: "break-test",
+      effect: (context) =>
+        context.schema.register({
+          id: "root",
+          type: "pure",
+          io: (io) => ({ value: io.data.out("value", t.Custom(rootId)) }),
+          run: () => Effect.void,
+        }),
+    }),
+  );
   const create = (schema: string, properties = {}) =>
     editor.node.create({
       graphID: "graph",
@@ -48,7 +60,12 @@ const setup = Effect.gen(function* () {
         properties,
       },
     });
-  const root = yield* create("MakeStruct", { type: rootId });
+  const root = yield* editor.node.create({
+    graphID: "graph",
+    node: {
+      schema: { package: PackageId.make("break-test"), schema: SchemaId.make("root") },
+    },
+  });
   const first = yield* create("BreakStruct");
   const second = yield* create("BreakStruct");
   const connect = (from: string, out: string, to: string, input = "value") =>
@@ -153,6 +170,53 @@ it.effect("rejects non-struct input connections and reacts to changed definition
   }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("infers Make Struct field inputs from its wildcard output without properties", () =>
+  Effect.gen(function* () {
+    const { editor, connect } = yield* setup;
+    yield* editor.module(
+      Module.make({
+        id: "make-test",
+        effect: (context) =>
+          context.schema.register({
+            id: "root",
+            type: "pure",
+            io: (io) => ({ value: io.data.in("value", t.Custom(rootId)) }),
+            run: () => Effect.void,
+          }),
+      }),
+    );
+    const make = yield* editor.node.create({
+      graphID: "graph",
+      node: {
+        schema: { package: CustomTypes.packageId, schema: SchemaId.make("MakeStruct") },
+      },
+    });
+    const sink = yield* editor.node.create({
+      graphID: "graph",
+      node: {
+        schema: { package: PackageId.make("make-test"), schema: SchemaId.make("root") },
+      },
+    });
+    expect(make.node.properties).toEqual({});
+    expect(make.io.dataInputs).toEqual([]);
+    expect(make.io.dataOutputs).toEqual([{ id: "value", type: CustomTypes.makeWildcard }]);
+    expect(
+      CustomTypes.packageModel.schemas.find((schema) => schema.id === "MakeStruct")!.properties,
+    ).toEqual([]);
+    const connection = yield* connect(make.node.id, "value", sink.node.id);
+    expect(
+      (yield* editor.project.rendered()).graphs.graph!.nodes[make.node.id]!.io.dataInputs,
+    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Custom(childId) }]);
+    yield* editor.connection.delete({
+      graphID: "graph",
+      connectionId: connection.connection.id,
+    });
+    expect(
+      (yield* editor.project.rendered()).graphs.graph!.nodes[make.node.id]!.io.dataInputs,
+    ).toEqual([]);
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it("commits derived groups only after a whole Break chain stabilizes and reuses unchanged groups", () => {
   const graph = {
     ...Canvas.empty("graph"),
@@ -178,7 +242,7 @@ it("commits derived groups only after a whole Break chain stabilizes and reuses 
       CustomTypes.nodeIO(node.schema, {}, definitions)!,
     ]),
   );
-  const derive = CustomTypes.derivedOutputs(graph, definitions);
+  const derive = CustomTypes.derivedIO(graph, definitions);
   expect(Result.isSuccess(cache.update(declarations, [], derive))).toBe(true);
   const first = cache.group("a");
   cache.update(declarations, [], derive);

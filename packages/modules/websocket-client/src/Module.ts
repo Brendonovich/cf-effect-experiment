@@ -2,11 +2,7 @@ import { DataType } from "@macrograph/module/DataType";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
-import {
-  MessageReceived,
-  WebSocketClientEngine,
-  WebSocketConnection,
-} from "./Definition.ts";
+import { MessageReceived, WebSocketClientEngine, WebSocketConnection } from "./Definition.ts";
 
 const connectionProperty = {
   connection: {
@@ -38,14 +34,12 @@ const WebSocketClientModule = Module.make({
     yield* context.schema.register({
       id: "MessageReceived",
       name: "Message Received",
-      description:
-        "Runs when a text message arrives from the selected WebSocket.",
+      description: "Runs when a text message arrives from the selected WebSocket.",
       type: "event",
       properties: connectionProperty,
       event: (event, { properties }) =>
         Effect.succeed(
-          event._tag === "WebSocketMessageReceived" &&
-            event.connectionId === properties.connection,
+          event._tag === "WebSocketMessageReceived" && event.connectionId === properties.connection,
         ),
       io: (io) => ({
         message: io.data.out("message", DataType.String, { name: "Message" }),

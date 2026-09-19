@@ -17,6 +17,7 @@
     "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
+    "@macrograph/module-github": "workspace:*",
     "@macrograph/module-kofi": "workspace:*",
     "@macrograph/module-openai": "workspace:*",
     "@macrograph/module-twitch": "workspace:*",

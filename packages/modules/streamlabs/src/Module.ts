@@ -16,7 +16,9 @@ export default Module.make({
       io: (io) => ({
         name: io.data.out("name", DataType.String, { name: "Name" }),
         amount: io.data.out("amount", DataType.Float, { name: "Amount" }),
-        formattedAmount: io.data.out("formattedAmount", DataType.String, { name: "Formatted Amount" }),
+        formattedAmount: io.data.out("formattedAmount", DataType.String, {
+          name: "Formatted Amount",
+        }),
         message: io.data.out("message", DataType.String, { name: "Message" }),
         currency: io.data.out("currency", DataType.String, { name: "Currency" }),
         from: io.data.out("from", DataType.String, { name: "From" }),
@@ -45,7 +47,9 @@ export default Module.make({
         name: io.data.out("name", DataType.String, { name: "Name" }),
         months: io.data.out("months", DataType.Float, { name: "Months" }),
         message: io.data.out("message", DataType.String, { name: "Message" }),
-        membershipLevelName: io.data.out("membershipLevelName", DataType.String, { name: "Membership Level Name" }),
+        membershipLevelName: io.data.out("membershipLevelName", DataType.String, {
+          name: "Membership Level Name",
+        }),
         payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
@@ -89,8 +93,12 @@ export default Module.make({
       event: (event) => Effect.succeed(event.kind === "membershipGift"),
       io: (io) => ({
         name: io.data.out("name", DataType.String, { name: "Name" }),
-        membershipLevelName: io.data.out("membershipLevelName", DataType.String, { name: "Membership Level Name" }),
-        membershipGiftId: io.data.out("membershipGiftId", DataType.String, { name: "Membership Gift ID" }),
+        membershipLevelName: io.data.out("membershipLevelName", DataType.String, {
+          name: "Membership Level Name",
+        }),
+        membershipGiftId: io.data.out("membershipGiftId", DataType.String, {
+          name: "Membership Gift ID",
+        }),
         channelUrl: io.data.out("channelUrl", DataType.String),
         message: io.data.out("message", DataType.String),
         payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
@@ -113,9 +121,15 @@ export default Module.make({
       event: (event) => Effect.succeed(event.kind === "membershipGiftStart"),
       io: (io) => ({
         name: io.data.out("name", DataType.String, { name: "Name" }),
-        giftMembershipsLevelName: io.data.out("giftMembershipsLevelName", DataType.String, { name: "Membership Level Name" }),
-        giftMembershipsCount: io.data.out("giftMembershipsCount", DataType.Int, { name: "Membership Count" }),
-        membershipMessageId: io.data.out("membershipMessageId", DataType.String, { name: "Membership Gift ID" }),
+        giftMembershipsLevelName: io.data.out("giftMembershipsLevelName", DataType.String, {
+          name: "Membership Level Name",
+        }),
+        giftMembershipsCount: io.data.out("giftMembershipsCount", DataType.Int, {
+          name: "Membership Count",
+        }),
+        membershipMessageId: io.data.out("membershipMessageId", DataType.String, {
+          name: "Membership Gift ID",
+        }),
         channelUrl: io.data.out("channelUrl", DataType.String),
         payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
       }),

@@ -544,6 +544,16 @@ it.layer(TestLayer)((it) => {
           (yield* persistence.loadProject()).functions[created.graph.id]?.inputPosition,
         ).toEqual({ x: 123, y: 456 });
 
+        const withSecondInput = yield* editor.function.addField(created.graph.id, "input");
+        const secondInput = withSecondInput.fn.arguments[1]!;
+        const reordered = yield* editor.function.reorderField(
+          created.graph.id,
+          "input",
+          input.id,
+          secondInput.id,
+        );
+        expect(reordered.fn.arguments.map((field) => field.id)).toEqual([secondInput.id, input.id]);
+
         yield* editor.function.deleteField(created.graph.id, "input", input.id);
         expect((yield* persistence.loadGraph(created.graph.id)).connections).toEqual([]);
       }),

@@ -1,4 +1,4 @@
-export const workspaceVersion = 2 as const;
+export const workspaceVersion = 3 as const;
 export type PaneDirection = "horizontal" | "vertical";
 export type NavSection = "graphs" | "packages" | "functions" | null;
 
@@ -16,9 +16,21 @@ export type GraphTab = {
   readonly view: GraphViewState;
 };
 
+export interface PackageViewState {
+  readonly selectedView: "engine" | "reference";
+  readonly selectedReferenceKey: string | null;
+}
+
+export type PackageTab = {
+  readonly id: string;
+  readonly type: "package";
+  readonly packageId: string;
+  readonly view: PackageViewState;
+};
+
 export type WorkspaceTab =
   | GraphTab
-  | { readonly id: string; readonly type: "package"; readonly packageId: string }
+  | PackageTab
   | { readonly id: string; readonly type: "settings" | "shortcuts" | "types" };
 
 export interface PaneState {
@@ -67,6 +79,7 @@ export type WorkspaceAction =
   | { readonly type: "cycle-tab"; readonly delta: number }
   | { readonly type: "split-pane"; readonly paneId: string; readonly direction: PaneDirection }
   | { readonly type: "set-graph-view"; readonly tabId: string; readonly view: GraphViewState }
+  | { readonly type: "set-package-view"; readonly tabId: string; readonly view: PackageViewState }
   | { readonly type: "set-nav-section"; readonly section: NavSection }
   | { readonly type: "set-inspector-open"; readonly open: boolean }
   | { readonly type: "toggle-zoom"; readonly paneId: string };
@@ -79,6 +92,11 @@ export const defaultGraphView = (): GraphViewState => ({
   scale: 1,
   selectedNodeIds: [],
   selectedNodeId: null,
+});
+
+export const defaultPackageView = (): PackageViewState => ({
+  selectedView: "engine",
+  selectedReferenceKey: null,
 });
 
 const normalizeGraphView = (view: GraphViewState): GraphViewState => {
@@ -109,7 +127,7 @@ const makeTab = (input: TabInput, tabId = id("tab")): WorkspaceTab => {
     case "graph":
       return { id: tabId, type: "graph", graphId: input.graphId, view: defaultGraphView() };
     case "package":
-      return { id: tabId, type: "package", packageId: input.packageId };
+      return { id: tabId, type: "package", packageId: input.packageId, view: defaultPackageView() };
     case "settings":
     case "shortcuts":
     case "types":
@@ -342,6 +360,20 @@ export const workspaceReducer = (
       }
       return state;
     }
+    case "set-package-view": {
+      for (const pane of Object.values(state.panes)) {
+        const index = pane.tabs.findIndex(
+          (tab) => tab.id === action.tabId && tab.type === "package",
+        );
+        if (index < 0) continue;
+        const tabs = [...pane.tabs];
+        const tab = tabs[index]!;
+        if (tab.type !== "package") return state;
+        tabs[index] = { ...tab, view: action.view };
+        return { ...state, panes: { ...state.panes, [pane.id]: { ...pane, tabs } } };
+      }
+      return state;
+    }
     case "set-nav-section":
       return { ...state, navSection: action.section };
     case "set-inspector-open":
@@ -374,11 +406,17 @@ const validView = (value: unknown): value is GraphViewState =>
   (value.selectedNodeId === null ||
     (typeof value.selectedNodeId === "string" &&
       value.selectedNodeIds.includes(value.selectedNodeId)));
+const validPackageView = (value: unknown): value is PackageViewState =>
+  isRecord(value) &&
+  (value.selectedView === "engine" || value.selectedView === "reference") &&
+  (value.selectedReferenceKey === null ||
+    (typeof value.selectedReferenceKey === "string" && value.selectedReferenceKey.length <= 500));
 const validTab = (value: unknown): value is WorkspaceTab => {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.type !== "string")
     return false;
   if (value.type === "graph") return typeof value.graphId === "string" && validView(value.view);
-  if (value.type === "package") return typeof value.packageId === "string";
+  if (value.type === "package")
+    return typeof value.packageId === "string" && validPackageView(value.view);
   return value.type === "settings" || value.type === "shortcuts" || value.type === "types";
 };
 const validTree = (
@@ -453,12 +491,31 @@ const migrateVersionOne = (value: Record<string, unknown>) => {
       return [key, { ...pane, tabs, selectedTabId }];
     }),
   );
+  return { ...value, version: 2, panes };
+};
+
+const migrateVersionTwo = (value: Record<string, unknown>) => {
+  if (value.version !== 2 || !isRecord(value.panes)) return value;
+  const panes = Object.fromEntries(
+    Object.entries(value.panes).map(([key, pane]) => {
+      if (!isRecord(pane) || !Array.isArray(pane.tabs)) return [key, pane];
+      return [
+        key,
+        {
+          ...pane,
+          tabs: pane.tabs.map((tab) =>
+            isRecord(tab) && tab.type === "package" ? { ...tab, view: defaultPackageView() } : tab,
+          ),
+        },
+      ];
+    }),
+  );
   return { ...value, version: workspaceVersion, panes };
 };
 
 const migrateWorkspaceState = (value: unknown): unknown => {
   if (!isRecord(value)) return value;
-  return migrateVersionOne(migrateVersionZero(value));
+  return migrateVersionTwo(migrateVersionOne(migrateVersionZero(value)));
 };
 
 export const maxWorkspaceStorageBytes = 1_000_000;
@@ -561,7 +618,7 @@ export const loadWorkspaceState = (
   try {
     stored = storage.getItem(key);
     if (stored === null) {
-      const previousKey = key.replace(":v2:", ":v1:");
+      const previousKey = key.replace(":v3:", ":v2:");
       if (previousKey !== key) {
         stored = storage.getItem(previousKey);
         storedKey = previousKey;

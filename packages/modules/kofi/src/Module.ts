@@ -20,8 +20,7 @@ export default Module.make({
           resource: KofiWebhook,
         },
       },
-      event: (event, { properties }) =>
-        Effect.succeed(event.webhookId === properties.webhook),
+      event: (event, { properties }) => Effect.succeed(event.webhookId === properties.webhook),
       io: (io) => ({
         type: io.data.out("type", DataType.String, { name: "Type" }),
         fromName: io.data.out("fromName", DataType.String, { name: "From Name" }),

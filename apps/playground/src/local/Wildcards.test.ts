@@ -185,10 +185,11 @@ it.effect(
         },
       });
       const executor = yield* Executor.make(model, {
-        executionDriver: {
-          executeNode: (_key, effect) =>
-            effect.pipe(Effect.map((result) => JSON.parse(JSON.stringify(result)))),
-        },
+        executionEnvironment: Executor.durableExecution((key, executor) =>
+          executor
+            .executeNode(key)
+            .pipe(Effect.map((result) => JSON.parse(JSON.stringify(result)))),
+        ),
       });
       yield* executor.module(
         source,

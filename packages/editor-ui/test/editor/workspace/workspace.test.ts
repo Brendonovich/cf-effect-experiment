@@ -111,6 +111,39 @@ describe("workspace reducer", () => {
     });
   });
 
+  it("persists independent module view selections in copied panes", () => {
+    let state = createWorkspaceState({ type: "package", packageId: "obs" });
+    const firstPaneId = state.focusedPaneId;
+    const firstTab = selectedTab(state)!;
+    state = workspaceReducer(state, {
+      type: "set-package-view",
+      tabId: firstTab.id,
+      view: { selectedView: "reference", selectedReferenceKey: "node:start-stream" },
+    });
+    state = workspaceReducer(state, {
+      type: "split-pane",
+      paneId: firstPaneId,
+      direction: "horizontal",
+    });
+    const copied = selectedTab(state)!;
+    expect(copied.type === "package" ? copied.view : undefined).toEqual({
+      selectedView: "reference",
+      selectedReferenceKey: "node:start-stream",
+    });
+
+    state = workspaceReducer(state, {
+      type: "set-package-view",
+      tabId: copied.id,
+      view: { selectedView: "engine", selectedReferenceKey: "resource:connection" },
+    });
+    const original = selectedTab(state, firstPaneId);
+    expect(original?.type === "package" ? original.view : undefined).toEqual({
+      selectedView: "reference",
+      selectedReferenceKey: "node:start-stream",
+    });
+    expect(parseWorkspaceState(JSON.stringify(state))).toEqual(state);
+  });
+
   it("selects, cycles, moves, and closes tabs coherently", () => {
     let state = createWorkspaceState({ type: "graph", graphId: "main" });
     const pane = state.focusedPaneId;
@@ -343,8 +376,8 @@ describe("workspace storage", () => {
     ).toBe(true);
   });
 
-  it("moves version one storage to the current key", () => {
-    const state = createWorkspaceState({ type: "settings" });
+  it("moves version two storage to the current key", () => {
+    const state = createWorkspaceState({ type: "package", packageId: "obs" });
     const values = new Map<string, string>();
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
@@ -352,8 +385,19 @@ describe("workspace storage", () => {
       removeItem: (key: string) => values.delete(key),
     };
     const key = workspaceStorageKey("project", "user");
-    const previousKey = key.replace(":v2:", ":v1:");
-    values.set(previousKey, JSON.stringify({ ...state, version: 1 }));
+    const previousKey = key.replace(":v3:", ":v2:");
+    const pane = state.panes[state.focusedPaneId]!;
+    const packageTab = selectedTab(state)!;
+    if (packageTab.type !== "package") throw new Error("Expected a package tab");
+    const versionTwo = {
+      ...state,
+      version: 2,
+      panes: {
+        ...state.panes,
+        [pane.id]: { ...pane, tabs: [{ ...packageTab, view: undefined }] },
+      },
+    };
+    values.set(previousKey, JSON.stringify(versionTwo));
     expect(
       loadWorkspaceState(storage, key, () =>
         createWorkspaceState({ type: "graph", graphId: "fallback" }),

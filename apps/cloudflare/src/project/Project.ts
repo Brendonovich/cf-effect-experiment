@@ -416,12 +416,11 @@ export const make = (
                   deployments.delete(deploymentSnapshotObjectKey(project.id, deployment.id)),
                 ],
                 { discard: true },
-              )
-                .pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.logError("Failed to remove project deployment objects", cause),
-                  ),
+              ).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logError("Failed to remove project deployment objects", cause),
                 ),
+              ),
             { discard: true },
           );
         }).pipe(Policy.withPolicy(projectPolicy.canManage(projectId))),

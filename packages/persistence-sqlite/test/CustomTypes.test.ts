@@ -1,6 +1,6 @@
 import { Project } from "@macrograph/core";
-import { Persistence } from "@macrograph/persistence";
 import { DataType } from "@macrograph/module/DataType";
+import { Persistence } from "@macrograph/persistence";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { migrate } from "drizzle-orm/node-sqlite/migrator";
 import { Effect, Layer, Schema } from "effect";
@@ -9,8 +9,8 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { test } from "vitest";
 import { fileURLToPath } from "node:url";
+import { test } from "vitest";
 
 import { DrizzleDriver } from "../src/DrizzleDriver.ts";
 import { SqlitePersistence } from "../src/SqlitePersistence.ts";
@@ -52,7 +52,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
             name: "Preserved node",
             schema: { package: "CustomTypes", schema: "StringifyJson" },
             position: { x: 10, y: 20 },
-            properties: { type: "result" },
+            properties: {},
             foldPins: false,
             splitScopeOutputs: ["found"],
             inputDefaults: {

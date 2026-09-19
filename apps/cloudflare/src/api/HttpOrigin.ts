@@ -1,4 +1,4 @@
-interface OriginRequest {
+export interface OriginRequest {
   readonly url: string;
   readonly headers: Readonly<Record<string, string | undefined>>;
 }

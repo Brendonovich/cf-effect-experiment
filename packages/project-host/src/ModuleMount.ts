@@ -1,7 +1,7 @@
 import type { Executor } from "@macrograph/execution";
+import type { Engine, Module } from "@macrograph/module";
 
 import { Editor } from "@macrograph/editor";
-import type { Engine, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { EngineHost } from "./EngineHost.ts";
@@ -20,6 +20,6 @@ export const register = <Definition extends Engine.AnyDef = never>(
     ? Effect.flatMap(Editor.Service, (editor) =>
         Effect.all([editor.module(args[0]), executor.module(args[0])], { discard: true }),
       )
-    : Effect.all([EngineHost.mount(...args), executor.module(args[0], args[1])], { discard: true });
+    : EngineHost.mount(...args).pipe(Effect.andThen(executor.module(args[0], args[1])));
 
 export * as ModuleMount from "./ModuleMount.ts";

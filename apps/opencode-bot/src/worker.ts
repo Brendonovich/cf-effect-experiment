@@ -55,10 +55,8 @@ export default Layer.unwrap(
       Effect.gen(function* () {
         const environment = yield* Cloudflare.WorkerEnvironment;
         const discordWebhook =
-          boundString(environment.DISCORD_AUTOFIX_WEBHOOK) ??
-          Redacted.value(yield* DiscordWebhook);
-        const botUserId =
-          boundString(environment.DISCORD_AUTOFIX_BOT_ID) ?? (yield* DiscordBotId);
+          boundString(environment.DISCORD_AUTOFIX_WEBHOOK) ?? Redacted.value(yield* DiscordWebhook);
+        const botUserId = boundString(environment.DISCORD_AUTOFIX_BOT_ID) ?? (yield* DiscordBotId);
         const githubToken =
           boundString(environment.GITHUB_API_TOKEN) ?? Redacted.value(yield* GitHubToken);
         return yield* Effect.gen(function* () {

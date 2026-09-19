@@ -92,8 +92,12 @@ const setup = async (
   );
   vi.spyOn(api, "replay").mockReturnValue(Effect.succeed(replayResult));
   const credentialsApi: CredentialsApiClient = {
+    complete: () => Effect.die("Credentials are not needed for this test"),
+    connect: () => Effect.die("Credentials are not needed for this test"),
     list: () => Effect.die("Credentials are not needed for this test"),
+    providers: () => Effect.die("Credentials are not needed for this test"),
     refetch: () => Effect.die("Credentials are not needed for this test"),
+    remove: () => Effect.die("Credentials are not needed for this test"),
   };
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   const onSelectionChange = vi.fn();

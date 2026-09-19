@@ -475,7 +475,6 @@ describe("WebSocket server engine", () => {
       }).pipe(Effect.provide(harness.engineLayer));
     }),
   );
-
 });
 
 describe("Node WebSocket listener", () => {

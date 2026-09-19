@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
-import { Persistence } from "@macrograph/persistence";
 import { Engine, HttpEndpoint, Module } from "@macrograph/module";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, PubSub, Schema } from "effect";
 
 import { EngineHost } from "../src/EngineHost.ts";

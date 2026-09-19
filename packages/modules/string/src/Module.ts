@@ -14,6 +14,7 @@ const decimal = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
 const StringModule = Module.make({
   id: "string",
   name: "String",
+  description: "Create, compare, format, and transform text.",
   effect: Effect.fnUntraced(function* (context) {
     for (const [id, name, second, calculate] of [
       ["StringIncludes", "String Includes", "needle", (a: string, b: string) => a.includes(b)],
@@ -255,7 +256,10 @@ const StringModule = Module.make({
       type: "pure",
       io: (io) => ({
         input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-        separator: io.data.in("separator", DataType.String, { name: "Separator", defaultValue: "" }),
+        separator: io.data.in("separator", DataType.String, {
+          name: "Separator",
+          defaultValue: "",
+        }),
         output: io.data.out("output", DataType.List(DataType.String)),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.split(io.separator))),
@@ -278,7 +282,10 @@ const StringModule = Module.make({
       description: "Joins a list of strings with LF line breaks.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.List(DataType.String), { name: "Lines", defaultValue: [] }),
+        input: io.data.in("input", DataType.List(DataType.String), {
+          name: "Lines",
+          defaultValue: [],
+        }),
         output: io.data.out("output", DataType.String),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.join("\n"))),

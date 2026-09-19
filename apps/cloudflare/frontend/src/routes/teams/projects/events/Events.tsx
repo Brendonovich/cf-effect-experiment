@@ -17,6 +17,7 @@ import {
   LoadingState,
 } from "@macrograph/editor-ui";
 import { styles } from "@macrograph/editor-ui/events.stylex";
+import GitHubModule from "@macrograph/module-github";
 import KofiModule from "@macrograph/module-kofi";
 import TwitchModule from "@macrograph/module-twitch";
 import * as stylex from "@stylexjs/stylex";
@@ -290,7 +291,7 @@ export const Events: Component<EventsProps> = (props) => {
           </div>
           <div sx={styles.instance}>
             {endpointProps.ingress.schema.displayName} ·{" "}
-            {[KofiModule, TwitchModule].find((module) =>
+            {[KofiModule, TwitchModule, GitHubModule].find((module) =>
               endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
@@ -409,8 +410,9 @@ export const Events: Component<EventsProps> = (props) => {
               id={item.record.id}
               name={item.record.eventType}
               moduleName={
-                [KofiModule, TwitchModule].find((module) => module.id === item.record.moduleId)
-                  ?.name ?? item.record.moduleId
+                [KofiModule, TwitchModule, GitHubModule].find(
+                  (module) => module.id === item.record.moduleId,
+                )?.name ?? item.record.moduleId
               }
               source={item.kind === "event" ? eventSource(item.record) : "Ingress"}
               receivedAt={item.record.receivedAt}
@@ -450,7 +452,7 @@ export const Events: Component<EventsProps> = (props) => {
                     ? undefined
                     : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
                 const moduleName =
-                  [KofiModule, TwitchModule].find(
+                  [KofiModule, TwitchModule, GitHubModule].find(
                     (module) => module.id === selected.record.moduleId,
                   )?.name ?? selected.record.moduleId;
 

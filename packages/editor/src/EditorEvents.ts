@@ -39,8 +39,7 @@ export class Service extends Context.Service<
   }
 >()("macrograph/EditorEvents") {}
 
-export const layer = Layer.effect(
-  Service)(
+export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const persistence = yield* Persistence.Service;
     const pubsub = yield* PubSub.unbounded<EditorEvent.EditorEvent>();

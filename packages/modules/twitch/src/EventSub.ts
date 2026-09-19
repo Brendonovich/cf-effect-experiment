@@ -172,10 +172,9 @@ export namespace SubscriptionEvent {
 }
 
 export namespace EventSubSocket {
-  export class ConnectionFailed extends Schema.TaggedError<ConnectionFailed>()(
-    "ConnectionFailed",
-    { cause: S.Unknown },
-  ) {}
+  export class ConnectionFailed extends Schema.TaggedError<ConnectionFailed>()("ConnectionFailed", {
+    cause: S.Unknown,
+  }) {}
 
   export const make = (url = "wss://eventsub.wss.twitch.tv/ws") =>
     Effect.gen(function* () {

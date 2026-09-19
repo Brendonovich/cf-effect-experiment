@@ -3,11 +3,12 @@ import * as S from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { RpcClient, RpcGroup, type Rpc } from "effect/unstable/rpc";
 
-import type { Live, Requirement } from "./HttpIngress.ts";
 import type { Catalog } from "./Credential.ts";
-import { unavailable } from "./Credential.ts";
+import type { Live, Requirement } from "./HttpIngress.ts";
 import type { Module } from "./Module.ts";
 import type { ResourceClass, ToHandler } from "./Resource.ts";
+
+import { unavailable } from "./Credential.ts";
 
 export const EngineTypeId: unique symbol = Symbol.for("~macrograph/Module/Engine");
 

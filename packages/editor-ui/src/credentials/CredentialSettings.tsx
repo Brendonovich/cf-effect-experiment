@@ -6,10 +6,10 @@ import { Effect } from "effect";
 import { Show, createEffect } from "solid-js";
 
 import { Avatar } from "../account/Avatar";
+import { colors } from "../tokens.stylex.ts";
 import { Button, ButtonLink } from "../ui/Button";
 import { createStateMachine } from "../ui/createStateMachine.ts";
 import { CredentialTable } from "./CredentialTable";
-import { colors } from "../tokens.stylex.ts";
 
 const styles = stylex.create({
   focusRing: {
@@ -422,11 +422,7 @@ export function CredentialSettings(props: CredentialSettingsProps) {
       </p>
       <Show
         when={phase() !== "loading"}
-        fallback={
-          <p sx={styles.status}>
-            {props.loadingLabel ?? "Loading authorization..."}
-          </p>
-        }
+        fallback={<p sx={styles.status}>{props.loadingLabel ?? "Loading authorization..."}</p>}
       >
         <Show
           when={phase() === "connected"}
@@ -445,9 +441,7 @@ export function CredentialSettings(props: CredentialSettingsProps) {
               }
             >
               <div sx={styles.pending}>
-                <p sx={styles.pendingTitle}>
-                  Finish authorization in the MacroGraph window
-                </p>
+                <p sx={styles.pendingTitle}>Finish authorization in the MacroGraph window</p>
                 <p sx={styles.pendingDescription}>
                   This page checks automatically while you approve the device connection.
                 </p>

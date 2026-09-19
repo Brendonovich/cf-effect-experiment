@@ -7,6 +7,7 @@ import { defineConfig } from "vite";
 
 const cloudSettings = new Set([
   "@macrograph/module-kofi",
+  "@macrograph/module-github",
   "@macrograph/module-twitch",
   "@macrograph/module-openai",
   "@macrograph/module-elevenlabs",

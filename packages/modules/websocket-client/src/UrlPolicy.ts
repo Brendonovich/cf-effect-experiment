@@ -1,11 +1,8 @@
 import { Context, Effect, Layer, Schema } from "effect";
 
-export class Rejected extends Schema.TaggedError<Rejected>()(
-  "WebSocketUrlRejected",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class Rejected extends Schema.TaggedError<Rejected>()("WebSocketUrlRejected", {
+  reason: Schema.String,
+}) {}
 
 export class Service extends Context.Service<
   Service,
@@ -17,10 +14,7 @@ const hostname = (url: URL) => url.hostname.toLowerCase().replace(/\.+$/, "");
 
 const privateIpv4 = (host: string): boolean => {
   const parts = host.split(".").map(Number);
-  if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-  )
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
     return false;
   const [a, b, c] = parts as [number, number, number, number];
   return (
@@ -42,8 +36,7 @@ const privateIpv4 = (host: string): boolean => {
 };
 
 const publicIpv6 = (host: string): boolean => {
-  const literal =
-    host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   const halves = literal.split("::");
   if (halves.length > 2) return false;
   const parse = (half: string) =>
@@ -51,23 +44,13 @@ const publicIpv6 = (host: string): boolean => {
       ? []
       : half
           .split(":")
-          .map((part) =>
-            /^[0-9a-f]{1,4}$/i.test(part) ? Number.parseInt(part, 16) : -1,
-          );
+          .map((part) => (/^[0-9a-f]{1,4}$/i.test(part) ? Number.parseInt(part, 16) : -1));
   const left = parse(halves[0] ?? "");
   const right = parse(halves[1] ?? "");
   if (left.includes(-1) || right.includes(-1)) return false;
   const omitted = 8 - left.length - right.length;
-  if (
-    (halves.length === 1 && omitted !== 0) ||
-    (halves.length === 2 && omitted < 1)
-  )
-    return false;
-  const segments = [
-    ...left,
-    ...Array.from({ length: omitted }, () => 0),
-    ...right,
-  ];
+  if ((halves.length === 1 && omitted !== 0) || (halves.length === 2 && omitted < 1)) return false;
+  const segments = [...left, ...Array.from({ length: omitted }, () => 0), ...right];
   const first = segments[0] ?? 0;
   const second = segments[1] ?? 0;
   return (
@@ -82,8 +65,7 @@ const publicIpv6 = (host: string): boolean => {
 const commonCheck = (url: URL): Effect.Effect<void, Rejected> => {
   if (url.protocol !== "ws:" && url.protocol !== "wss:")
     return reject(`Protocol ${url.protocol || "(missing)"} is not allowed`);
-  if (url.username !== "" || url.password !== "")
-    return reject("URL credentials are not allowed");
+  if (url.username !== "" || url.password !== "") return reject("URL credentials are not allowed");
   if (url.hash !== "") return reject("URL fragments are not allowed");
   return Effect.void;
 };
@@ -96,10 +78,8 @@ export const make = (check: (url: URL) => Effect.Effect<void, Rejected>) =>
   );
 
 export const secureLayer = make((url) => {
-  if (url.protocol !== "wss:")
-    return reject("Hosted WebSocket connections must use WSS");
-  if (url.port !== "")
-    return reject("Hosted WSS connections must use port 443");
+  if (url.protocol !== "wss:") return reject("Hosted WebSocket connections must use WSS");
+  if (url.port !== "") return reject("Hosted WSS connections must use port 443");
   const host = hostname(url);
   if (
     host === "localhost" ||
@@ -115,9 +95,7 @@ export const secureLayer = make((url) => {
     return reject(`Host ${host} is not allowed`);
   // DNS rebinding also requires deployment-level egress controls; hostname checks cannot stop it.
   if (host.includes(":"))
-    return publicIpv6(host)
-      ? Effect.void
-      : reject(`Host ${host} is not publicly routable`);
+    return publicIpv6(host) ? Effect.void : reject(`Host ${host} is not publicly routable`);
   if (privateIpv4(host)) return reject(`Host ${host} is not publicly routable`);
   if (!host.includes(".")) return reject(`Host ${host} is not allowed`);
   return Effect.void;

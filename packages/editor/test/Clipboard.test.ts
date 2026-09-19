@@ -12,8 +12,8 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
-import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DataType } from "@macrograph/module";
+import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { Effect, Layer, PubSub, Result, Schema } from "effect";
 
 import { Editor, EditorEvent, EditorEvents, EditorRpc, Packages } from "../src/index.ts";
@@ -273,9 +273,7 @@ it.layer(TestLayer)((it) => {
         expect(pasted.connections).toEqual([]);
         expect(
           Object.values((yield* editor.project.get()).graphs.destination!.canvas.nodes),
-        ).toEqual(
-          pasted.nodes,
-        );
+        ).toEqual(pasted.nodes);
       }),
   );
   it.effect(
@@ -322,9 +320,9 @@ it.layer(TestLayer)((it) => {
         expect(yield* PubSub.take(subscription)).toEqual(deleted);
         expect(deleted.deletedConnectionIds).toEqual([pasted.connections[0]!.id]);
         expect((yield* editor.project.get()).graphs.destination!.canvas.connections).toEqual([]);
-        expect(Object.keys((yield* editor.project.get()).graphs.destination!.canvas.nodes)).toEqual([
-          pasted.nodes[1]!.id,
-        ]);
+        expect(Object.keys((yield* editor.project.get()).graphs.destination!.canvas.nodes)).toEqual(
+          [pasted.nodes[1]!.id],
+        );
       }),
   );
 

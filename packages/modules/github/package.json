@@ -1,0 +1,39 @@
+{
+  "name": "@macrograph/module-github",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Module.ts",
+  "exports": {
+    ".": "./src/Module.ts",
+    "./Api": "./src/Api.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Deployment/Webhook": "./src/Deployment/Webhook.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Settings": "./src/Settings.tsx",
+    "./Webhook": "./src/Webhook.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/stylex": "catalog:",
+    "@tanstack/solid-query": "6.0.0-rc.0",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.9"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}

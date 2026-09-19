@@ -176,27 +176,26 @@ describe("Executor", () => {
     Effect.gen(function* () {
       const executions = yield* Ref.make<ReadonlyArray<string>>([]);
       const pureRuns = yield* Ref.make(0);
-      const checkpoints = new Map<string, Executor.NodeExecutionResult>();
-      const executionDriver: Executor.ExecutionDriver = {
-        executeNode: (key, effect) => {
-          const id = JSON.stringify({
-            projectId: key.projectId,
-            graphId: key.graphId,
-            eventNodeId: key.eventNodeId,
-            nodeId: key.nodeId,
-            kind: key.kind,
-          });
-          const cached = checkpoints.get(id);
-          if (cached !== undefined) return Effect.succeed(structuredClone(cached));
-          return effect.pipe(
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                checkpoints.set(id, structuredClone(result));
-              }),
-            ),
-          );
-        },
-      };
+      const checkpoints = new Map<string, Executor.SerializedNodeExecutionResult>();
+      const executionEnvironment = Executor.durableExecution((key, executor) => {
+        const effect = executor.executeNode(key);
+        const id = JSON.stringify({
+          projectId: key.projectId,
+          graphId: key.graphId,
+          eventNodeId: key.eventNodeId,
+          nodeId: key.nodeId,
+          kind: key.kind,
+        });
+        const cached = checkpoints.get(id);
+        if (cached !== undefined) return Effect.succeed(structuredClone(cached));
+        return effect.pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              checkpoints.set(id, structuredClone(result));
+            }),
+          ),
+        );
+      });
       const module = Module.make({
         id: "test",
         engine: TestEngine,
@@ -341,7 +340,9 @@ describe("Executor", () => {
         },
       };
 
-      const executor = yield* Executor.make(Project.empty(), { executionDriver });
+      const executor = yield* Executor.make(Project.empty(), {
+        executionEnvironment,
+      });
       yield* executor.module(module, deployment);
       yield* executor.loadProject(project);
       const spans: Array<Tracer.Span> = [];
@@ -410,7 +411,7 @@ describe("Executor", () => {
         if (span.status._tag === "Ended") assert.isTrue(Exit.isSuccess(span.status.exit));
       }
 
-      const replayed = yield* Executor.make(project, { executionDriver });
+      const replayed = yield* Executor.make(project, { executionEnvironment });
       yield* replayed.module(module, deployment);
       const replayStart = spans.length;
       yield* replayed

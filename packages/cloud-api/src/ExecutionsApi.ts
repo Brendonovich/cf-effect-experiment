@@ -3,7 +3,11 @@ import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 
 import { Authentication } from "./Authentication.ts";
 import { ExecutionNotFound, ProjectNotFound } from "./Errors.ts";
-import { ProjectEventRecord, ProjectExecutionNodeRecord, ProjectExecutionRecord } from "./Models.ts";
+import {
+  ProjectEventRecord,
+  ProjectExecutionNodeRecord,
+  ProjectExecutionRecord,
+} from "./Models.ts";
 
 export class ExecutionsApiGroup extends HttpApiGroup.make("executions").add(
   HttpApiEndpoint.get("list", "/api/projects/:projectId/executions", {

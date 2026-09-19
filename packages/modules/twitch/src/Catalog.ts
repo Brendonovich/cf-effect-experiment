@@ -912,10 +912,12 @@ export const register = Effect.fnUntraced(function* (context: Context) {
                 ? DataType.Bool
                 : DataType.String;
           return io.data.in(field.id, field.optional ? DataType.Option(type) : type, {
-            name: field.name ?? field.id
-              .replace(/([a-z])([A-Z])/g, "$1 $2")
-              .replace(/^./, (value) => value.toUpperCase())
-              .replace(/\bId\b/g, "ID"),
+            name:
+              field.name ??
+              field.id
+                .replace(/([a-z])([A-Z])/g, "$1 $2")
+                .replace(/^./, (value) => value.toUpperCase())
+                .replace(/\bId\b/g, "ID"),
           });
         }),
         responseJson: io.data.out("responseJson", DataType.String, { name: "Response JSON" }),
@@ -926,8 +928,11 @@ export const register = Effect.fnUntraced(function* (context: Context) {
               : field.kind === "bool" || field.kind === "exists"
                 ? DataType.Bool
                 : DataType.String;
-          return io.data.out(field.id, field.optional ? DataType.Option(type) : type,
-            field.name === undefined ? undefined : { name: field.name });
+          return io.data.out(
+            field.id,
+            field.optional ? DataType.Option(type) : type,
+            field.name === undefined ? undefined : { name: field.name },
+          );
         }),
       }),
       run: ({ io, properties, engine }) =>

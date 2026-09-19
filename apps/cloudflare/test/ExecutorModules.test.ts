@@ -1,5 +1,3 @@
-import type { Executor } from "@macrograph/execution";
-
 import { assert, describe, it } from "@effect/vitest";
 import {
   ConnectionId,
@@ -10,6 +8,7 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
+import { Executor } from "@macrograph/execution";
 import { unavailableRuntimeClient as unavailableTwitchRuntimeClient } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Result, Schema } from "effect";
@@ -105,12 +104,11 @@ describe("ExecutorModules", () => {
       const executor = yield* ProjectExecutor.make(project, {
         modules: ExecutorModules.registry,
         engineClient,
-        executionDriver: {
-          executeNode: (key, effect) =>
-            effect.pipe(
-              Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result))),
-            ),
-        },
+        executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
+          nodeExecutor
+            .executeNode(key)
+            .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
+        ),
       });
       yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
       assert.deepStrictEqual(calls, ["https://api.openai.com", "https://api.elevenlabs.io"]);
@@ -125,6 +123,7 @@ describe("ExecutorModules", () => {
   it("registers the cloud-compatible catalog without local or persistent-socket modules", () => {
     assert.deepStrictEqual(ExecutorModules.registry.entries.map(({ id }) => id).sort(), [
       "elevenlabs",
+      "github",
       "http-client",
       "json",
       "kofi",

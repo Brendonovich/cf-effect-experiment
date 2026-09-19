@@ -51,16 +51,17 @@ Replay restores the source's validated result and recreates the same activation.
 ## Module API
 
 ```ts
-yield* context.schema.register({
-  id: "Example",
-  type: "base",
-  io: (io) => ({
-    input: io.exec.in("exec"),
-    found: io.scope.out("found", { value: DataType.String }),
-    missing: io.exec.out("missing"),
-  }),
-  run: ({ io }) => Effect.succeed(io.found({ value: "hello" })),
-});
+yield *
+  context.schema.register({
+    id: "Example",
+    type: "base",
+    io: (io) => ({
+      input: io.exec.in("exec"),
+      found: io.scope.out("found", { value: DataType.String }),
+      missing: io.exec.out("missing"),
+    }),
+    run: ({ io }) => Effect.succeed(io.found({ value: "hello" })),
+  });
 ```
 
 The materialized scope output is a typed function returning the selected branch

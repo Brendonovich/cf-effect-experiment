@@ -4,10 +4,7 @@ import { Effect, Result } from "effect";
 
 import { count, events, ids, requests } from "../src/Catalog.ts";
 import { OBSSocket, SocketAddress } from "../src/Definition.ts";
-import {
-  CurrentProgramSceneChanged,
-  SceneCollectionListChanged,
-} from "../src/Events.ts";
+import { CurrentProgramSceneChanged, SceneCollectionListChanged } from "../src/Events.ts";
 import * as ObsEvent from "../src/Events.ts";
 import OBSModule from "../src/Module.ts";
 import { canvasRequests } from "../src/Protocol.ts";
@@ -41,9 +38,7 @@ describe("OBS catalog", () => {
         [...ids],
       );
       assert.strictEqual(new Set(schemas.map(({ id }) => id)).size, 209);
-      assert.isTrue(
-        schemas.every(({ description }) => description !== undefined),
-      );
+      assert.isTrue(schemas.every(({ description }) => description !== undefined));
       assert.deepStrictEqual(
         [
           "VirtualcamStateChanged",
@@ -355,11 +350,7 @@ describe("OBS catalog", () => {
       );
       yield* vendor.run({
         input: (ref) =>
-          ref.id === "vendorName"
-            ? "vendor"
-            : ref.id === "requestType"
-              ? "request"
-              : "{}",
+          ref.id === "vendorName" ? "vendor" : ref.id === "requestType" ? "request" : "{}",
         output: () => undefined,
         properties: { socket: address },
         event: undefined,
@@ -380,9 +371,7 @@ describe("OBS catalog", () => {
   it.effect("filters events by socket and maps event data", () =>
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(OBSModule.effect);
-      const schema = schemas.find(
-        ({ id }) => id === "CurrentProgramSceneChanged",
-      );
+      const schema = schemas.find(({ id }) => id === "CurrentProgramSceneChanged");
       assert.isDefined(schema);
       const address = SocketAddress.make("ws://localhost:4455");
       const other = SocketAddress.make("ws://localhost:4456");
@@ -408,9 +397,7 @@ describe("OBS catalog", () => {
         sceneUuid: "scene-1",
       });
 
-      const listSchema = schemas.find(
-        ({ id }) => id === "SceneCollectionListChanged",
-      );
+      const listSchema = schemas.find(({ id }) => id === "SceneCollectionListChanged");
       assert.isDefined(listSchema);
       assert.strictEqual(listSchema.dataOutputs[0]?.type._tag, "List");
       const listOutputs = new Map<string, unknown>();

@@ -62,6 +62,18 @@
       "path": "packages/project-host"
     },
     {
+      "path": "packages/live-runtime"
+    },
+    {
+      "path": "packages/workflow-runtime"
+    },
+    {
+      "path": "packages/workflow-runtime-effect-cluster"
+    },
+    {
+      "path": "packages/workflow-runtime-vercel"
+    },
+    {
       "path": "packages/modules/twitch"
     },
     {

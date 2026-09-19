@@ -7,6 +7,7 @@ const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 
 const LogicModule = Module.make({
   id: "logic",
   name: "Logic",
+  description: "Branch, compare, and combine values with logical operations.",
   effect: Effect.fnUntraced(function* (context) {
     yield* context.schema.register({
       id: "Branch",

@@ -12,7 +12,7 @@ import {
 } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-import type * as Executor from "./Executor.ts";
+import * as Executor from "./Executor.ts";
 
 export const Status = Schema.Literals(["running", "complete", "failed", "interrupted"]);
 
@@ -119,7 +119,7 @@ export class Service extends Context.Service<
       event: Input,
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
-    readonly executionDriver: Executor.ExecutionDriver;
+    readonly executionEnvironment: Executor.InProcessExecutionEnvironment;
     readonly wrap: (executor: Executor.Service) => Executor.Service;
     readonly replay: (eventId: string) => Effect.Effect<void, ReplayUnavailable>;
   }
@@ -202,63 +202,63 @@ export const layer = Layer.effect(Service)(
           );
         }),
       );
-    const executionDriver: Executor.ExecutionDriver = {
-      executeNode: (key, effect) =>
-        Effect.uninterruptibleMask((restore) =>
-          Effect.gen(function* () {
-            const eventId = yield* CurrentEvent;
-            if (eventId === undefined) return yield* restore(effect);
-            const startedAt = yield* Clock.currentTimeMillis;
-            yield* update((events) =>
-              events.map((event) =>
-                event.id !== eventId
-                  ? event
-                  : {
-                      ...event,
-                      nodes: [
-                        ...event.nodes.slice(-(limits.nodes - 1)),
-                        {
-                          id: key.traceId,
-                          graphId: key.graphId,
-                          nodeId: key.nodeId,
-                          executionId: key.executionTraceId,
-                          startedAt,
-                          finishedAt: null,
-                          status: "running",
-                          error: null,
-                        },
-                      ],
-                    },
-              ),
-            );
-            return yield* restore(effect).pipe(
-              Effect.onExit((exit) =>
-                finish(exit).pipe(
-                  Effect.flatMap((finished) =>
-                    update((events) =>
-                      events.map((event) =>
-                        event.id !== eventId
-                          ? event
-                          : {
-                              ...event,
-                              nodes: event.nodes.map((node) =>
-                                node.id === key.traceId ? { ...node, ...finished } : node,
-                              ),
-                            },
-                      ),
+    const executionEnvironment = Executor.inProcessExecution((key, nodeExecutor) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const effect = nodeExecutor.executeNode(key);
+          const eventId = yield* CurrentEvent;
+          if (eventId === undefined) return yield* restore(effect);
+          const startedAt = yield* Clock.currentTimeMillis;
+          yield* update((events) =>
+            events.map((event) =>
+              event.id !== eventId
+                ? event
+                : {
+                    ...event,
+                    nodes: [
+                      ...event.nodes.slice(-(limits.nodes - 1)),
+                      {
+                        id: key.traceId,
+                        graphId: key.graphId,
+                        nodeId: key.nodeId,
+                        executionId: key.executionTraceId,
+                        startedAt,
+                        finishedAt: null,
+                        status: "running",
+                        error: null,
+                      },
+                    ],
+                  },
+            ),
+          );
+          return yield* restore(effect).pipe(
+            Effect.onExit((exit) =>
+              finish(exit).pipe(
+                Effect.flatMap((finished) =>
+                  update((events) =>
+                    events.map((event) =>
+                      event.id !== eventId
+                        ? event
+                        : {
+                            ...event,
+                            nodes: event.nodes.map((node) =>
+                              node.id === key.traceId ? { ...node, ...finished } : node,
+                            ),
+                          },
                     ),
                   ),
                 ),
               ),
-            );
-          }),
-        ),
-    };
+            ),
+          );
+        }),
+      ),
+    );
     return Service.of({
       snapshot: Effect.sync(() => events),
       changes: Stream.fromPubSub(snapshots),
       track,
-      executionDriver,
+      executionEnvironment,
       replay: (eventId) =>
         Effect.gen(function* () {
           const replay = replays.get(eventId);

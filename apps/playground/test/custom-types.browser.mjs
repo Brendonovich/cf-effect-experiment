@@ -71,7 +71,7 @@ const confirm = async () => {
     .getByRole("dialog", { name: "Confirm type changes", exact: true })
     .waitFor({ state: "detached" });
 };
-const createNode = async (name, x, y, type) => {
+const createNode = async (name, x, y) => {
   await page.locator("[data-active-graph-canvas]").click({ button: "right", position: { x, y } });
   await page.getByPlaceholder("Search nodes").fill(name);
   await button(name, page.getByRole("dialog", { name: "Create node", exact: true })).click();
@@ -92,18 +92,6 @@ const createNode = async (name, x, y, type) => {
   const node = Object.values(project.graphs)
     .flatMap((graph) => Object.values(graph.nodes))
     .find((node) => node.name === name);
-  if (type) {
-    await selectNode(node);
-    await page.getByRole("group", { name: "Target type", exact: true }).getByRole("button").click();
-    await page.getByRole("option", { name: type, exact: true }).click();
-    await page.waitForFunction(
-      ({ key, id }) =>
-        Object.values(JSON.parse(localStorage.getItem(key)).project.graphs).some(
-          (graph) => graph.nodes[id]?.properties.type,
-        ),
-      { key, id: node.id },
-    );
-  }
   return node;
 };
 const selectNode = async (node) => page.locator(`[data-node-header="${node.id}"]`).click();
@@ -153,10 +141,16 @@ const executionFixture = (types) => {
         stringify: "StringifyJson",
       }[operation],
       defaults,
-      operation === "break" ? {} : { type: type.id, ...(member === undefined ? {} : { variant: member }) },
+      member === undefined ? {} : { variant: member },
     );
   const connect = (outNodeId, outIoId, inNodeId, inIoId) =>
-    connections.push({ id: `wire-${connections.length}`, outNodeId, outIo: { _tag: "Port", id: outIoId }, inNodeId, inIoId });
+    connections.push({
+      id: `wire-${connections.length}`,
+      outNodeId,
+      outIo: { _tag: "Port", id: outIoId },
+      inNodeId,
+      inIoId,
+    });
   const date = [{ _tag: "Some", value: "2026-08-31T00:00:00.000Z" }];
   const original = { _type: person.id, name: "original", dates: date };
   const updated = { ...original, name: "PR15_EXECUTION_PROOF" };
@@ -299,8 +293,11 @@ try {
   await page.locator("[data-active-graph-canvas]").waitFor();
   const listPickerNode = await createNode("List Create", 60, 340);
   await selectNode(listPickerNode);
-  assert.equal(await page.getByRole("group", { name: "List item type", exact: true }).count(), 0,
-    "List Create infers its item type instead of exposing a type picker");
+  assert.equal(
+    await page.getByRole("group", { name: "List item type", exact: true }).count(),
+    0,
+    "List Create infers its item type instead of exposing a type picker",
+  );
   await selectNode(listPickerNode);
   await page.keyboard.press("Delete");
   await page.waitForFunction(
@@ -310,9 +307,9 @@ try {
       ),
     { key, id: listPickerNode.id },
   );
-  const make = await createNode("Make Struct", 60, 80, "Person");
-  const stringify = await createNode("Stringify JSON", 460, 100, "Person");
-  const match = await createNode("Match Enum", 460, 340, "Response");
+  const make = await createNode("Make Struct", 60, 80);
+  const stringify = await createNode("Stringify JSON", 460, 100);
+  const match = await createNode("Match Enum", 460, 340);
   await selectNode(match);
   const matchDefault = page.locator('[data-default-editor="Response"]');
   await button("Set default", matchDefault).click();
@@ -320,6 +317,16 @@ try {
   await matchDefault.getByLabel("Response.person.name", { exact: true }).fill("Ada");
   await button("Save default", matchDefault).click();
   await matchDefault.getByLabel("Saved Response").waitFor();
+  const makeOutput = page
+    .locator(`[data-node-id="${make.id}"][data-io-direction="output"]`)
+    .first();
+  const stringifyInput = page
+    .locator(`[data-node-id="${stringify.id}"][data-io-direction="input"]`)
+    .first();
+  await wire(makeOutput, stringifyInput);
+  await waitSaved((project) =>
+    Object.values(project.graphs).some((graph) => graph.connections.length === 1),
+  );
   await selectNode(make);
   const datesDefault = page.locator('[data-default-editor="dates"]');
   await button("Set default", datesDefault).click();
@@ -333,17 +340,6 @@ try {
   await button("Set default", nameDefault).click();
   await nameDefault.getByLabel("name", { exact: true }).fill("Ada");
   await button("Save default", nameDefault).click();
-  const makeOutput = page
-    .locator(`[data-node-id="${make.id}"][data-io-direction="output"]`)
-    .first();
-  const stringifyInput = page
-    .locator(`[data-node-id="${stringify.id}"][data-io-direction="input"]`)
-    .first();
-  await wire(makeOutput, stringifyInput);
-  await waitSaved((project) =>
-    Object.values(project.graphs).some((graph) => graph.connections.length === 1),
-  );
-
   await button("Types").click();
   await button("Structs").click();
   await button("Edit type Person").click();

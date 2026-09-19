@@ -172,13 +172,6 @@ export const nodeDiagnostics = (
     ...io.executionOutputs.flatMap((port) => port.scope ?? []),
   ])
     for (const id of references(port.type)) check(id);
-  if (
-    node.schema.package === CustomTypes.packageId &&
-    !CustomTypes.isBreakStruct(node) &&
-    typeof node.properties.type === "string" &&
-    node.properties.type !== ""
-  )
-    check(node.properties.type);
   for (const id of valueReferences(node.properties)) check(id);
   for (const id of valueReferences(node.inputDefaults)) check(id);
   const relevant = Object.fromEntries(

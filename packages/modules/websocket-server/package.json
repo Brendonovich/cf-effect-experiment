@@ -3,7 +3,6 @@
   "version": "0.0.1",
   "type": "module",
   "main": "./src/Module.ts",
-  "macrograph": { "standaloneDeployment": "./src/Deployment/Local.ts" },
   "exports": {
     ".": "./src/Module.ts",
     "./Definition": "./src/Definition.ts",
@@ -36,5 +35,8 @@
     "typescript": "^5.8",
     "vitest": "^4.1.0",
     "ws": "^8.18.3"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment/Local.ts"
   }
 }

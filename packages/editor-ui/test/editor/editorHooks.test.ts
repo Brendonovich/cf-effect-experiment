@@ -7,6 +7,7 @@ import {
   Node,
   PackageId,
   Project,
+  SchemaAuthoring,
   SchemaId,
   OutputRef,
 } from "@macrograph/core";
@@ -732,7 +733,7 @@ describe("editor concern hooks", () => {
       let editable = true;
       const { canvas, editor, pkg } = createRoot((cleanup) => {
         dispose = cleanup;
-        const editor = createEditorStore();
+        const editor = createEditorStore(new SchemaAuthoring.Registry());
         const io = {
           executionInputs: [],
           executionOutputs: [],

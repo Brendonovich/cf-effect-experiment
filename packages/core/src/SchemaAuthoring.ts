@@ -12,6 +12,7 @@ import * as Wildcards from "./Wildcards.ts";
 export interface Context {
   readonly properties: Readonly<Record<string, unknown>>;
   readonly definitions: DataType.Definitions;
+  readonly io?: NodeIO;
 }
 
 export interface PropertySource {
@@ -36,6 +37,11 @@ export interface Definition {
   readonly generateIO?: (context: IOContext) => Result.Result<NodeIO, string>;
   readonly acceptsInput?: (
     input: string,
+    type: DataType.Any,
+    definitions: DataType.Definitions | undefined,
+  ) => boolean;
+  readonly acceptsOutput?: (
+    output: string,
     type: DataType.Any,
     definitions: DataType.Definitions | undefined,
   ) => boolean;

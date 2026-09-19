@@ -114,7 +114,10 @@ export const compatibleSchemaPorts = (
       portsCompatible(source.port, port) &&
       (source.direction !== "output" ||
         source.port.kind !== "data" ||
-        behavior?.acceptsInput?.(port.id, source.port.type, definitions) !== false),
+        behavior?.acceptsInput?.(port.id, source.port.type, definitions) !== false) &&
+      (source.direction !== "input" ||
+        source.port.kind !== "data" ||
+        behavior?.acceptsOutput?.(port.id, source.port.type, definitions) !== false),
   );
 };
 

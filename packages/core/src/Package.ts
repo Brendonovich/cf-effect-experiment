@@ -63,6 +63,7 @@ export type SchemaModel = typeof SchemaModel.Type;
 export const Model = Schema.Struct({
   id: PackageId,
   name: Schema.String,
+  description: Schema.optional(Schema.String),
   schemas: Schema.Array(SchemaModel),
   resources: Schema.Array(ResourceDefinition).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),

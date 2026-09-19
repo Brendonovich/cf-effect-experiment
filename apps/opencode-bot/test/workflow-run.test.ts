@@ -32,8 +32,9 @@ const payload = {
 };
 
 it("notifies Discord for a current maintainer PR failure", async () => {
-  const request = vi.fn(async (_input: string | URL | Request) =>
-    new Response(null, { status: 204 }));
+  const request = vi.fn(
+    async (_input: string | URL | Request) => new Response(null, { status: 204 }),
+  );
 
   expect(await processWorkflowRun(payload, config, request)).toBe("notified");
   expect(request).toHaveBeenCalledTimes(1);

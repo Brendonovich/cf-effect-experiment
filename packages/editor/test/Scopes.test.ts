@@ -32,12 +32,19 @@ const definition: Extract<DataType.Definition, { readonly _tag: "Enum" }> = {
 };
 const sinkModule = Module.make({
   id: "scope-editor",
-  effect: (context) =>
-    context.schema.register({
+  effect: Effect.fnUntraced(function* (context) {
+    yield* context.schema.register({
       id: "sink",
       io: (io) => ({ value: io.data.in("value", DataType.String) }),
       run: () => Effect.void,
-    }),
+    });
+    yield* context.schema.register({
+      id: "source",
+      type: "pure",
+      io: (io) => ({ value: io.data.out("value", DataType.Custom(enumId)) }),
+      run: () => Effect.void,
+    });
+  }),
 });
 const setup = Effect.gen(function* () {
   const persistence = yield* Persistence.Service;
@@ -53,7 +60,22 @@ const setup = Effect.gen(function* () {
     graphID: "graph",
     node: {
       schema: { package: CustomTypes.packageId, schema: SchemaId.make("MatchEnum") },
-      properties: { type: enumId },
+      properties: {},
+    },
+  });
+  const source = yield* editor.node.create({
+    graphID: "graph",
+    node: {
+      schema: { package: PackageId.make(sinkModule.id), schema: SchemaId.make("source") },
+    },
+  });
+  yield* editor.connection.create({
+    graphID: "graph",
+    connection: {
+      outNodeId: source.node.id,
+      outIo: OutputRef.port("value"),
+      inNodeId: match.node.id,
+      inIoId: IoId.make("value"),
     },
   });
   const unpack = yield* editor.node.create({
@@ -68,7 +90,14 @@ const setup = Effect.gen(function* () {
       schema: { package: PackageId.make(sinkModule.id), schema: SchemaId.make("sink") },
     },
   });
-  return { editor, match, unpack, sink };
+  const rendered = yield* editor.project.rendered();
+  return {
+    editor,
+    match: { ...match, io: rendered.graphs.graph!.nodes[match.node.id]!.io },
+    unpack,
+    sink,
+    source,
+  };
 });
 const connect = (
   editor: Editor.Interface,
@@ -91,7 +120,7 @@ it.effect(
   "persists inline split mode, validates projected wires, blocks connected mode switches and copies the group",
   () =>
     Effect.gen(function* () {
-      const { editor, match, sink } = yield* setup;
+      const { editor, match, sink, source } = yield* setup;
       const scope = 'variant:"Found"';
       const split = yield* editor.node.setScopeSplit({
         graphID: "graph",
@@ -133,20 +162,28 @@ it.effect(
         ),
       ).toBeInstanceOf(Connection.InvalidError);
       const graph = Project.canvases(yield* editor.project.get()).graph!;
+      const anchor = graph.connections.find(
+        (connection) => connection.outNodeId === source.node.id,
+      )!;
       const pasted = yield* editor.fragment.paste({
         graphID: "graph",
         position: { x: 300, y: 0 },
         text: JSON.stringify({
           format: "macrograph/nodes",
           version: 1,
-          nodes: [graph.nodes[match.node.id], graph.nodes[sink.node.id]],
-          connections: [exec.connection, field.connection],
+          nodes: [
+            graph.nodes[source.node.id],
+            graph.nodes[match.node.id],
+            graph.nodes[sink.node.id],
+          ],
+          connections: [anchor, exec.connection, field.connection],
         }),
       });
       expect(
         pasted.nodes.find((node) => node.schema.schema === "MatchEnum")?.splitScopeOutputs,
       ).toEqual([scope]);
       expect(pasted.connections.map((wire) => wire.outIo)).toEqual([
+        OutputRef.port("value"),
         OutputRef.scopeExec(scope),
         OutputRef.scopeField(scope, 'field:"value"'),
       ]);
@@ -253,7 +290,7 @@ it.effect(
         }),
       });
       const broken = pasted.nodes.find(Scopes.isBreakScope)!;
-      expect(pasted.connections).toHaveLength(3);
+      expect(pasted.connections).toHaveLength(4);
       expect(pasted.nodeIO[broken.id]?.dataOutputs).toEqual([
         { id: 'field:"value"', name: "value", type: DataType.String },
       ]);

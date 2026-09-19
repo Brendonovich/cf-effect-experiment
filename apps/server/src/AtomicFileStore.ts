@@ -1,7 +1,6 @@
+import { Effect, Schema } from "effect";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-
-import { Effect, Schema } from "effect";
 
 export class AtomicFileStoreError extends Schema.TaggedError<AtomicFileStoreError>()(
   "AtomicFileStoreError",
@@ -15,7 +14,9 @@ export interface AtomicFileStore {
 }
 
 const failure = (operation: string) =>
-  new AtomicFileStoreError({ reason: `Could not ${operation} the protected server credential store` });
+  new AtomicFileStoreError({
+    reason: `Could not ${operation} the protected server credential store`,
+  });
 
 export const makeAtomicFileStore = (path: string): AtomicFileStore => {
   const directory = dirname(path);

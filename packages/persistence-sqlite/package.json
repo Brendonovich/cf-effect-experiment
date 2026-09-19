@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@macrograph/core": "workspace:*",
-    "@macrograph/persistence": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/persistence": "workspace:*",
     "drizzle-orm": "1.0.0-rc.5-ab785fc",
     "effect": "catalog:"
   },

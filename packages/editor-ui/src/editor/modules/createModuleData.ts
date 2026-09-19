@@ -4,8 +4,8 @@ import { Actor, type Package, type ResourceConstant } from "@macrograph/core";
 import { Cause, Effect } from "effect";
 import { createMemo, refresh } from "solid-js";
 
-import type { ModuleSettingsData } from "./ModuleSettingsView";
 import type { EditorConnection, ModuleSettingsDescriptor } from "../Editor";
+import type { ModuleSettingsData } from "./ModuleSettingsView";
 
 import { runPromise } from "../../observability/browserTracing";
 

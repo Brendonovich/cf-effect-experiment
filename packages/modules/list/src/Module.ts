@@ -11,6 +11,7 @@ const indexOf = (index: number, length: number) =>
 const ListModule = Module.make({
   id: "list",
   name: "List",
+  description: "Create, inspect, and transform typed lists.",
   effect: Effect.fnUntraced(function* (context) {
     yield* context.schema.register({
       id: "ListCreate",

@@ -244,3 +244,36 @@ it("shows a function icon only on function graph tabs", () => {
   expect(graphTab?.querySelector("svg")).toBeNull();
   expect(functionTab?.querySelector("svg")).not.toBeNull();
 });
+
+it("keeps a module reference mounted when its selection changes", () => {
+  const { controller, otherPaneId, pane } = setup("horizontal");
+  controller.layout.dispatchWorkspace({
+    type: "open-tab",
+    paneId: otherPaneId,
+    tab: { type: "package", packageId: "twitch" },
+  });
+  flush();
+
+  const packageTab = controller.layout
+    .workspace()
+    .panes[otherPaneId]!.tabs.find((tab) => tab.type === "package");
+  expect(packageTab?.type).toBe("package");
+  if (packageTab?.type !== "package") return;
+
+  controller.layout.dispatchWorkspace({
+    type: "set-package-view",
+    tabId: packageTab.id,
+    view: { selectedView: "reference", selectedReferenceKey: null },
+  });
+  flush();
+  const referenceNav = pane(otherPaneId).querySelector('nav[aria-label="Twitch reference"]');
+  expect(referenceNav).not.toBeNull();
+
+  controller.layout.dispatchWorkspace({
+    type: "set-package-view",
+    tabId: packageTab.id,
+    view: { selectedView: "reference", selectedReferenceKey: "node:test" },
+  });
+  flush();
+  expect(pane(otherPaneId).querySelector('nav[aria-label="Twitch reference"]')).toBe(referenceNav);
+});

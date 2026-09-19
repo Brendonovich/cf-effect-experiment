@@ -34,12 +34,13 @@ enum variant. Recursive types describe finite values, not cyclic JavaScript obje
 
 The project-scoped `CustomTypes` built-in package shares IO generation between
 editor and executor. Its catalog always contains seven operations: `MakeStruct`, `BreakStruct`,
-`UpdateStruct`, `ConstructEnum`, `MatchEnum`, `ParseJson`, and `StringifyJson`. Except for
-`BreakStruct`, each stores a stable definition ID in the `type` property; `ConstructEnum`
-also stores a variant name in `variant`. Break Struct has no properties: its `value` input
-is a wildcard constrained to structs. Connecting a struct reveals its fields, including
-through chains of Break nodes. Disconnection clears inferred fields; stale wires remain
-available for repair. Primitive, container and enum inputs are rejected.
+`UpdateStruct`, `ConstructEnum`, `MatchEnum`, `ParseJson`, and `StringifyJson`. Every operation
+infers its target definition from wildcard data pins instead of storing a `type` property.
+Make/Update/Construct/Parse infer through their outputs; Break/Update/Match/Stringify infer through
+their inputs. Construct Enum stores only its selected variant. Dynamic field and branch pins appear
+once a wildcard is anchored to a compatible custom type and clear when that anchor is removed.
+Stale wires remain available for repair. Incompatible primitive, container, struct, or enum anchors
+are rejected according to the operation.
 Struct/Enum selectors filter by definition kind; JSON nodes accept either. Missing selections,
 wrong kinds and removed variants produce diagnostics and block reachable execution.
 Renaming a type does not break nodes. Fields and variants retain name-based identity;
@@ -54,8 +55,8 @@ renaming a member intentionally exposes old pins for repair. Old per-type schema
 - Parse and stringify JSON through current project codecs, retaining nominal markers.
 - List operations accept custom and nested container types through wildcard connections.
 
-Changing a custom node's type/variant property preserves saved defaults and connections for
-explicit repair, even when the new selection makes them invalid.
+Changing Construct Enum's variant preserves saved defaults and connections for explicit repair,
+even when the new selection makes them invalid.
 
 Structured default controls edit scalars, dates, list entries, optional values and tagged payloads.
 Recursive controls expand only finite saved/explicitly added values. Invalid saved content remains

@@ -240,8 +240,7 @@ export const makeLocalProjectStore = (
     if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
-  const layer = Layer.effect(
-    Persistence.Service)(
+  const layer = Layer.effect(Persistence.Service)(
     Effect.gen(function* () {
       const update = (mutation: Persistence.ProjectMutation) =>
         Ref.modify(state, (current) => {

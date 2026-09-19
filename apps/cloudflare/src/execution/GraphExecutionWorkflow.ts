@@ -2,7 +2,7 @@ import type { EventTraceContext } from "@macrograph/cloud-api";
 
 import { Project } from "@macrograph/core";
 import * as Executor from "@macrograph/execution/Executor";
-import { ProjectExecutor } from "@macrograph/project-host";
+import { ExecutionStep, GraphExecution } from "@macrograph/workflow-runtime";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Schema, Tracer } from "effect";
@@ -22,11 +22,6 @@ import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
-
-const WorkflowNodeStepName = Schema.String.pipe(
-	Schema.brand("WorkflowNodeStepName"),
-);
-type WorkflowNodeStepName = typeof WorkflowNodeStepName.Type;
 
 const ExecutionNodeRecordId = Schema.String.pipe(
 	Schema.brand("ExecutionNodeRecordId"),
@@ -52,19 +47,14 @@ export interface GraphExecutionWorkflowInput {
 	};
 }
 
-export const nodeStepName = (
-	key: Executor.NodeExecutionKey,
-): WorkflowNodeStepName =>
-	WorkflowNodeStepName.make(
-		`runtime-node-v2/${key.kind}/${encodeURIComponent(key.graphId)}/${encodeURIComponent(key.eventNodeId)}/${encodeURIComponent(key.executionPath)}/${encodeURIComponent(key.nodeId)}`,
-	);
-
 export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExecutionWorkflow>()(
 	"GraphExecutionWorkflow",
 	Effect.gen(function* () {
 		const deploymentObjectsResource = yield* DeploymentObjectsBucket;
 		const database = yield* Database.Service;
-		const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
+		const deploymentObjects = yield* Cloudflare.R2.ReadBucket(
+			deploymentObjectsResource,
+		);
 
 		const updateExecution = (
 			executionId: string,
@@ -83,7 +73,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 
 		const updateNodeExecution = (
 			executionId: string,
-			stepName: WorkflowNodeStepName,
+			stepName: ExecutionStep.NodeStepName,
 			key: Executor.NodeExecutionKey,
 			values: {
 				readonly status: "running" | "complete" | "errored";
@@ -197,13 +187,9 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 					try: () => JSON.parse(input.event),
 					catch: (cause) => cause,
 				}).pipe(Effect.orDie);
-				if (typeof Executor.make !== "function")
-					return yield* Effect.die(
-						"Executor.make is unavailable in the Workflow bundle",
-					);
-				const executionDriver: Executor.ExecutionDriver = {
-					executeNode: (key, effect) => {
-						const name = nodeStepName(key);
+				const executionEnvironment = Executor.durableExecution(
+					(key, nodeExecutor) => {
+						const name = ExecutionStep.nodeStepName(key);
 						return Effect.gen(function* () {
 							const startedAt = new Date().toISOString();
 							yield* Cloudflare.Workflows.task(
@@ -215,7 +201,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 							);
 							const result = yield* Cloudflare.Workflows.task(
 								name,
-								effect.pipe(
+								nodeExecutor.executeNode(key).pipe(
 									Effect.orDie,
 									Effect.withSpan("GraphExecutionWorkflow.executeNode", {
 										annotations: serviceSpanAnnotations(
@@ -266,19 +252,19 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 							),
 						);
 					},
-				};
+				);
 				const engineClient = yield* WorkflowRuntime.make(project).pipe(
 					Effect.provide(FetchHttpClient.layer),
 				);
-				const executor = yield* ProjectExecutor.make(project, {
-					projectId: input.projectId,
-					executionDriver,
-					modules: ExecutorModules.registry,
-					engineClient,
-				});
-				yield* ExecutorModules.registry
-					.handle(executor, input.moduleId, event)
-					.pipe(Effect.orDie);
+				yield* GraphExecution.run(
+					project,
+					{ projectId: input.projectId, moduleId: input.moduleId, event },
+					{
+						executionEnvironment,
+						modules: ExecutorModules.registry,
+						engineClient,
+					},
+				).pipe(Effect.orDie);
 				yield* Cloudflare.Workflows.task(
 					"runtime-execution-v1/complete",
 					updateExecution(input.executionId, {

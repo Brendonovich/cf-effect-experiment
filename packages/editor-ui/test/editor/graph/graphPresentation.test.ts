@@ -76,14 +76,18 @@ describe("graph presentation", () => {
       executionOutputs: [{ id: IoId.make("true") }],
     };
     expect(graphNodeWidth(io)).toBe(148);
-    expect(graphNodeWidth({
-      ...io,
-      executionOutputs: [{ id: IoId.make("true"), name: "A long named execution branch" }],
-    })).toBeGreaterThan(graphNodeWidth(io));
-    expect(graphNodeWidth({
-      ...io,
-      dataInputs: io.dataInputs.map((port) => ({ ...port, name: "" })),
-    })).toBe(graphNodeWidth(io));
+    expect(
+      graphNodeWidth({
+        ...io,
+        executionOutputs: [{ id: IoId.make("true"), name: "A long named execution branch" }],
+      }),
+    ).toBeGreaterThan(graphNodeWidth(io));
+    expect(
+      graphNodeWidth({
+        ...io,
+        dataInputs: io.dataInputs.map((port) => ({ ...port, name: "" })),
+      }),
+    ).toBe(graphNodeWidth(io));
   });
 
   it("shows orphan defaults without wires and omits nominally incompatible wires", () => {

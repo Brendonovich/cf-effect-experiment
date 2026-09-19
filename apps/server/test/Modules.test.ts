@@ -1,7 +1,9 @@
 import { NodeServices, NodeSocket } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
+import { Project } from "@macrograph/core";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
+import { LiveRuntime } from "@macrograph/live-runtime";
 import { Engine } from "@macrograph/module";
 import Discord from "@macrograph/module-discord/Deployment";
 import ElevenLabs from "@macrograph/module-elevenlabs/Deployment";
@@ -35,7 +37,6 @@ import { FetchHttpClient } from "effect/unstable/http";
 import { RpcSerialization } from "effect/unstable/rpc";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
-import { ProjectExecution } from "../src/ProjectExecution.ts";
 
 const deployments = [
   Discord,
@@ -88,7 +89,7 @@ const mounted = Layer.mergeAll(
   ...statelessModules.map(ModuleHost.moduleLayer),
 );
 
-const services = ProjectExecution.layer.pipe(
+const services = LiveRuntime.layer({ initialProject: Project.empty() }).pipe(
   Layer.provideMerge(
     Editor.layer.pipe(
       Layer.provideMerge(EditorEvents.layer),

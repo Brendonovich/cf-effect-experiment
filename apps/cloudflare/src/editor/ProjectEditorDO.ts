@@ -13,6 +13,9 @@ import {
   Presence,
 } from "@macrograph/editor";
 import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
+import GitHubModule from "@macrograph/module-github";
+import { GitHubEngine } from "@macrograph/module-github/Definition";
+import GitHubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import HttpClientModule from "@macrograph/module-http-client";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
@@ -59,6 +62,7 @@ const HostedDeployments = [
   TwitchDeployment,
   UtilitiesDeployment,
   HttpClientDeployment,
+  GitHubDeployment,
   ...CloudModules.apiDeployments,
 ] as const;
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
@@ -306,7 +310,10 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
             ingress
               .lookupEndpoint(activeProjectId ?? "unknown", endpointId)
               .pipe(Effect.provide(runtimeContext), Effect.map(Option.fromNullishOr)),
-          secret: () => Effect.die("Webhook signing secrets are owned by the ingress worker"),
+          secret: (endpointId) =>
+            ingress
+              .endpointSecret(activeProjectId ?? "unknown", endpointId)
+              .pipe(Effect.provide(runtimeContext), Effect.map(Redacted.make)),
         }),
       );
 
@@ -387,6 +394,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         CloudModules.editorLayer,
         hostDeployment(KofiDeployment),
         hostDeployment({
+          ...GitHubDeployment,
+          layer: GitHubDeployment.layer.pipe(
+            Layer.provide(endpointHostLayer),
+            Layer.provide(FetchHttpClient.layer),
+          ),
+        }),
+        hostDeployment({
           ...TwitchDeployment,
           layer: editorTwitchLayer,
         }),
@@ -405,10 +419,12 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           const twitch = yield* TwitchEngine;
           const utilities = yield* UtilitiesEngine;
           const httpClient = yield* HttpClientEngine;
+          const github = yield* GitHubEngine;
           yield* EngineHost.mount(KofiModule, KofiDeployment, kofi.client.state);
           yield* EngineHost.mount(TwitchModule, TwitchDeployment, twitch.client.state);
           yield* EngineHost.mount(UtilitiesModule, UtilitiesDeployment, utilities.client.state);
           yield* EngineHost.mount(HttpClientModule, HttpClientDeployment, httpClient.client.state);
+          yield* EngineHost.mount(GitHubModule, GitHubDeployment, github.client.state);
         }),
       ).pipe(Layer.provideMerge(EngineClientHandlersLayer));
       const RpcLayer = Layer.mergeAll(

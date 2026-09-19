@@ -33,14 +33,11 @@ const ProjectMeta = Schema.Struct({
   engines: Schema.optional(Schema.Record(Schema.String, Schema.Json)),
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
-  functions: Schema.optional(
-    Schema.Record(Schema.String, FunctionMetadata),
-  ),
+  functions: Schema.optional(Schema.Record(Schema.String, FunctionMetadata)),
 });
 
 export const layer = (dir: string) =>
-  Layer.effect(
-    Persistence.Service)(
+  Layer.effect(Persistence.Service)(
     Effect.gen(function* () {
       const { join } = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;

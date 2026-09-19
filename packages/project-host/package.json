@@ -20,13 +20,13 @@
     "@macrograph/core": "workspace:*",
     "@macrograph/editor": "workspace:*",
     "@macrograph/execution": "workspace:*",
-    "@macrograph/persistence": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/persistence": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
   }

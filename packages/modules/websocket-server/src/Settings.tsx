@@ -291,9 +291,7 @@ const ServerRow: Component<{
             type="button"
             sx={[styles.focus, styles.removeButton]}
             onClick={() =>
-              void props.run(
-                props.rpc.WebSocketServerRemove({ id: props.server.definition.id }),
-              )
+              void props.run(props.rpc.WebSocketServerRemove({ id: props.server.definition.id }))
             }
           >
             Remove

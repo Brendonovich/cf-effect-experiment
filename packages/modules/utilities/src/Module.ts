@@ -71,6 +71,7 @@ export const formatValue = (value: unknown): string => Inspectable.toStringUnkno
 const UtilitiesModule = Module.make({
   id: "util",
   name: "Utilities",
+  description: "General-purpose control flow, formatting, timing, and debugging tools.",
   engine: UtilitiesEngine,
   effect: Effect.fnUntraced(function* (context) {
     yield* context.schema.register({

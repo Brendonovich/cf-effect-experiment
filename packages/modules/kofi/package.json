@@ -3,7 +3,6 @@
   "version": "0.0.1",
   "type": "module",
   "main": "./src/Module.ts",
-  "macrograph": { "standaloneDeployment": "./src/Deployment/Webhook.ts" },
   "exports": {
     ".": "./src/Module.ts",
     "./Definition": "./src/Definition.ts",
@@ -29,5 +28,8 @@
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment/Webhook.ts"
   }
 }

@@ -29,6 +29,10 @@ const meta: Meta<typeof Inspector> = {
     onRenameNode: noop,
     onSetNodeProperty: noop,
     onClearNodeProperty: noop,
+    onAddFunctionField: async () => undefined,
+    onUpdateFunctionField: noop,
+    onReorderFunctionField: noop,
+    onDeleteFunctionField: noop,
   },
   parameters: { layout: "fullscreen" },
   decorators: [

@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from "./Auth";
 import { signInUrl } from "./authRedirect";
 import { Redirect } from "./Redirect";
 import { WorkspaceHomeRoute } from "./routes";
+import { CredentialOAuthCallbackRoute } from "./routes/credential-oauth-callback";
 import { NotFoundRoute } from "./routes/not-found";
 import { SignInRoute } from "./routes/sign-in";
 import { TeamHomeRoute } from "./routes/teams";
@@ -54,6 +55,7 @@ const Router = createRouter({
   base: import.meta.env.BASE_URL,
   routes: [
     { path: "/sign-in", component: SignInRoute },
+    { path: "/credential-oauth/callback", component: CredentialOAuthCallbackRoute },
     {
       path: "/",
       component: AuthenticatedApp,

@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 import { CanvasId } from "@macrograph/core";
 
-import { SnapshotGraphCanvas } from "./SnapshotGraphCanvas";
 import {
   chatMessageNode,
   chatMessageSchema,
@@ -10,6 +9,7 @@ import {
   renderedGraph,
   twitchPackageId,
 } from "../storybook-fixtures";
+import { SnapshotGraphCanvas } from "./SnapshotGraphCanvas";
 
 const meta: Meta<typeof SnapshotGraphCanvas> = {
   title: "Editor/Graph/SnapshotGraphCanvas",

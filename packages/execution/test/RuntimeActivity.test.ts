@@ -29,6 +29,11 @@ const key = (id: string): Executor.NodeExecutionKey => ({
   traceId: id,
 });
 const result: Executor.NodeExecutionResult = { outputs: [], executionOutputId: null };
+const executeNode = (
+  activity: RuntimeActivity.Service["Service"],
+  id: string,
+  effect: Effect.Effect<Executor.NodeExecutionResult, Executor.ExecutorError>,
+) => activity.executionEnvironment.executeNode(key(id), { executeNode: () => effect });
 
 class Message extends Schema.TaggedClass<Message>()("Message", {
   message: Schema.String,
@@ -104,8 +109,7 @@ describe("RuntimeActivity", () => {
           Effect.succeed(result);
         const executor = activity.wrap({
           ...(yield* Executor.make(Project.empty())),
-          handleEvent: () =>
-            activity.executionDriver.executeNode(key("queued"), nodeEffect).pipe(Effect.asVoid),
+          handleEvent: () => executeNode(activity, "queued", nodeEffect).pipe(Effect.asVoid),
         });
         yield* executor.handleEvent(module, new Message({ message: "queued", values: [] }));
         const original = (yield* activity.snapshot)[0]!;
@@ -197,7 +201,7 @@ describe("RuntimeActivity", () => {
       const value = yield* activity.track(
         "test",
         event,
-        activity.executionDriver.executeNode(key("one"), Effect.succeed(result)),
+        executeNode(activity, "one", Effect.succeed(result)),
       );
       assert.strictEqual(value, result);
       const events = yield* activity.snapshot;
@@ -226,7 +230,7 @@ describe("RuntimeActivity", () => {
         Schema.decodeUnknownSync(Schema.Array(RuntimeActivity.Event))(events),
         events,
       );
-      yield* activity.executionDriver.executeNode(key("untracked"), Effect.succeed(result));
+      yield* executeNode(activity, "untracked", Effect.succeed(result));
       assert.strictEqual(yield* activity.snapshot, events);
     }).pipe(Effect.provide(RuntimeActivity.layer)),
   );
@@ -236,11 +240,7 @@ describe("RuntimeActivity", () => {
       const activity = yield* RuntimeActivity.Service;
       const error = new Executor.NodeExecutionError({ nodeId: "one", cause: new Error("broken") });
       const failed = yield* activity
-        .track(
-          "test",
-          { _tag: "Failure" },
-          activity.executionDriver.executeNode(key("one"), Effect.fail(error)),
-        )
+        .track("test", { _tag: "Failure" }, executeNode(activity, "one", Effect.fail(error)))
         .pipe(Effect.exit);
       assert.isTrue(Exit.isFailure(failed));
       if (Exit.isFailure(failed)) assert.strictEqual(Cause.squash(failed.cause), error);
@@ -270,8 +270,9 @@ describe("RuntimeActivity", () => {
         .track(
           "test",
           { _tag: "Wait" },
-          activity.executionDriver.executeNode(
-            key("wait"),
+          executeNode(
+            activity,
+            "wait",
             Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
           ),
         )
@@ -304,15 +305,14 @@ describe("RuntimeActivity", () => {
           .track(
             "test",
             { _tag: id },
-            activity.executionDriver
-              .executeNode(
-                key(id),
-                Deferred.succeed(started[index]!, undefined).pipe(
-                  Effect.andThen(Deferred.await(release)),
-                  Effect.as(result),
-                ),
-              )
-              .pipe(Effect.forkChild, Effect.flatMap(Fiber.join)),
+            executeNode(
+              activity,
+              id,
+              Deferred.succeed(started[index]!, undefined).pipe(
+                Effect.andThen(Deferred.await(release)),
+                Effect.as(result),
+              ),
+            ).pipe(Effect.forkChild, Effect.flatMap(Fiber.join)),
           )
           .pipe(Effect.forkChild),
       );
@@ -360,7 +360,7 @@ describe("RuntimeActivity", () => {
         { _tag: "many nodes" },
         Effect.gen(function* () {
           for (let index = 0; index < RuntimeActivity.limits.nodes + 10; index++)
-            yield* activity.executionDriver.executeNode(key(String(index)), Effect.succeed(result));
+            yield* executeNode(activity, String(index), Effect.succeed(result));
         }),
       );
       events = yield* activity.snapshot;

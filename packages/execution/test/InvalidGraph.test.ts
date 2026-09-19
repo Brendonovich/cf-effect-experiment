@@ -167,7 +167,7 @@ describe("event graph preflight", () => {
               },
               connections: [...base.connections, wire("data", "source", "value", "sink", "value")],
             },
-            tag: "InvalidConnection",
+            tag: "InvalidGraph",
           },
           {
             types: {
@@ -244,12 +244,11 @@ describe("event graph preflight", () => {
             graphs: { g: { canvas: variant.graph } },
           });
           const executor = yield* Executor.make(project, {
-            executionDriver: {
-              executeNode: (_key, effect) =>
-                Effect.sync(() => {
-                  checkpoints++;
-                }).pipe(Effect.andThen(effect)),
-            },
+            executionEnvironment: Executor.inProcessExecution((key, executor) =>
+              Effect.sync(() => {
+                checkpoints++;
+              }).pipe(Effect.andThen(executor.executeNode(key))),
+            ),
           });
           yield* executor.module(
             module,
@@ -368,13 +367,12 @@ describe("event graph preflight", () => {
         { _type: typeId, count: 1, removed: true },
       ]) {
         const executor = yield* Executor.make(project, {
-          executionDriver: {
-            executeNode: () =>
-              Effect.succeed({
-                outputs: [{ outputId: "value", value }],
-                executionOutputId: "exec",
-              }),
-          },
+          executionEnvironment: Executor.durableExecution(() =>
+            Effect.succeed({
+              outputs: [{ outputId: "value", value }],
+              executionOutputId: "exec",
+            }),
+          ),
         });
         yield* executor.module(
           module,
@@ -442,12 +440,12 @@ describe("event graph preflight", () => {
               id: "g",
               name: "Graph",
               nodes: {
-              event: { ...node("event", "event"), properties: { selector: "selector" } },
-              resource: {
-                ...node("resource", "resource", { "selected-port": 2 }),
-                properties: { selector: "selector" },
+                event: { ...node("event", "event"), properties: { selector: "selector" } },
+                resource: {
+                  ...node("resource", "resource", { "selected-port": 2 }),
+                  properties: { selector: "selector" },
+                },
               },
-            },
               connections: [wire("exec", "event", "exec", "resource", "exec")],
             },
           },
@@ -554,13 +552,13 @@ describe("event graph preflight", () => {
                   id: "g",
                   name: "Graph",
                   nodes: {
-                  event: node("event", "event"),
-                  pure: node("pure", "pure"),
-                  sink: node("sink", "sink"),
-                },
+                    event: node("event", "event"),
+                    pure: node("pure", "pure"),
+                    sink: node("sink", "sink"),
+                  },
                   connections: [
-                  wire("exec", "event", "exec", "sink", "exec"),
-                  wire("data", pure ? "pure" : "event", "value", "sink", "value"),
+                    wire("exec", "event", "exec", "sink", "exec"),
+                    wire("data", pure ? "pure" : "event", "value", "sink", "value"),
                   ],
                 },
               },

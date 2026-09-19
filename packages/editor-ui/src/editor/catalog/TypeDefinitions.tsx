@@ -394,7 +394,7 @@ export function TypeDefinitions(props: {
           <div sx={styles.search}>
             <SearchInput
               label="Search types"
-              placeholder="Search Types"
+              placeholder="Search types"
               value={search()}
               onChange={setSearch}
             />

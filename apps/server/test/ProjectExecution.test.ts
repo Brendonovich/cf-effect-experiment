@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { GraphId, IoId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
+import { LiveRuntime } from "@macrograph/live-runtime";
 import { Engine, Module } from "@macrograph/module";
 import OBSModule from "@macrograph/module-obs";
 import { OBSEngine } from "@macrograph/module-obs/Definition";
@@ -27,20 +28,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ProjectExecution } from "../src/ProjectExecution.ts";
-
 const EditorLayer = Editor.layer.pipe(
   Layer.provideMerge(EditorEvents.layer),
   Layer.provideMerge(Packages.defaultLayer),
 );
 
-const TestLayer = ProjectExecution.layer.pipe(
+const TestLayer = LiveRuntime.layer({
+  initialProject: { ...Project.empty(), name: "test" },
+}).pipe(
   Layer.provideMerge(EditorLayer),
   Layer.provideMerge(RuntimeActivity.layer),
   Layer.provide(Persistence.layerMemory),
 );
 
-describe("ProjectExecution", () => {
+describe("LiveRuntime", () => {
   it.effect("captures events and driver nodes and replays against current editor state", () =>
     Effect.gen(function* () {
       class Trigger extends Schema.TaggedClass<Trigger>()("Trigger", { message: Schema.String }) {}
@@ -64,9 +65,10 @@ describe("ProjectExecution", () => {
         TestEngine.toLayer(() => Effect.die("unused")),
       );
       const editor = yield* Editor.Service;
-      const executor = yield* ProjectExecution.Service;
+      const executor = yield* LiveRuntime.Service;
       const activity = yield* RuntimeActivity.Service;
       yield* editor.module(module, deployment);
+      yield* editor.engine.hostRuntimeClient(module.id, {});
       yield* executor.module(module, deployment);
       const { graph } = yield* editor.graph.create({ name: "Activity" });
       const created = yield* editor.node.create({
@@ -134,19 +136,16 @@ describe("ProjectExecution", () => {
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       const packages = yield* Packages.Service;
-      const executor = yield* ProjectExecution.Service;
+      const executor = yield* LiveRuntime.Service;
 
       assert.strictEqual((yield* executor.project).name, "test");
 
-      yield* Effect.all(
-        [
-          editor.module(TwitchModule, TwitchDeployment),
-          executor.module(TwitchModule, TwitchDeployment),
-          editor.module(OBSModule, OBSDeployment),
-          executor.module(OBSModule, OBSDeployment),
-        ],
-        { discard: true },
-      );
+      yield* editor.module(TwitchModule, TwitchDeployment);
+      yield* editor.engine.hostRuntimeClient(TwitchModule.id, {});
+      yield* executor.module(TwitchModule, TwitchDeployment);
+      yield* editor.module(OBSModule, OBSDeployment);
+      yield* editor.engine.hostRuntimeClient(OBSModule.id, {});
+      yield* executor.module(OBSModule, OBSDeployment);
 
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
         "CustomTypes",

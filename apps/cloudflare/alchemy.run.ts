@@ -9,70 +9,73 @@ import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
-import { traceDatasetName } from "./src/Observability.ts";
+import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
 import {
-	DatabaseHyperdrive,
-	DeploymentObjectsBucket,
-	LegacyLogicalDatabase,
+  DatabaseHyperdrive,
+  DeploymentObjectsBucket,
+  LegacyLogicalDatabase,
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
-	CloudWorker,
-	IngressPublicOrigin,
-	WebAssetsDirectory,
+  CloudWorker,
+  CredentialOAuthStateSecret,
+  IngressPublicOrigin,
+  WebAssetsDirectory,
 } from "./src/worker/CloudWorker.ts";
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 
 export default Alchemy.Stack(
-	"MacroGraph",
-	{
-		providers: Layer.mergeAll(
-			Cloudflare.providers(),
-			Axiom.providers(),
-			Drizzle.providers(),
-			Planetscale.providers(),
-			PlanetscaleLogicalDb.providers(),
-			DurableObjectMigrationBundle.providers(),
-		),
-		state: Cloudflare.state(),
-	},
-	Effect.gen(function* () {
-		const ctx = yield* Alchemy.AlchemyContext;
-		yield* DatabaseHyperdrive;
-		yield* DeploymentObjectsBucket;
-		const legacyDatabase = yield* LegacyLogicalDatabase;
+  "MacroGraph",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      ...(axiomConfigured() ? [Axiom.providers()] : []),
+      Drizzle.providers(),
+      Planetscale.providers(),
+      PlanetscaleLogicalDb.providers(),
+      DurableObjectMigrationBundle.providers(),
+    ),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const ctx = yield* Alchemy.AlchemyContext;
+    const credentialOAuthStateSecret = yield* Alchemy.makeRandom("CredentialOAuthStateSecret");
+    yield* DatabaseHyperdrive;
+    yield* DeploymentObjectsBucket;
+    const legacyDatabase = yield* LegacyLogicalDatabase;
 
-		const frontendBuild = !ctx.dev
-			? yield* Command.Build("WebAppBuild", {
-					command: "pnpm run build",
-					cwd: "frontend",
-					outdir: "dist",
-					memo: false,
-					env: {
-						...(process.env.AXIOM_ORG_ID === undefined
-							? {}
-							: { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
-						VITE_AXIOM_TRACE_DATASET: traceDatasetName,
-					},
-				})
-			: undefined;
+    const frontendBuild = !ctx.dev
+      ? yield* Command.Build("WebAppBuild", {
+          command: "pnpm run build",
+          cwd: "frontend",
+          outdir: "dist",
+          memo: false,
+          env: {
+            ...(process.env.AXIOM_ORG_ID === undefined
+              ? {}
+              : { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
+            VITE_AXIOM_TRACE_DATASET: traceDatasetName,
+          },
+        })
+      : undefined;
 
-		const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
-			const ingressWorker = yield* IngressWorker;
-			const cloudWorker = yield* CloudWorker.pipe(
-				Effect.provide(CloudWorkerLayer),
-				Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
-				Effect.provideService(IngressPublicOrigin, ingressWorker.url),
-			);
-			return { cloudWorker, ingressWorker };
-		}).pipe(Effect.provide(IngressWorkerLayer));
-		return {
-			legacyDatabaseName: legacyDatabase.name,
-			url: ctx.dev ? "http://0.0.0.0:5175/" : cloudWorker.url,
-			...(!ctx.dev && {
-				publicWorkerUrl: cloudWorker.url,
-				publicIngressUrl: ingressWorker.url,
-			}),
-		};
-	}),
+    const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
+      const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
+      const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
+        Effect.provide(CloudWorkerLayer),
+        Effect.provideService(CredentialOAuthStateSecret, credentialOAuthStateSecret),
+        Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
+        Effect.provideService(IngressPublicOrigin, ingressWorker.url),
+      );
+      return { cloudWorker, ingressWorker };
+    }).pipe(Effect.provide(IngressWorkerLayer));
+    return {
+      legacyDatabaseName: legacyDatabase.name,
+      url: ctx.dev ? "http://0.0.0.0:5175/" : cloudWorker.url,
+      ...(!ctx.dev && {
+        publicWorkerUrl: cloudWorker.url,
+        publicIngressUrl: ingressWorker.url,
+      }),
+    };
+  }),
 );

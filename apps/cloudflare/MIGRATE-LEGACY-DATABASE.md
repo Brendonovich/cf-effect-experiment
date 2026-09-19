@@ -1,5 +1,9 @@
 # Legacy MacroGraph Database Migration
 
+> The Supabase-to-`macrograph_legacy` migration documented here is complete.
+> The subsequent account-table cutover into the primary Cloud logical database
+> is documented in [`MIGRATE-ACCOUNT-DATABASE.md`](./MIGRATE-ACCOUNT-DATABASE.md).
+
 Move the existing `macrograph/apps/web` database from Supabase into a separate
 logical database on the PlanetScale Postgres cluster managed by this app. This
 does not merge data into the new cloud app or change either app's schema.

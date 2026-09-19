@@ -1,9 +1,8 @@
 import { Context, Effect, Schema, type Scope } from "effect";
 
-export class ListenerError extends Schema.TaggedError<ListenerError>()(
-  "WebSocketListenerError",
-  { reason: Schema.String },
-) {}
+export class ListenerError extends Schema.TaggedError<ListenerError>()("WebSocketListenerError", {
+  reason: Schema.String,
+}) {}
 
 export interface Client {
   readonly closed: Effect.Effect<void>;

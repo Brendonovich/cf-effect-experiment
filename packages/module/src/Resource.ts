@@ -14,11 +14,10 @@ export interface HandlerService<Identifier extends string, Shape> {
   readonly changes: Stream.Stream<ReadonlyArray<Value<Shape>>>;
 }
 
-export interface Handler<Identifier extends string, Shape>
-  extends Context.ServiceClass.Shape<
-    `macrograph/Module/Resource/${Identifier}`,
-    HandlerService<Identifier, Shape>
-  > {}
+export interface Handler<Identifier extends string, Shape> extends Context.ServiceClass.Shape<
+  `macrograph/Module/Resource/${Identifier}`,
+  HandlerService<Identifier, Shape>
+> {}
 
 export interface AnyClass {
   readonly key: string;
@@ -30,15 +29,17 @@ export type ToHandler<R extends ResourceClass<any, any, any>> =
     ? Handler<Identifier, Shape>
     : never;
 
-export const make = <Self, Shape extends Schema.Json>() =>
+export const make =
+  <Self, Shape extends Schema.Json>() =>
   <const Identifier extends string>(
     id: Identifier,
     opts: { readonly name: string; readonly description?: string },
   ) => {
     const sequence = resourceSequence++;
-    const HandlerTag = Context.Service<Handler<Identifier, Shape>, HandlerService<Identifier, Shape>>(
-      `macrograph/Module/Resource/${sequence}/${id}`,
-    );
+    const HandlerTag = Context.Service<
+      Handler<Identifier, Shape>,
+      HandlerService<Identifier, Shape>
+    >(`macrograph/Module/Resource/${sequence}/${id}`);
 
     class Resource {
       static readonly key = id;
@@ -50,8 +51,7 @@ export const make = <Self, Shape extends Schema.Json>() =>
       static readonly changes = Stream.unwrap(Effect.map(HandlerTag, (handler) => handler.changes));
 
       static toLayer(load: Effect.Effect<ReadonlyArray<Value<Shape>>>) {
-        return Layer.effect(
-          HandlerTag)(
+        return Layer.effect(HandlerTag)(
           Effect.gen(function* () {
             const state = yield* SubscriptionRef.make<ReadonlyArray<Value<Shape>>>([]);
             const lock = yield* Semaphore.make(1);
@@ -78,10 +78,7 @@ export interface ResourceClass<_Self, Identifier extends string, Shape> {
   new (_: never): {};
   readonly key: Identifier;
   readonly definition: { readonly name: string; readonly description?: string };
-  readonly Handler: Context.Service<
-    Handler<Identifier, Shape>,
-    HandlerService<Identifier, Shape>
-  >;
+  readonly Handler: Context.Service<Handler<Identifier, Shape>, HandlerService<Identifier, Shape>>;
   readonly values: Effect.Effect<ReadonlyArray<Value<Shape>>, never, Handler<Identifier, Shape>>;
   readonly reload: Effect.Effect<void, never, Handler<Identifier, Shape>>;
   readonly changes: Stream.Stream<ReadonlyArray<Value<Shape>>, never, Handler<Identifier, Shape>>;

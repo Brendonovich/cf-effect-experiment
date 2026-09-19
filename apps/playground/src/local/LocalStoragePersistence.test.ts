@@ -1,6 +1,6 @@
 import { Project } from "@macrograph/core";
-import { Persistence } from "@macrograph/persistence";
 import { DataType } from "@macrograph/module/DataType";
+import { Persistence } from "@macrograph/persistence";
 import { Effect, Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
 

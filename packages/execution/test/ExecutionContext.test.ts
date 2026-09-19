@@ -32,10 +32,11 @@ describe("schema execution context", () => {
         }>
       >([]);
       const keys = yield* Ref.make<ReadonlyArray<Executor.NodeExecutionKey>>([]);
-      const executionDriver: Executor.ExecutionDriver = {
-        executeNode: (key, effect) =>
-          Ref.update(keys, (current) => [...current, key]).pipe(Effect.andThen(effect)),
-      };
+      const executionEnvironment = Executor.inProcessExecution((key, executor) =>
+        Ref.update(keys, (current) => [...current, key]).pipe(
+          Effect.andThen(executor.executeNode(key)),
+        ),
+      );
       const module = Module.make({
         id: "context",
         engine: TestEngine,
@@ -165,7 +166,7 @@ describe("schema execution context", () => {
       };
       const executor = yield* Executor.make(project, {
         projectId: "project-123",
-        executionDriver,
+        executionEnvironment,
       });
       yield* executor.module(module, deployment);
       const spans: Array<Tracer.Span> = [];

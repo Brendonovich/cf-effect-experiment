@@ -24,8 +24,7 @@ interface ExecutionDetail {
 
 type SnapshotGraph = (typeof ProjectSnapshot.Type)["graphs"][string];
 
-const snapshotGraphCanvas = (graph: SnapshotGraph) =>
-  "canvas" in graph ? graph.canvas : graph;
+const snapshotGraphCanvas = (graph: SnapshotGraph) => ("canvas" in graph ? graph.canvas : graph);
 
 interface DeploymentBrowserProps {
   projectId: string;
@@ -37,7 +36,11 @@ interface DeploymentBrowserProps {
   canDeploy: boolean;
   onDeploy: () => Promise<void>;
   selectionHref: (deploymentId?: string, graphId?: string) => string;
-  onSelectionChange: (deploymentId: string | undefined, graphId?: string, replace?: boolean) => void;
+  onSelectionChange: (
+    deploymentId: string | undefined,
+    graphId?: string,
+    replace?: boolean,
+  ) => void;
 }
 
 const formatDate = (value: string) =>
@@ -91,7 +94,10 @@ export const DeploymentBrowser: Component<DeploymentBrowserProps> = (props) => {
         return;
       }
 
-      queryClient.setQueryData(["deployments", props.projectId], [result.deployment, ...deployments()]);
+      queryClient.setQueryData(
+        ["deployments", props.projectId],
+        [result.deployment, ...deployments()],
+      );
       queryClient.setQueryData(["project", props.projectId], (project: typeof projectQuery.data) =>
         project === undefined ? project : { ...project, currentDeploymentId: result.deployment.id },
       );
@@ -463,7 +469,9 @@ export const DeploymentBrowser: Component<DeploymentBrowserProps> = (props) => {
             </div>
             <Show
               when={selectedDeploymentId() === undefined || !snapshotQuery.isPending}
-              fallback={<LoadingState label="Loading deployment canvas" style={styles.fullHeight} />}
+              fallback={
+                <LoadingState label="Loading deployment canvas" style={styles.fullHeight} />
+              }
             >
               <Show
                 when={selectedGraph()}

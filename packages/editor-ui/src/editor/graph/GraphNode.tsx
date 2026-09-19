@@ -22,6 +22,7 @@ import {
 export {
   GRAPH_NODE_FIRST_IO_Y,
   GRAPH_NODE_IO_SPACING,
+  graphNodeHeight,
   graphNodeInputs,
   graphNodeOutputs,
   graphNodeWidth,

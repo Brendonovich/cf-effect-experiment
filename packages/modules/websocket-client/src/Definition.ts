@@ -3,18 +3,14 @@ import * as Resource from "@macrograph/module/Resource";
 import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const ConnectionId = Schema.String.pipe(
-  Schema.brand("WebSocketConnectionId"),
-);
+export const ConnectionId = Schema.String.pipe(Schema.brand("WebSocketConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
 export const ConnectionDefinition = Schema.Struct({
   id: ConnectionId,
   name: Schema.String,
   url: Schema.String,
-  connectOnStartup: Schema.Boolean.pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(false)),
-  ),
+  connectOnStartup: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 });
 export type ConnectionDefinition = typeof ConnectionDefinition.Type;
 
@@ -41,36 +37,32 @@ export class ConnectionFailed extends Schema.TaggedError<ConnectionFailed>()(
   { id: ConnectionId, reason: Schema.String },
 ) {}
 
-export class NotConnected extends Schema.TaggedError<NotConnected>()(
-  "WebSocketNotConnected",
-  { id: ConnectionId },
-) {}
+export class NotConnected extends Schema.TaggedError<NotConnected>()("WebSocketNotConnected", {
+  id: ConnectionId,
+}) {}
 
 export class MessageTooLarge extends Schema.TaggedError<MessageTooLarge>()(
   "WebSocketMessageTooLarge",
   { size: Schema.Int, limit: Schema.Int },
 ) {}
 
-export class SendFailed extends Schema.TaggedError<SendFailed>()(
-  "WebSocketSendFailed",
-  {
-    id: ConnectionId,
-    reason: Schema.String,
-  },
-) {}
+export class SendFailed extends Schema.TaggedError<SendFailed>()("WebSocketSendFailed", {
+  id: ConnectionId,
+  reason: Schema.String,
+}) {}
 
 export class MessageReceived extends Schema.TaggedClass<MessageReceived>()(
   "WebSocketMessageReceived",
   { connectionId: ConnectionId, data: Schema.String },
 ) {}
 
-export class WebSocketConnection extends Resource.make<
-  WebSocketConnection,
-  ConnectionId
->()("WebSocketConnection", {
-  name: "WebSocket Connection",
-  description: "A configured outbound WebSocket connection.",
-}) {}
+export class WebSocketConnection extends Resource.make<WebSocketConnection, ConnectionId>()(
+  "WebSocketConnection",
+  {
+    name: "WebSocket Connection",
+    description: "A configured outbound WebSocket connection.",
+  },
+) {}
 
 export class ClientRpcs extends RpcGroup.make(
   Rpc.make("WebSocketAddConnection", {
@@ -91,10 +83,7 @@ export class ClientRpcs extends RpcGroup.make(
   }),
   Rpc.make("WebSocketConnect", {
     payload: Schema.Struct({ id: ConnectionId }),
-    error: Schema.Union([
-      ConnectionNotFound,
-      ConnectionFailed,
-    ]),
+    error: Schema.Union([ConnectionNotFound, ConnectionFailed]),
   }),
   Rpc.make("WebSocketDisconnect", {
     payload: Schema.Struct({ id: ConnectionId }),
@@ -105,12 +94,7 @@ export class ClientRpcs extends RpcGroup.make(
 export class RuntimeRpcs extends RpcGroup.make(
   Rpc.make("WebSocketSendMessage", {
     payload: Schema.Struct({ connectionId: ConnectionId, data: Schema.String }),
-    error: Schema.Union([
-      ConnectionNotFound,
-      NotConnected,
-      MessageTooLarge,
-      SendFailed,
-    ]),
+    error: Schema.Union([ConnectionNotFound, NotConnected, MessageTooLarge, SendFailed]),
   }),
 ) {}
 

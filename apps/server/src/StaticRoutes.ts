@@ -8,13 +8,7 @@ import {
 import { realpathSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
-const reservedPaths = [
-  "/api",
-  "/health",
-  "/module",
-  "/rpc",
-  "/rpc-ws",
-];
+const reservedPaths = ["/api", "/health", "/module", "/rpc", "/rpc-ws"];
 
 const decodePath = (url: string) => {
   const pathname = url.split("?", 1)[0] ?? "";

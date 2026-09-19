@@ -34,16 +34,16 @@ const model = (connections: readonly ReturnType<typeof wire>[]) =>
           id: "graph",
           name: "Inline",
           nodes: Object.fromEntries(
-          [
-            node("event"),
-            node("source"),
-            node("pure"),
-            node("first", "sink"),
-            node("second", "sink"),
-            node("inner", "source"),
-            node("both"),
-          ].map((node) => [node.id, node]),
-        ),
+            [
+              node("event"),
+              node("source"),
+              node("pure"),
+              node("first", "sink"),
+              node("second", "sink"),
+              node("inner", "source"),
+              node("both"),
+            ].map((node) => [node.id, node]),
+          ),
           connections,
         },
       },
@@ -118,22 +118,22 @@ describe("inline scopes", () => {
         const captured: unknown[] = [],
           runs: string[] = [];
         const module = fixture(captured, runs);
-        const checkpoints = new Map<string, Executor.NodeExecutionResult>();
+        const checkpoints = new Map<string, Executor.SerializedNodeExecutionResult>();
         const executor = yield* Executor.make(model(base), {
-          executionDriver: {
-            executeNode: (key, run) =>
-              key.nodeId !== "source"
-                ? run
-                : checkpoints.has(key.nodeId)
-                  ? Effect.succeed(checkpoints.get(key.nodeId)!)
-                  : run.pipe(
-                      Effect.tap((result) =>
-                        Effect.sync(() => {
-                          checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
-                        }),
-                      ),
+          executionEnvironment: Executor.durableExecution((key, executor) => {
+            const run = executor.executeNode(key);
+            return key.nodeId !== "source"
+              ? run
+              : checkpoints.has(key.nodeId)
+                ? Effect.succeed(checkpoints.get(key.nodeId)!)
+                : run.pipe(
+                    Effect.tap((result) =>
+                      Effect.sync(() => {
+                        checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
+                      }),
                     ),
-          },
+                  );
+          }),
         });
         yield* executor.module(
           module,

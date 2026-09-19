@@ -2,6 +2,7 @@ import type { Socket } from "node:net";
 
 import { NodeHttpServer, NodeServices, NodeSocket } from "@effect/platform-node";
 import { CloudCredentials, SessionStoreError } from "@macrograph/cloud-credentials";
+import { Project } from "@macrograph/core";
 import {
   Editor,
   EditorAccess,
@@ -12,8 +13,9 @@ import {
   Presence,
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
-import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
+import { LiveRuntime } from "@macrograph/live-runtime";
 import { Engine } from "@macrograph/module";
+import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Effect, Layer } from "effect";
 import {
   FetchHttpClient,
@@ -29,9 +31,8 @@ import Deployments from "virtual:macrograph-module-deployments";
 
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
-import { Observability } from "./Observability.ts";
 import { ModuleHost } from "./ModuleHost.ts";
-import { ProjectExecution } from "./ProjectExecution.ts";
+import { Observability } from "./Observability.ts";
 import { ServerConfig } from "./ServerConfig.ts";
 import { ServerSetup } from "./ServerSetup.ts";
 import { StaticRoutes } from "./StaticRoutes.ts";
@@ -240,7 +241,9 @@ const EditorLayer = Editor.layer.pipe(
   Layer.provideMerge(Presence.layer),
 );
 
-const ProjectExecutionLayer = ProjectExecution.layer.pipe(Layer.provideMerge(EditorLayer));
+const LiveRuntimeLayer = LiveRuntime.layer({
+  initialProject: { ...Project.empty(), name: "test" },
+}).pipe(Layer.provideMerge(EditorLayer));
 
 const HealthRoute = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -295,7 +298,7 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provide(EditorRpc.connectionMiddlewareLayer),
   Layer.provide(Layer.succeed(EditorAccess.Policy, accessPolicy)),
   Layer.provide(RpcSerialization.layerJsonRpc()),
-  Layer.provide(ProjectExecutionLayer),
+  Layer.provide(LiveRuntimeLayer),
   Layer.provide(RuntimeActivity.layer),
   Layer.provide(
     Layer.succeed(Engine.Credentials, {

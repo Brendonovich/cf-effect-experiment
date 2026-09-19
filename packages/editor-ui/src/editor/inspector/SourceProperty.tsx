@@ -19,6 +19,7 @@ export function SourceProperty(props: {
   property: Package.PropertyDefinition;
   properties: Readonly<Record<string, unknown>>;
   definitions: DataType.Definitions;
+  io?: SchemaAuthoring.Context["io"];
   disabled: boolean;
   onChange: (value: string) => void;
   onClear: () => void;
@@ -31,6 +32,7 @@ export function SourceProperty(props: {
     props.source.options({
       properties: props.properties,
       definitions: props.definitions,
+      ...(props.io === undefined ? {} : { io: props.io }),
     }),
   );
 

@@ -486,6 +486,12 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       return rows[0] === undefined ? undefined : endpointFromRow(rows[0]);
     });
 
+    const endpointSecret = (projectId: string, endpointId: HttpEndpoint.Id) =>
+      projectIngressDos
+        .getByName(projectId)
+        .endpointSecret(endpointId)
+        .pipe(callIngress, Effect.orDie);
+
     const undeployProject = Effect.fnUntraced(function* (projectId: string) {
       const desired = yield* database
         .select({ previewIds: projectIngressDesired.previewIds })
@@ -535,6 +541,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       listIngress,
       getEndpoint,
       lookupEndpoint,
+      endpointSecret,
       undeployProject,
     };
   });

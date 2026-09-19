@@ -1,8 +1,4 @@
-import {
-  CurrentUser,
-  DeploymentNotFound,
-  ProjectNotFound,
-} from "@macrograph/cloud-api";
+import { CurrentUser, DeploymentNotFound, ProjectNotFound } from "@macrograph/cloud-api";
 import { Policy, Project, RenderedProject } from "@macrograph/core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq } from "drizzle-orm";
@@ -19,10 +15,7 @@ import {
   type ProjectDeploymentRecord,
 } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
-import {
-  deploymentProjectObjectKey,
-  deploymentSnapshotObjectKey,
-} from "./DeploymentObjectKey.ts";
+import { deploymentProjectObjectKey, deploymentSnapshotObjectKey } from "./DeploymentObjectKey.ts";
 import * as DeploymentPolicy from "./DeploymentPolicy.ts";
 
 export const make = (
@@ -189,18 +182,16 @@ export const make = (
                       ).pipe(Effect.andThen(Effect.failCause(cause))),
                     ),
                     Effect.andThen(
-                      Effect.all(
-                        [deployments.delete(r2Key), deployments.delete(snapshotKey)],
-                        { discard: true },
-                      )
-                        .pipe(
-                          Effect.catchCause((cleanupCause) =>
-                            Effect.logError(
-                              "Failed to remove rejected deployment objects",
-                              cleanupCause,
-                            ),
+                      Effect.all([deployments.delete(r2Key), deployments.delete(snapshotKey)], {
+                        discard: true,
+                      }).pipe(
+                        Effect.catchCause((cleanupCause) =>
+                          Effect.logError(
+                            "Failed to remove rejected deployment objects",
+                            cleanupCause,
                           ),
                         ),
+                      ),
                     ),
                     Effect.andThen(Effect.failCause(cause)),
                   ),

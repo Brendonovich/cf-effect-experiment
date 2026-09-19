@@ -1,0 +1,30 @@
+{
+  "name": "@macrograph/workflow-runtime",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ExecutionStep": "./src/ExecutionStep.ts",
+    "./GraphExecution": "./src/GraphExecution.ts",
+    "./NodeExecution": "./src/NodeExecution.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/core": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@macrograph/project-host": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

@@ -11,8 +11,8 @@ import {
   Packages,
   Presence,
 } from "@macrograph/editor";
-import { Executor, RuntimeActivity } from "@macrograph/execution";
-import { Persistence } from "@macrograph/persistence";
+import { RuntimeActivity } from "@macrograph/execution";
+import { LiveRuntime } from "@macrograph/live-runtime";
 import HttpClientDeployment from "@macrograph/module-http-client/Deployment/Local";
 import JsonModule from "@macrograph/module-json";
 import ListModule from "@macrograph/module-list";
@@ -31,33 +31,13 @@ import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { ModuleMount } from "@macrograph/project-host/ModuleMount";
-import { Context, Effect, Layer, Stream, type Scope } from "effect";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { RpcTest, type Rpc } from "effect/unstable/rpc";
 
 import type { BrowserCredentialProvider } from "./BrowserCredentials";
 import type { LocalProjectStore } from "./LocalStoragePersistence";
 
 import { browserServices } from "./BrowserServices";
-
-const engineClient = (editor: Editor.Interface, moduleId: string) =>
-  Effect.succeed(
-    new Proxy(
-      {},
-      {
-        get:
-          (_target, property) =>
-          (...args: ReadonlyArray<unknown>) =>
-            editor.engine.getRuntimeClient(moduleId).pipe(
-              Effect.flatMap((client) => {
-                const method = Reflect.get(Object(client), property);
-                return typeof method === "function"
-                  ? method(...args)
-                  : Effect.die(`Engine ${moduleId} has no ${String(property)} RPC`);
-              }),
-            ),
-      },
-    ),
-  );
 
 export const makeLocalConnection = (
   store: LocalProjectStore,
@@ -84,27 +64,7 @@ export const makeLocalConnection = (
   return Layer.build(rpc).pipe(
     Effect.flatMap((context) =>
       Effect.gen(function* () {
-        const editorService = yield* Editor.Service;
-        const persistenceService = yield* Persistence.Service;
-        const editorEvents = yield* EditorEvents.Service;
-        const activity = yield* RuntimeActivity.Service;
-        const executor = activity.wrap(
-          yield* Executor.make(yield* persistenceService.loadProject(), {
-            projectId: store.projectId,
-            executionDriver: activity.executionDriver,
-            engineClient: (moduleId) => engineClient(editorService, moduleId),
-            resourceValues: ({ package: moduleId, resource }) =>
-              editorService.engine.getResourceValues(moduleId, resource).pipe(Effect.orDie),
-          }),
-        );
-        yield* Stream.fromSubscription(yield* editorEvents.subscribe).pipe(
-          Stream.runForEach(() =>
-            persistenceService
-              .loadProject()
-              .pipe(Effect.flatMap(executor.loadProject), Effect.orDie),
-          ),
-          Effect.forkScoped,
-        );
+        const executor = yield* LiveRuntime.make({ projectId: store.projectId });
 
         const mount = <
           ResourceType extends Resource.ResourceClass<any, any, any>,
@@ -126,7 +86,6 @@ export const makeLocalConnection = (
           >,
         ) =>
           Effect.gen(function* () {
-            yield* executor.module(deployment.module, deployment);
             const context = EngineHost.editorContextLayer(deployment, {
               emit: (event) =>
                 executor
@@ -144,7 +103,12 @@ export const makeLocalConnection = (
               EngineHost.layer(deployment, context).pipe(Layer.provide(browserServices)),
             );
             const instance = Context.get(engineContext, deployment.definition);
-            yield* EngineHost.mount(deployment.module, deployment, instance.client.state);
+            yield* ModuleMount.register(
+              executor,
+              deployment.module,
+              deployment,
+              instance.client.state,
+            );
             return engineContext;
           });
 

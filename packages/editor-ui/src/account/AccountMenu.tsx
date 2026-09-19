@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
 
-import { Avatar } from "./Avatar.tsx";
 import { colors } from "../tokens.stylex.ts";
+import { Avatar } from "./Avatar.tsx";
 
 export interface AccountMenuProps {
   readonly email: string;

@@ -379,11 +379,14 @@ export const make: Make<AppHelix.AppCredentials | HttpClient.HttpClient | HttpEn
           accountId,
         });
         yield* Effect.gen(function* () {
-          const endpoint = yield* endpoints.get(EventSubEndpoint, accountId).pipe(
-            Effect.mapError(
-              () => new Helix.HelixError({ reason: "Failed to resolve EventSub webhook endpoint" }),
-            ),
-          );
+          const endpoint = yield* endpoints
+            .get(EventSubEndpoint, accountId)
+            .pipe(
+              Effect.mapError(
+                () =>
+                  new Helix.HelixError({ reason: "Failed to resolve EventSub webhook endpoint" }),
+              ),
+            );
           if (Option.isNone(endpoint)) {
             yield* Effect.logInfo("No EventSub webhook endpoint to disconnect", { accountId });
             return;

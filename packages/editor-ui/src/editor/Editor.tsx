@@ -356,6 +356,10 @@ function FunctionTabIcon() {
   return <IconTablerFunction {...stylex.attrs(styles.tabIcon)} />;
 }
 
+function ModuleTabIcon() {
+  return <IconTablerPackage {...stylex.attrs(styles.tabIcon)} />;
+}
+
 export type EditorRpcClient = RpcClient.FromGroup<
   typeof EditorRpc.EditorRpcs,
   RpcClientError.RpcClientError
@@ -445,6 +449,11 @@ function EditorContent(
     canvas,
     controller.commands,
   );
+  const selectedModule = createMemo(() => {
+    const view = controller.layout.activeWorkspaceView();
+    if (view.type !== "package") return null;
+    return controller.editor.store.packages.find((pkg) => pkg.id === view.packageId) ?? null;
+  });
 
   const workspaceTabTitle = (tab: WorkspaceTab) => {
     if (tab.type === "graph")
@@ -462,7 +471,7 @@ function EditorContent(
         title:
           controller.editor.store.packages.find((pkg) => pkg.id === tab.packageId)?.name ??
           tab.packageId,
-        description: "Module",
+        icon: <ModuleTabIcon />,
       };
     if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
     if (tab.type === "types") return { id: tab.id, title: "Types" };
@@ -473,42 +482,65 @@ function EditorContent(
     };
   };
 
-  const renderWorkspacePreview = (tab: WorkspaceTab) => {
-    if (tab.type === "shortcuts") return <ShortcutsHelp shortcuts={shortcuts} />;
-    if (tab.type === "types")
-      return (
-        <TypeDefinitions
-          project={controller.editor.store.project}
-          canEdit={controller.connection.canEdit()}
-          onPreview={controller.commands.previewTypeDefinition}
-          onConfirm={controller.commands.confirmTypeDefinition}
-        />
-      );
-    if (tab.type === "package") {
-      const pkg = () =>
-        controller.editor.store.packages.find((candidate) => candidate.id === tab.packageId);
-      return (
-        <Show when={pkg()} fallback={<EmptyContext />}>
-          {(value) => (
-            <ModuleSettingsView
-              package={value()}
-              settings={controller.connection.moduleSettingsById().get(value().id)}
-              data={controller.connection.moduleData.metadata()}
-              state={() => controller.connection.moduleData.states.get(value().id)?.()}
-              onChanged={() => controller.connection.refreshModuleData(value().id)}
-            />
-          )}
+  const renderWorkspacePreview = (tab: () => WorkspaceTab) => {
+    const packageTab = createMemo(() => {
+      const value = tab();
+      return value.type === "package" ? value : undefined;
+    });
+    return (
+      <>
+        <Show when={tab().type === "shortcuts"}>
+          <ShortcutsHelp shortcuts={shortcuts} />
         </Show>
-      );
-    }
-    if (tab.type === "settings")
-      return (
-        renderProjectSettings()?.({
-          client: controller.connection.client,
-          refreshModuleData: controller.connection.refreshModuleData,
-        }) ?? <EmptyContext />
-      );
-    return <EmptyContext />;
+        <Show when={tab().type === "types"}>
+          <TypeDefinitions
+            project={controller.editor.store.project}
+            canEdit={controller.connection.canEdit()}
+            onPreview={controller.commands.previewTypeDefinition}
+            onConfirm={controller.commands.confirmTypeDefinition}
+          />
+        </Show>
+        <Show when={packageTab()} fallback={null}>
+          {(selectedTab) => {
+            const pkg = createMemo(() =>
+              controller.editor.store.packages.find(
+                (candidate) => candidate.id === selectedTab().packageId,
+              ),
+            );
+            return (
+              <Show when={pkg()} fallback={<EmptyContext />}>
+                {(value) => (
+                  <ModuleSettingsView
+                    package={value()}
+                    authoring={controller.editor.authoring}
+                    definitions={controller.editor.store.project?.types ?? {}}
+                    functions={Object.values(controller.editor.store.project?.functions ?? {})}
+                    view={selectedTab().view}
+                    onViewChange={(view) =>
+                      controller.layout.dispatchWorkspace({
+                        type: "set-package-view",
+                        tabId: selectedTab().id,
+                        view,
+                      })
+                    }
+                    settings={controller.connection.moduleSettingsById().get(value().id)}
+                    data={controller.connection.moduleData.metadata()}
+                    state={() => controller.connection.moduleData.states.get(value().id)?.()}
+                    onChanged={() => controller.connection.refreshModuleData(value().id)}
+                  />
+                )}
+              </Show>
+            );
+          }}
+        </Show>
+        <Show when={tab().type === "settings"}>
+          {renderProjectSettings()?.({
+            client: controller.connection.client,
+            refreshModuleData: controller.connection.refreshModuleData,
+          }) ?? <EmptyContext />}
+        </Show>
+      </>
+    );
   };
 
   return (
@@ -586,8 +618,7 @@ function EditorContent(
                   functionIds={
                     new Set(Object.keys(controller.editor.store.project?.functions ?? {}))
                   }
-                  packagesWithSettings={controller.catalog.filteredPackagesWithSettings()}
-                  packagesWithoutSettings={controller.catalog.filteredPackagesWithoutSettings()}
+                  packages={controller.catalog.filteredPackages()}
                   allPackages={controller.editor.store.packages}
                   constants={controller.editor.store.project?.constants ?? {}}
                   onSectionChange={controller.layout.setNavSection}
@@ -1132,6 +1163,7 @@ function EditorContent(
             >
               <Inspector
                 authoring={controller.editor.authoring}
+                module={selectedModule()}
                 nodeDiagnostics={
                   controller.editor.store.nodeDiagnostics[
                     controller.layout.selectedGraphId() ?? ""
@@ -1168,6 +1200,7 @@ function EditorContent(
                 onClearNodeProperty={controller.commands.clearNodeProperty}
                 onAddFunctionField={controller.commands.addFunctionField}
                 onUpdateFunctionField={controller.commands.updateFunctionField}
+                onReorderFunctionField={controller.commands.reorderFunctionField}
                 onDeleteFunctionField={controller.commands.deleteFunctionField}
               />
             </Sidebar>

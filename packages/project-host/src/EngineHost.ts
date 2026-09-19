@@ -1,14 +1,13 @@
-import type * as S from "effect/Schema";
-import { type Rpc, RpcTest } from "effect/unstable/rpc";
-
-import { Persistence } from "@macrograph/persistence";
-import * as Engine from "@macrograph/module/Engine";
 import type * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import type * as Module from "@macrograph/module/Module";
 import type * as Resource from "@macrograph/module/Resource";
-import { Context, Effect, Layer, Schema, Semaphore } from "effect";
+import type * as S from "effect/Schema";
 
 import { Editor } from "@macrograph/editor";
+import * as Engine from "@macrograph/module/Engine";
+import { Persistence } from "@macrograph/persistence";
+import { Context, Effect, Layer, Schema, Semaphore } from "effect";
+import { type Rpc, RpcTest } from "effect/unstable/rpc";
 
 export const contextLayer = <
   ResourceType extends Resource.ResourceClass<any, any, any>,
@@ -34,8 +33,7 @@ export const contextLayer = <
     readonly emit: Engine.ToLayerCtx<ResourceType, Event, Storage>["emit"];
   },
 ) =>
-  Layer.effect(
-    definition.EngineContext)(
+  Layer.effect(definition.EngineContext)(
     Effect.gen(function* () {
       const lock = yield* Semaphore.make(1);
       const save = (state: Storage["Type"]) =>
@@ -112,14 +110,12 @@ const editorLayer = <
         reconcile: options.reconcile ?? (() => Effect.succeed([])),
         setEndpoints:
           options.reconcile === undefined ? () => Effect.void : editor.engine.setEndpoints,
-        resource:
-          options.resource ??
-          {
-            refresh: (resource) =>
-              editor.engine
-                .reloadResource(deployment.moduleId, resource.key)
-                .pipe(Effect.catchTag("InvalidResourceError", () => Effect.void)),
-          },
+        resource: options.resource ?? {
+          refresh: (resource) =>
+            editor.engine
+              .reloadResource(deployment.moduleId, resource.key)
+              .pipe(Effect.catchTag("InvalidResourceError", () => Effect.void)),
+        },
         credentials,
         client: options.client ?? { refresh: editor.engine.dirtyClientState(deployment.moduleId) },
         emit: options.emit,
@@ -196,9 +192,7 @@ export const layer = <
         ),
       ),
     ),
-  ).pipe(
-    Layer.provideMerge(engineLayer),
-  );
+  ).pipe(Layer.provideMerge(engineLayer));
 };
 
 export const mount = <Definition extends Engine.AnyDef>(
@@ -211,10 +205,7 @@ export const mount = <Definition extends Engine.AnyDef>(
     yield* editor.module(module, deployment);
     yield* editor.engine.hostClientState(
       module.id,
-      clientState.pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
-        Effect.orDie,
-      ),
+      clientState.pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)), Effect.orDie),
     );
   });
 

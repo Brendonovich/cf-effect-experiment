@@ -77,19 +77,19 @@ const project = (target = "break") =>
           id: "graph",
           name: "Scopes",
           nodes: {
-          event: node("event", "scope-test", "event"),
-          break: node("break", Scopes.packageId, "BreakScope"),
-          sink: node("sink", "scope-test", "sink"),
-          scopeSink: node("scopeSink", "scope-test", "scopeSink"),
-          wrongSink: node("wrongSink", "scope-test", "wrongSink"),
-        },
+            event: node("event", "scope-test", "event"),
+            break: node("break", Scopes.packageId, "BreakScope"),
+            sink: node("sink", "scope-test", "sink"),
+            scopeSink: node("scopeSink", "scope-test", "scopeSink"),
+            wrongSink: node("wrongSink", "scope-test", "wrongSink"),
+          },
           connections:
             target === "break"
               ? [
-                wire("scope", "event", "payload", "break", "scope"),
-                wire("exec", "break", "exec", "sink", "exec"),
-                wire("data", "break", "value", "sink", "value"),
-              ]
+                  wire("scope", "event", "payload", "break", "scope"),
+                  wire("exec", "break", "exec", "sink", "exec"),
+                  wire("data", "break", "value", "sink", "value"),
+                ]
               : [wire("scope", "event", "payload", target, target === "sink" ? "exec" : "payload")],
         },
       },
@@ -119,9 +119,9 @@ describe("scope execution", () => {
               id: "graph",
               name: "Empty scope",
               nodes: {
-              event: node("event", module.id, "event"),
-              break: node("break", Scopes.packageId, "BreakScope"),
-            },
+                event: node("event", module.id, "event"),
+                break: node("break", Scopes.packageId, "BreakScope"),
+              },
               connections: [wire("scope", "event", "empty", "break", "scope")],
             },
           },
@@ -129,12 +129,10 @@ describe("scope execution", () => {
       });
       const ran: string[] = [];
       const executor = yield* Executor.make(model, {
-        executionDriver: {
-          executeNode: (key, effect) => {
-            ran.push(key.nodeId);
-            return effect;
-          },
-        },
+        executionEnvironment: Executor.inProcessExecution((key, executor) => {
+          ran.push(key.nodeId);
+          return executor.executeNode(key);
+        }),
       });
       yield* executor.module(
         module,
@@ -202,22 +200,22 @@ describe("scope execution", () => {
     Effect.gen(function* () {
       const captured: unknown[] = [];
       const module = fixture(captured);
-      const checkpoints = new Map<string, Executor.NodeExecutionResult>();
+      const checkpoints = new Map<string, Executor.SerializedNodeExecutionResult>();
       const executor = yield* Executor.make(project(), {
-        executionDriver: {
-          executeNode: (key, run) =>
-            key.nodeId === "sink"
-              ? run
-              : checkpoints.has(key.nodeId)
-                ? Effect.succeed(checkpoints.get(key.nodeId)!)
-                : run.pipe(
-                    Effect.tap((result) =>
-                      Effect.sync(() => {
-                        checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
-                      }),
-                    ),
+        executionEnvironment: Executor.durableExecution((key, nodeExecutor) => {
+          const run = nodeExecutor.executeNode(key);
+          return key.nodeId === "sink"
+            ? run
+            : checkpoints.has(key.nodeId)
+              ? Effect.succeed(checkpoints.get(key.nodeId)!)
+              : run.pipe(
+                  Effect.tap((result) =>
+                    Effect.sync(() => {
+                      checkpoints.set(key.nodeId, JSON.parse(JSON.stringify(result)));
+                    }),
                   ),
-        },
+                );
+        }),
       });
       yield* executor.module(
         module,
@@ -258,12 +256,10 @@ describe("scope execution", () => {
         const module = fixture([]);
         let runs = 0;
         const executor = yield* Executor.make(project(target), {
-          executionDriver: {
-            executeNode: (_, run) => {
-              runs++;
-              return run;
-            },
-          },
+          executionEnvironment: Executor.inProcessExecution((key, executor) => {
+            runs++;
+            return executor.executeNode(key);
+          }),
         });
         yield* executor.module(
           module,
@@ -287,15 +283,18 @@ describe("scope execution", () => {
         Effect.gen(function* () {
           const captured: unknown[] = [];
           const module = fixture(captured);
+          const serializedScopePayload =
+            scopePayload === undefined ? undefined : JSON.parse(JSON.stringify(scopePayload));
           const executor = yield* Executor.make(project(), {
-            executionDriver: {
-              executeNode: () =>
-                Effect.succeed({
-                  outputs: [],
-                  executionOutputId: "payload",
-                  ...(scopePayload === undefined ? {} : { scopePayload }),
-                }),
-            },
+            executionEnvironment: Executor.durableExecution(() =>
+              Effect.succeed({
+                outputs: [],
+                executionOutputId: "payload",
+                ...(serializedScopePayload === undefined
+                  ? {}
+                  : { scopePayload: serializedScopePayload }),
+              }),
+            ),
           });
           yield* executor.module(
             module,

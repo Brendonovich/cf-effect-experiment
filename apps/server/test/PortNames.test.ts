@@ -32,20 +32,21 @@ const check = (
   module: string,
   collect: Effect.Effect<ReadonlyArray<Registration.RegisteredSchema>>,
   expected: ReadonlyArray<PortName>,
-) => it.effect(`${module} preserves the original IO names`, () =>
-  Effect.gen(function* () {
-    const schemas = yield* collect;
-    for (const [id, direction, portId, name] of expected) {
-      const schema = schemas.find((schema) => schema.id === id);
-      assert.isDefined(schema, `${module}.${id}`);
-      for (const io of [schema, schema.generateIO({})]) {
-        const port = io[direction].find((port) => port.id === portId);
-        assert.isDefined(port, `${module}.${id}.${direction}.${portId}`);
-        assert.strictEqual(port.name ?? null, name, `${module}.${id}.${direction}.${portId}`);
+) =>
+  it.effect(`${module} preserves the original IO names`, () =>
+    Effect.gen(function* () {
+      const schemas = yield* collect;
+      for (const [id, direction, portId, name] of expected) {
+        const schema = schemas.find((schema) => schema.id === id);
+        assert.isDefined(schema, `${module}.${id}`);
+        for (const io of [schema, schema.generateIO({})]) {
+          const port = io[direction].find((port) => port.id === portId);
+          assert.isDefined(port, `${module}.${id}.${direction}.${portId}`);
+          assert.strictEqual(port.name ?? null, name, `${module}.${id}.${direction}.${portId}`);
+        }
       }
-    }
-  }),
-);
+    }),
+  );
 
 describe("Original MacroGraph IO names", () => {
   check("Logic", Registration.collect(Logic.effect), [
@@ -146,7 +147,12 @@ describe("Original MacroGraph IO names", () => {
     ["StreamlabsYoutubeMembership", "dataOutputs", "months", "Months"],
     ["StreamlabsYoutubeSuperchat", "dataOutputs", "displayString", "Display String"],
     ["StreamlabsYoutubeMembershipGiftee", "dataOutputs", "membershipGiftId", "Membership Gift ID"],
-    ["StreamlabsYoutubeMembershipGifter", "dataOutputs", "giftMembershipsCount", "Membership Count"],
+    [
+      "StreamlabsYoutubeMembershipGifter",
+      "dataOutputs",
+      "giftMembershipsCount",
+      "Membership Count",
+    ],
   ]);
   check("OBS", Registration.collect(OBS.effect), [
     ["RGBAHexToOBSColour", "dataInputs", "input", null],

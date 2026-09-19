@@ -17,12 +17,7 @@ export const ServerDefinition = Schema.Struct({
 });
 export type ServerDefinition = typeof ServerDefinition.Type;
 
-export const ServerStatus = Schema.Literals([
-  "stopped",
-  "starting",
-  "running",
-  "error",
-]);
+export const ServerStatus = Schema.Literals(["stopped", "starting", "running", "error"]);
 export type ServerStatus = typeof ServerStatus.Type;
 
 export const ServerState = Schema.Struct({
@@ -33,10 +28,9 @@ export const ServerState = Schema.Struct({
 });
 export type ServerState = typeof ServerState.Type;
 
-export class InvalidServer extends Schema.TaggedError<InvalidServer>()(
-  "WebSocketInvalidServer",
-  { reason: Schema.String },
-) {}
+export class InvalidServer extends Schema.TaggedError<InvalidServer>()("WebSocketInvalidServer", {
+  reason: Schema.String,
+}) {}
 
 export class ServerNotFound extends Schema.TaggedError<ServerNotFound>()(
   "WebSocketServerNotFound",
@@ -148,12 +142,7 @@ export class RuntimeRpcs extends RpcGroup.make(
   }),
   Rpc.make("WebSocketServerBroadcast", {
     payload: Schema.Struct({ serverId: ServerId, message: Schema.String }),
-    error: Schema.Union([
-      ServerNotFound,
-      ServerNotRunning,
-      MessageTooLarge,
-      SendFailed,
-    ]),
+    error: Schema.Union([ServerNotFound, ServerNotRunning, MessageTooLarge, SendFailed]),
   }),
 ) {}
 

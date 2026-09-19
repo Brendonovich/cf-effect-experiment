@@ -46,8 +46,8 @@ export const createPresence = (props: {
     if (element === null) return;
     const finish = (event: AnimationEvent) => {
       if (event.target !== element || untrack(state) !== "hiding") return;
-      const animationNames = getComputedStyle(element).animationName
-        .split(",")
+      const animationNames = getComputedStyle(element)
+        .animationName.split(",")
         .map((name) => name.trim());
       if (animationNames.includes(event.animationName)) setState("hidden");
     };

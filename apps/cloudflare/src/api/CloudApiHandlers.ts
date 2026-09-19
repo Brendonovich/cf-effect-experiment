@@ -148,8 +148,20 @@ export const credentialHandlers = HttpApiBuilder.group(
   Effect.fnUntraced(function* (handlers) {
     const credential = yield* Credential.Service;
     return handlers
+      .handle("providers", () => credential.providers)
       .handle("list", ({ params }) => credential.list(params.projectId))
-      .handle("refetch", ({ params }) => credential.refetch(params.projectId));
+      .handle("refetch", ({ params }) => credential.refetch(params.projectId))
+      .handle("connect", ({ params, request }) =>
+        credential.connect(params.projectId, params.provider, credential.publicOrigin(request)),
+      )
+      .handle("complete", ({ payload }) =>
+        credential.complete(payload.provider, payload.code, payload.state),
+      )
+      .handle("remove", ({ params }) =>
+        credential
+          .remove(params.projectId, params.provider, params.credentialId)
+          .pipe(Effect.asVoid),
+      );
   }),
 );
 

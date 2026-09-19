@@ -1,5 +1,3 @@
-import type { Executor } from "@macrograph/execution";
-
 import { assert, describe, it } from "@effect/vitest";
 import {
   ConnectionId,
@@ -13,6 +11,7 @@ import {
   RenderedProject,
   SchemaId,
 } from "@macrograph/core";
+import { Executor } from "@macrograph/execution";
 import { DataType } from "@macrograph/module/DataType";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
@@ -116,12 +115,11 @@ describe("hosted function graphs", () => {
       const steps = new Map<string, Executor.NodeExecutionResult>();
       const executor = yield* ProjectExecutor.make(deployed, {
         modules: ExecutorModules.registry,
-        executionDriver: {
-          executeNode: (key, effect) =>
-            effect.pipe(
-              Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result))),
-            ),
-        },
+        executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
+          nodeExecutor
+            .executeNode(key)
+            .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
+        ),
       });
       yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
       assert.deepStrictEqual(steps.get(GraphFunction.InputBoundaryNodeId)?.outputs, [

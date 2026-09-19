@@ -29,13 +29,13 @@ describe("browser tracing configuration", () => {
   });
 
   it("removes workspace identifiers from navigation attributes", () => {
+    expect(sanitizeNavigationPath("/teams/private-team/projects/secret-project/editor")).toBe(
+      "/teams/:id/projects/:id/editor",
+    );
     expect(
       sanitizeNavigationPath(
-        "/teams/private-team/projects/secret-project/editor",
+        "/teams/private-team/projects/secret-project/deployments/deployment-1",
       ),
-    ).toBe("/teams/:id/projects/:id/editor");
-    expect(
-      sanitizeNavigationPath("/teams/private-team/projects/secret-project/deployments/deployment-1"),
     ).toBe("/teams/:id/projects/:id/deployments/:id");
   });
 });

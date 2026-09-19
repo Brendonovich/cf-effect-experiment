@@ -32,7 +32,7 @@ describe("editor store", () => {
           schema: SchemaId.make("MakeStruct"),
         },
         position: { x: 0, y: 0 },
-        properties: { type: id },
+        properties: {},
         inputDefaults: { old: "kept" },
         foldPins: false,
       };
@@ -63,7 +63,7 @@ describe("editor store", () => {
         deletedConnectionIds: { graph: ["wire"] },
       });
       expect(editor.store.project?.types).toEqual({});
-      expect(editor.store.nodeIO.graph?.node).toEqual(emptyIO);
+      expect(editor.store.nodeIO.graph?.node).toEqual(CustomTypes.nodeIO(node.schema, {}, {})!);
       expect(editor.store.project?.graphs.graph?.nodes.node?.inputDefaults).toEqual({
         old: "kept",
       });

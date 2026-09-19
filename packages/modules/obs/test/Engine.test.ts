@@ -7,8 +7,8 @@ import type * as ObsEvent from "../src/Events.ts";
 
 import { OBSEngine, OBSSocket, SocketAddress } from "../src/Definition.ts";
 import deployment from "../src/Deployment/WebSocket.ts";
-import * as ObsWebSocket from "../src/ObsWebSocket.ts";
 import OBSModule from "../src/Module.ts";
+import * as ObsWebSocket from "../src/ObsWebSocket.ts";
 import {
   canvasRequests,
   highVolumeSubscriptions,

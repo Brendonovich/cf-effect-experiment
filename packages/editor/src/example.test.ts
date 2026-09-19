@@ -51,8 +51,7 @@ namespace Persistence {
   ) {}
 
   export const layerMemory = (project: Project.Model) =>
-    Layer.effect(
-      Service)(
+    Layer.effect(Service)(
       Effect.gen(function* () {
         const projectRef = yield* Ref.make(project);
 

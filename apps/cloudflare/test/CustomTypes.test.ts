@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CustomTypes, Project, RenderedProject } from "@macrograph/core";
+import { Executor } from "@macrograph/execution";
+import { Module } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
@@ -44,15 +46,8 @@ describe("hosted custom types", () => {
               name: "Hosted custom types",
               nodes: {
                 tick: makeNode("tick", "util", "Tick"),
-                match: makeNode(
-                  "match",
-                  CustomTypes.packageId,
-                  "MatchEnum",
-                  {
-                    value: { _type: "result", _tag: "Found", items: [1, 2, 3] },
-                  },
-                  { type: "result" },
-                ),
+                source: makeNode("source", "custom-anchor", "source"),
+                match: makeNode("match", CustomTypes.packageId, "MatchEnum", {}, {}),
               },
               connections: [
                 {
@@ -61,6 +56,13 @@ describe("hosted custom types", () => {
                   outIo: { _tag: "Port" as const, id: "exec" },
                   inNodeId: "match",
                   inIoId: "exec",
+                },
+                {
+                  id: "value",
+                  outNodeId: "source",
+                  outIo: { _tag: "Port" as const, id: "value" },
+                  inNodeId: "match",
+                  inIoId: "value",
                 },
               ],
             },
@@ -82,17 +84,29 @@ describe("hosted custom types", () => {
         { ...project, types: deployed.types },
         {
           modules: ExecutorModules.registry,
-          executionDriver: {
-            executeNode: (key, effect) =>
-              effect.pipe(
-                Effect.map((result) => {
-                  const replay = JSON.parse(JSON.stringify(result));
-                  recorded.push({ node: key.nodeId, output: replay });
-                  return replay;
-                }),
-              ),
-          },
+          executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
+            nodeExecutor.executeNode(key).pipe(
+              Effect.map((result) => {
+                const replay = JSON.parse(JSON.stringify(result));
+                recorded.push({ node: key.nodeId, output: replay });
+                return replay;
+              }),
+            ),
+          ),
         },
+      );
+      yield* executor.module(
+        Module.make({
+          id: "custom-anchor",
+          effect: (context) =>
+            context.schema.register({
+              id: "source",
+              type: "pure",
+              io: (io) => ({ value: io.data.out("value", DataType.Custom("result")) }),
+              run: ({ io }) =>
+                Effect.sync(() => io.value({ _type: "result", _tag: "Found", items: [1, 2, 3] })),
+            }),
+        }),
       );
       yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
       assert.deepStrictEqual(recorded.find((step) => step.node === "match")?.output, {

@@ -25,8 +25,8 @@ const secondAccountId = AccountId.make("solid-2-repro-two");
 const delay = () => new Promise<void>((resolve) => setTimeout(resolve, ASYNC_DELAY));
 
 const socketStates = new Map<typeof AccountId.Type, SocketState>([
-	[firstAccountId, "connected"],
-	[secondAccountId, "connected"],
+  [firstAccountId, "connected"],
+  [secondAccountId, "connected"],
 ]);
 const accountEnabled = new Map<typeof AccountId.Type, boolean>([
   [firstAccountId, true],
@@ -122,9 +122,7 @@ const rpc: SettingsProps["rpc"] = {
 
 const ConnectedSettings: Component = () => {
   const View = successCase ? Settings : BuggySettings;
-  const view = createMemo(() => (
-    <View state={() => data.state} rpc={rpc} onChanged={reload} />
-  ));
+  const view = createMemo(() => <View state={() => data.state} rpc={rpc} onChanged={reload} />);
   return <>{view()}</>;
 };
 

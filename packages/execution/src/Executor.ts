@@ -2,6 +2,7 @@ import {
   Canvas,
   CustomTypes,
   Function as GraphFunction,
+  IoId,
   Node,
   type NodeIO,
   OutputRef,
@@ -15,7 +16,7 @@ import { DataType } from "@macrograph/module/DataType";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
-import { Cause, Effect, Ref, Result, Schema } from "effect";
+import { Cause, Effect, Option, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
@@ -83,6 +84,11 @@ export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()
   { nodeId: Schema.String, cause: Schema.Unknown },
 ) {}
 
+export class NodeExecutionNotPending extends Schema.TaggedError<NodeExecutionNotPending>()(
+  "NodeExecutionNotPending",
+  { traceId: Schema.String },
+) {}
+
 export class InvalidGraph extends Schema.TaggedError<InvalidGraph>()("InvalidGraph", {
   graphId: Schema.String,
   nodeId: Schema.String,
@@ -109,6 +115,7 @@ export type ExecutorError =
   | ResourceResolutionError
   | EngineClientUnavailable
   | NodeExecutionError
+  | NodeExecutionNotPending
   | InvalidGraph
   | Node.NotFoundError;
 
@@ -139,6 +146,7 @@ export interface Service {
     inputs: Readonly<Record<string, unknown>>,
     options?: FunctionInvocationOptions,
   ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
+  readonly executeSerializedNode: SerializedNodeExecutor["executeNode"];
 }
 
 export interface FunctionInvocationOptions {
@@ -184,25 +192,88 @@ export interface NodeExecutionResult {
   readonly scopePayload?: Readonly<Record<string, unknown>>;
 }
 
-export interface ExecutionDriver {
+export interface SerializedNodeExecutionResult {
+  readonly outputs: ReadonlyArray<{ readonly outputId: string; readonly value: Schema.Json }>;
+  readonly executionOutputId: string | null;
+  readonly scopePayload?: Readonly<Record<string, Schema.Json>>;
+}
+
+export interface NodeExecutionRequest {
+  readonly key: NodeExecutionKey;
+  readonly moduleId: string;
+  readonly schemaId: string;
+  readonly inputs: Readonly<Record<string, Schema.Json>>;
+  readonly properties: Readonly<Record<string, Schema.Json>>;
+  readonly event?: Schema.Json;
+  readonly types: DataType.Definitions;
+  readonly resolvedTypes: Readonly<Record<string, DataType.Any>>;
+  readonly precomputed?: SerializedNodeExecutionResult;
+  readonly scopeInput?: {
+    readonly inputId: string;
+    readonly payload: Readonly<Record<string, Schema.Json>>;
+  };
+}
+
+export interface NodeExecutor {
   readonly executeNode: (
     key: NodeExecutionKey,
-    effect: Effect.Effect<NodeExecutionResult, ExecutorError>,
   ) => Effect.Effect<NodeExecutionResult, ExecutorError>;
 }
 
+export interface DurableNodeExecutor {
+  readonly executeNode: (
+    key: NodeExecutionKey,
+  ) => Effect.Effect<SerializedNodeExecutionResult, ExecutorError>;
+}
+
+export interface SerializedNodeExecutor {
+  readonly executeNode: (
+    request: NodeExecutionRequest,
+  ) => Effect.Effect<SerializedNodeExecutionResult, ExecutorError>;
+}
+
+export interface InProcessExecutionEnvironment {
+  readonly _tag: "InProcess";
+  readonly executeNode: (
+    key: NodeExecutionKey,
+    executor: NodeExecutor,
+  ) => Effect.Effect<NodeExecutionResult, ExecutorError>;
+}
+
+export interface DurableExecutionEnvironment {
+  readonly _tag: "Durable";
+  readonly executeNode: (
+    key: NodeExecutionKey,
+    executor: DurableNodeExecutor,
+  ) => Effect.Effect<SerializedNodeExecutionResult, ExecutorError>;
+}
+
+export interface SerializedExecutionEnvironment {
+  readonly _tag: "Serialized";
+  readonly executeNode: SerializedNodeExecutor["executeNode"];
+}
+
+export type ExecutionEnvironment =
+  | InProcessExecutionEnvironment
+  | DurableExecutionEnvironment
+  | SerializedExecutionEnvironment;
+
+export const inProcessExecution = (
+  executeNode: InProcessExecutionEnvironment["executeNode"],
+): InProcessExecutionEnvironment => ({ _tag: "InProcess", executeNode });
+
+export const durableExecution = (
+  executeNode: DurableExecutionEnvironment["executeNode"],
+): DurableExecutionEnvironment => ({ _tag: "Durable", executeNode });
+
 export interface MakeOptions {
   readonly projectId?: string;
-  readonly executionDriver?: ExecutionDriver;
+  readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
   readonly resourceValues?: (
     resource: ResourceConstant.ResourceRef,
   ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
 }
-
-export const inlineExecutionDriver: ExecutionDriver = {
-  executeNode: (_key, effect) => effect,
-};
 
 const outputKey = (nodeId: string, outputId: string) =>
   NodeOutputKey.make(`${nodeId}\0${outputId}`);
@@ -213,8 +284,26 @@ export const make = Effect.fnUntraced(function* (
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
   const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
-  const executionDriver = options?.executionDriver ?? inlineExecutionDriver;
   const projectId = options?.projectId ?? "local";
+  const pendingNodes = new Map<
+    string,
+    {
+      readonly execute: Effect.Effect<NodeExecutionResult, ExecutorError>;
+      readonly executeDurable: Effect.Effect<SerializedNodeExecutionResult, ExecutorError>;
+    }
+  >();
+  const pendingNode = Effect.fnUntraced(function* (key: NodeExecutionKey) {
+    const pending = pendingNodes.get(key.traceId);
+    if (pending === undefined) return yield* new NodeExecutionNotPending({ traceId: key.traceId });
+    return pending;
+  });
+  const nodeExecutor: NodeExecutor = {
+    executeNode: (key) => pendingNode(key).pipe(Effect.flatMap((pending) => pending.execute)),
+  };
+  const durableNodeExecutor: DurableNodeExecutor = {
+    executeNode: (key) =>
+      pendingNode(key).pipe(Effect.flatMap((pending) => pending.executeDurable)),
+  };
 
   const registerModule: Service["module"] = Effect.fnUntraced(function* (...args) {
     const [definition, deployment] = args;
@@ -247,6 +336,224 @@ export const make = Effect.fnUntraced(function* (
       return next;
     });
   });
+
+  const executeSerializedNode: SerializedNodeExecutor["executeNode"] = Effect.fnUntraced(
+    function* (request) {
+      if (request.precomputed !== undefined) return request.precomputed;
+      const registeredModules = new Map(yield* Ref.get(modules));
+      registeredModules.set(CustomTypes.packageId, {
+        schemas: CustomTypes.schemas(request.types),
+        engineClient: undefined,
+      });
+      registeredModules.set(Scopes.packageId, {
+        schemas: new Map([[Scopes.schema.id, Scopes.schema]]),
+        engineClient: undefined,
+      });
+      const registeredModule = registeredModules.get(request.moduleId);
+      if (registeredModule === undefined)
+        return yield* new ModuleNotRegistered({ moduleId: request.moduleId });
+      const schema = registeredModule.schemas.get(request.schemaId);
+      if (schema === undefined)
+        return yield* new SchemaNotRegistered({
+          moduleId: request.moduleId,
+          schemaId: request.schemaId,
+        });
+      const nodeIO = yield* Effect.try({
+        try: () => schema.generateIO(request.properties),
+        catch: () =>
+          new InvalidGraph({
+            graphId: request.key.graphId,
+            nodeId: request.key.nodeId,
+            reasons: ["Schema IO could not be generated"],
+          }),
+      });
+      const inputs = new Map<string, unknown>();
+      const resolveType = (type: DataType.Any) =>
+        request.resolvedTypes[JSON.stringify(type)] ?? type;
+      yield* Effect.forEach(
+        nodeIO.dataInputs,
+        (input) =>
+          Schema.decodeUnknownEffect(
+            DataType.JsonValueSchema(resolveType(input.type), request.types),
+          )(request.inputs[input.id]).pipe(
+            Effect.tap((value) =>
+              Effect.sync(() => {
+                inputs.set(input.id, value);
+              }),
+            ),
+            Effect.catchCause(
+              () =>
+                new InvalidInputValue({
+                  nodeId: request.key.nodeId,
+                  inputId: input.id,
+                  reason: `Expected ${input.type._tag}`,
+                }),
+            ),
+          ),
+        { discard: true },
+      );
+      let scopePayload: Readonly<Record<string, unknown>> | undefined;
+      if (request.scopeInput !== undefined) {
+        const input = nodeIO.executionInputs.find(
+          (candidate) => candidate.id === request.scopeInput?.inputId,
+        );
+        if (input === undefined)
+          return yield* new MissingInput({
+            nodeId: request.key.nodeId,
+            inputId: request.scopeInput.inputId,
+          });
+        scopePayload = Object.fromEntries(
+          yield* Effect.forEach(input.scope ?? [], (field) =>
+            Schema.decodeUnknownEffect(
+              DataType.JsonValueSchema(resolveType(field.type), request.types),
+            )(request.scopeInput!.payload[field.id]).pipe(
+              Effect.map((value) => [field.id, value] as const),
+              Effect.catchCause(
+                () =>
+                  new InvalidInputValue({
+                    nodeId: request.key.nodeId,
+                    inputId: input.id,
+                    reason: `Invalid scope field ${field.id}`,
+                  }),
+              ),
+            ),
+          ),
+        );
+      }
+      const event =
+        request.event === undefined
+          ? undefined
+          : yield* Effect.gen(function* () {
+              const tagged = yield* Schema.decodeUnknownEffect(
+                Schema.Struct({ _tag: Schema.String }),
+              )(request.event).pipe(Effect.orDie);
+              return Object.assign({}, request.event, tagged);
+            });
+      const outputs: Array<NodeOutput> = [];
+      const nodeAttributes = {
+        "macrograph.project.id": request.key.projectId,
+        "macrograph.graph.id": request.key.graphId,
+        "macrograph.event_node.id": request.key.eventNodeId,
+        "macrograph.execution.id": request.key.executionTraceId,
+        "macrograph.trace.id": request.key.traceId,
+        "macrograph.node.id": request.key.nodeId,
+        "macrograph.node.kind": request.key.kind,
+        "macrograph.module.id": request.moduleId,
+        "macrograph.schema.id": request.schemaId,
+        "macrograph.execution.path": request.key.executionPath,
+        ...(request.key.parentTraceId === undefined
+          ? {}
+          : { "macrograph.trace.parent.id": request.key.parentTraceId }),
+      };
+      const handleRunCause = (
+        cause: Cause.Cause<unknown>,
+      ): Effect.Effect<never, EngineClientUnavailable | NodeExecutionError> => {
+        const error = Cause.squash(cause);
+        return isEngineClientUnavailable(error)
+          ? Effect.fail(error)
+          : Effect.fail(new NodeExecutionError({ nodeId: request.key.nodeId, cause }));
+      };
+      const selected = yield* Effect.suspend(() =>
+        schema.run({
+          types: {
+            resolve: resolveType,
+            definitions: request.types,
+          },
+          input: (input) => inputs.get(input.id),
+          scopeInput: (input) =>
+            request.scopeInput?.inputId === input.id ? scopePayload : undefined,
+          output: (output, value) => {
+            outputs.push({ outputId: output.id, value });
+          },
+          properties: request.properties,
+          event,
+          engine: registeredModule.engineClient,
+          execution: {
+            projectId: request.key.projectId,
+            graphId: request.key.graphId,
+            eventNodeId: request.key.eventNodeId,
+            traceId: request.key.executionTraceId,
+          },
+          node: {
+            nodeId: request.key.nodeId,
+            kind: request.key.kind,
+            executionPath: request.key.executionPath,
+            traceId: request.key.traceId,
+            ...(request.key.parentTraceId === undefined
+              ? {}
+              : { parentTraceId: request.key.parentTraceId }),
+            withSpan: (name, effect) =>
+              effect.pipe(Effect.withSpan(name, { attributes: nodeAttributes })),
+          },
+        }),
+      ).pipe(
+        Effect.withSpan(`Schema.run ${request.moduleId}.${request.schemaId}`, {
+          attributes: nodeAttributes,
+        }),
+        Effect.catchCause(handleRunCause),
+      );
+      const executionOutput =
+        selected ??
+        nodeIO.executionOutputs.find((output) => output.id === "exec") ??
+        (nodeIO.executionOutputs.length === 1 ? nodeIO.executionOutputs[0] : undefined);
+      const fields = executionOutput?.scope;
+      const encodedScope =
+        fields === undefined
+          ? undefined
+          : Object.fromEntries(
+              yield* Effect.forEach(fields, (field) =>
+                Schema.encodeUnknownEffect(
+                  DataType.JsonValueSchema(resolveType(field.type), request.types),
+                )(
+                  selected instanceof Registration.ScopeExecution
+                    ? selected.payload[field.id]
+                    : undefined,
+                ).pipe(
+                  Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+                  Effect.map((value) => [field.id, value] as const),
+                  Effect.catchCause(
+                    () =>
+                      new InvalidOutputValue({
+                        nodeId: request.key.nodeId,
+                        outputId: executionOutput!.id,
+                        reason: `Invalid scope field ${field.id}`,
+                      }),
+                  ),
+                ),
+              ),
+            );
+      const encodedOutputs = yield* Effect.forEach(outputs, (output) => {
+        const port = nodeIO.dataOutputs.find((candidate) => candidate.id === output.outputId);
+        if (port === undefined)
+          return Effect.fail(
+            new InvalidOutputValue({
+              nodeId: request.key.nodeId,
+              outputId: output.outputId,
+              reason: "Expected a declared data output",
+            }),
+          );
+        return Schema.encodeUnknownEffect(
+          DataType.JsonValueSchema(resolveType(port.type), request.types),
+        )(output.value).pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+          Effect.map((value) => ({ outputId: output.outputId, value })),
+          Effect.catchCause(
+            () =>
+              new InvalidOutputValue({
+                nodeId: request.key.nodeId,
+                outputId: output.outputId,
+                reason: `Expected ${port.type._tag}`,
+              }),
+          ),
+        );
+      });
+      return {
+        outputs: encodedOutputs,
+        executionOutputId: executionOutput?.id ?? null,
+        ...(encodedScope === undefined ? {} : { scopePayload: encodedScope }),
+      };
+    },
+  );
 
   const execute = Effect.fnUntraced(function* (
     request: ExecutionRequest,
@@ -455,6 +762,36 @@ export const make = Effect.fnUntraced(function* (
     // Event-local declarations are immutable. Reuse the solved groups for preflight,
     // live input/output checks and durable-result encoding/decoding alike.
     const wildcardGraphs = new Map<string, Wildcards.Cache>();
+    const toNodeIO = (io: Registration.RegisteredNodeIO): NodeIO => ({
+      dataInputs: io.dataInputs.map((port) => ({ id: IoId.make(port.id), type: port.type })),
+      dataOutputs: io.dataOutputs.map((port) => ({
+        id: IoId.make(port.id),
+        type: port.type,
+        ...(port.name === undefined ? {} : { name: port.name }),
+      })),
+      executionInputs: io.executionInputs.map(Scopes.executionPort),
+      executionOutputs: io.executionOutputs.map(Scopes.executionPort),
+    });
+    const toRegisteredIO = (io: NodeIO): Registration.RegisteredNodeIO => ({
+      dataInputs: io.dataInputs.map(
+        (port) =>
+          new Registration.DataInputRef(
+            port.id,
+            port.type,
+            port.name,
+            port.defaultValue === undefined ? undefined : Option.none(),
+          ),
+      ),
+      dataOutputs: io.dataOutputs.map(
+        (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
+      ),
+      executionInputs: io.executionInputs.map(
+        (port) => new Registration.ExecutionInputRef(port.id, port.name, port.scope),
+      ),
+      executionOutputs: io.executionOutputs.map(
+        (port) => new Registration.ExecutionOutputRef(port.id, port.name, port.scope ?? undefined),
+      ),
+    });
     const generateNodeIO = Effect.fnUntraced(function* (
       graph: Canvas.Model,
       node: Node.Model,
@@ -483,8 +820,30 @@ export const make = Effect.fnUntraced(function* (
           // The ordinary preflight still reports them if it reaches them.
           if (declaration !== undefined) declarations.set(candidate.id, declaration);
         }
-        const derive = CustomTypes.derivedOutputs(graph, currentProject.types);
-        const result = cache.update(declarations, graph.connections, derive);
+        const derive = CustomTypes.derivedIO(graph, currentProject.types);
+        let result = cache.update(declarations, graph.connections, derive);
+        if (Result.isSuccess(result)) {
+          for (const [id, io] of declarations) {
+            const derived = cache.derivedIO(id);
+            if (derived !== undefined) declarations.set(id, { ...io, ...toRegisteredIO(derived) });
+          }
+          for (const candidate of Object.values(graph.nodes)) {
+            if (!Scopes.isBreakScope(candidate)) continue;
+            const resolved = Scopes.resolveIO(graph, candidate.id, (id) => {
+              const io = declarations.get(id);
+              return io === undefined ? undefined : toNodeIO(io);
+            });
+            if (resolved !== undefined) declarations.set(candidate.id, toRegisteredIO(resolved));
+          }
+          result = cache.update(declarations, graph.connections, derive);
+          if (Result.isSuccess(result))
+            for (const candidate of Object.values(graph.nodes)) {
+              if (!Scopes.isBreakScope(candidate)) continue;
+              const io = declarations.get(candidate.id);
+              if (io === undefined) continue;
+              cache.setDerivedIO(candidate.id, toNodeIO(io));
+            }
+        }
         if (Result.isFailure(result)) {
           const conflicts = result.failure.filter((conflict) => conflict.nodes.has(node.id));
           if (conflicts.length > 0)
@@ -512,17 +871,10 @@ export const make = Effect.fnUntraced(function* (
         }
         wildcardGraphs.set(graph.id, cache);
       }
-      const outputs = cache.derivedOutputs(node.id);
+      const derived = cache.derivedIO(node.id);
       return cache.resolveIO(
         node.id,
-        outputs === undefined
-          ? io
-          : {
-              ...io,
-              dataOutputs: outputs.map(
-                (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
-              ),
-            },
+        derived === undefined ? io : { ...io, ...toRegisteredIO(derived) },
       );
     });
 
@@ -958,118 +1310,256 @@ export const make = Effect.fnUntraced(function* (
           } satisfies NodeExecutionResult;
         });
 
-        const transformResult = Effect.fnUntraced(function* (
+        const transformResult = <Value>(
           result: NodeExecutionResult,
           transform: (
             type: DataType.Any,
             value: unknown,
-          ) => Effect.Effect<unknown, Schema.SchemaError>,
-        ) {
-          const branch = nodeIO.executionOutputs.find(
-            (port) => port.id === result.executionOutputId,
-          );
-          const fields = branch?.scope;
-          let scopePayload: Readonly<Record<string, unknown>> | undefined;
-          if (fields !== undefined) {
-            const payload = result.scopePayload;
-            if (
-              payload === undefined ||
-              payload === null ||
-              typeof payload !== "object" ||
-              Object.keys(payload).length !== fields.length ||
-              fields.some((field) => !Object.hasOwn(payload, field.id)) ||
-              new Set(fields.map((field) => field.id)).size !== fields.length
-            )
-              return yield* new InvalidOutputValue({
-                nodeId: node.id,
-                outputId: branch!.id,
-                reason: "Scope payload must contain exactly the declared fields",
-              });
-            scopePayload = Object.fromEntries(
-              yield* Effect.forEach(fields, (field) =>
-                transform(field.type, payload[field.id]).pipe(
-                  Effect.map((value) => [field.id, value] as const),
-                  Effect.catchCause(
-                    () =>
-                      new InvalidOutputValue({
-                        nodeId: node.id,
-                        outputId: branch!.id,
-                        reason: `Invalid scope field ${field.id}`,
-                      }),
+          ) => Effect.Effect<Value, Schema.SchemaError>,
+        ) =>
+          Effect.gen(function* () {
+            const branch = nodeIO.executionOutputs.find(
+              (port) => port.id === result.executionOutputId,
+            );
+            const fields = branch?.scope;
+            let scopePayload: Readonly<Record<string, Value>> | undefined;
+            if (fields !== undefined) {
+              const payload = result.scopePayload;
+              if (
+                payload === undefined ||
+                payload === null ||
+                typeof payload !== "object" ||
+                Object.keys(payload).length !== fields.length ||
+                fields.some((field) => !Object.hasOwn(payload, field.id)) ||
+                new Set(fields.map((field) => field.id)).size !== fields.length
+              )
+                return yield* new InvalidOutputValue({
+                  nodeId: node.id,
+                  outputId: branch!.id,
+                  reason: "Scope payload must contain exactly the declared fields",
+                });
+              scopePayload = Object.fromEntries(
+                yield* Effect.forEach(fields, (field) =>
+                  transform(field.type, payload[field.id]).pipe(
+                    Effect.map((value) => [field.id, value] as const),
+                    Effect.catchCause(
+                      () =>
+                        new InvalidOutputValue({
+                          nodeId: node.id,
+                          outputId: branch!.id,
+                          reason: `Invalid scope field ${field.id}`,
+                        }),
+                    ),
                   ),
                 ),
-              ),
-            );
-          } else if (result.scopePayload !== undefined) {
-            return yield* new InvalidOutputValue({
-              nodeId: node.id,
-              outputId: result.executionOutputId ?? "",
-              reason: "Payload requires a declared scope output",
-            });
-          }
-          const outputs = yield* Effect.forEach(result.outputs, (output) => {
-            const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
-            if (
-              ports.length !== 1 ||
-              nodeIO.executionOutputs.some((port) => port.id === output.outputId)
-            )
-              return Effect.fail(
-                new InvalidOutputValue({
-                  nodeId: node.id,
-                  outputId: output.outputId,
-                  reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
-                }),
               );
-            return transform(ports[0]!.type, output.value).pipe(
-              Effect.map((value) => ({ ...output, value })),
-              Effect.catchCause(
-                () =>
+            } else if (result.scopePayload !== undefined) {
+              return yield* new InvalidOutputValue({
+                nodeId: node.id,
+                outputId: result.executionOutputId ?? "",
+                reason: "Payload requires a declared scope output",
+              });
+            }
+            const outputs = yield* Effect.forEach(result.outputs, (output) => {
+              const ports = nodeIO.dataOutputs.filter((port) => port.id === output.outputId);
+              if (
+                ports.length !== 1 ||
+                nodeIO.executionOutputs.some((port) => port.id === output.outputId)
+              )
+                return Effect.fail(
                   new InvalidOutputValue({
                     nodeId: node.id,
                     outputId: output.outputId,
-                    reason: `Expected ${ports[0]!.type._tag}`,
+                    reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
                   }),
-              ),
-            );
+                );
+              return transform(ports[0]!.type, output.value).pipe(
+                Effect.map((value) => ({ ...output, value })),
+                Effect.catchCause(
+                  () =>
+                    new InvalidOutputValue({
+                      nodeId: node.id,
+                      outputId: output.outputId,
+                      reason: `Expected ${ports[0]!.type._tag}`,
+                    }),
+                ),
+              );
+            });
+            return {
+              outputs,
+              executionOutputId: result.executionOutputId,
+              ...(scopePayload === undefined ? {} : { scopePayload }),
+            };
           });
-          return { ...result, outputs, ...(scopePayload === undefined ? {} : { scopePayload }) };
-        });
 
-        const result =
-          schema.type === "pure" || GraphFunction.isCall(node)
-            ? yield* runEffect
-            : yield* executionDriver
-                .executeNode(
-                  {
-                    projectId,
-                    graphId: graph.id,
-                    eventNodeId: rootEventNodeId,
-                    nodeId: node.id,
-                    kind: schema.type,
-                    executionPath,
-                    executionTraceId,
-                    traceId,
-                    ...(parentTraceId === undefined ? {} : { parentTraceId }),
-                  },
-                  runEffect.pipe(
-                    Effect.flatMap((result) =>
-                      transformResult(result, (type, value) =>
-                        Schema.encodeUnknownEffect(
-                          DataType.JsonValueSchema(type, currentProject.types),
-                        )(value),
+        const key: NodeExecutionKey = {
+          projectId,
+          graphId: graph.id,
+          eventNodeId: rootEventNodeId,
+          nodeId: node.id,
+          kind: schema.type === "pure" ? "base" : schema.type,
+          executionPath,
+          executionTraceId,
+          traceId,
+          ...(parentTraceId === undefined ? {} : { parentTraceId }),
+        };
+        const serializeResult = (result: NodeExecutionResult) =>
+          transformResult(result, (type, value) =>
+            Schema.encodeUnknownEffect(DataType.JsonValueSchema(type, currentProject.types))(
+              value,
+            ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json))),
+          );
+        const deserializeResult = (result: SerializedNodeExecutionResult) =>
+          transformResult(result, (type, value) =>
+            Schema.decodeUnknownEffect(DataType.JsonValueSchema(type, currentProject.types))(value),
+          );
+        const serializeRequest = Effect.gen(function* () {
+          const precomputed =
+            Scopes.isBreakScope(node) || GraphFunction.isBoundaryNodeId(node.id)
+              ? yield* runEffect.pipe(Effect.flatMap(serializeResult))
+              : undefined;
+          const encodedInputs = Object.fromEntries(
+            yield* Effect.forEach(nodeIO.dataInputs, (input) =>
+              Schema.encodeUnknownEffect(
+                DataType.JsonValueSchema(input.type, currentProject.types),
+              )(inputs.get(input.id)).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+                Effect.map((value) => [input.id, value] as const),
+                Effect.catchCause(
+                  () =>
+                    new InvalidInputValue({
+                      nodeId: node.id,
+                      inputId: input.id,
+                      reason: `Expected ${input.type._tag}`,
+                    }),
+                ),
+              ),
+            ),
+          );
+          const encodedProperties = Object.fromEntries(
+            yield* Effect.forEach(Object.entries(resolvedProperties), ([id, value]) =>
+              Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+                Effect.map((encoded) => [id, encoded] as const),
+                Effect.catchCause(
+                  () =>
+                    new InvalidInputValue({
+                      nodeId: node.id,
+                      inputId: id,
+                      reason: "Property is not JSON serializable",
+                    }),
+                ),
+              ),
+            ),
+          );
+          const encodedEvent =
+            event === undefined
+              ? undefined
+              : yield* Effect.try({
+                  try: () => JSON.stringify(event),
+                  catch: (cause) => cause,
+                }).pipe(
+                  Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))),
+                  Effect.catchCause(
+                    () =>
+                      new InvalidInputValue({
+                        nodeId: node.id,
+                        inputId: "event",
+                        reason: "Event is not JSON serializable",
+                      }),
+                  ),
+                );
+          const scopeFields = nodeIO.executionInputs.find(
+            (input) => input.id === incomingScope?.inputId,
+          )?.scope;
+          const encodedScope =
+            incomingScope === undefined
+              ? undefined
+              : {
+                  inputId: incomingScope.inputId,
+                  payload: Object.fromEntries(
+                    yield* Effect.forEach(scopeFields ?? [], (field) =>
+                      Schema.encodeUnknownEffect(
+                        DataType.JsonValueSchema(field.type, currentProject.types),
+                      )(incomingScope.payload[field.id]).pipe(
+                        Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+                        Effect.map((value) => [field.id, value] as const),
+                        Effect.catchCause(
+                          () =>
+                            new InvalidInputValue({
+                              nodeId: node.id,
+                              inputId: incomingScope.inputId,
+                              reason: `Invalid scope field ${field.id}`,
+                            }),
+                        ),
                       ),
                     ),
                   ),
+                };
+          const unresolvedIO = yield* generateUnresolvedNodeIO(
+            graph,
+            node,
+            schema,
+            resolvedProperties,
+          );
+          const descriptors = [
+            ...unresolvedIO.dataInputs.map((port) => port.type),
+            ...unresolvedIO.dataOutputs.map((port) => port.type),
+            ...unresolvedIO.executionInputs.flatMap((port) =>
+              (port.scope ?? []).map((field) => field.type),
+            ),
+            ...unresolvedIO.executionOutputs.flatMap((port) =>
+              (port.scope ?? []).map((field) => field.type),
+            ),
+          ];
+          const resolvedTypes = Object.fromEntries(
+            descriptors.map((type) => [
+              JSON.stringify(type),
+              wildcardGraphs.get(graph.id)!.resolve(node.id, type),
+            ]),
+          );
+          return {
+            key,
+            moduleId: node.schema.package,
+            schemaId: node.schema.schema,
+            inputs: encodedInputs,
+            properties: encodedProperties,
+            ...(encodedEvent === undefined ? {} : { event: encodedEvent }),
+            types: currentProject.types,
+            resolvedTypes,
+            ...(precomputed === undefined ? {} : { precomputed }),
+            ...(encodedScope === undefined ? {} : { scopeInput: encodedScope }),
+          } satisfies NodeExecutionRequest;
+        });
+
+        const environment = options?.executionEnvironment;
+        const result =
+          schema.type === "pure" || GraphFunction.isCall(node) || environment === undefined
+            ? yield* runEffect
+            : environment._tag === "InProcess"
+              ? yield* Effect.sync(() =>
+                  pendingNodes.set(key.traceId, {
+                    execute: runEffect,
+                    executeDurable: runEffect.pipe(Effect.flatMap(serializeResult)),
+                  }),
+                ).pipe(
+                  Effect.andThen(environment.executeNode(key, nodeExecutor)),
+                  Effect.ensuring(Effect.sync(() => pendingNodes.delete(key.traceId))),
                 )
-                .pipe(
-                  Effect.flatMap((result) =>
-                    transformResult(result, (type, value) =>
-                      Schema.decodeUnknownEffect(
-                        DataType.JsonValueSchema(type, currentProject.types),
-                      )(value),
-                    ),
-                  ),
-                );
+              : environment._tag === "Durable"
+                ? yield* Effect.sync(() =>
+                    pendingNodes.set(key.traceId, {
+                      execute: runEffect,
+                      executeDurable: runEffect.pipe(Effect.flatMap(serializeResult)),
+                    }),
+                  ).pipe(
+                    Effect.andThen(environment.executeNode(key, durableNodeExecutor)),
+                    Effect.ensuring(Effect.sync(() => pendingNodes.delete(key.traceId))),
+                    Effect.flatMap(deserializeResult),
+                  )
+                : yield* serializeRequest.pipe(
+                    Effect.flatMap(environment.executeNode),
+                    Effect.flatMap(deserializeResult),
+                  );
 
         // An exec node may emit different payloads on successive branches. Never retain
         // outputs from its previous invocation (including a previous enum match branch).
@@ -1452,6 +1942,7 @@ export const make = Effect.fnUntraced(function* (
     project: Ref.get(project),
     loadProject: (nextProject) => Ref.set(project, nextProject),
     module: registerModule,
+    executeSerializedNode,
     handleEvent: (module, event) => {
       const emittedEvent: { readonly _tag: string } = event;
       return execute({ _tag: "Event", definition: module, event }).pipe(

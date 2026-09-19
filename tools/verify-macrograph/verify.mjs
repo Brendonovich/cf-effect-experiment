@@ -13,7 +13,15 @@ import { isUnexpectedConsoleProblem } from "./diagnostics.mjs";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, "../..");
 const mode = process.argv[2] ?? "all";
-const supportedModes = new Set(["doctor", "smoke", "journey", "all"]);
+const supportedModes = new Set([
+  "doctor",
+  "smoke",
+  "function-navigation",
+  "module-reference",
+  "journey",
+  "all",
+]);
+const interactionTimeout = Number(process.env.MACROGRAPH_VERIFY_INTERACTION_TIMEOUT ?? 10_000);
 const uiTimeout = Number(process.env.MACROGRAPH_VERIFY_UI_TIMEOUT ?? 60_000);
 const runId = process.env.MACROGRAPH_VERIFY_RUN_ID ?? new Date().toISOString().replaceAll(":", "-");
 const outputDirectory = resolve(
@@ -194,6 +202,7 @@ async function openBrowser(url) {
     acceptDownloads: true,
   });
   const page = context.pages()[0] ?? (await context.newPage());
+  page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
     const location = message.location();
     const ignored = isUnavailableOpenCodePicker(location.url);
@@ -238,12 +247,22 @@ function isUnavailableOpenCodePicker(url) {
   }
 }
 
-async function smoke(page) {
+async function waitForAppShell(page) {
   await page.getByRole("img", { name: "MacroGraph" }).waitFor();
   await page.getByRole("button", { name: "Export", exact: true }).waitFor();
-  await page
-    .getByRole("button", { name: "New graph", exact: true })
-    .waitFor({ timeout: uiTimeout });
+}
+
+async function smoke(page) {
+  await waitForAppShell(page);
+  await page.getByRole("button", { name: "New graph", exact: true }).waitFor();
+  const path = join(outputDirectory, "smoke.png");
+  await page.screenshot({ path, fullPage: true });
+  await evidence(path, "screenshot");
+  check("playground shell and editor are visible", "passed");
+}
+
+async function functionNavigation(page) {
+  await waitForAppShell(page);
   await page.getByRole("button", { name: "Functions", exact: true }).click();
   await page.getByRole("button", { name: "New function", exact: true }).click();
   await page.getByRole("button", { name: "New Function", exact: true }).first().waitFor();
@@ -251,11 +270,60 @@ async function smoke(page) {
   await page
     .getByRole("separator", { name: "Resize navigation and constants", exact: true })
     .waitFor();
-  const path = join(outputDirectory, "smoke.png");
+  const path = join(outputDirectory, "function-navigation.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
-  check("playground shell and editor are visible", "passed");
   check("function navigation and split constants are visible", "passed");
+}
+
+async function moduleReference(page) {
+  await waitForAppShell(page);
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await page.getByRole("button", { name: "Utilities", exact: true }).click();
+  const moduleInfo = page.locator('[data-component="module-info"]');
+  await moduleInfo.getByText("Module", { exact: true }).waitFor();
+  await moduleInfo.getByText("Utilities", { exact: true }).waitFor();
+  await moduleInfo
+    .getByText("General-purpose control flow, formatting, timing, and debugging tools.", {
+      exact: true,
+    })
+    .waitFor();
+  const redundantTitleCount = await moduleInfo.getByText("Module Info", { exact: true }).count();
+  check("focused module title omits Info", redundantTitleCount === 0 ? "passed" : "failed");
+  check("focused module exposes module info in the inspector", "passed", "Utilities");
+  await page.getByRole("tab", { name: "Reference", exact: true }).click();
+  await page.getByRole("heading", { name: "Exec Nodes", exact: true }).waitFor();
+  const referenceSearch = page.getByRole("searchbox", { name: "Search reference", exact: true });
+  const referenceSidebar = page.locator("aside", { has: referenceSearch });
+  await referenceSearch.pressSequentially("Concat");
+  await page.getByRole("heading", { name: "Pure Nodes", exact: true }).waitFor();
+  const unrelatedNode = referenceSidebar.getByRole("button", { name: "Print", exact: true });
+  const unrelatedNodeVisible =
+    (await unrelatedNode.count()) > 0 && (await unrelatedNode.first().isVisible());
+  check(
+    "module reference search filters exposed nodes",
+    unrelatedNodeVisible ? "failed" : "passed",
+  );
+  await page.getByRole("button", { name: "Concat Strings", exact: true }).click();
+  await page.getByRole("heading", { name: "Concat Strings", exact: true }).waitFor();
+  await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
+  await page.reload();
+  await page.getByRole("heading", { name: "Concat Strings", exact: true }).waitFor();
+  await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
+  const persistedReferenceTab = await page
+    .getByRole("tab", { name: "Reference", exact: true })
+    .getAttribute("aria-selected");
+  const persistedReferenceItem = await page
+    .getByRole("button", { name: "Concat Strings", exact: true })
+    .getAttribute("aria-pressed");
+  const path = join(outputDirectory, "module-reference.png");
+  await page.screenshot({ path, fullPage: true });
+  await evidence(path, "screenshot");
+  check("module reference groups, selects, and previews exposed nodes", "passed");
+  check(
+    "module view and reference selection persist with the pane",
+    persistedReferenceTab === "true" && persistedReferenceItem === "true" ? "passed" : "failed",
+  );
 }
 
 function graphEntries(projectExport) {
@@ -403,13 +471,18 @@ process.once("SIGINT", () => void handleSignal("SIGINT"));
 process.once("SIGTERM", () => void handleSignal("SIGTERM"));
 
 async function main() {
-  if (!supportedModes.has(mode)) throw new Error(`Usage: verify.mjs [doctor|smoke|journey|all]`);
+  if (!supportedModes.has(mode))
+    throw new Error(
+      `Usage: verify.mjs [doctor|smoke|function-navigation|module-reference|journey|all]`,
+    );
   await mkdir(outputDirectory, { recursive: true });
   await doctor();
   if (mode !== "doctor") {
     const { url } = await startApp();
     const page = await openBrowser(url);
     if (mode === "smoke" || mode === "all") await smoke(page);
+    if (mode === "function-navigation" || mode === "all") await functionNavigation(page);
+    if (mode === "module-reference" || mode === "all") await moduleReference(page);
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
     const unexpectedHttpErrors = manifest.browser.httpErrors.filter(

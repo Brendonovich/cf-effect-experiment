@@ -1,0 +1,29 @@
+{
+  "name": "@macrograph/workflow-runtime-vercel",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./VercelRuntime": "./src/VercelRuntime.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/core": "workspace:*",
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/project-host": "workspace:*",
+    "@macrograph/workflow-runtime": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@macrograph/module": "workspace:*",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

@@ -6,6 +6,7 @@ import type { ModuleContext } from "./Registration.ts";
 export type Module<Definition extends Engine.AnyDef = never> = {
   readonly id: string;
   readonly name?: string;
+  readonly description?: string;
   readonly effect: (context: ModuleContext<Definition>) => Effect.Effect<void>;
 } & ([Definition] extends [never] ? { readonly engine?: never } : { readonly engine: Definition });
 

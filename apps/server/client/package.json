@@ -22,6 +22,7 @@
     "@macrograph/module-discord": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
     "@macrograph/module-elgato-key-light": "workspace:*",
+    "@macrograph/module-github": "workspace:*",
     "@macrograph/module-goxlr": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-ikea-tradfri": "workspace:*",

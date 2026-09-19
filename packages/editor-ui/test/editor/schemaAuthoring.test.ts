@@ -103,7 +103,7 @@ describe("schema-owned authoring", () => {
     expect(BuiltinAuthoring.registry.get(node("n", "ChooseField").schema)).toBeUndefined();
   });
 
-  it("filters custom-type sources by kind, follows variant selection and reads renamed definitions", () => {
+  it("exposes only the variant property and derives its options from inferred IO", () => {
     const definitions: t.Definitions = {
       z: { _tag: "Struct", id: t.DefinitionId.make("z"), name: "Zulu", fields: [] },
       a: {
@@ -113,29 +113,26 @@ describe("schema-owned authoring", () => {
         variants: [{ name: "Yes", fields: [] }],
       },
     };
-    const source = (operation: string, property = "type") =>
-      BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: operation })!.properties![
-        property
-      ]!;
-    const context = { definitions, properties: {} };
-    expect(source("MakeStruct").options(context)).toEqual([{ id: "z", name: "Zulu" }]);
-    expect(source("MatchEnum").options(context)).toEqual([{ id: "a", name: "Alpha" }]);
-    expect(source("ParseJson").options(context)).toEqual([
-      { id: "a", name: "Alpha" },
-      { id: "z", name: "Zulu" },
-    ]);
+    for (const operation of CustomTypes.operations)
+      expect(
+        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: operation.id })!.properties,
+      ).toEqual(
+        operation.id === "ConstructEnum"
+          ? expect.objectContaining({ variant: expect.anything() })
+          : {},
+      );
+    const source = BuiltinAuthoring.registry.get({
+      package: "CustomTypes",
+      schema: "ConstructEnum",
+    })!.properties!.variant!;
     expect(
-      source("ConstructEnum", "variant").options({ definitions, properties: { type: "a" } }),
-    ).toEqual([{ id: "Yes", name: "Yes" }]);
-    expect(
-      source("ConstructEnum", "variant").options({ definitions, properties: { type: "z" } }),
-    ).toEqual([]);
-    expect(
-      source("MakeStruct").options({
+      source.options({
+        definitions,
         properties: {},
-        definitions: { z: { ...definitions.z!, name: "Renamed" } },
+        io: { ...empty, dataOutputs: [port("value", t.Custom(t.DefinitionId.make("a")))] },
       }),
-    ).toEqual([{ id: "z", name: "Renamed" }]);
+    ).toEqual([{ id: "Yes", name: "Yes" }]);
+    expect(source.options({ definitions, properties: {}, io: empty })).toEqual([]);
   });
 
   it("generates both input and output ports from an output-anchored type and clears stale pins", () => {
@@ -266,12 +263,24 @@ describe("schema-owned authoring", () => {
   it("keeps the catalog static across definition changes while regenerating node IO", () =>
     createRoot((dispose) => {
       const editor = createEditorStore();
-      const n = node("make", "MakeStruct", "CustomTypes", { type: "item" });
+      const n = node("make", "MakeStruct", "CustomTypes");
+      const sink = node("sink", "Static");
       const project = {
         ...Project.empty(),
-        graphs: { g: { ...Canvas.empty("g"), nodes: { make: n } } },
+        graphs: {
+          g: {
+            ...Canvas.empty("g"),
+            nodes: { make: n, sink },
+            connections: [wire("make", "value", "sink", "in")],
+          },
+        },
       };
-      editor.setProject(project, { g: { make: empty } });
+      editor.setProject(project, {
+        g: {
+          make: CustomTypes.nodeIO(n.schema, {}, {})!,
+          sink: { ...empty, dataInputs: [port("in", t.Custom(t.DefinitionId.make("item")))] },
+        },
+      });
       const before = editor.store.packages;
       editor.applyEvent({
         _tag: "TypeDefinitionsUpdated",
@@ -294,7 +303,7 @@ describe("schema-owned authoring", () => {
       expect(editor.store.nodeDiagnostics.g?.make).toBeUndefined();
       expect(
         CustomTypes.packageModel.schemas.find((schema) => schema.id === "UpdateStruct")
-          ?.properties[0]?.description,
+          ?.description,
       ).toContain("None keeps");
       dispose();
     }));
@@ -318,7 +327,7 @@ describe("schema-owned authoring", () => {
       {},
     );
     expect(result.io.target?.dataOutputs).toEqual([]);
-    expect(result.diagnostics.target).toEqual(["Break Struct requires a struct input"]);
+    expect(result.diagnostics.target).toEqual(["Break Struct requires an inferred custom type"]);
   });
 
   it("bounds non-converging generators and reports them", () => {

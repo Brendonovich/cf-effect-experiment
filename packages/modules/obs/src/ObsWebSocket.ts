@@ -8,33 +8,24 @@ import {
   type HighVolumeEvent,
 } from "./Protocol.ts";
 
-export class ProtocolError extends Schema.TaggedError<ProtocolError>()(
-  "ProtocolError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class ProtocolError extends Schema.TaggedError<ProtocolError>()("ProtocolError", {
+  reason: Schema.String,
+}) {}
 
 export class AuthenticationError extends Schema.TaggedError<AuthenticationError>()(
   "AuthenticationError",
   { reason: Schema.String },
 ) {}
 
-export class RequestError extends Schema.TaggedError<RequestError>()(
-  "RequestError",
-  {
-    requestType: Schema.String,
-    code: Schema.Number,
-    comment: Schema.optional(Schema.String),
-  },
-) {}
+export class RequestError extends Schema.TaggedError<RequestError>()("RequestError", {
+  requestType: Schema.String,
+  code: Schema.Number,
+  comment: Schema.optional(Schema.String),
+}) {}
 
-export class ConnectionError extends Schema.TaggedError<ConnectionError>()(
-  "ConnectionError",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class ConnectionError extends Schema.TaggedError<ConnectionError>()("ConnectionError", {
+  reason: Schema.String,
+}) {}
 
 const Authentication = Schema.Struct({
   challenge: Schema.String,
@@ -77,9 +68,7 @@ const IncomingPacket = Schema.Union([
   }),
 ]);
 
-const decodePacket = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(IncomingPacket),
-);
+const decodePacket = Schema.decodeUnknownEffect(Schema.fromJsonString(IncomingPacket));
 type IncomingPacket = Schema.Schema.Type<typeof IncomingPacket>;
 
 export interface ObsEvent {
@@ -170,11 +159,9 @@ export const make = Effect.fnUntraced(function* (
       connected = false;
       const error = new ConnectionError({ reason });
       yield* Deferred.fail(identified, error);
-      yield* Effect.forEach(
-        pending.values(),
-        ({ response }) => Deferred.fail(response, error),
-        { discard: true },
-      );
+      yield* Effect.forEach(pending.values(), ({ response }) => Deferred.fail(response, error), {
+        discard: true,
+      });
       pending.clear();
       yield* PubSub.shutdown(eventBus);
       yield* PubSub.shutdown(highVolumeBus);
@@ -182,16 +169,11 @@ export const make = Effect.fnUntraced(function* (
 
   const handlePacket = (
     packet: IncomingPacket,
-  ): Effect.Effect<
-    void,
-    ProtocolError | AuthenticationError | Socket.SocketError
-  > => {
+  ): Effect.Effect<void, ProtocolError | AuthenticationError | Socket.SocketError> => {
     switch (packet.op) {
       case 0:
         if (helloReceived) {
-          return Effect.fail(
-            new ProtocolError({ reason: "Received Hello more than once" }),
-          );
+          return Effect.fail(new ProtocolError({ reason: "Received Hello more than once" }));
         }
         helloReceived = true;
         canvasesSupported = supportsCanvases(packet.d.obsWebSocketVersion);
@@ -205,11 +187,7 @@ export const make = Effect.fnUntraced(function* (
                 ? yield* new AuthenticationError({
                     reason: "OBS requires a password, but none was provided",
                   })
-                : yield* authenticate(
-                    crypto,
-                    password,
-                    packet.d.authentication,
-                  );
+                : yield* authenticate(crypto, password, packet.d.authentication);
           yield* write(
             JSON.stringify({
               op: 1,
@@ -262,9 +240,7 @@ export const make = Effect.fnUntraced(function* (
   const run = socket
     .runRaw(
       (input) =>
-        decodePacket(
-          typeof input === "string" ? input : new TextDecoder().decode(input),
-        ).pipe(
+        decodePacket(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
           Effect.mapError(
             (cause) =>
               new ProtocolError({
@@ -288,64 +264,60 @@ export const make = Effect.fnUntraced(function* (
   const socketFiber = yield* Effect.forkScoped(run);
   yield* Deferred.await(identified);
 
-  const call: Client["call"] = Effect.fnUntraced(
-    function* (requestType, requestData) {
-      if (!connected)
-        return yield* new ConnectionError({
-          reason: "OBS WebSocket is disconnected",
-        });
-
-      const canvasUuid = requestData?.canvasUuid;
-      if (
-        canvasUuid !== undefined &&
-        canvasUuid !== "" &&
-        (typeof canvasUuid !== "string" || !canvasRequests.has(requestType))
-      )
-        return yield* new RequestError({
-          requestType,
-          code: 402,
-          comment: "This request does not support the supplied canvasUuid",
-        });
-      if (
-        (requestType === "GetCanvasList" || (typeof canvasUuid === "string" && canvasUuid !== "")) &&
-        !canvasesSupported
-      )
-        return yield* new RequestError({
-          requestType,
-          code: 204,
-          comment: "Canvas requests require obs-websocket 5.7.0 or newer (stable)",
-        });
-      // Empty canvas pins mean the default canvas, including on older servers.
-      const data =
-        requestData === undefined
-          ? undefined
-          : Object.fromEntries(
-              Object.entries(requestData).filter(
-                ([key, value]) => key !== "canvasUuid" || (value !== "" && value !== undefined),
-              ),
-            );
-
-      const requestId = `${requestPrefix}-${requestSequence++}`;
-      const response = yield* Deferred.make<unknown, CallError>();
-      pending.set(requestId, { requestType, response });
-      const packet = JSON.stringify({
-        op: 6,
-        d: {
-          requestType,
-          requestId,
-          ...(data === undefined || Object.keys(data).length === 0 ? {} : { requestData: data }),
-        },
+  const call: Client["call"] = Effect.fnUntraced(function* (requestType, requestData) {
+    if (!connected)
+      return yield* new ConnectionError({
+        reason: "OBS WebSocket is disconnected",
       });
 
-      return yield* write(packet).pipe(
-        Effect.mapError(
-          (error) => new ConnectionError({ reason: error.message }),
-        ),
-        Effect.andThen(Deferred.await(response)),
-        Effect.ensuring(Effect.sync(() => pending.delete(requestId))),
-      );
-    },
-  );
+    const canvasUuid = requestData?.canvasUuid;
+    if (
+      canvasUuid !== undefined &&
+      canvasUuid !== "" &&
+      (typeof canvasUuid !== "string" || !canvasRequests.has(requestType))
+    )
+      return yield* new RequestError({
+        requestType,
+        code: 402,
+        comment: "This request does not support the supplied canvasUuid",
+      });
+    if (
+      (requestType === "GetCanvasList" || (typeof canvasUuid === "string" && canvasUuid !== "")) &&
+      !canvasesSupported
+    )
+      return yield* new RequestError({
+        requestType,
+        code: 204,
+        comment: "Canvas requests require obs-websocket 5.7.0 or newer (stable)",
+      });
+    // Empty canvas pins mean the default canvas, including on older servers.
+    const data =
+      requestData === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(requestData).filter(
+              ([key, value]) => key !== "canvasUuid" || (value !== "" && value !== undefined),
+            ),
+          );
+
+    const requestId = `${requestPrefix}-${requestSequence++}`;
+    const response = yield* Deferred.make<unknown, CallError>();
+    pending.set(requestId, { requestType, response });
+    const packet = JSON.stringify({
+      op: 6,
+      d: {
+        requestType,
+        requestId,
+        ...(data === undefined || Object.keys(data).length === 0 ? {} : { requestData: data }),
+      },
+    });
+
+    return yield* write(packet).pipe(
+      Effect.mapError((error) => new ConnectionError({ reason: error.message })),
+      Effect.andThen(Deferred.await(response)),
+      Effect.ensuring(Effect.sync(() => pending.delete(requestId))),
+    );
+  });
 
   return {
     call,

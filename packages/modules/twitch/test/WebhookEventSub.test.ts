@@ -244,7 +244,10 @@ describe("WebhookEventSub", () => {
       assert.strictEqual(listError._tag, "HelixError");
       assert.strictEqual(listError.status, 503);
       assert.isTrue(storage.accounts[accountId]?.enabled);
-      assert.strictEqual((yield* engine.client.state).accounts[0]?.eventSubSocket.state, "connected");
+      assert.strictEqual(
+        (yield* engine.client.state).accounts[0]?.eventSubSocket.state,
+        "connected",
+      );
       assert.deepStrictEqual(deleted, []);
 
       failList = false;
@@ -252,7 +255,10 @@ describe("WebhookEventSub", () => {
       assert.strictEqual(deleteError._tag, "HelixError");
       assert.strictEqual(deleteError.status, 503);
       assert.isTrue(storage.accounts[accountId]?.enabled);
-      assert.strictEqual((yield* engine.client.state).accounts[0]?.eventSubSocket.state, "connected");
+      assert.strictEqual(
+        (yield* engine.client.state).accounts[0]?.eventSubSocket.state,
+        "connected",
+      );
       assert.deepStrictEqual(deleted, ["channel.ban"]);
       assert.strictEqual(subscriptions.length, 1);
 

@@ -183,6 +183,17 @@ class UpdateFunctionField extends Rpc.make("UpdateFunctionField", {
   ]),
 }) {}
 
+class ReorderFunctionField extends Rpc.make("ReorderFunctionField", {
+  payload: {
+    graphId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    fieldId: Schema.String,
+    targetFieldId: Schema.String,
+  },
+  success: EditorEvent.FunctionUpdated,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, GraphFunction.NotFoundError]),
+}) {}
+
 class DeleteFunctionField extends Rpc.make("DeleteFunctionField", {
   payload: {
     graphId: Schema.String,
@@ -548,6 +559,7 @@ export const EditorRpcs = RpcGroup.make(
   CreateFunction,
   AddFunctionField,
   UpdateFunctionField,
+  ReorderFunctionField,
   DeleteFunctionField,
   CreateNode,
   DeleteNode,
@@ -616,6 +628,8 @@ export const handlerLayer = EditorRpcs.toLayer(
       AddFunctionField: ({ graphId, direction }) => editor.function.addField(graphId, direction),
       UpdateFunctionField: ({ graphId, direction, field }) =>
         editor.function.updateField(graphId, direction, field),
+      ReorderFunctionField: ({ graphId, direction, fieldId, targetFieldId }) =>
+        editor.function.reorderField(graphId, direction, fieldId, targetFieldId),
       DeleteFunctionField: ({ graphId, direction, fieldId }) =>
         editor.function.deleteField(graphId, direction, fieldId),
       CreateNode: (payload) => editor.node.create({ graphID: payload.graphId, node: payload.node }),

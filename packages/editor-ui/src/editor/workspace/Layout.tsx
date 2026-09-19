@@ -387,7 +387,7 @@ export function WorkspacePanes(props: {
   dispatch: (action: WorkspaceAction) => void;
   onActivate: (paneId: string) => void;
   renderGraph: (tab: () => GraphTab, paneId: string) => JSX.Element;
-  renderPreview: (tab: WorkspaceTab) => JSX.Element;
+  renderPreview: (tab: () => WorkspaceTab) => JSX.Element;
 }) {
   const dispatchAndActivate = (action: WorkspaceAction) => {
     props.dispatch(action);
@@ -443,7 +443,7 @@ export function WorkspacePanes(props: {
         >
           <Show when={selected()} fallback={<EmptyContext />}>
             {(tab) => (
-              <Show when={tab().type === "graph"} fallback={props.renderPreview(tab())}>
+              <Show when={tab().type === "graph"} fallback={props.renderPreview(tab)}>
                 {props.renderGraph(tab as () => GraphTab, paneId)}
               </Show>
             )}

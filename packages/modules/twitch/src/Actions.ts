@@ -132,7 +132,13 @@ export const actions: ReadonlyArray<Action> = [
     inputs: [channel, user],
     outputs: [
       exists("following", "Following"),
-      { id: "followedAt", name: "Followed At", path: "data.0.followed_at", kind: "string", optional: true },
+      {
+        id: "followedAt",
+        name: "Followed At",
+        path: "data.0.followed_at",
+        kind: "string",
+        optional: true,
+      },
     ],
   },
   {
@@ -392,7 +398,15 @@ export const actions: ReadonlyArray<Action> = [
     scopes: ["channel:read:polls", "channel:manage:polls"],
     role: "broadcaster",
     inputs: [channel, { id: "pollId", key: "id", optional: true }, first(20), after],
-    outputs: [{ id: "cursor", name: "Pagination", path: "pagination.cursor", kind: "string", optional: true }],
+    outputs: [
+      {
+        id: "cursor",
+        name: "Pagination",
+        path: "pagination.cursor",
+        kind: "string",
+        optional: true,
+      },
+    ],
   },
 ];
 

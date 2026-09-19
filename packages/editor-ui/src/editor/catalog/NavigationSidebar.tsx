@@ -213,21 +213,6 @@ const styles = stylex.create({
   },
   unselected: { backgroundColor: { default: "transparent", ":hover": colors.gray4 } },
   packages: { display: "flex", flexDirection: "column", minHeight: "100%" },
-  separator: {
-    backgroundColor: colors.gray3,
-    marginTop: 8,
-    paddingBlock: 10,
-    paddingInline: 8,
-  },
-  separatorTitle: {
-    color: colors.gray9,
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: ".025em",
-    paddingBottom: 4,
-    textTransform: "uppercase",
-  },
-  unavailablePackage: { color: colors.gray9, fontSize: 12, paddingBlock: 4 },
   constants: { paddingBottom: 8, paddingInline: 8 },
   column: { display: "flex", flexDirection: "column" },
   noConstants: {
@@ -345,8 +330,7 @@ export function NavigationSidebar(props: {
   selectedPaneId?: string | undefined;
   graphs: ReadonlyArray<readonly [string, Canvas.Model]>;
   functionIds: ReadonlySet<string>;
-  packagesWithSettings: ReadonlyArray<Package.Model>;
-  packagesWithoutSettings: ReadonlyArray<Package.Model>;
+  packages: ReadonlyArray<Package.Model>;
   allPackages: ReadonlyArray<Package.Model>;
   constants: Project.Model["constants"];
   onSectionChange: (section: NavigationSection) => void;
@@ -378,6 +362,9 @@ export function NavigationSidebar(props: {
   const [navigationPercent, setNavigationPercent] = createSignal(62);
   const [splitPointer, setSplitPointer] = createSignal<number | null>(null);
   const [constantSearch, setConstantSearch] = createSignal("");
+  const sortedPackages = createMemo(() =>
+    [...props.packages].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+  );
   type ConstantWorkflow = {
     context: {
       search: string;
@@ -544,7 +531,7 @@ export function NavigationSidebar(props: {
           <div style={{ "flex-shrink": "0" }}>
             <div sx={styles.topTabs}>
               <div sx={styles.tabGrid}>
-                <For each={["graphs", "packages", "functions"] as const}>
+                <For each={["graphs", "functions", "packages"] as const}>
                   {(section) => (
                     <button
                       type="button"
@@ -573,10 +560,10 @@ export function NavigationSidebar(props: {
                   sx={styles.searchInput}
                   placeholder={
                     props.section === "graphs"
-                      ? "Search Graphs"
+                      ? "Search graphs"
                       : props.section === "packages"
-                        ? "Search Modules"
-                        : "Search Functions"
+                        ? "Search modules"
+                        : "Search functions"
                   }
                   value={props.search}
                   onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -641,17 +628,13 @@ export function NavigationSidebar(props: {
             </Show>
             <Show when={props.section === "packages"}>
               <div sx={styles.packages}>
-                <Show
-                  when={
-                    props.packagesWithSettings.length + props.packagesWithoutSettings.length === 0
-                  }
-                >
+                <Show when={props.packages.length === 0}>
                   <div sx={[styles.navOption, styles.noConstants]}>
                     {props.search.trim() === "" ? "No modules yet." : "No modules found."}
                   </div>
                 </Show>
                 <div style={{ "padding-bottom": "4px" }}>
-                  <For each={props.packagesWithSettings}>
+                  <For each={sortedPackages()}>
                     {(pkg) => (
                       <button
                         type="button"
@@ -669,14 +652,6 @@ export function NavigationSidebar(props: {
                     )}
                   </For>
                 </div>
-                <Show when={props.packagesWithoutSettings.length > 0}>
-                  <div sx={styles.separator}>
-                    <div sx={styles.separatorTitle}>No editor settings</div>
-                    <For each={props.packagesWithoutSettings}>
-                      {(pkg) => <div sx={styles.unavailablePackage}>{pkg.name}</div>}
-                    </For>
-                  </div>
-                </Show>
               </div>
             </Show>
           </div>
@@ -814,7 +789,7 @@ export function NavigationSidebar(props: {
               <IconTablerSearch {...stylex.attrs(styles.searchIcon)} />
               <input
                 sx={styles.searchInput}
-                placeholder="Search Constants"
+                placeholder="Search constants"
                 value={constantSearch()}
                 onInput={(event) => setConstantSearch(event.currentTarget.value)}
               />

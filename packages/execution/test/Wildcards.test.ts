@@ -66,32 +66,32 @@ const project = (unresolved = false) =>
           id: "graph",
           name: "Graph",
           nodes: Object.fromEntries(
-          (unresolved ? ["unresolved"] : ["event", "identity", "sink"]).map((id) => [
-            id,
-            {
+            (unresolved ? ["unresolved"] : ["event", "identity", "sink"]).map((id) => [
               id,
-              name: id,
-              schema: { package: "wildcards", schema: id },
-              properties: {},
-              inputDefaults: {},
-              position: { x: 0, y: 0 },
-              foldPins: false,
-            },
-          ]),
-        ),
+              {
+                id,
+                name: id,
+                schema: { package: "wildcards", schema: id },
+                properties: {},
+                inputDefaults: {},
+                position: { x: 0, y: 0 },
+                foldPins: false,
+              },
+            ]),
+          ),
           connections: unresolved
             ? []
             : [
-              ["event", "exec", "identity", "exec"],
-              ["identity", "exec", "sink", "exec"],
-              ["event", "out", "identity", "in"],
-              ["identity", "out", "sink", "in"],
+                ["event", "exec", "identity", "exec"],
+                ["identity", "exec", "sink", "exec"],
+                ["event", "out", "identity", "in"],
+                ["identity", "out", "sink", "in"],
               ].map(([from, out, to, input], i) => ({
-              id: String(i),
-              outNodeId: from,
-              outIo: { _tag: "Port", id: out },
-              inNodeId: to,
-              inIoId: input,
+                id: String(i),
+                outNodeId: from,
+                outIo: { _tag: "Port", id: out },
+                inNodeId: to,
+                inIoId: input,
               })),
         },
       },
@@ -106,16 +106,15 @@ it.effect(
         encoded: unknown[] = [];
       const module = fixture(captured);
       const executor = yield* Executor.make(project(), {
-        executionDriver: {
-          executeNode: (_key, effect) =>
-            effect.pipe(
-              Effect.tap((result) =>
-                Effect.sync(() => {
-                  encoded.push(result);
-                }),
-              ),
+        executionEnvironment: Executor.durableExecution((key, executor) =>
+          executor.executeNode(key).pipe(
+            Effect.tap((result) =>
+              Effect.sync(() => {
+                encoded.push(result);
+              }),
             ),
-        },
+          ),
+        ),
       });
       yield* executor.module(
         module,

@@ -164,7 +164,10 @@ export default Module.make({
         webhookUrl: io.data.in("webhookUrl", DataType.String, { name: "Webhook URL" }),
         content: io.data.in("content", DataType.String, { name: "Message" }),
         username: io.data.in("username", DataType.String, { name: "Username", defaultValue: "" }),
-        avatarUrl: io.data.in("avatarUrl", DataType.String, { name: "Avatar URL", defaultValue: "" }),
+        avatarUrl: io.data.in("avatarUrl", DataType.String, {
+          name: "Avatar URL",
+          defaultValue: "",
+        }),
         tts: io.data.in("tts", DataType.Bool, { name: "TTS", defaultValue: false }),
         status: io.data.out("status", DataType.Int, { name: "Status" }),
       }),
