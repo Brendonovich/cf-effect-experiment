@@ -479,7 +479,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         if (project.name !== name) {
           yield* persistence.saveProject({ ...project, name }).pipe(Effect.orDie);
         }
-        return yield* editor.project.rendered().pipe(Effect.orDie);
+        const executable = yield* editor.project.get().pipe(Effect.orDie);
+        const rendered = yield* editor.project.rendered().pipe(Effect.orDie);
+        return { project: executable, snapshot: rendered };
       });
 
       const listGraphs = () =>

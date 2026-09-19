@@ -1,6 +1,5 @@
 import type { EventTraceContext } from "@macrograph/cloud-api";
 
-import { Project } from "@macrograph/core";
 import * as Executor from "@macrograph/execution/Executor";
 import { ProjectExecutor } from "@macrograph/project-host";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -18,6 +17,7 @@ import {
 	projectExecutionNodes,
 	projectExecutions,
 } from "../database/DatabaseSchema.ts";
+import { DeploymentArtifact } from "../deployment/DeploymentArtifact.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentSnapshotsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
@@ -178,7 +178,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 					}).pipe(Effect.orDie),
 				);
 				const project = yield* Cloudflare.Workflows.task(
-					`runtime-project-v1/${input.projectId}/${input.deploymentId}`,
+					`runtime-project-v2/${input.projectId}/${input.deploymentId}`,
 					Effect.gen(function* () {
 						const object = yield* snapshots.get(input.r2Key);
 						if (object === null)
@@ -190,7 +190,10 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
 							try: () => JSON.parse(json),
 							catch: (cause) => cause,
 						});
-						return yield* Schema.decodeUnknownEffect(Project.Model)(value);
+						const artifact = yield* Schema.decodeUnknownEffect(
+							DeploymentArtifact.Model,
+						)(value);
+						return artifact.project;
 					}).pipe(Effect.orDie),
 				);
 				const event = yield* Effect.try({

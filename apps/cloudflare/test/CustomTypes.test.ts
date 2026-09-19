@@ -1,12 +1,77 @@
 import { assert, describe, it } from "@effect/vitest";
-import { CustomTypes, Project, RenderedProject } from "@macrograph/core";
+import {
+  ConnectionId,
+  CustomTypes,
+  Function as GraphFunction,
+  GraphId,
+  IoId,
+  OutputRef,
+  Project,
+  RenderedProject,
+} from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
+import { DeploymentArtifact } from "../src/deployment/DeploymentArtifact.ts";
 import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 
-describe("hosted custom types", () => {
+describe("hosted deployment snapshots", () => {
+  it.effect("keeps rendered function graphs separate from executable cloud projects", () =>
+    Effect.gen(function* () {
+      const functionId = GraphId.make("identity");
+      const value = { id: IoId.make("value"), name: "Value", type: DataType.String };
+      const connection = (outIo: string, inIoId: string) => ({
+        id: ConnectionId.make(crypto.randomUUID()),
+        outNodeId: GraphFunction.InputBoundaryNodeId,
+        outIo: OutputRef.port(outIo),
+        inNodeId: GraphFunction.OutputBoundaryNodeId,
+        inIoId: IoId.make(inIoId),
+      });
+      const fn: GraphFunction.Model = {
+        canvas: {
+          id: functionId,
+          name: "Identity",
+          nodes: {},
+          connections: [
+            connection(GraphFunction.ExecutionIoId, GraphFunction.ExecutionIoId),
+            connection(value.id, value.id),
+          ],
+        },
+        arguments: [value],
+        returns: [value],
+        inputPosition: { x: 0, y: 0 },
+        outputPosition: { x: 400, y: 0 },
+      };
+      const rendered: RenderedProject.Model = {
+        ...Project.empty(),
+        graphs: {
+          [functionId]: {
+            ...fn.canvas,
+            nodes: {},
+            schemas: {},
+          },
+        },
+        functions: { [functionId]: fn },
+      };
+      const encoded = Schema.encodeUnknownSync(DeploymentArtifact.Model)({
+        project: { ...Project.empty(), functions: { [functionId]: fn } },
+        snapshot: rendered,
+      });
+      const artifact = Schema.decodeUnknownSync(DeploymentArtifact.Model)(
+        JSON.parse(JSON.stringify(encoded)),
+      );
+      assert.property(artifact.snapshot.graphs, functionId);
+      assert.deepStrictEqual(artifact.project.graphs, {});
+      const executor = yield* ProjectExecutor.make(artifact.project, {
+        modules: ExecutorModules.registry,
+      });
+      assert.deepStrictEqual(yield* executor.invokeFunction(functionId, { value: "cloud" }), {
+        value: "cloud",
+      });
+    }),
+  );
+
   it.effect("retains deployment definitions and replays tagged match outputs as JSON", () =>
     Effect.gen(function* () {
       const types: DataType.Definitions = {
@@ -67,11 +132,15 @@ describe("hosted custom types", () => {
           },
         },
       });
-      // Deployment writes RenderedProject while workflow reads the compatible Project model.
+      // The rendered view and executable project retain the same authored type definitions.
       const rendered = Schema.decodeUnknownSync(RenderedProject.Model)({ ...project, graphs: {} });
-      const deployed = Schema.decodeUnknownSync(Project.Model)(
-        JSON.parse(JSON.stringify(Schema.encodeUnknownSync(RenderedProject.Model)(rendered))),
-      );
+      const deployed = Schema.decodeUnknownSync(DeploymentArtifact.Model)(
+        JSON.parse(
+          JSON.stringify(
+            Schema.encodeUnknownSync(DeploymentArtifact.Model)({ project, snapshot: rendered }),
+          ),
+        ),
+      ).project;
       assert.deepStrictEqual(deployed.types, types);
       const recorded: Array<{ node: string; output: unknown }> = [];
       const executor = yield* ProjectExecutor.make(

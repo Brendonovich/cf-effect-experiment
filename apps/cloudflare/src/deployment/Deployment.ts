@@ -2,9 +2,8 @@ import {
   CurrentUser,
   DeploymentNotFound,
   ProjectNotFound,
-  ProjectSnapshot,
 } from "@macrograph/cloud-api";
-import { Policy, RenderedProject } from "@macrograph/core";
+import { Policy } from "@macrograph/core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -20,6 +19,7 @@ import {
   type ProjectDeploymentRecord,
 } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
+import { DeploymentArtifact } from "./DeploymentArtifact.ts";
 import { deploymentObjectKey } from "./DeploymentObjectKey.ts";
 import * as DeploymentPolicy from "./DeploymentPolicy.ts";
 
@@ -84,17 +84,17 @@ export const make = (
           const object = yield* deployments.get(deployment.r2Key).pipe(Effect.orDie);
           if (object === null) return yield* new DeploymentNotFound();
           const json = yield* object.text().pipe(Effect.orDie);
-          const snapshot = yield* Effect.try({
+          const artifact = yield* Effect.try({
             try: () => JSON.parse(json),
             catch: (cause) => cause,
-          }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ProjectSnapshot)), Effect.orDie);
-          return { deployment, snapshot };
+          }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(DeploymentArtifact.Model)), Effect.orDie);
+          return { deployment, snapshot: artifact.snapshot };
         }).pipe(Policy.withPolicy(deploymentPolicy.canView(projectId))),
       deploy: (projectId: string, publicOrigin: string) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
           const project = yield* loadProject(projectId);
-          const snapshot = yield* projectEditors
+          const artifact = yield* projectEditors
             .getByName(project.id)
             .snapshot(project.name)
             .pipe(Effect.orDie);
@@ -108,7 +108,7 @@ export const make = (
             createdBy: user.id,
             createdAt,
           };
-          const encoded = yield* Schema.encodeUnknownEffect(RenderedProject.Model)(snapshot).pipe(
+          const encoded = yield* Schema.encodeUnknownEffect(DeploymentArtifact.Model)(artifact).pipe(
             Effect.orDie,
           );
           yield* deployments
@@ -190,7 +190,7 @@ export const make = (
       startPreview: (projectId: string, previewId: string, publicOrigin: string) =>
         Effect.gen(function* () {
           const project = yield* loadProject(projectId);
-          const snapshot = yield* projectEditors
+          const artifact = yield* projectEditors
             .getByName(project.id)
             .snapshot(project.name)
             .pipe(Effect.orDie);
@@ -198,7 +198,7 @@ export const make = (
             projectId: project.id,
             publicOrigin,
             previewId,
-            engines: snapshot.engines,
+            engines: artifact.project.engines,
           });
           return { endpoints };
         }).pipe(Policy.withPolicy(deploymentPolicy.canEdit(projectId))),

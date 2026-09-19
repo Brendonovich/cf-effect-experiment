@@ -1,4 +1,3 @@
-import { Project } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -8,6 +7,7 @@ import { Cause, Effect, Schema } from "effect";
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 
 import * as Database from "../database/Database.ts";
+import { DeploymentArtifact } from "../deployment/DeploymentArtifact.ts";
 import {
   projectDeployments,
   projectIngressDesired,
@@ -144,11 +144,14 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
       if (object === null)
         return yield* Effect.die(`Project deployment ${deployment.r2Key} not found`);
       const json = yield* object.text().pipe(Effect.orDie);
-      const project = yield* Effect.try({
+      const artifact = yield* Effect.try({
         try: () => JSON.parse(json),
         catch: (cause) => cause,
-      }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Project.Model)), Effect.orDie);
-      return { ...deployment, project };
+      }).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(DeploymentArtifact.Model)),
+        Effect.orDie,
+      );
+      return { ...deployment, project: artifact.project };
     });
 
     const reconcileProjectDeployment = Effect.fnUntraced(function* (
