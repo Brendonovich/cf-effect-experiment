@@ -468,7 +468,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         }
       });
 
-      const snapshot = Effect.fnUntraced(function* (name: string) {
+      const getProject = Effect.fnUntraced(function* (name: string) {
         yield* persistence.loadProject().pipe(
           Effect.catchTag("ProjectNotFoundError", () =>
             persistence.saveProject({ ...Project.empty(), name }),
@@ -478,7 +478,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         const project = yield* persistence.loadProject().pipe(Effect.orDie);
         if (project.name !== name) {
           yield* persistence.saveProject({ ...project, name }).pipe(Effect.orDie);
+          return { ...project, name };
         }
+        return project;
+      });
+
+      const getRenderedProject = Effect.fnUntraced(function* (name: string) {
+        yield* getProject(name);
         return yield* editor.project.rendered().pipe(Effect.orDie);
       });
 
@@ -652,7 +658,8 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         disconnectAll,
         disconnectUser,
         credentialsChanged,
-        snapshot,
+        getProject,
+        getRenderedProject,
         listGraphs,
         createGraph,
         getGraph,

@@ -2,9 +2,8 @@ import {
   CurrentUser,
   DeploymentNotFound,
   ProjectNotFound,
-  ProjectSnapshot,
 } from "@macrograph/cloud-api";
-import { Policy, RenderedProject } from "@macrograph/core";
+import { Policy, Project, RenderedProject } from "@macrograph/core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -20,7 +19,10 @@ import {
   type ProjectDeploymentRecord,
 } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
-import { deploymentObjectKey } from "./DeploymentObjectKey.ts";
+import {
+  deploymentProjectObjectKey,
+  deploymentSnapshotObjectKey,
+} from "./DeploymentObjectKey.ts";
 import * as DeploymentPolicy from "./DeploymentPolicy.ts";
 
 export const make = (
@@ -81,25 +83,27 @@ export const make = (
             .pipe(Effect.orDie);
           const deployment = rows[0];
           if (deployment === undefined) return yield* new DeploymentNotFound();
-          const object = yield* deployments.get(deployment.r2Key).pipe(Effect.orDie);
+          const object = yield* deployments
+            .get(deploymentSnapshotObjectKey(projectId, deploymentId))
+            .pipe(Effect.orDie);
           if (object === null) return yield* new DeploymentNotFound();
           const json = yield* object.text().pipe(Effect.orDie);
           const snapshot = yield* Effect.try({
             try: () => JSON.parse(json),
             catch: (cause) => cause,
-          }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ProjectSnapshot)), Effect.orDie);
+          }).pipe(Effect.flatMap(Schema.decodeUnknownEffect(RenderedProject.Model)), Effect.orDie);
           return { deployment, snapshot };
         }).pipe(Policy.withPolicy(deploymentPolicy.canView(projectId))),
       deploy: (projectId: string, publicOrigin: string) =>
         Effect.gen(function* () {
           const user = yield* CurrentUser;
           const project = yield* loadProject(projectId);
-          const snapshot = yield* projectEditors
-            .getByName(project.id)
-            .snapshot(project.name)
-            .pipe(Effect.orDie);
+          const projectEditor = projectEditors.getByName(project.id);
+          const executable = yield* projectEditor.getProject(project.name).pipe(Effect.orDie);
+          const snapshot = yield* projectEditor.getRenderedProject(project.name).pipe(Effect.orDie);
           const deploymentId = crypto.randomUUID();
-          const r2Key = deploymentObjectKey(project.id, deploymentId);
+          const r2Key = deploymentProjectObjectKey(project.id, deploymentId);
+          const snapshotKey = deploymentSnapshotObjectKey(project.id, deploymentId);
           const createdAt = new Date().toISOString();
           const deployment: ProjectDeploymentRecord = {
             id: deploymentId,
@@ -108,14 +112,33 @@ export const make = (
             createdBy: user.id,
             createdAt,
           };
-          const encoded = yield* Schema.encodeUnknownEffect(RenderedProject.Model)(snapshot).pipe(
+          const [encodedProject, encodedSnapshot] = yield* Effect.all([
+            Schema.encodeUnknownEffect(Project.Model)(executable),
+            Schema.encodeUnknownEffect(RenderedProject.Model)(snapshot),
+          ]).pipe(Effect.orDie);
+          yield* Effect.all(
+            [
+              deployments.put(r2Key, JSON.stringify(encodedProject), {
+                httpMetadata: { contentType: "application/json" },
+              }),
+              deployments.put(snapshotKey, JSON.stringify(encodedSnapshot), {
+                httpMetadata: { contentType: "application/json" },
+              }),
+            ],
+            { discard: true },
+          ).pipe(
+            Effect.catchCause((cause) =>
+              Effect.all([deployments.delete(r2Key), deployments.delete(snapshotKey)], {
+                discard: true,
+              }).pipe(
+                Effect.catchCause((cleanupCause) =>
+                  Effect.logError("Failed to remove partial deployment objects", cleanupCause),
+                ),
+                Effect.andThen(Effect.failCause(cause)),
+              ),
+            ),
             Effect.orDie,
           );
-          yield* deployments
-            .put(r2Key, JSON.stringify(encoded), {
-              httpMetadata: { contentType: "application/json" },
-            })
-            .pipe(Effect.orDie);
           yield* database
             .transaction((transaction) =>
               Effect.gen(function* () {
@@ -166,12 +189,14 @@ export const make = (
                       ).pipe(Effect.andThen(Effect.failCause(cause))),
                     ),
                     Effect.andThen(
-                      deployments
-                        .delete(r2Key)
+                      Effect.all(
+                        [deployments.delete(r2Key), deployments.delete(snapshotKey)],
+                        { discard: true },
+                      )
                         .pipe(
                           Effect.catchCause((cleanupCause) =>
                             Effect.logError(
-                              "Failed to remove rejected deployment snapshot",
+                              "Failed to remove rejected deployment objects",
                               cleanupCause,
                             ),
                           ),
@@ -190,15 +215,15 @@ export const make = (
       startPreview: (projectId: string, previewId: string, publicOrigin: string) =>
         Effect.gen(function* () {
           const project = yield* loadProject(projectId);
-          const snapshot = yield* projectEditors
+          const executable = yield* projectEditors
             .getByName(project.id)
-            .snapshot(project.name)
+            .getProject(project.name)
             .pipe(Effect.orDie);
           const endpoints = yield* workerOperations.previewProject({
             projectId: project.id,
             publicOrigin,
             previewId,
-            engines: snapshot.engines,
+            engines: executable.engines,
           });
           return { endpoints };
         }).pipe(Policy.withPolicy(deploymentPolicy.canEdit(projectId))),

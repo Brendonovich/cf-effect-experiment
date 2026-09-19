@@ -22,6 +22,7 @@ import {
   type ProjectAccess,
   type ProjectRecord,
 } from "../database/DatabaseSchema.ts";
+import { deploymentSnapshotObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
 import * as Team from "../team/Team.ts";
 import * as TeamPolicy from "../team/TeamPolicy.ts";
@@ -399,21 +400,26 @@ export const make = (
       remove: (projectId: string) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
-          const snapshots = yield* database
-            .select({ r2Key: projectDeployments.r2Key })
+          const deploymentRows = yield* database
+            .select({ id: projectDeployments.id, r2Key: projectDeployments.r2Key })
             .from(projectDeployments)
             .where(eq(projectDeployments.projectId, project.id))
             .pipe(Effect.orDie);
           yield* workerOperations.undeployProject(project.id);
           yield* database.delete(projects).where(eq(projects.id, project.id)).pipe(Effect.orDie);
           yield* Effect.forEach(
-            snapshots,
-            (snapshot) =>
-              deployments
-                .delete(snapshot.r2Key)
+            deploymentRows,
+            (deployment) =>
+              Effect.all(
+                [
+                  deployments.delete(deployment.r2Key),
+                  deployments.delete(deploymentSnapshotObjectKey(project.id, deployment.id)),
+                ],
+                { discard: true },
+              )
                 .pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logError("Failed to remove project deployment snapshot", cause),
+                    Effect.logError("Failed to remove project deployment objects", cause),
                   ),
                 ),
             { discard: true },

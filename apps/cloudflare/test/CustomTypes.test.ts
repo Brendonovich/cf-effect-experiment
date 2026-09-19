@@ -67,12 +67,16 @@ describe("hosted custom types", () => {
           },
         },
       });
-      // Deployment writes RenderedProject while workflow reads the compatible Project model.
+      // The rendered view and executable project retain the same authored type definitions.
       const rendered = Schema.decodeUnknownSync(RenderedProject.Model)({ ...project, graphs: {} });
       const deployed = Schema.decodeUnknownSync(Project.Model)(
+        JSON.parse(JSON.stringify(Schema.encodeUnknownSync(Project.Model)(project))),
+      );
+      const deployedSnapshot = Schema.decodeUnknownSync(RenderedProject.Model)(
         JSON.parse(JSON.stringify(Schema.encodeUnknownSync(RenderedProject.Model)(rendered))),
       );
       assert.deepStrictEqual(deployed.types, types);
+      assert.deepStrictEqual(deployedSnapshot.types, types);
       const recorded: Array<{ node: string; output: unknown }> = [];
       const executor = yield* ProjectExecutor.make(
         { ...project, types: deployed.types },

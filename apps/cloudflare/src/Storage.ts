@@ -109,5 +109,5 @@ export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
 	}),
 );
 
-export const DeploymentSnapshotsBucket =
+export const DeploymentObjectsBucket =
 	Cloudflare.R2.Bucket("RevisionSnapshots");

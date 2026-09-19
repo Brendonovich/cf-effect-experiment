@@ -28,7 +28,7 @@ import * as EventPolicy from "../execution/EventPolicy.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import * as Project from "../project/Project.ts";
 import * as ProjectPolicy from "../project/ProjectPolicy.ts";
-import { DatabaseHyperdrive, DeploymentSnapshotsBucket } from "../Storage.ts";
+import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
 import * as Team from "../team/Team.ts";
 import * as TeamPolicy from "../team/TeamPolicy.ts";
 import { IngressWorker } from "./IngressWorker.ts";
@@ -71,7 +71,7 @@ export default Layer.unwrap(
 			yield* Effect.serviceOption(IngressPublicOrigin),
 		);
 		const databaseResource = yield* DatabaseHyperdrive;
-		const deploymentsResource = yield* DeploymentSnapshotsBucket;
+		const deploymentsResource = yield* DeploymentObjectsBucket;
 
 		return CloudWorker.make(
 			{
