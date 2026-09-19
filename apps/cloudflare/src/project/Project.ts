@@ -22,6 +22,7 @@ import {
   type ProjectAccess,
   type ProjectRecord,
 } from "../database/DatabaseSchema.ts";
+import { deploymentSnapshotObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
 import * as Team from "../team/Team.ts";
 import * as TeamPolicy from "../team/TeamPolicy.ts";
@@ -400,7 +401,7 @@ export const make = (
         Effect.gen(function* () {
           const project = yield* load(projectId);
           const snapshots = yield* database
-            .select({ r2Key: projectDeployments.r2Key })
+            .select({ id: projectDeployments.id, r2Key: projectDeployments.r2Key })
             .from(projectDeployments)
             .where(eq(projectDeployments.projectId, project.id))
             .pipe(Effect.orDie);
@@ -409,8 +410,13 @@ export const make = (
           yield* Effect.forEach(
             snapshots,
             (snapshot) =>
-              deployments
-                .delete(snapshot.r2Key)
+              Effect.all(
+                [
+                  deployments.delete(snapshot.r2Key),
+                  deployments.delete(deploymentSnapshotObjectKey(project.id, snapshot.id)),
+                ],
+                { discard: true },
+              )
                 .pipe(
                   Effect.catchCause((cause) =>
                     Effect.logError("Failed to remove project deployment snapshot", cause),

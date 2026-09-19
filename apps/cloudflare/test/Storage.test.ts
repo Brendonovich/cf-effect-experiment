@@ -2,7 +2,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { CreateGraphRequest, CreateProjectRequest } from "@macrograph/cloud-api";
 import { Effect, Result, Schema } from "effect";
 
-import { deploymentObjectKey } from "../src/deployment/DeploymentObjectKey.ts";
+import {
+  deploymentObjectKey,
+  deploymentSnapshotObjectKey,
+} from "../src/deployment/DeploymentObjectKey.ts";
 
 describe("Storage", () => {
   it.effect("builds immutable deployment object keys", () =>
@@ -10,6 +13,10 @@ describe("Storage", () => {
       assert.strictEqual(
         deploymentObjectKey("project-1", "deployment-2"),
         "projects/project-1/revisions/deployment-2.json",
+      );
+      assert.strictEqual(
+        deploymentSnapshotObjectKey("project-1", "deployment-2"),
+        "projects/project-1/revisions/deployment-2.snapshot.json",
       );
     }),
   );

@@ -13,7 +13,6 @@ import { DataType } from "@macrograph/module/DataType";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
-import { DeploymentArtifact } from "../src/deployment/DeploymentArtifact.ts";
 import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 
 describe("hosted deployment snapshots", () => {
@@ -54,16 +53,20 @@ describe("hosted deployment snapshots", () => {
         },
         functions: { [functionId]: fn },
       };
-      const encoded = Schema.encodeUnknownSync(DeploymentArtifact.Model)({
-        project: { ...Project.empty(), functions: { [functionId]: fn } },
-        snapshot: rendered,
+      const encodedProject = Schema.encodeUnknownSync(Project.Model)({
+        ...Project.empty(),
+        functions: { [functionId]: fn },
       });
-      const artifact = Schema.decodeUnknownSync(DeploymentArtifact.Model)(
-        JSON.parse(JSON.stringify(encoded)),
+      const encodedSnapshot = Schema.encodeUnknownSync(RenderedProject.Model)(rendered);
+      const deployed = Schema.decodeUnknownSync(Project.Model)(
+        JSON.parse(JSON.stringify(encodedProject)),
       );
-      assert.property(artifact.snapshot.graphs, functionId);
-      assert.deepStrictEqual(artifact.project.graphs, {});
-      const executor = yield* ProjectExecutor.make(artifact.project, {
+      const snapshot = Schema.decodeUnknownSync(RenderedProject.Model)(
+        JSON.parse(JSON.stringify(encodedSnapshot)),
+      );
+      assert.property(snapshot.graphs, functionId);
+      assert.deepStrictEqual(deployed.graphs, {});
+      const executor = yield* ProjectExecutor.make(deployed, {
         modules: ExecutorModules.registry,
       });
       assert.deepStrictEqual(yield* executor.invokeFunction(functionId, { value: "cloud" }), {
@@ -134,13 +137,12 @@ describe("hosted deployment snapshots", () => {
       });
       // The rendered view and executable project retain the same authored type definitions.
       const rendered = Schema.decodeUnknownSync(RenderedProject.Model)({ ...project, graphs: {} });
-      const deployed = Schema.decodeUnknownSync(DeploymentArtifact.Model)(
-        JSON.parse(
-          JSON.stringify(
-            Schema.encodeUnknownSync(DeploymentArtifact.Model)({ project, snapshot: rendered }),
-          ),
-        ),
-      ).project;
+      const deployed = Schema.decodeUnknownSync(Project.Model)(
+        JSON.parse(JSON.stringify(Schema.encodeUnknownSync(Project.Model)(project))),
+      );
+      Schema.decodeUnknownSync(RenderedProject.Model)(
+        JSON.parse(JSON.stringify(Schema.encodeUnknownSync(RenderedProject.Model)(rendered))),
+      );
       assert.deepStrictEqual(deployed.types, types);
       const recorded: Array<{ node: string; output: unknown }> = [];
       const executor = yield* ProjectExecutor.make(
