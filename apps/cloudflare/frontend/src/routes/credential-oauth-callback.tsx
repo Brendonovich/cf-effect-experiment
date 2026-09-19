@@ -41,10 +41,7 @@ export const CredentialOAuthCallbackRoute = () => {
         setError(true);
         return;
       }
-      window.opener?.postMessage(
-        { type: "macrograph-credential-connected", projectId: result.projectId },
-        location.origin,
-      );
+      window.opener?.postMessage({ type: "macrograph-credential-connected" }, location.origin);
       window.close();
     });
   });

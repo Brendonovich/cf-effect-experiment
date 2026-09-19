@@ -1,5 +1,4 @@
-import { CurrentUser, ProjectNotFound } from "@macrograph/cloud-api";
-import { Policy } from "@macrograph/core";
+import { CurrentUser } from "@macrograph/cloud-api";
 import { Credential } from "@macrograph/module";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import { and, eq } from "drizzle-orm";
@@ -12,12 +11,10 @@ import * as Database from "../database/Database.ts";
 import { projects } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
 import * as Authentication from "./Authentication.ts";
-import * as CredentialPolicy from "./CredentialPolicy.ts";
 import * as OAuthProviders from "./OAuthProviders.ts";
 
 const OAuthState = Schema.Struct({
   userId: Schema.String,
-  projectId: Schema.String,
   provider: Schema.String,
   redirectUri: Schema.String,
   expiresAt: Schema.Number,
@@ -52,7 +49,6 @@ const summary = (
 export const make = Effect.gen(function* () {
   const authentication = yield* Authentication.Service;
   const database = yield* Database.Service;
-  const credentialPolicy = yield* CredentialPolicy.Service;
   const providers = yield* OAuthProviders.Service;
   const projectEditors = yield* ProjectEditorDO;
   const runtimeContext = yield* AlchemyRuntimeContext;
@@ -72,19 +68,6 @@ export const make = Effect.gen(function* () {
       ),
     );
   });
-
-  const projectFor = (projectId: string) =>
-    database
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1)
-      .pipe(
-        Effect.orDie,
-        Effect.flatMap((rows) =>
-          rows[0] === undefined ? Effect.fail(new ProjectNotFound()) : Effect.succeed(rows[0]),
-        ),
-      );
 
   const rowsFor = (userId: string) =>
     database
@@ -158,63 +141,40 @@ export const make = Effect.gen(function* () {
       );
     });
 
-  const requireOwner = (projectId: string) =>
-    Effect.gen(function* () {
-      const user = yield* CurrentUser;
-      const project = yield* projectFor(projectId);
-      if (project.createdBy !== user.id) return yield* new HttpApiError.Forbidden();
-      return { user, project };
-    });
+  const startConnection = (
+    user: { readonly id: string; readonly sessionId: string | undefined },
+    providerId: string,
+    origin: string,
+  ) => {
+    const provider = providers.get(providerId);
+    if (provider === undefined) return Effect.fail(new HttpApiError.BadRequest());
+    const redirectUri = `${origin}/credential-oauth/callback`;
+    return signState({
+      userId: user.id,
+      provider: provider.id,
+      redirectUri,
+      expiresAt: Date.now() + 10 * 60 * 1_000,
+      nonce: crypto.randomUUID(),
+    }).pipe(
+      Effect.map((state) => ({
+        authorizationUrl: providers.authorizeUrl(provider, redirectUri, state),
+      })),
+    );
+  };
 
   return {
     publicOrigin: requestOrigin,
     providers: Effect.succeed(providers.list),
-    list: (projectId: string) =>
-      Effect.gen(function* () {
-        const user = yield* CurrentUser;
-        const project = yield* projectFor(projectId);
-        if (project.createdBy !== user.id)
-          return Credential.unavailable(
-            "not-connected",
-            "Credentials are scoped to the project creator.",
-          );
-        return yield* catalogFor(user.id);
-      }).pipe(Policy.withPolicy(credentialPolicy.canView(projectId))),
-    refetch: (projectId: string) =>
-      requireOwner(projectId).pipe(
-        Effect.flatMap(({ user }) => catalogFor(user.id)),
-        Policy.withPolicy(credentialPolicy.canManage(projectId)),
-        Policy.withPolicy(credentialPolicy.canEdit(projectId)),
-      ),
-    connect: (projectId: string, providerId: string, origin: string) =>
-      requireOwner(projectId).pipe(
-        Effect.flatMap(({ user }) => {
-          const provider = providers.get(providerId);
-          if (provider === undefined) return Effect.fail(new HttpApiError.BadRequest());
-          const redirectUri = `${origin}/credential-oauth/callback`;
-          return signState({
-            userId: user.id,
-            projectId,
-            provider: provider.id,
-            redirectUri,
-            expiresAt: Date.now() + 10 * 60 * 1_000,
-            nonce: crypto.randomUUID(),
-          }).pipe(
-            Effect.map((state) => ({
-              authorizationUrl: providers.authorizeUrl(provider, redirectUri, state),
-            })),
-          );
-        }),
-        Policy.withPolicy(credentialPolicy.canManage(projectId)),
-        Policy.withPolicy(credentialPolicy.canEdit(projectId)),
-      ),
+    list: CurrentUser.pipe(Effect.flatMap((user) => catalogFor(user.id))),
+    refetch: CurrentUser.pipe(Effect.flatMap((user) => catalogFor(user.id))),
+    connect: (providerId: string, origin: string) =>
+      CurrentUser.pipe(Effect.flatMap((user) => startConnection(user, providerId, origin))),
     complete: (providerId: string, code: string, encodedState: string) =>
       Effect.gen(function* () {
         const user = yield* CurrentUser;
         const state = yield* verifyState(encodedState);
         if (state.userId !== user.id || state.provider !== providerId)
           return yield* new HttpApiError.Forbidden();
-        yield* requireOwner(state.projectId);
         const provider = providers.get(providerId);
         if (provider === undefined) return yield* new HttpApiError.BadRequest();
         const token = yield* providers
@@ -245,7 +205,6 @@ export const make = Effect.gen(function* () {
           .pipe(Effect.orDie);
         yield* notifyProjects(user.id, user.sessionId);
         return {
-          projectId: state.projectId,
           credential: summary(
             {
               providerId,
@@ -259,9 +218,9 @@ export const make = Effect.gen(function* () {
           ),
         };
       }),
-    remove: (projectId: string, providerId: string, credentialId: string) =>
-      requireOwner(projectId).pipe(
-        Effect.flatMap(({ user }) =>
+    remove: (providerId: string, credentialId: string) =>
+      CurrentUser.pipe(
+        Effect.flatMap((user) =>
           database
             .delete(oauthCredentials)
             .where(
@@ -273,8 +232,6 @@ export const make = Effect.gen(function* () {
             )
             .pipe(Effect.orDie, Effect.andThen(notifyProjects(user.id, user.sessionId))),
         ),
-        Policy.withPolicy(credentialPolicy.canManage(projectId)),
-        Policy.withPolicy(credentialPolicy.canEdit(projectId)),
       ),
     refreshCredential: (userId: string, providerId: string, credentialId: string) =>
       Effect.gen(function* () {

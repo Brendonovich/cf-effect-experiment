@@ -119,11 +119,9 @@ export const Events: Component<EventsProps> = (props) => {
   }));
 
   const credentialsQuery = createQuery(() => ({
-    queryKey: ["credentials", props.projectId],
+    queryKey: ["account-credentials"],
     queryFn: async () => {
-      const catalog = await runApi(
-        props.credentialsApi.list({ params: { projectId: props.projectId } }),
-      );
+      const catalog = await runApi(props.credentialsApi.list());
       if (catalog === undefined) throw new Error("Could not load credentials");
       return catalog;
     },

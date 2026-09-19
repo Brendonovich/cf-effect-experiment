@@ -462,7 +462,11 @@ export function App(
           </Show>
           <div sx={styles.account}>
             <Loading fallback={null}>
-              <AccountMenu email={props.user.email} onSignOut={() => void auth.signOut()} />
+              <AccountMenu
+                email={props.user.email}
+                onCredentials={() => navigate("/credentials")}
+                onSignOut={() => void auth.signOut()}
+              />
             </Loading>
           </div>
         </header>

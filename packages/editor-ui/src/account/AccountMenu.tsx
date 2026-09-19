@@ -6,6 +6,7 @@ import { Avatar } from "./Avatar.tsx";
 
 export interface AccountMenuProps {
   readonly email: string;
+  readonly onCredentials?: () => void;
   readonly onSignOut: () => void;
 }
 
@@ -14,11 +15,11 @@ export function AccountMenu(props: AccountMenuProps) {
   const [open, setOpen] = createSignal(false);
   let root: HTMLDivElement | undefined;
   let trigger: HTMLButtonElement | undefined;
-  let logout: HTMLButtonElement | undefined;
+  let firstAction: HTMLButtonElement | undefined;
 
   createEffect(open, (isOpen) => {
     if (!isOpen) return;
-    logout?.focus();
+    firstAction?.focus();
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (event.target instanceof globalThis.Node && !root?.contains(event.target)) {
         setOpen(false);
@@ -64,8 +65,23 @@ export function AccountMenu(props: AccountMenuProps) {
       </button>
       <Show when={open()}>
         <div id="account-popover" role="region" aria-label="Account actions" sx={styles.popover}>
+          <Show when={props.onCredentials !== undefined}>
+            <button
+              ref={firstAction}
+              type="button"
+              sx={[styles.button, styles.action]}
+              onClick={() => {
+                setOpen(false);
+                props.onCredentials?.();
+              }}
+            >
+              Credentials
+            </button>
+          </Show>
           <button
-            ref={logout}
+            ref={(element) => {
+              if (props.onCredentials === undefined) firstAction = element;
+            }}
             type="button"
             sx={[styles.button, styles.logout]}
             onClick={() => {
@@ -118,6 +134,7 @@ const styles = stylex.create({
     boxShadow: "0 12px 24px rgb(0 0 0 / .25)",
   },
   logout: { width: "100%", textAlign: "left" },
+  action: { width: "100%", textAlign: "left" },
   button: {
     flexShrink: 0,
     borderRadius: 6,
