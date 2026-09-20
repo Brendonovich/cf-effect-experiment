@@ -101,7 +101,7 @@ export class ScopeInputRef<Value = Readonly<Record<string, unknown>>> extends Ex
 const scopeFields = (fields: ScopeFields): ReadonlyArray<ScopeField> =>
   Object.entries(fields).map(([id, type]) => ({ id, name: id, type }));
 
-/** null denotes an inferred scope input (used by Break Scope). */
+/** null denotes an inferred scope input (used by scope projections). */
 export const scopesCompatible = (
   output: ReadonlyArray<ScopeField> | null | undefined,
   input: ReadonlyArray<ScopeField> | null | undefined,

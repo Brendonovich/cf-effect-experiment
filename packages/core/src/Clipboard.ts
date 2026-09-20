@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 import { Connection } from "./Connection.ts";
 import { NodeIO } from "./IO.ts";
 import { Node } from "./Node.ts";
+import { Projection as ScopeProjection } from "./Scopes.ts";
 
 export const maxBytes = 1_000_000;
 export const maxNodes = 500;
@@ -12,6 +13,7 @@ export const Fragment = Schema.Struct({
   format: Schema.Literal("macrograph/nodes"),
   version: Schema.Literal(1),
   nodes: Schema.Array(Node.Model),
+  scopeProjections: Schema.optional(Schema.Array(ScopeProjection)),
   connections: Schema.Array(Connection.Model),
   source: Schema.optional(Schema.Struct({ session: Schema.String, graphId: Schema.String })),
   externalConnections: Schema.optional(Schema.Array(Connection.Model)),
@@ -94,8 +96,8 @@ export const decode = (text: string) =>
       }
       const fragment = Schema.decodeUnknownSync(Fragment)(raw, { onExcessProperty: "error" });
       if (
-        fragment.nodes.length === 0 ||
-        fragment.nodes.length > maxNodes ||
+        fragment.nodes.length + (fragment.scopeProjections?.length ?? 0) === 0 ||
+        fragment.nodes.length + (fragment.scopeProjections?.length ?? 0) > maxNodes ||
         fragment.connections.length + (fragment.externalConnections?.length ?? 0) > maxConnections
       )
         throw new Error("Clipboard must contain 1-500 nodes and at most 2000 connections");
@@ -109,6 +111,16 @@ export const decode = (text: string) =>
           throw new Error("Invalid or duplicate node id");
         ids.add(node.id);
         if (!validPosition(node.position)) throw new Error("Invalid node position");
+      }
+      for (const projection of fragment.scopeProjections ?? []) {
+        if (
+          !projection.id ||
+          ["__proto__", "constructor", "prototype"].includes(projection.id) ||
+          ids.has(projection.id)
+        )
+          throw new Error("Invalid or duplicate projection id");
+        ids.add(projection.id);
+        if (!validPosition(projection.position)) throw new Error("Invalid projection position");
       }
       const connections = new Set<string>();
       const inputs = new Set<string>();

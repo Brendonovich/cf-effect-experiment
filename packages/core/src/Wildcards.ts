@@ -145,7 +145,7 @@ const solve = (
     if (output?.kind === "data" && inputs.length === 1) pair(output.port, inputs[0]!);
     if (output?.kind === "execution" && output.port.scope != null) {
       const input = target.executionInputs.find((port) => port.id === wire.inIoId);
-      // An inferred scope input exposes its fields as data outputs (Break Scope).
+      // An inferred scope input exposes its fields as data outputs on a projection.
       const fields = input?.scope === null ? target.dataOutputs : input?.scope;
       for (const field of fields ?? []) {
         const source = output.port.scope.find((candidate) => candidate.id === field.id);

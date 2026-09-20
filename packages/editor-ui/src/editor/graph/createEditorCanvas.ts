@@ -41,6 +41,11 @@ export interface EditorCanvasOptions {
     source?: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
     shiftKey?: boolean,
   ) => Promise<void> | undefined;
+  readonly createScopeProjection?: (
+    position: { x: number; y: number },
+    source: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
+    shiftKey?: boolean,
+  ) => Promise<void> | undefined;
   readonly editor: ReturnType<typeof createEditorStore>;
   readonly client: () => EditorRpcClient | null;
   readonly canEdit: () => boolean;
@@ -358,6 +363,25 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
         source: drag.source,
         shiftKey: event.shiftKey,
       };
+      if (
+        drag.source.direction === "output" &&
+        drag.source.port.kind === "scope" &&
+        drag.source.port.scope != null &&
+        drag.source.port.outputRef?._tag === "Port" &&
+        options.createScopeProjection !== undefined
+      ) {
+        const createScopeProjection = options.createScopeProjection;
+        runFork(
+          Effect.tryPromise({
+            try: () =>
+              createNodeAt(menu, (placement) =>
+                createScopeProjection(placement.graph, drag.source, placement.shiftKey),
+              ),
+            catch: (error) => error,
+          }).pipe(Effect.catchCause(Effect.log)),
+        );
+        return;
+      }
       const match = singleCompatibleSchema(
         store.packages,
         drag.source,

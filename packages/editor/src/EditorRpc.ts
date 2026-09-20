@@ -4,9 +4,11 @@ import {
   Function as GraphFunction,
   Graph,
   Node,
+  OutputRef,
   Package as PkgTypes,
   Policy,
   Project,
+  Position,
   ResourceConstant,
   TypeDefinition,
 } from "@macrograph/core";
@@ -215,6 +217,24 @@ class CreateNode extends Rpc.make("CreateNode", {
     PkgTypes.InvalidPropertyError,
     PkgTypes.InvalidInputDefaultError,
     GraphFunction.EventNodeNotAllowedError,
+  ]),
+}) {}
+
+class CreateScopeProjection extends Rpc.make("CreateScopeProjection", {
+  payload: {
+    graphId: Schema.String,
+    position: Position,
+    sourceNodeId: Schema.String,
+    sourceOutput: OutputRef.Model,
+  },
+  success: EditorEvent.ScopeProjectionCreated,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Graph.NotFoundError,
+    Node.NotFoundError,
+    PkgTypes.SchemaNotFoundError,
+    Connection.InvalidError,
   ]),
 }) {}
 
@@ -516,6 +536,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.FunctionCreated,
     EditorEvent.FunctionUpdated,
     EditorEvent.NodeCreated,
+    EditorEvent.ScopeProjectionCreated,
     EditorEvent.NodeDeleted,
     EditorEvent.FragmentPasted,
     EditorEvent.FragmentDeleted,
@@ -562,6 +583,7 @@ export const EditorRpcs = RpcGroup.make(
   ReorderFunctionField,
   DeleteFunctionField,
   CreateNode,
+  CreateScopeProjection,
   DeleteNode,
   PasteFragment,
   GetClipboardIdentity,
@@ -633,6 +655,13 @@ export const handlerLayer = EditorRpcs.toLayer(
       DeleteFunctionField: ({ graphId, direction, fieldId }) =>
         editor.function.deleteField(graphId, direction, fieldId),
       CreateNode: (payload) => editor.node.create({ graphID: payload.graphId, node: payload.node }),
+      CreateScopeProjection: (payload) =>
+        editor.scopeProjection.create({
+          graphID: payload.graphId,
+          position: payload.position,
+          sourceNodeID: payload.sourceNodeId,
+          sourceOutput: payload.sourceOutput,
+        }),
       PasteFragment: (payload) =>
         editor.fragment.paste({
           graphID: payload.graphId,

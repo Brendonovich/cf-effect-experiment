@@ -76,7 +76,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "Scopes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
             );
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
@@ -123,7 +123,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "Scopes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
             );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, {

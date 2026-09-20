@@ -2,7 +2,6 @@ import {
   Canvas,
   CustomTypes,
   Function as GraphFunction,
-  IoId,
   Node,
   type NodeIO,
   OutputRef,
@@ -345,10 +344,6 @@ export const make = Effect.fnUntraced(function* (
         schemas: CustomTypes.schemas(request.types),
         engineClient: undefined,
       });
-      registeredModules.set(Scopes.packageId, {
-        schemas: new Map([[Scopes.schema.id, Scopes.schema]]),
-        engineClient: undefined,
-      });
       const registeredModule = registeredModules.get(request.moduleId);
       if (registeredModule === undefined)
         return yield* new ModuleNotRegistered({ moduleId: request.moduleId });
@@ -570,10 +565,6 @@ export const make = Effect.fnUntraced(function* (
       schemas: CustomTypes.schemas(currentProject.types),
       engineClient: undefined,
     });
-    registeredModules.set(Scopes.packageId, {
-      schemas: new Map([[Scopes.schema.id, Scopes.schema]]),
-      engineClient: undefined,
-    });
     if (definition !== undefined && !registeredModules.has(definition.id))
       return yield* new ModuleNotRegistered({ moduleId: definition.id });
 
@@ -733,45 +724,12 @@ export const make = Effect.fnUntraced(function* (
               reasons: ["Schema IO could not be generated"],
             }),
         });
-      const io = yield* generate(schema, properties);
-      if (!Scopes.isBreakScope(node)) return io;
-      const wires = graph.connections.filter(
-        (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
-      );
-      const wire = wires.length === 1 ? wires[0] : undefined;
-      if (wire === undefined) return io;
-      const source = yield* Canvas.getNode(graph, wire.outNodeId);
-      const sourceSchema = yield* getSchema(registeredModules, source);
-      const sourceIO = yield* generate(
-        sourceSchema,
-        yield* resolveProperties(source, sourceSchema, false),
-      );
-      const fields =
-        wire.outIo._tag === "Port"
-          ? sourceIO.executionOutputs.find((port) => port.id === OutputRef.parentId(wire.outIo))
-              ?.scope
-          : undefined;
-      return {
-        ...io,
-        dataOutputs: (fields ?? []).map(
-          (field) => new Registration.DataOutputRef(field.id, field.type, field.name),
-        ),
-      };
+      return yield* generate(schema, properties);
     });
 
     // Event-local declarations are immutable. Reuse the solved groups for preflight,
     // live input/output checks and durable-result encoding/decoding alike.
     const wildcardGraphs = new Map<string, Wildcards.Cache>();
-    const toNodeIO = (io: Registration.RegisteredNodeIO): NodeIO => ({
-      dataInputs: io.dataInputs.map((port) => ({ id: IoId.make(port.id), type: port.type })),
-      dataOutputs: io.dataOutputs.map((port) => ({
-        id: IoId.make(port.id),
-        type: port.type,
-        ...(port.name === undefined ? {} : { name: port.name }),
-      })),
-      executionInputs: io.executionInputs.map(Scopes.executionPort),
-      executionOutputs: io.executionOutputs.map(Scopes.executionPort),
-    });
     const toRegisteredIO = (io: NodeIO): Registration.RegisteredNodeIO => ({
       dataInputs: io.dataInputs.map(
         (port) =>
@@ -827,22 +785,7 @@ export const make = Effect.fnUntraced(function* (
             const derived = cache.derivedIO(id);
             if (derived !== undefined) declarations.set(id, { ...io, ...toRegisteredIO(derived) });
           }
-          for (const candidate of Object.values(graph.nodes)) {
-            if (!Scopes.isBreakScope(candidate)) continue;
-            const resolved = Scopes.resolveIO(graph, candidate.id, (id) => {
-              const io = declarations.get(id);
-              return io === undefined ? undefined : toNodeIO(io);
-            });
-            if (resolved !== undefined) declarations.set(candidate.id, toRegisteredIO(resolved));
-          }
           result = cache.update(declarations, graph.connections, derive);
-          if (Result.isSuccess(result))
-            for (const candidate of Object.values(graph.nodes)) {
-              if (!Scopes.isBreakScope(candidate)) continue;
-              const io = declarations.get(candidate.id);
-              if (io === undefined) continue;
-              cache.setDerivedIO(candidate.id, toNodeIO(io));
-            }
         }
         if (Result.isFailure(result)) {
           const conflicts = result.failure.filter((conflict) => conflict.nodes.has(node.id));
@@ -1221,15 +1164,6 @@ export const make = Effect.fnUntraced(function* (
         };
         const runEffect = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
-          if (Scopes.isBreakScope(node)) {
-            return {
-              outputs: nodeIO.dataOutputs.map((port) => ({
-                outputId: port.id,
-                value: incomingScope?.payload[port.id],
-              })),
-              executionOutputId: "exec",
-            } satisfies NodeExecutionResult;
-          }
           if (GraphFunction.isCall(node)) {
             const target = node.properties.function;
             if (typeof target !== "string" || currentProject.functions[target] === undefined)
@@ -1414,10 +1348,9 @@ export const make = Effect.fnUntraced(function* (
             Schema.decodeUnknownEffect(DataType.JsonValueSchema(type, currentProject.types))(value),
           );
         const serializeRequest = Effect.gen(function* () {
-          const precomputed =
-            Scopes.isBreakScope(node) || GraphFunction.isBoundaryNodeId(node.id)
-              ? yield* runEffect.pipe(Effect.flatMap(serializeResult))
-              : undefined;
+          const precomputed = GraphFunction.isBoundaryNodeId(node.id)
+            ? yield* runEffect.pipe(Effect.flatMap(serializeResult))
+            : undefined;
           const encodedInputs = Object.fromEntries(
             yield* Effect.forEach(nodeIO.dataInputs, (input) =>
               Schema.encodeUnknownEffect(
@@ -1894,7 +1827,7 @@ export const make = Effect.fnUntraced(function* (
           canvasId: invocation.canvasId,
           reason: "Function does not exist",
         });
-      const canvas = GraphFunction.projectCanvas(fn);
+      const canvas = Scopes.lowerProjections(GraphFunction.projectCanvas(fn));
       const inputNode = yield* Canvas.getNode(canvas, GraphFunction.InputBoundaryNodeId);
       const inputSchema = yield* getSchema(registeredModules, inputNode);
       yield* executeEventNode(canvas, inputNode, inputSchema);
@@ -1904,7 +1837,7 @@ export const make = Effect.fnUntraced(function* (
     yield* Effect.forEach(
       Object.entries(currentProject.graphs),
       ([, graph]) => {
-        const canvas = graph.canvas;
+        const canvas = Scopes.lowerProjections(graph.canvas);
         return Effect.forEach(
           Object.values(canvas.nodes).filter((node) => node.schema.package === definition.id),
           (node) =>

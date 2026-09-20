@@ -350,6 +350,17 @@ export interface Interface {
       options: NodeDeleteOptions,
     ) => Effect.Effect<EditorEvent.NodeDeleted, NodeMutationError>;
   };
+  readonly scopeProjection: {
+    readonly create: (options: {
+      readonly graphID: string;
+      readonly position: { readonly x: number; readonly y: number };
+      readonly sourceNodeID: string;
+      readonly sourceOutput: OutputRef.Model;
+    }) => Effect.Effect<
+      EditorEvent.ScopeProjectionCreated,
+      NodeMutationError | Package.SchemaNotFoundError | Connection.InvalidError
+    >;
+  };
   readonly connection: {
     readonly create: (options: {
       readonly graphID: string;
@@ -490,8 +501,17 @@ export const layer = Layer.effect(Service)(
       node: Node.Model,
       definitions?: DataType.Definitions,
     ) {
+      if (Scopes.isProjectionNode(node)) {
+        const project = yield* persistence.loadProject();
+        const graph = Object.values(Project.canvases(project)).find(
+          (graph) => graph.scopeProjections?.[node.id] !== undefined,
+        );
+        if (graph === undefined) return emptyNodeIO;
+        const { declarations } = yield* graphWildcards(graph, {}, undefined, definitions);
+        return declarations.get(node.id) ?? emptyNodeIO;
+      }
       const io = yield* getBaseNodeIO(node, definitions);
-      if (!Scopes.isBreakScope(node) && !CustomTypes.isOperationNode(node)) return io;
+      if (!CustomTypes.isOperationNode(node)) return io;
       const project = yield* persistence.loadProject();
       const graph = Object.values(Project.canvases(project)).find((graph) =>
         Object.hasOwn(graph.nodes, node.id),
@@ -528,11 +548,11 @@ export const layer = Layer.effect(Service)(
           ));
         if (io !== undefined) declarations.set(node.id, io);
       }
-      for (const node of Object.values(graph.nodes)) {
-        if (!Scopes.isBreakScope(node)) continue;
-        const io = Scopes.resolveIO(graph, node.id, (id) => declarations.get(id));
-        if (io !== undefined) declarations.set(node.id, io);
-      }
+      for (const projection of Object.values(graph.scopeProjections ?? {}))
+        declarations.set(
+          projection.id,
+          Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
+        );
       const derive = CustomTypes.derivedIO(
         graph,
         definitions ?? (yield* persistence.loadProject()).types,
@@ -543,11 +563,11 @@ export const layer = Layer.effect(Service)(
           const derived = cache.derivedIO(id);
           if (derived !== undefined) declarations.set(id, { ...io, ...derived });
         }
-        for (const node of Object.values(graph.nodes)) {
-          if (!Scopes.isBreakScope(node)) continue;
-          const io = Scopes.resolveIO(graph, node.id, (id) => declarations.get(id));
-          if (io !== undefined) declarations.set(node.id, io);
-        }
+        for (const projection of Object.values(graph.scopeProjections ?? {}))
+          declarations.set(
+            projection.id,
+            Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
+          );
         result = cache.update(declarations, graph.connections, derive);
       }
       wildcardCaches.set(graph.id, cache);
@@ -711,6 +731,12 @@ export const layer = Layer.effect(Service)(
             after[nodeId] = io;
           }
         }
+        for (const projection of Object.values(graph.scopeProjections ?? {})) {
+          before[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => before[id]);
+          after[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => after[id]);
+          if (projectState(before[projection.id]) !== projectState(after[projection.id]))
+            add(projection.id, "Projected scope fields change");
+        }
         for (const wire of definitionsChanged ? graph.connections : []) {
           const oldOut = before[wire.outNodeId] ?? emptyNodeIO;
           const oldIn = before[wire.inNodeId] ?? emptyNodeIO;
@@ -802,6 +828,14 @@ export const layer = Layer.effect(Service)(
               resolved.add(nodeId);
             }
           }
+          for (const projection of Object.values(graph.scopeProjections ?? {})) {
+            nodeIO[graphId][projection.id] = Scopes.projectionIO(
+              graph,
+              projection.id,
+              (id) => nodeIO[graphId]?.[id],
+            );
+            resolved.add(projection.id);
+          }
           for (const connection of graph.connections) {
             if (
               (graph.nodes[connection.outNodeId] === undefined &&
@@ -841,6 +875,10 @@ export const layer = Layer.effect(Service)(
     ) {
       const node = graph.nodes[nodeId];
       if (node !== undefined) return yield* getNodeIO(node);
+      if (graph.scopeProjections?.[nodeId] !== undefined) {
+        const { declarations } = yield* graphWildcards(graph);
+        return declarations.get(nodeId) ?? emptyNodeIO;
+      }
       const fn = project.functions[graph.id];
       if (fn !== undefined) {
         const io = GraphFunction.boundaryIO(fn, nodeId);
@@ -1151,11 +1189,16 @@ export const layer = Layer.effect(Service)(
           return yield* new Clipboard.MissingSchemas({ schemas: [...missingSchemas.values()] });
         if (requests.length > 0) return yield* new Clipboard.RebindRequired({ requests });
         const nodes: Array<Node.Model> = [];
+        const scopeProjections: Array<Scopes.Projection> = [];
         const nodeIO: Record<string, NodeIO> = {};
         const remap = new Map<string, NodeId>();
+        const positions = [
+          ...fragment.nodes.map((node) => node.position),
+          ...(fragment.scopeProjections ?? []).map((projection) => projection.position),
+        ];
         const anchor = {
-          x: Math.min(...fragment.nodes.map((node) => node.position.x)),
-          y: Math.min(...fragment.nodes.map((node) => node.position.y)),
+          x: Math.min(...positions.map((position) => position.x)),
+          y: Math.min(...positions.map((position) => position.y)),
         };
         for (const source of resolved) {
           const node = yield* Effect.gen(function* () {
@@ -1220,16 +1263,39 @@ export const layer = Layer.effect(Service)(
           nodes.push(node);
           remap.set(source.id, node.id);
         }
+        for (const source of fragment.scopeProjections ?? []) {
+          let id = NodeId.make(crypto.randomUUID());
+          while (
+            Object.hasOwn(graph.nodes, id) ||
+            Object.hasOwn(graph.scopeProjections ?? {}, id) ||
+            nodes.some((node) => node.id === id) ||
+            scopeProjections.some((projection) => projection.id === id)
+          )
+            id = NodeId.make(crypto.randomUUID());
+          const position = {
+            x: options.position.x + source.position.x - anchor.x,
+            y: options.position.y + source.position.y - anchor.y,
+          };
+          if (!Clipboard.validPosition(position))
+            return yield* new Clipboard.InvalidError({ reason: "Pasted position exceeds limits" });
+          scopeProjections.push({ id, position });
+          remap.set(source.id, id);
+        }
         const connections: Array<Connection.Model> = [];
         const connectionIds = new Set(graph.connections.map((connection) => connection.id));
         const external =
           sameProject && fragment.source?.graphId === options.graphID
             ? (fragment.externalConnections ?? [])
             : [];
-        // Infer Break Scope pins from the complete proposed fragment, independent of wire order.
         const proposedGraph: Canvas.Model = {
           ...graph,
           nodes: { ...graph.nodes, ...Object.fromEntries(nodes.map((node) => [node.id, node])) },
+          scopeProjections: {
+            ...graph.scopeProjections,
+            ...Object.fromEntries(
+              scopeProjections.map((projection) => [projection.id, projection]),
+            ),
+          },
           connections: [
             ...graph.connections,
             ...[...fragment.connections, ...external]
@@ -1244,27 +1310,15 @@ export const layer = Layer.effect(Service)(
               })),
           ],
         };
-        const sourceIO = { ...nodeIO };
-        for (const node of nodes) {
-          if (!Scopes.isBreakScope(node)) continue;
-          const wire = proposedGraph.connections.find(
-            (wire) => wire.inNodeId === node.id && wire.inIoId === "scope",
-          );
-          if (wire !== undefined && sourceIO[wire.outNodeId] === undefined) {
-            const source = proposedGraph.nodes[wire.outNodeId];
-            if (source !== undefined)
-              sourceIO[source.id] = yield* getNodeIO(source).pipe(
-                Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(emptyNodeIO)),
-              );
-          }
-          nodeIO[node.id] =
-            Scopes.resolveIO(proposedGraph, node.id, (id) => sourceIO[id]) ?? Scopes.emptyIO;
-        }
-        if (nodes.some(CustomTypes.isOperationNode)) {
+        if (nodes.some(CustomTypes.isOperationNode) || scopeProjections.length > 0) {
           const inferred = yield* graphWildcards(proposedGraph, nodeIO);
           for (const node of nodes) {
             const io = inferred.declarations.get(node.id);
             if (io !== undefined) nodeIO[node.id] = io;
+          }
+          for (const projection of scopeProjections) {
+            const io = inferred.declarations.get(projection.id);
+            if (io !== undefined) nodeIO[projection.id] = io;
           }
         }
         const occupied = new Set(
@@ -1284,14 +1338,22 @@ export const layer = Layer.effect(Service)(
               ? yield* getNodeIO(graph.nodes[outNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : undefined);
+              : graph.scopeProjections?.[outNodeId] !== undefined
+                ? yield* endpointIO(project, graph, outNodeId).pipe(
+                    Effect.catchCause(() => Effect.succeed(undefined)),
+                  )
+                : undefined);
           const inputIO =
             nodeIO[inNodeId] ??
             (Object.hasOwn(graph.nodes, inNodeId)
               ? yield* getNodeIO(graph.nodes[inNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : undefined);
+              : graph.scopeProjections?.[inNodeId] !== undefined
+                ? yield* endpointIO(project, graph, inNodeId).pipe(
+                    Effect.catchCause(() => Effect.succeed(undefined)),
+                  )
+                : undefined);
           if (outputIO === undefined || inputIO === undefined) {
             if (isExternal) continue;
             return yield* new Clipboard.InvalidError({
@@ -1349,6 +1411,7 @@ export const layer = Layer.effect(Service)(
           _tag: "FragmentPasted",
           graphId: options.graphID,
           nodes,
+          scopeProjections,
           connections,
           nodeIO,
         });
@@ -1374,6 +1437,7 @@ export const layer = Layer.effect(Service)(
         return yield* new Clipboard.InvalidError({ reason: "Invalid cut selection" });
       const graph = yield* persistence.loadGraph(options.graphID);
       for (const id of options.nodeIds) {
+        if (graph.scopeProjections?.[id] !== undefined) continue;
         if (!Object.hasOwn(graph.nodes, id)) return yield* new Node.NotFoundError({ id });
         const node = yield* Canvas.getNode(graph, id);
         const schema = yield* packages.getSchema(node.schema).pipe(
@@ -1407,12 +1471,17 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       const persistedNode = graph.nodes[options.nodeID];
       if (persistedNode === undefined) {
-        const project = yield* persistence.loadProject();
-        const fn = project.functions[options.graphID];
-        if (fn === undefined || !GraphFunction.isBoundaryNodeId(options.nodeID))
-          return yield* new Node.NotFoundError({ id: options.nodeID });
-        if (options.name !== undefined)
-          return yield* new Node.NotFoundError({ id: options.nodeID });
+        if (graph.scopeProjections?.[options.nodeID] !== undefined) {
+          if (options.name !== undefined)
+            return yield* new Node.NotFoundError({ id: options.nodeID });
+        } else {
+          const project = yield* persistence.loadProject();
+          const fn = project.functions[options.graphID];
+          if (fn === undefined || !GraphFunction.isBoundaryNodeId(options.nodeID))
+            return yield* new Node.NotFoundError({ id: options.nodeID });
+          if (options.name !== undefined)
+            return yield* new Node.NotFoundError({ id: options.nodeID });
+        }
       }
 
       if (options.name !== undefined) {
@@ -1438,7 +1507,11 @@ export const layer = Layer.effect(Service)(
 
     const nodeDelete = Effect.fn("Editor.node.delete")(function* (options: NodeDeleteOptions) {
       const graph = yield* persistence.loadGraph(options.graphID);
-      yield* Canvas.getNode(graph, options.nodeID);
+      if (
+        graph.nodes[options.nodeID] === undefined &&
+        graph.scopeProjections?.[options.nodeID] === undefined
+      )
+        return yield* new Node.NotFoundError({ id: options.nodeID });
       const connections = graph.connections
         .filter(
           (connection) =>
@@ -1450,6 +1523,49 @@ export const layer = Layer.effect(Service)(
         graphId: options.graphID,
         nodeId: options.nodeID,
         deletedConnectionIds: connections.map((connection) => connection.id),
+      });
+    }, lock.withPermit);
+
+    const scopeProjectionCreate = Effect.fn("Editor.scopeProjection.create")(function* (options: {
+      readonly graphID: string;
+      readonly position: { readonly x: number; readonly y: number };
+      readonly sourceNodeID: string;
+      readonly sourceOutput: OutputRef.Model;
+    }) {
+      const graph = yield* persistence.loadGraph(options.graphID);
+      const project = yield* persistence.loadProject();
+      const sourceIO = yield* endpointIO(project, graph, options.sourceNodeID);
+      const output = OutputRef.resolve(sourceIO, options.sourceOutput);
+      if (
+        options.sourceOutput._tag !== "Port" ||
+        output?.kind !== "execution" ||
+        output.port.scope == null
+      )
+        return yield* new Connection.InvalidError({ reason: "Output is not a bundled scope" });
+      const id = NodeId.make(crypto.randomUUID());
+      const projection: Scopes.Projection = { id, position: options.position };
+      const connection: Connection.Model = {
+        id: Connection.ConnectionId.make(crypto.randomUUID()),
+        outNodeId: options.sourceNodeID,
+        outIo: options.sourceOutput,
+        inNodeId: id,
+        inIoId: Scopes.ProjectionInputId,
+      };
+      const candidate = {
+        ...graph,
+        scopeProjections: { ...graph.scopeProjections, [id]: projection },
+        connections: [...graph.connections, connection],
+      };
+      const io = Scopes.projectionIO(candidate, id, (nodeId) =>
+        nodeId === options.sourceNodeID ? sourceIO : undefined,
+      );
+      return yield* events.publish({
+        _tag: "ScopeProjectionCreated",
+        graphId: options.graphID,
+        projection,
+        node: Scopes.projectionNode(projection),
+        connection,
+        io,
       });
     }, lock.withPermit);
 
@@ -1807,7 +1923,9 @@ export const layer = Layer.effect(Service)(
       const graphs: Record<string, Canvas.Model> = {};
       for (const [graphId, persistedGraph] of Object.entries(Project.canvases(project))) {
         const fn = project.functions[graphId];
-        const graph = fn === undefined ? persistedGraph : GraphFunction.projectCanvas(fn);
+        const graph = Scopes.projectCanvas(
+          fn === undefined ? persistedGraph : GraphFunction.projectCanvas(fn),
+        );
         graphs[graphId] = graph;
         generated[graphId] = {};
         for (const node of Object.values(graph.nodes)) {
@@ -1836,19 +1954,22 @@ export const layer = Layer.effect(Service)(
       const graphs: Record<string, RenderedProject.Model["graphs"][string]> = {};
       for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
         const fn = project.functions[graphId];
+        const projectedGraph = Scopes.projectCanvas(graph);
         const nodes: Record<string, RenderedProject.Model["graphs"][string]["nodes"][string]> = {};
         const { cache, declarations, result } = yield* graphWildcards(graph);
         const schemas: Record<string, Record<string, Package.SchemaModel>> = {};
-        for (const node of Object.values(graph.nodes)) {
-          const schema = yield* packages
-            .getSchema(node.schema)
-            .pipe(
-              Effect.catchTag("SchemaNotFoundError", (error) =>
-                node.schema.package === CustomTypes.packageId
-                  ? Effect.succeed(undefined)
-                  : Effect.fail(error),
-              ),
-            );
+        for (const node of Object.values(projectedGraph.nodes)) {
+          const schema = Scopes.isProjectionNode(node)
+            ? undefined
+            : yield* packages
+                .getSchema(node.schema)
+                .pipe(
+                  Effect.catchTag("SchemaNotFoundError", (error) =>
+                    node.schema.package === CustomTypes.packageId
+                      ? Effect.succeed(undefined)
+                      : Effect.fail(error),
+                  ),
+                );
           nodes[node.id] = {
             ...node,
             io: Result.isFailure(result)
@@ -1864,7 +1985,7 @@ export const layer = Layer.effect(Service)(
               ...node,
               io: GraphFunction.boundaryIO(fn, node.id)!,
             };
-        graphs[graphId] = { ...graph, nodes, schemas };
+        graphs[graphId] = { ...projectedGraph, nodes, schemas };
       }
       return { ...project, graphs };
     }, lock.withPermit);
@@ -2254,6 +2375,7 @@ export const layer = Layer.effect(Service)(
         getInputSuggestions: nodeGetInputSuggestions,
         delete: nodeDelete,
       },
+      scopeProjection: { create: scopeProjectionCreate },
       connection: { create: connectionCreate, delete: connectionDelete },
       engine: {
         setState: engineSetState,

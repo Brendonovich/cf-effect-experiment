@@ -30,7 +30,7 @@ it.effect("registers an engine-less module without engine services, RPC clients,
     const catalog = yield* packages.getPackages();
     assert.deepStrictEqual(
       catalog.map((pkg) => pkg.id),
-      ["CustomTypes", "macrograph-functions", "Scopes", "stateless"],
+      ["CustomTypes", "macrograph-functions", "stateless"],
     );
     assert.deepStrictEqual(catalog.find((pkg) => pkg.id === "stateless")?.resources, []);
     assert.deepStrictEqual(

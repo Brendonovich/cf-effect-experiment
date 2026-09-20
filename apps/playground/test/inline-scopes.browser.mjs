@@ -316,11 +316,9 @@ export async function singleSchemaDrop(context) {
   await waitConnections(page, 2);
   const project = await saved(page);
   const nodes = Object.values(project.graphs.demo.nodes);
-  assert.equal(nodes.length, 4);
-  const inserted = nodes.find(
-    (node) => node.schema.package === "Scopes" && node.schema.schema === "BreakScope",
-  );
-  assert(inserted, "Dropping a scope should insert the sole compatible Break Scope schema");
+  assert.equal(nodes.length, 3);
+  const inserted = Object.values(project.graphs.demo.scopeProjections ?? {})[0];
+  assert(inserted, "Dropping a scope should insert a scope projection");
   assert(
     project.graphs.demo.connections.some(
       (wire) =>

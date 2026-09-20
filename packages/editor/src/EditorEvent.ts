@@ -7,6 +7,7 @@ import {
   Node,
   NodeIO,
   ResourceConstant,
+  Scopes,
 } from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
@@ -70,11 +71,24 @@ export const NodeCreated = Schema.TaggedStruct("NodeCreated", {
 });
 export type NodeCreated = typeof NodeCreated.Type;
 
+export const ScopeProjectionCreated = Schema.TaggedStruct("ScopeProjectionCreated", {
+  actor,
+  graphId: Schema.String,
+  projection: Scopes.Projection,
+  node: Node.Model,
+  connection: Connection.Model,
+  io: NodeIO,
+});
+export type ScopeProjectionCreated = typeof ScopeProjectionCreated.Type;
+
 export const FragmentPasted = Schema.TaggedStruct("FragmentPasted", {
   actor,
   graphId: Schema.String,
   nodes: Schema.Array(Node.Model),
   connections: Schema.Array(Connection.Model),
+  scopeProjections: Schema.Array(Scopes.Projection).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+  ),
   nodeIO: Schema.Record(Schema.String, NodeIO),
 });
 export type FragmentPasted = typeof FragmentPasted.Type;
@@ -229,6 +243,7 @@ export type Persistent =
   | FunctionCreated
   | FunctionUpdated
   | NodeCreated
+  | ScopeProjectionCreated
   | NodeDeleted
   | NodeNameChanged
   | NodePositionChanged

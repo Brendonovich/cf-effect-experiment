@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { CustomTypes, Function as GraphFunction, Project, Scopes } from "@macrograph/core";
+import { CustomTypes, Function as GraphFunction, Project } from "@macrograph/core";
 import {
   Editor,
   EditorAccess,
@@ -104,7 +104,6 @@ describe("workspace runtime activity access", () => {
           assert.deepStrictEqual(yield* client.GetPackages({}), [
             CustomTypes.packageModel,
             GraphFunction.packageModel,
-            Scopes.packageModel,
           ]);
           const presence = yield* client.PresenceStream().pipe(Stream.runHead);
           assert.isTrue(Option.isSome(presence));
