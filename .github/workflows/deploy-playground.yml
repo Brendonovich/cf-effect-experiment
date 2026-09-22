@@ -1,0 +1,50 @@
+name: Deploy Playground
+
+on:
+  push:
+    branches: [deploy/playground]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-playground
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build playground
+        run: pnpm --filter @macrograph/playground build
+
+      - name: Create Pages project
+        working-directory: apps/cloudflare
+        run: |
+          if ! pnpm exec wrangler pages project list | grep -q 'macrograph-playground'; then
+            pnpm exec wrangler pages project create macrograph-playground \
+              --production-branch deploy/playground
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy playground
+        working-directory: apps/cloudflare
+        run: pnpm exec wrangler pages deploy ../playground/dist --project-name macrograph-playground --branch deploy/playground
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
