@@ -1,8 +1,8 @@
-import { Engine, Resource, SafeObjectKey } from "@macrograph/module";
+import { Engine, Resource } from "@macrograph/module";
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const DeviceId = SafeObjectKey.pipe(Schema.brand("ElgatoKeyLightDeviceId"));
+export const DeviceId = Schema.String.pipe(Schema.brand("ElgatoKeyLightDeviceId"));
 export type DeviceId = typeof DeviceId.Type;
 
 export const DeviceDefinition = Schema.Struct({

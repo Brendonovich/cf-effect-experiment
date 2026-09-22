@@ -167,7 +167,9 @@ describe("custom data types", () => {
     };
     expect(DataType.isValue(DataType.Custom(resultId), {}, invalid)).toBe(false);
     expect(DataType.isValue(DataType.Custom(treeId), {}, invalid)).toBe(false);
-    expect(() => DataType.DefinitionId.make("constructor")).toThrow();
+    expect(DataType.isValue(DataType.Custom(DataType.DefinitionId.make("constructor")), {})).toBe(
+      false,
+    );
   });
 
   it("reports cyclic and excessively deep payloads as schema errors, not recursion defects", () => {

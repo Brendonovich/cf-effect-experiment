@@ -2,7 +2,6 @@ import type { EventTraceContext } from "@macrograph/cloud-api";
 
 import { Project } from "@macrograph/core";
 import * as Executor from "@macrograph/execution/Executor";
-import { SafeObjectKey } from "@macrograph/module";
 import { ExecutionStep, GraphExecution } from "@macrograph/workflow-runtime";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
@@ -24,7 +23,7 @@ import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
-const ExecutionNodeRecordId = SafeObjectKey.pipe(Schema.brand("ExecutionNodeRecordId"));
+const ExecutionNodeRecordId = Schema.String.pipe(Schema.brand("ExecutionNodeRecordId"));
 
 export interface GraphExecutionWorkflowInput {
   readonly executionId: string;

@@ -1,10 +1,9 @@
-import { SafeObjectKey } from "@macrograph/module";
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const ConnectionId = SafeObjectKey.pipe(Schema.brand("WebSocketConnectionId"));
+export const ConnectionId = Schema.String.pipe(Schema.brand("WebSocketConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
 export const ConnectionDefinition = Schema.Struct({

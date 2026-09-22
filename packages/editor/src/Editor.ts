@@ -24,7 +24,6 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { SafeObjectKey } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import * as Registration from "@macrograph/module/Registration";
@@ -46,7 +45,7 @@ import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
 import { Packages } from "./Packages.ts";
 
-const ResourceKey = SafeObjectKey.pipe(Schema.brand("ResourceKey"));
+const ResourceKey = Schema.String.pipe(Schema.brand("ResourceKey"));
 type ResourceKey = typeof ResourceKey.Type;
 
 type GraphUpdateOptions = {
