@@ -1,4 +1,5 @@
 import {
+  Canvas,
   Connection,
   Graph,
   Node,
@@ -16,7 +17,7 @@ export const getGraph = Effect.fn("ProjectOperations.getGraph")(function* (
   editor: Editor,
   graphId: string,
 ): Effect.fn.Return<
-  { readonly graph: Graph.Model; readonly nodeIO: Readonly<Record<string, NodeIO>> },
+  { readonly graph: Canvas.Model; readonly nodeIO: Readonly<Record<string, NodeIO>> },
   Project.NotFoundError | PersistenceError | Graph.NotFoundError
 > {
   const snapshot = yield* editor.project.snapshot();
@@ -27,13 +28,12 @@ export const getGraph = Effect.fn("ProjectOperations.getGraph")(function* (
 
 export const createGraph = Effect.fn("ProjectOperations.createGraph")(function* (
   editor: Editor,
-  input: Graph.CreateRequest,
+  input: Canvas.CreateRequest,
 ): Effect.fn.Return<
-  Graph.Model,
+  Canvas.Model,
   | PersistenceError
   | Project.NotFoundError
   | Graph.NotFoundError
-  | Graph.FunctionError
   | Node.NotFoundError
   | Package.SchemaNotFoundError
   | Package.InvalidPropertyError
@@ -50,16 +50,18 @@ export const createGraph = Effect.fn("ProjectOperations.createGraph")(function* 
       });
   }
 
-  const created = yield* editor.graph.create({
-    ...(input.name === undefined ? {} : { name: input.name }),
-    ...(input.kind === undefined ? {} : { kind: input.kind }),
-    ...(input.signature === undefined ? {} : { signature: input.signature }),
-  });
+  const created = yield* editor.graph.create(input.name === undefined ? {} : { name: input.name });
 
   return yield* Effect.gen(function* () {
     const nodeIds = new Map<string, string>();
     for (const [reference, node] of Object.entries(nodes)) {
-      const event = yield* editor.node.create({ graphID: created.graph.id, node });
+      const event = yield* editor.node
+        .create({ graphID: created.graph.id, node })
+        .pipe(
+          Effect.catchTag("FunctionEventNodeNotAllowedError", () =>
+            Effect.die("A newly-created graph was unexpectedly treated as a function"),
+          ),
+        );
       nodeIds.set(reference, event.node.id);
     }
 
@@ -80,7 +82,7 @@ export const createGraph = Effect.fn("ProjectOperations.createGraph")(function* 
   }).pipe(
     Effect.catchCause((cause) =>
       editor.graph
-        .delete({ graphID: created.graph.id, force: true })
+        .delete({ graphID: created.graph.id })
         .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
     ),
   );

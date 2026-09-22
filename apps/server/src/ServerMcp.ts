@@ -1,7 +1,7 @@
 import {
+  Canvas,
+  CanvasId,
   Connection,
-  Graph,
-  GraphId,
   Node,
   NodeIO,
   Package,
@@ -30,7 +30,7 @@ export const toolkit = Toolkit.make(
   Tool.make("listGraphs", {
     description: "List graph IDs and names in this server's project.",
     success: Schema.Struct({
-      graphs: Schema.Array(Schema.Struct({ id: GraphId, name: Schema.String })),
+      graphs: Schema.Array(Schema.Struct({ id: CanvasId, name: Schema.String })),
     }),
     failure: Schema.Unknown,
   })
@@ -40,7 +40,7 @@ export const toolkit = Toolkit.make(
     description:
       "Inspect a graph, including all nodes, connections, and resolved node inputs and outputs.",
     parameters: Schema.Struct(graphParameters),
-    success: Schema.Struct({ graph: Graph.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
+    success: Schema.Struct({ graph: Canvas.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
     failure: Schema.Unknown,
   })
     .addDependency(CurrentSession)
@@ -48,8 +48,8 @@ export const toolkit = Toolkit.make(
   Tool.make("createGraph", {
     description:
       "PREFERRED: Create an entire graph in one request, including its name, nodes, and connections. Nodes are keyed by temporary local IDs, and connections reference those IDs. Node schemas use { package, schema }; resource properties use matching resource IDs returned by searchSchemas. Use searchSchemas only if schema IDs, ports, or resources are unknown. Prefer this compound tool over separate createNode/createConnection calls.",
-    parameters: Graph.CreateRequest,
-    success: Schema.Struct({ graph: Graph.Model }),
+    parameters: Canvas.CreateRequest,
+    success: Schema.Struct({ graph: Canvas.Model }),
     failure: Schema.Unknown,
   }).addDependency(CurrentSession),
   Tool.make("deleteGraph", {
@@ -138,9 +138,9 @@ export const layer = (basePath: string) =>
         listGraphs: () =>
           editor.project.get().pipe(
             Effect.map((project) => ({
-              graphs: Object.values(project.graphs).map((graph) => ({
-                id: graph.id,
-                name: graph.name,
+              graphs: Object.values(project.graphs).map(({ canvas }) => ({
+                id: canvas.id,
+                name: canvas.name,
               })),
             })),
           ),
@@ -150,9 +150,7 @@ export const layer = (basePath: string) =>
             Effect.map((graph) => ({ graph })),
           ),
         deleteGraph: ({ graphId }) =>
-          withActor(editor.graph.delete({ graphID: graphId, force: true })).pipe(
-            Effect.as({ deleted: true }),
-          ),
+          withActor(editor.graph.delete({ graphID: graphId })).pipe(Effect.as({ deleted: true })),
         searchSchemas: (options) =>
           Effect.gen(function* () {
             const [loadedPackages, project] = yield* Effect.all([
