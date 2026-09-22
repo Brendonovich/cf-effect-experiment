@@ -8,7 +8,7 @@ import {
   PackageId,
   ResourceConstant,
 } from "@macrograph/core";
-import { Editor, EditorEvents, Packages } from "@macrograph/editor";
+import { Editor, EditorEvents, Packages, ProjectOperations } from "@macrograph/editor";
 import { layer as mcpLayer } from "@macrograph/mcp";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
@@ -134,13 +134,6 @@ export const layer = (basePath: string) =>
             editorEvents.withActor(effect, { type: "CLIENT", id: `mcp-${session.userId}` }),
           ),
         );
-      const getGraph = Effect.fnUntraced(function* (graphId: string) {
-        const snapshot = yield* editor.project.snapshot();
-        const graph = snapshot.project.graphs[graphId];
-        if (graph === undefined) return yield* new Graph.NotFoundError({ id: graphId });
-        return { graph, nodeIO: snapshot.nodeIO[graphId] ?? {} };
-      });
-
       const handlers = toolkit.of({
         listGraphs: () =>
           editor.project.get().pipe(
@@ -151,122 +144,27 @@ export const layer = (basePath: string) =>
               })),
             })),
           ),
-        getGraph: ({ graphId }) => getGraph(graphId),
+        getGraph: ({ graphId }) => ProjectOperations.getGraph(editor, graphId),
         createGraph: (input) =>
-          withActor(
-            Effect.gen(function* () {
-              const nodes = input.nodes ?? {};
-              const connections = input.connections ?? [];
-              for (const connection of connections) {
-                if (
-                  !Object.hasOwn(nodes, connection.outNodeId) ||
-                  !Object.hasOwn(nodes, connection.inNodeId)
-                )
-                  return yield* new Connection.InvalidError({
-                    reason: "Connection references a node that is not being created",
-                  });
-              }
-              const created = yield* editor.graph.create({
-                ...(input.name === undefined ? {} : { name: input.name }),
-                ...(input.kind === undefined ? {} : { kind: input.kind }),
-                ...(input.signature === undefined ? {} : { signature: input.signature }),
-              });
-              return yield* Effect.gen(function* () {
-                const nodeIds = new Map<string, string>();
-                for (const [reference, node] of Object.entries(nodes)) {
-                  const event = yield* editor.node.create({ graphID: created.graph.id, node });
-                  nodeIds.set(reference, event.node.id);
-                }
-                for (const connection of connections) {
-                  const outNodeId = nodeIds.get(connection.outNodeId);
-                  const inNodeId = nodeIds.get(connection.inNodeId);
-                  if (outNodeId === undefined || inNodeId === undefined)
-                    return yield* new Connection.InvalidError({
-                      reason: "Connection references a node that is not being created",
-                    });
-                  yield* editor.connection.create({
-                    graphID: created.graph.id,
-                    connection: { ...connection, outNodeId, inNodeId },
-                  });
-                }
-                const result = yield* getGraph(created.graph.id);
-                return { graph: result.graph };
-              }).pipe(
-                Effect.catchCause((cause) =>
-                  editor.graph
-                    .delete({ graphID: created.graph.id, force: true })
-                    .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
-                ),
-              );
-            }),
+          withActor(ProjectOperations.createGraph(editor, input)).pipe(
+            Effect.map((graph) => ({ graph })),
           ),
         deleteGraph: ({ graphId }) =>
           withActor(editor.graph.delete({ graphID: graphId, force: true })).pipe(
             Effect.as({ deleted: true }),
           ),
-        searchSchemas: ({ query, queries, limit }) =>
+        searchSchemas: (options) =>
           Effect.gen(function* () {
             const [loadedPackages, project] = yield* Effect.all([
               packages.getPackages(),
               editor.project.get(),
             ]);
-            const resources = Object.values(project.constants);
-            const searches = [...(query === undefined ? [] : [query]), ...(queries ?? [])]
-              .map((value) => value.trim().toLowerCase())
-              .filter(Boolean);
-            const schemas = loadedPackages.flatMap((pkg) =>
-              pkg.schemas
-                .map((schema) => {
-                  const fields = [
-                    schema.id,
-                    schema.name,
-                    pkg.id,
-                    pkg.name,
-                    schema.description ?? "",
-                  ].map((value) => value.toLowerCase());
-                  const text = fields.join(" ");
-                  const scores = searches
-                    .filter((search) => search.split(/\s+/).every((term) => text.includes(term)))
-                    .map((search) => {
-                      const exact = fields.findIndex((field) => field === search);
-                      if (exact !== -1) return exact;
-                      const prefix = fields.findIndex((field) => field.startsWith(search));
-                      if (prefix !== -1) return fields.length + prefix;
-                      const substring = fields.findIndex((field) => field.includes(search));
-                      return substring === -1 ? fields.length * 3 : fields.length * 2 + substring;
-                    });
-                  if (searches.length > 0 && scores.length === 0) return undefined;
-                  const matchingResources: Record<
-                    string,
-                    { id: ResourceConstant.Id; name: string }[]
-                  > = {};
-                  for (const property of schema.properties) {
-                    if (!("resource" in property)) continue;
-                    matchingResources[property.id] = resources
-                      .filter(
-                        (resource) =>
-                          resource.resource.package === pkg.id &&
-                          resource.resource.resource === property.resource,
-                      )
-                      .map(({ id, name }) => ({ id, name }));
-                  }
-                  return {
-                    package: pkg.id,
-                    schema,
-                    resources: matchingResources,
-                    score: scores.length === 0 ? 0 : Math.min(...scores),
-                  };
-                })
-                .filter((schema) => schema !== undefined),
-            );
-            schemas.sort(
-              (left, right) =>
-                left.score - right.score ||
-                left.package.localeCompare(right.package) ||
-                left.schema.id.localeCompare(right.schema.id),
-            );
             return {
-              schemas: schemas.slice(0, limit ?? 20).map(({ score: _, ...schema }) => schema),
+              schemas: ProjectOperations.searchSchemas(
+                loadedPackages,
+                Object.values(project.constants),
+                options,
+              ),
             };
           }),
         listResources: () =>
