@@ -24,6 +24,23 @@ export const CreateInput = Schema.Struct({
 });
 export type CreateInput = typeof CreateInput.Type;
 
+export const CreateRequest = Schema.Struct({
+  name: Schema.optional(Schema.String.annotate({ description: "Display name for the new graph." })),
+  nodes: Schema.optional(
+    Schema.Record(Schema.String, Node.CreateInput).annotate({
+      description:
+        "Node definitions keyed by temporary client-defined IDs. Connections in this request reference those IDs.",
+    }),
+  ),
+  connections: Schema.optional(
+    Schema.Array(Connection.CreateInput).annotate({
+      description:
+        "Connections between nodes in this request, using their temporary node IDs and schema port IDs.",
+    }),
+  ),
+});
+export type CreateRequest = typeof CreateRequest.Type;
+
 export const empty = (id: string): Model => ({
   id: CanvasId.make(id),
   name: id,

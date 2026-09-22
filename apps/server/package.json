@@ -21,6 +21,7 @@
     "@macrograph/editor": "workspace:*",
     "@macrograph/execution": "workspace:*",
     "@macrograph/live-runtime": "workspace:*",
+    "@macrograph/mcp": "workspace:*",
     "@macrograph/module": "workspace:*",
     "@macrograph/module-discord": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
