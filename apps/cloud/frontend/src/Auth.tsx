@@ -6,6 +6,7 @@ import { createContext, createMemo, refresh, useContext } from "solid-js";
 
 import { type ApiClient, makeApiClient, publicWorkerOrigin, runApiResult } from "./api";
 import { cloudLogin } from "./cloudLogin";
+import { isPreviewDeployment, previewSession } from "./previewAuth";
 import { logoutWebsite } from "./websiteLogout";
 
 interface AuthContextValue {
@@ -22,11 +23,13 @@ export function AuthProvider(props: { readonly children: JSX.Element }) {
   let signingOut = false;
   const api = makeApiClient(publicWorkerOrigin(), () => signingOut);
   const status = createMemo<SessionStatus | { state: "failed" }>(() =>
-    cloudLogin(
-      api.session,
-      location.origin === "https://cloud.macrograph.app" &&
-        new URLSearchParams(location.search).get("logout") !== "failed",
-    ),
+    isPreviewDeployment()
+      ? previewSession(api.session)
+      : cloudLogin(
+          api.session,
+          location.origin === "https://cloud.macrograph.app" &&
+            new URLSearchParams(location.search).get("logout") !== "failed",
+        ),
   );
 
   const signOut = async () => {

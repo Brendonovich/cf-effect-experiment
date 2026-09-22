@@ -6,6 +6,7 @@ export * from "./ExecutionsApi.ts";
 export * from "./EventsApi.ts";
 export * from "./Models.ts";
 export * from "./PreviewsApi.ts";
+export * from "./PreviewAuthApi.ts";
 export * from "./ProjectsApi.ts";
 export * from "./DeploymentsApi.ts";
 export * from "./SessionApi.ts";
