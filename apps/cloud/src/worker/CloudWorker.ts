@@ -20,6 +20,7 @@ import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as PreviewAuth from "../auth/PreviewAuth.ts";
+import PreviewAuthGrantDO from "../auth/PreviewAuthGrantDO.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as DeploymentPolicy from "../deployment/DeploymentPolicy.ts";
@@ -115,6 +116,7 @@ export default Layer.unwrap(
         const runtimeContext = yield* Alchemy.RuntimeContext;
         if (credentialOAuthStateSecret !== undefined)
           yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
+        yield* PreviewAuthGrantDO;
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
         const policies = Layer.mergeAll(
           CredentialPolicy.layer,
