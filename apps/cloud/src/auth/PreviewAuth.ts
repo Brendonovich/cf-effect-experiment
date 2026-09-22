@@ -4,14 +4,13 @@ import {
   sessionSecurity,
   type PreviewTokenRequest,
 } from "@macrograph/cloud-api";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Layer, Schema } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import { projects, teamMemberships, teams, users } from "../database/DatabaseSchema.ts";
-import { DeploymentStage } from "../DeploymentStage.ts";
 import * as Authentication from "./Authentication.ts";
 import PreviewAuthGrantDO from "./PreviewAuthGrantDO.ts";
 
@@ -66,7 +65,6 @@ export const pkceChallenge = (verifier: string) =>
   );
 
 export const make = Effect.gen(function* () {
-  const stage = yield* DeploymentStage;
   const authentication = yield* Authentication.Service;
   const database = yield* Database.Service;
 
@@ -82,6 +80,7 @@ export const make = Effect.gen(function* () {
   const requireProduction = Effect.fnUntraced(function* (
     request: HttpServerRequest.HttpServerRequest,
   ) {
+    const stage = yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie);
     if (stage !== "production" || requestOrigin(request) !== productionOrigin)
       return yield* new HttpApiError.Forbidden();
     yield* noStore;
@@ -90,6 +89,7 @@ export const make = Effect.gen(function* () {
   const requirePreview = Effect.fnUntraced(function* (
     request: HttpServerRequest.HttpServerRequest,
   ) {
+    const stage = yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie);
     const origin = requestOrigin(request);
     if (!/^pr\d+$/.test(stage) || !isPreviewOrigin(origin) || request.headers.origin !== origin)
       return yield* new HttpApiError.Forbidden();

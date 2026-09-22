@@ -10,7 +10,6 @@ import * as Planetscale from "alchemy/Planetscale";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
-import { DeploymentStage } from "./src/DeploymentStage.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
 import {
@@ -89,7 +88,6 @@ export default Alchemy.Stack(
       const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
         Effect.provide(CloudWorkerLayer),
         Effect.provideService(CredentialOAuthStateSecret, credentialOAuthStateSecret),
-        Effect.provideService(DeploymentStage, stage),
         Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
         Effect.provideService(IngressPublicOrigin, ingressWorker.url),
       );

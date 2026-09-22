@@ -5,19 +5,16 @@ import {
   sessionSecurity,
 } from "@macrograph/cloud-api";
 import { and, eq } from "drizzle-orm";
-import { Context, Effect, Layer } from "effect";
+import { Config, Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import { apiKeys, users } from "../database/DatabaseSchema.ts";
-import { DeploymentStage } from "../DeploymentStage.ts";
 import CloudAuthDO from "./CloudAuthDO.ts";
 
 export const make = Effect.gen(function* () {
-  const stage = yield* DeploymentStage;
-  const isPreview = /^pr\d+$/.test(stage);
   const database = yield* Database.Service;
   const cloudAuths = yield* CloudAuthDO;
   const cloudAuth = (sessionId: string) => cloudAuths.getByName(sessionId);
@@ -33,6 +30,7 @@ export const make = Effect.gen(function* () {
 
   const authenticatedSession = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
+      const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
       const sessionId = request.cookies[sessionCookieName];
       if (!sessionId || !hasTrustedOrigin(request)) return yield* new HttpApiError.Unauthorized();
       const userId = yield* isPreview
@@ -75,6 +73,7 @@ export const make = Effect.gen(function* () {
 
   const authenticateBearer = () =>
     Effect.gen(function* () {
+      const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
       if (isPreview) return yield* new HttpApiError.Unauthorized();
       const request = yield* HttpServerRequest.HttpServerRequest;
       const match = /^Bearer ([^\s]+)$/i.exec(request.headers.authorization ?? "");
@@ -116,6 +115,7 @@ export const make = Effect.gen(function* () {
     authenticateBearer,
     sessionStatus: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
+        const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
         const existingSessionId = request.cookies[sessionCookieName] || undefined;
         const sessionId = existingSessionId ?? crypto.randomUUID();
         if (existingSessionId === undefined) yield* setSessionCookie(request, sessionId);
@@ -135,6 +135,7 @@ export const make = Effect.gen(function* () {
       }),
     startWebsiteSession: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
+        const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
         if (isPreview) return yield* new HttpApiError.Forbidden();
         yield* requireWebsiteOrigin(request);
 
@@ -147,6 +148,7 @@ export const make = Effect.gen(function* () {
       }),
     pollWebsiteSession: (sessionId: string, request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
+        const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
         if (isPreview) return yield* new HttpApiError.Forbidden();
         yield* requireWebsiteOrigin(request);
         const status = yield* cloudAuth(sessionId).poll();
@@ -158,6 +160,7 @@ export const make = Effect.gen(function* () {
       }),
     startSession: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
+        const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
         if (isPreview) return { state: "disconnected" as const };
         if (!hasTrustedOrigin(request)) return { state: "disconnected" as const };
         const existingSessionId = request.cookies[sessionCookieName] || undefined;
@@ -169,6 +172,7 @@ export const make = Effect.gen(function* () {
       }),
     pollSession: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
+        const isPreview = /^pr\d+$/.test(yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie));
         if (isPreview) return { state: "disconnected" as const };
         const sessionId = request.cookies[sessionCookieName];
         if (!sessionId || !hasTrustedOrigin(request)) return { state: "disconnected" as const };
@@ -200,11 +204,12 @@ export const layer = Layer.effect(Service)(make);
 export const middleware = Layer.effect(Authentication)(
   Effect.gen(function* () {
     const authentication = yield* Service;
-    const stage = yield* DeploymentStage;
-    const isPreview = /^pr\d+$/.test(stage);
     return {
       bearer: (effect) =>
         Effect.gen(function* () {
+          const isPreview = /^pr\d+$/.test(
+            yield* Config.string("ALCHEMY_STAGE").pipe(Effect.orDie),
+          );
           const request = yield* HttpServerRequest.HttpServerRequest;
           if (request.headers.authorization !== undefined) {
             const user = yield* authentication.authenticateBearer();
