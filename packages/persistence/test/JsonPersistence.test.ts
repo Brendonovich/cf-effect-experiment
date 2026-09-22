@@ -148,6 +148,7 @@ describe("JsonPersistence", () => {
         id: GraphId.make("graph-1"),
         name: "My Graph",
         nodes: {},
+        scopeProjections: new Map([["break", { x: 1, y: 2 }]]),
         connections: [],
       };
       const project = {
@@ -164,6 +165,10 @@ describe("JsonPersistence", () => {
       assert.strictEqual(loaded.name, "My Project");
       assert.ok(loaded.graphs["graph-1"]);
       assert.strictEqual(loaded.graphs["graph-1"].canvas.name, "My Graph");
+      assert.deepStrictEqual(
+        loaded.graphs["graph-1"].canvas.scopeProjections,
+        graph.scopeProjections,
+      );
       assert.deepStrictEqual(loaded.engines, project.engines);
     }).pipe(Effect.provide(TestLayer)),
   );

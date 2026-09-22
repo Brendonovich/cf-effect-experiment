@@ -135,9 +135,11 @@ const emptyNodeIO: NodeIO = {
 // Exact canonical state, not a hash: no collision can authorize a stale proposal.
 const projectState = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
-    item !== null && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
-      : item,
+    item instanceof Map
+      ? [...item.entries()].sort(([a], [b]) => String(a).localeCompare(String(b)))
+      : item !== null && typeof item === "object" && !Array.isArray(item)
+        ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+        : item,
   );
 
 export class EngineNotRegistered extends Schema.TaggedError<EngineNotRegistered>()(
@@ -504,7 +506,7 @@ export const layer = Layer.effect(Service)(
       if (Scopes.isProjectionNode(node)) {
         const project = yield* persistence.loadProject();
         const graph = Object.values(Project.canvases(project)).find(
-          (graph) => graph.scopeProjections?.[node.id] !== undefined,
+          (graph) => graph.scopeProjections?.has(node.id) === true,
         );
         if (graph === undefined) return emptyNodeIO;
         const { declarations } = yield* graphWildcards(graph, {}, undefined, definitions);
@@ -548,7 +550,7 @@ export const layer = Layer.effect(Service)(
           ));
         if (io !== undefined) declarations.set(node.id, io);
       }
-      for (const projection of Object.values(graph.scopeProjections ?? {}))
+      for (const projection of Scopes.values(graph.scopeProjections))
         declarations.set(
           projection.id,
           Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
@@ -563,7 +565,7 @@ export const layer = Layer.effect(Service)(
           const derived = cache.derivedIO(id);
           if (derived !== undefined) declarations.set(id, { ...io, ...derived });
         }
-        for (const projection of Object.values(graph.scopeProjections ?? {}))
+        for (const projection of Scopes.values(graph.scopeProjections))
           declarations.set(
             projection.id,
             Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
@@ -731,7 +733,7 @@ export const layer = Layer.effect(Service)(
             after[nodeId] = io;
           }
         }
-        for (const projection of Object.values(graph.scopeProjections ?? {})) {
+        for (const projection of Scopes.values(graph.scopeProjections)) {
           before[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => before[id]);
           after[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => after[id]);
           if (projectState(before[projection.id]) !== projectState(after[projection.id]))
@@ -828,7 +830,7 @@ export const layer = Layer.effect(Service)(
               resolved.add(nodeId);
             }
           }
-          for (const projection of Object.values(graph.scopeProjections ?? {})) {
+          for (const projection of Scopes.values(graph.scopeProjections)) {
             nodeIO[graphId][projection.id] = Scopes.projectionIO(
               graph,
               projection.id,
@@ -875,7 +877,7 @@ export const layer = Layer.effect(Service)(
     ) {
       const node = graph.nodes[nodeId];
       if (node !== undefined) return yield* getNodeIO(node);
-      if (graph.scopeProjections?.[nodeId] !== undefined) {
+      if (graph.scopeProjections?.has(nodeId) === true) {
         const { declarations } = yield* graphWildcards(graph);
         return declarations.get(nodeId) ?? emptyNodeIO;
       }
@@ -1267,7 +1269,7 @@ export const layer = Layer.effect(Service)(
           let id = NodeId.make(crypto.randomUUID());
           while (
             Object.hasOwn(graph.nodes, id) ||
-            Object.hasOwn(graph.scopeProjections ?? {}, id) ||
+            graph.scopeProjections?.has(id) === true ||
             nodes.some((node) => node.id === id) ||
             scopeProjections.some((projection) => projection.id === id)
           )
@@ -1290,12 +1292,10 @@ export const layer = Layer.effect(Service)(
         const proposedGraph: Canvas.Model = {
           ...graph,
           nodes: { ...graph.nodes, ...Object.fromEntries(nodes.map((node) => [node.id, node])) },
-          scopeProjections: {
-            ...graph.scopeProjections,
-            ...Object.fromEntries(
-              scopeProjections.map((projection) => [projection.id, projection]),
-            ),
-          },
+          scopeProjections: new Map([
+            ...(graph.scopeProjections ?? []),
+            ...scopeProjections.map((projection) => [projection.id, projection.position] as const),
+          ]),
           connections: [
             ...graph.connections,
             ...[...fragment.connections, ...external]
@@ -1338,7 +1338,7 @@ export const layer = Layer.effect(Service)(
               ? yield* getNodeIO(graph.nodes[outNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : graph.scopeProjections?.[outNodeId] !== undefined
+              : graph.scopeProjections?.has(outNodeId) === true
                 ? yield* endpointIO(project, graph, outNodeId).pipe(
                     Effect.catchCause(() => Effect.succeed(undefined)),
                   )
@@ -1349,7 +1349,7 @@ export const layer = Layer.effect(Service)(
               ? yield* getNodeIO(graph.nodes[inNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : graph.scopeProjections?.[inNodeId] !== undefined
+              : graph.scopeProjections?.has(inNodeId) === true
                 ? yield* endpointIO(project, graph, inNodeId).pipe(
                     Effect.catchCause(() => Effect.succeed(undefined)),
                   )
@@ -1437,7 +1437,7 @@ export const layer = Layer.effect(Service)(
         return yield* new Clipboard.InvalidError({ reason: "Invalid cut selection" });
       const graph = yield* persistence.loadGraph(options.graphID);
       for (const id of options.nodeIds) {
-        if (graph.scopeProjections?.[id] !== undefined) continue;
+        if (graph.scopeProjections?.has(id) === true) continue;
         if (!Object.hasOwn(graph.nodes, id)) return yield* new Node.NotFoundError({ id });
         const node = yield* Canvas.getNode(graph, id);
         const schema = yield* packages.getSchema(node.schema).pipe(
@@ -1471,7 +1471,7 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       const persistedNode = graph.nodes[options.nodeID];
       if (persistedNode === undefined) {
-        if (graph.scopeProjections?.[options.nodeID] !== undefined) {
+        if (graph.scopeProjections?.has(options.nodeID) === true) {
           if (options.name !== undefined)
             return yield* new Node.NotFoundError({ id: options.nodeID });
         } else {
@@ -1509,7 +1509,7 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       if (
         graph.nodes[options.nodeID] === undefined &&
-        graph.scopeProjections?.[options.nodeID] === undefined
+        graph.scopeProjections?.has(options.nodeID) !== true
       )
         return yield* new Node.NotFoundError({ id: options.nodeID });
       const connections = graph.connections
@@ -1553,7 +1553,7 @@ export const layer = Layer.effect(Service)(
       };
       const candidate = {
         ...graph,
-        scopeProjections: { ...graph.scopeProjections, [id]: projection },
+        scopeProjections: new Map(graph.scopeProjections).set(id, projection.position),
         connections: [...graph.connections, connection],
       };
       const io = Scopes.projectionIO(candidate, id, (nodeId) =>

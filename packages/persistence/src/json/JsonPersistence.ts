@@ -80,8 +80,11 @@ export const layer = (dir: string) =>
           .pipe(PersistenceError.refail);
 
         for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
+          const encoded = yield* Schema.encodeUnknownEffect(Canvas.Model)(graph).pipe(
+            PersistenceError.refail,
+          );
           yield* fs
-            .writeFileString(graphFilePath(graphId), JSON.stringify(graph, null, 2))
+            .writeFileString(graphFilePath(graphId), JSON.stringify(encoded, null, 2))
             .pipe(PersistenceError.refail);
         }
       }, lock.withPermit);
@@ -166,8 +169,11 @@ export const layer = (dir: string) =>
       // }, lock.withPermit);
 
       const saveGraph = Effect.fnUntraced(function* (graph: Canvas.Model) {
+        const encoded = yield* Schema.encodeUnknownEffect(Canvas.Model)(graph).pipe(
+          PersistenceError.refail,
+        );
         yield* fs
-          .writeFileString(graphFilePath(graph.id), JSON.stringify(graph, null, 2))
+          .writeFileString(graphFilePath(graph.id), JSON.stringify(encoded, null, 2))
           .pipe(PersistenceError.refail);
       }, lock.withPermit);
 

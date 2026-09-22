@@ -317,7 +317,7 @@ export async function singleSchemaDrop(context) {
   const project = await saved(page);
   const nodes = Object.values(project.graphs.demo.nodes);
   assert.equal(nodes.length, 3);
-  const inserted = Object.values(project.graphs.demo.scopeProjections ?? {})[0];
+  const inserted = project.graphs.demo.scopeProjections?.[0];
   assert(inserted, "Dropping a scope should insert a scope projection");
   assert(
     project.graphs.demo.connections.some(

@@ -28,7 +28,7 @@ export const empty = (id: string): Model => ({
   id: CanvasId.make(id),
   name: id,
   nodes: {},
-  scopeProjections: {},
+  scopeProjections: new Map(),
   connections: [],
 });
 

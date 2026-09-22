@@ -82,7 +82,7 @@ const project = (target = "break") =>
             scopeSink: node("scopeSink", "scope-test", "scopeSink"),
             wrongSink: node("wrongSink", "scope-test", "wrongSink"),
           },
-          scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
+          scopeProjections: [["break", { x: 0, y: 0 }]],
           connections:
             target === "break"
               ? [
@@ -121,7 +121,7 @@ describe("scope execution", () => {
               nodes: {
                 event: node("event", module.id, "event"),
               },
-              scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
+              scopeProjections: [["break", { x: 0, y: 0 }]],
               connections: [wire("scope", "event", "empty", "break", "scope")],
             },
           },

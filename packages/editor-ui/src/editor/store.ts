@@ -18,7 +18,7 @@ type MutableGraph = {
   id: Canvas.CanvasId;
   name: string;
   nodes: Record<string, Node.Model>;
-  scopeProjections: Record<string, Scopes.Projection>;
+  scopeProjections: Map<string, Scopes.Projection["position"]>;
   connections: Connection.Model[];
 };
 
@@ -72,7 +72,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                     {
                       ...graph,
                       nodes: { ...graph.nodes },
-                      scopeProjections: { ...(graph.scopeProjections ?? {}) },
+                      scopeProjections: new Map(graph.scopeProjections),
                       connections: [...graph.connections],
                     },
                   ]),
@@ -104,7 +104,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         const declarations = next.declaredNodeIO[graph.id] ?? {};
         const result = resolver.resolve(graph, declarations, next.project!.types);
         next.nodeIO[graph.id] = { ...result.io };
-        for (const projection of Object.values(graph.scopeProjections ?? {}))
+        for (const projection of Scopes.values(graph.scopeProjections))
           next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(
             graph,
             projection.id,
@@ -162,7 +162,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (event._tag === "FragmentPasted") {
             for (const node of event.nodes) graph.nodes[node.id] = node;
             for (const projection of event.scopeProjections ?? []) {
-              graph.scopeProjections[projection.id] = projection;
+              graph.scopeProjections.set(projection.id, projection.position);
               graph.nodes[projection.id] = Scopes.projectionNode(projection);
             }
             store.nodeIO[event.graphId] = { ...store.nodeIO[event.graphId], ...event.nodeIO };
@@ -173,7 +173,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           } else {
             for (const id of event.nodeIds) {
               delete graph.nodes[id];
-              delete graph.scopeProjections[id];
+              graph.scopeProjections.delete(id);
               delete store.nodeIO[event.graphId]?.[id];
             }
             const deleted = new Set(event.deletedConnectionIds);
@@ -188,7 +188,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (store.project) {
             store.project.graphs[event.graph.id] = {
               ...event.graph,
-              scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
+              scopeProjections: new Map(event.graph.scopeProjections),
               nodes: { ...event.graph.nodes },
               connections: [...event.graph.connections],
             };
@@ -216,7 +216,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (!store.project) return;
           store.project.graphs[event.graph.id] = {
             ...event.graph,
-            scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
+            scopeProjections: new Map(event.graph.scopeProjections),
             nodes: Object.fromEntries(
               GraphFunction.boundaryNodes(event.fn).map((node) => [node.id, node]),
             ),
@@ -283,10 +283,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           const target = store.project?.graphs[event.graphId];
           if (target === undefined) return;
           target.nodes[event.node.id] = event.node;
-          target.scopeProjections = {
-            ...target.scopeProjections,
-            [event.projection.id]: event.projection,
-          };
+          target.scopeProjections = new Map(target.scopeProjections).set(
+            event.projection.id,
+            event.projection.position,
+          );
           target.connections.push(event.connection);
           (store.nodeIO[event.graphId] ??= {})[event.node.id] = event.io;
         });
@@ -300,8 +300,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         setStore((store) => {
           if (store.project) {
             store.project.graphs[event.graphId]!.nodes = nodes;
-            if (store.project.graphs[event.graphId]!.scopeProjections)
-              delete store.project.graphs[event.graphId]!.scopeProjections![event.nodeId];
+            store.project.graphs[event.graphId]!.scopeProjections.delete(event.nodeId);
             const deleted = new Set(event.deletedConnectionIds);
             store.project.graphs[event.graphId]!.connections = graph.connections.filter(
               (connection) => !deleted.has(connection.id),
@@ -333,12 +332,13 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         };
         setStore((store) => {
           if (store.project) store.project.graphs[event.graphId]!.nodes[event.nodeId] = updated;
-          const projection = store.project?.graphs[event.graphId]?.scopeProjections?.[event.nodeId];
+          const projection = store.project?.graphs[event.graphId]?.scopeProjections.get(
+            event.nodeId,
+          );
           if (projection !== undefined)
-            store.project!.graphs[event.graphId]!.scopeProjections![event.nodeId] = {
-              ...projection,
-              position: updated.position,
-            };
+            store.project!.graphs[event.graphId]!.scopeProjections = new Map(
+              store.project!.graphs[event.graphId]!.scopeProjections,
+            ).set(event.nodeId, updated.position);
         });
         break;
       }
@@ -519,7 +519,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             {
               ...graph,
               nodes: { ...graph.nodes },
-              scopeProjections: { ...(graph.scopeProjections ?? {}) },
+              scopeProjections: new Map(graph.scopeProjections),
               connections: [...graph.connections],
             },
           ]),
