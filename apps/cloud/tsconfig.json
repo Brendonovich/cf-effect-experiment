@@ -51,6 +51,9 @@
       "path": "../../packages/http-ingress"
     },
     {
+      "path": "../../packages/mcp"
+    },
+    {
       "path": "../../packages/project-host"
     },
     {

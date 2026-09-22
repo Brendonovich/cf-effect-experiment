@@ -1,0 +1,322 @@
+import {
+  Connection,
+  Graph,
+  GraphId,
+  Node,
+  NodeIO,
+  Package,
+  PackageId,
+  ResourceConstant,
+} from "@macrograph/core";
+import { Editor, EditorEvents, Packages } from "@macrograph/editor";
+import { layer as mcpLayer } from "@macrograph/mcp";
+import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Tool, Toolkit } from "effect/unstable/ai";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+
+import type { ClientSessions } from "./ClientSessions.ts";
+
+export class CurrentSession extends Context.Service<CurrentSession, ClientSessions.Session>()(
+  "macrograph/server/McpCurrentSession",
+) {}
+
+const graphParameters = {
+  graphId: Schema.String.annotate({
+    description: "Graph ID returned by listGraphs or createGraph.",
+  }),
+};
+
+export const toolkit = Toolkit.make(
+  Tool.make("listGraphs", {
+    description: "List graph IDs and names in this server's project.",
+    success: Schema.Struct({
+      graphs: Schema.Array(Schema.Struct({ id: GraphId, name: Schema.String })),
+    }),
+    failure: Schema.Unknown,
+  })
+    .addDependency(CurrentSession)
+    .annotate(Tool.Readonly, true),
+  Tool.make("getGraph", {
+    description:
+      "Inspect a graph, including all nodes, connections, and resolved node inputs and outputs.",
+    parameters: Schema.Struct(graphParameters),
+    success: Schema.Struct({ graph: Graph.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
+    failure: Schema.Unknown,
+  })
+    .addDependency(CurrentSession)
+    .annotate(Tool.Readonly, true),
+  Tool.make("createGraph", {
+    description:
+      "PREFERRED: Create an entire graph in one request, including its name, nodes, and connections. Nodes are keyed by temporary local IDs, and connections reference those IDs. Node schemas use { package, schema }; resource properties use matching resource IDs returned by searchSchemas. Use searchSchemas only if schema IDs, ports, or resources are unknown. Prefer this compound tool over separate createNode/createConnection calls.",
+    parameters: Graph.CreateRequest,
+    success: Schema.Struct({ graph: Graph.Model }),
+    failure: Schema.Unknown,
+  }).addDependency(CurrentSession),
+  Tool.make("deleteGraph", {
+    description: "Permanently delete a graph and all of its nodes and connections.",
+    parameters: Schema.Struct(graphParameters),
+    success: Schema.Struct({ deleted: Schema.Boolean }),
+    failure: Schema.Unknown,
+  })
+    .addDependency(CurrentSession)
+    .annotate(Tool.Destructive, true),
+  Tool.make("searchSchemas", {
+    description:
+      "Find ranked node schemas by package, name, ID, or description. Use queries to find multiple unrelated node types in one call. Results include ports, properties, and matching configured resource IDs for resource-backed properties. Returns at most 20 schemas by default.",
+    parameters: Schema.Struct({
+      query: Schema.optionalKey(
+        Schema.String.annotate({
+          description: "Search phrase; all words must match the same package or schema.",
+        }),
+      ),
+      queries: Schema.optionalKey(
+        Schema.Array(Schema.String).annotate({
+          description:
+            "Alternative search phrases. Schemas matching any phrase are returned, allowing multiple node types to be discovered in one call.",
+        }),
+      ),
+      limit: Schema.optionalKey(
+        Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })).annotate({
+          description: "Maximum number of ranked schemas to return; defaults to 20.",
+          default: 20,
+        }),
+      ),
+    }),
+    success: Schema.Struct({
+      schemas: Schema.Array(
+        Schema.Struct({
+          package: PackageId,
+          schema: Package.SchemaModel,
+          resources: Schema.Record(
+            Schema.String,
+            Schema.Array(Schema.Struct({ id: ResourceConstant.Id, name: Schema.String })),
+          ),
+        }),
+      ),
+    }),
+    failure: Schema.Unknown,
+  })
+    .addDependency(CurrentSession)
+    .annotate(Tool.Readonly, true),
+  Tool.make("listResources", {
+    description:
+      "List configured resource constants and their IDs. Use these IDs for matching resource-typed node properties when creating graphs or nodes.",
+    success: Schema.Struct({ resources: Schema.Array(ResourceConstant.Model) }),
+    failure: Schema.Unknown,
+  })
+    .addDependency(CurrentSession)
+    .annotate(Tool.Readonly, true),
+  Tool.make("createNode", {
+    description:
+      "Add one node to an existing graph. Prefer createGraph when building a complete graph.",
+    parameters: Schema.Struct({ ...graphParameters, ...Node.CreateInput.fields }),
+    success: Schema.Struct({ node: Node.Model, io: NodeIO }),
+    failure: Schema.Unknown,
+  }).addDependency(CurrentSession),
+  Tool.make("createConnection", {
+    description:
+      "Connect an output pin to an input pin in an existing graph. Prefer createGraph for complete graphs.",
+    parameters: Schema.Struct({ ...graphParameters, ...Connection.CreateInput.fields }),
+    success: Schema.Struct({ connection: Connection.Model }),
+    failure: Schema.Unknown,
+  }).addDependency(CurrentSession),
+);
+
+export const layer = (basePath: string) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const editor = yield* Editor.Service;
+      const editorEvents = yield* EditorEvents.Service;
+      const packages = yield* Packages.Service;
+      const withActor = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        CurrentSession.pipe(
+          Effect.flatMap((session) =>
+            editorEvents.withActor(effect, { type: "CLIENT", id: `mcp-${session.userId}` }),
+          ),
+        );
+      const getGraph = Effect.fnUntraced(function* (graphId: string) {
+        const snapshot = yield* editor.project.snapshot();
+        const graph = snapshot.project.graphs[graphId];
+        if (graph === undefined) return yield* new Graph.NotFoundError({ id: graphId });
+        return { graph, nodeIO: snapshot.nodeIO[graphId] ?? {} };
+      });
+
+      const handlers = toolkit.of({
+        listGraphs: () =>
+          editor.project.get().pipe(
+            Effect.map((project) => ({
+              graphs: Object.values(project.graphs).map((graph) => ({
+                id: graph.id,
+                name: graph.name,
+              })),
+            })),
+          ),
+        getGraph: ({ graphId }) => getGraph(graphId),
+        createGraph: (input) =>
+          withActor(
+            Effect.gen(function* () {
+              const nodes = input.nodes ?? {};
+              const connections = input.connections ?? [];
+              for (const connection of connections) {
+                if (
+                  !Object.hasOwn(nodes, connection.outNodeId) ||
+                  !Object.hasOwn(nodes, connection.inNodeId)
+                )
+                  return yield* new Connection.InvalidError({
+                    reason: "Connection references a node that is not being created",
+                  });
+              }
+              const created = yield* editor.graph.create({
+                ...(input.name === undefined ? {} : { name: input.name }),
+                ...(input.kind === undefined ? {} : { kind: input.kind }),
+                ...(input.signature === undefined ? {} : { signature: input.signature }),
+              });
+              return yield* Effect.gen(function* () {
+                const nodeIds = new Map<string, string>();
+                for (const [reference, node] of Object.entries(nodes)) {
+                  const event = yield* editor.node.create({ graphID: created.graph.id, node });
+                  nodeIds.set(reference, event.node.id);
+                }
+                for (const connection of connections) {
+                  const outNodeId = nodeIds.get(connection.outNodeId);
+                  const inNodeId = nodeIds.get(connection.inNodeId);
+                  if (outNodeId === undefined || inNodeId === undefined)
+                    return yield* new Connection.InvalidError({
+                      reason: "Connection references a node that is not being created",
+                    });
+                  yield* editor.connection.create({
+                    graphID: created.graph.id,
+                    connection: { ...connection, outNodeId, inNodeId },
+                  });
+                }
+                const result = yield* getGraph(created.graph.id);
+                return { graph: result.graph };
+              }).pipe(
+                Effect.catchCause((cause) =>
+                  editor.graph
+                    .delete({ graphID: created.graph.id, force: true })
+                    .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
+                ),
+              );
+            }),
+          ),
+        deleteGraph: ({ graphId }) =>
+          withActor(editor.graph.delete({ graphID: graphId, force: true })).pipe(
+            Effect.as({ deleted: true }),
+          ),
+        searchSchemas: ({ query, queries, limit }) =>
+          Effect.gen(function* () {
+            const [loadedPackages, project] = yield* Effect.all([
+              packages.getPackages(),
+              editor.project.get(),
+            ]);
+            const resources = Object.values(project.constants);
+            const searches = [...(query === undefined ? [] : [query]), ...(queries ?? [])]
+              .map((value) => value.trim().toLowerCase())
+              .filter(Boolean);
+            const schemas = loadedPackages.flatMap((pkg) =>
+              pkg.schemas
+                .map((schema) => {
+                  const fields = [
+                    schema.id,
+                    schema.name,
+                    pkg.id,
+                    pkg.name,
+                    schema.description ?? "",
+                  ].map((value) => value.toLowerCase());
+                  const text = fields.join(" ");
+                  const scores = searches
+                    .filter((search) => search.split(/\s+/).every((term) => text.includes(term)))
+                    .map((search) => {
+                      const exact = fields.findIndex((field) => field === search);
+                      if (exact !== -1) return exact;
+                      const prefix = fields.findIndex((field) => field.startsWith(search));
+                      if (prefix !== -1) return fields.length + prefix;
+                      const substring = fields.findIndex((field) => field.includes(search));
+                      return substring === -1 ? fields.length * 3 : fields.length * 2 + substring;
+                    });
+                  if (searches.length > 0 && scores.length === 0) return undefined;
+                  const matchingResources: Record<
+                    string,
+                    { id: ResourceConstant.Id; name: string }[]
+                  > = {};
+                  for (const property of schema.properties) {
+                    if (!("resource" in property)) continue;
+                    matchingResources[property.id] = resources
+                      .filter(
+                        (resource) =>
+                          resource.resource.package === pkg.id &&
+                          resource.resource.resource === property.resource,
+                      )
+                      .map(({ id, name }) => ({ id, name }));
+                  }
+                  return {
+                    package: pkg.id,
+                    schema,
+                    resources: matchingResources,
+                    score: scores.length === 0 ? 0 : Math.min(...scores),
+                  };
+                })
+                .filter((schema) => schema !== undefined),
+            );
+            schemas.sort(
+              (left, right) =>
+                left.score - right.score ||
+                left.package.localeCompare(right.package) ||
+                left.schema.id.localeCompare(right.schema.id),
+            );
+            return {
+              schemas: schemas.slice(0, limit ?? 20).map(({ score: _, ...schema }) => schema),
+            };
+          }),
+        listResources: () =>
+          editor.project
+            .get()
+            .pipe(Effect.map((project) => ({ resources: Object.values(project.constants) }))),
+        createNode: ({ graphId, ...node }) =>
+          withActor(editor.node.create({ graphID: graphId, node })).pipe(
+            Effect.map((event) => ({ node: event.node, io: event.io })),
+          ),
+        createConnection: ({ graphId, ...connection }) =>
+          withActor(editor.connection.create({ graphID: graphId, connection })).pipe(
+            Effect.map((event) => ({ connection: event.connection })),
+          ),
+      });
+
+      return mcpLayer(
+        toolkit,
+        handlers,
+        { name: "MacroGraph Server", version: "1.0.0", path: `${basePath}/mcp` },
+        (effect) =>
+          Effect.serviceOption(CurrentSession).pipe(
+            Effect.flatMap((session) =>
+              Option.match(session, {
+                onNone: () => Effect.die("MCP tool request is missing its authenticated session"),
+                onSome: (current) => Effect.provideService(effect, CurrentSession, current),
+              }),
+            ),
+          ),
+      );
+    }),
+  );
+
+export const authenticated = <E, R>(
+  app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+  authenticate: Effect.Effect<
+    | { readonly status: "authorized"; readonly session: ClientSessions.Session }
+    | { readonly status: "unauthorized" | "forbidden" },
+    never,
+    HttpServerRequest.HttpServerRequest
+  >,
+) =>
+  authenticate.pipe(
+    Effect.flatMap((result) =>
+      result.status === "authorized"
+        ? Effect.provideService(app, CurrentSession, result.session)
+        : Effect.succeed(
+            HttpServerResponse.empty({ status: result.status === "unauthorized" ? 401 : 403 }),
+          ),
+    ),
+  );
+
+export * as ServerMcp from "./ServerMcp.ts";

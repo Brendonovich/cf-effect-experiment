@@ -14,8 +14,9 @@ import {
   PackageId,
   ResourceConstant,
 } from "@macrograph/core";
-import { Cause, Context, Effect, Layer, Option, Schema, Sink, Stream } from "effect";
-import { McpProtocol, McpSchema, McpServer, Tool, Toolkit } from "effect/unstable/ai";
+import { layer as mcpLayer } from "@macrograph/mcp";
+import { Effect, Option, Schema } from "effect";
+import { Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiError } from "effect/unstable/httpapi";
 
@@ -155,75 +156,19 @@ export const toolkit = Toolkit.make(
 );
 
 export const layer = (handlers: Toolkit.HandlersFrom<typeof toolkit.tools>) => {
-  const registration = Layer.effectDiscard(
-    Effect.gen(function* () {
-      const registry = yield* McpServer.McpServer;
-      const built = yield* toolkit;
-
-      for (const tool of Object.values(built.tools)) {
-        const outputSchema = Tool.getJsonSchemaFromSchema(tool.successSchema);
-        yield* registry.addTool({
-          tool: new McpSchema.Tool({
-            name: tool.name,
-            description: Tool.getDescription(tool),
-            inputSchema: Tool.getJsonSchema(tool),
-            ...(outputSchema.type === "object" ? { outputSchema } : {}),
-            annotations: {
-              readOnlyHint: Context.get(tool.annotations, Tool.Readonly),
-              destructiveHint: Context.get(tool.annotations, Tool.Destructive),
-              idempotentHint: Context.get(tool.annotations, Tool.Idempotent),
-              openWorldHint: Context.get(tool.annotations, Tool.OpenWorld),
-            },
+  return mcpLayer(
+    toolkit,
+    handlers,
+    { name: "MacroGraph Cloud", version: "1.0.0", path: "/api/mcp" },
+    (effect) =>
+      Effect.serviceOption(CurrentUser).pipe(
+        Effect.flatMap((user) =>
+          Option.match(user, {
+            onNone: () => Effect.die("MCP tool request is missing its authenticated user"),
+            onSome: (currentUser) => Effect.provideService(effect, CurrentUser, currentUser),
           }),
-          annotations: tool.annotations,
-          handle: (payload) =>
-            Effect.serviceOption(CurrentUser).pipe(
-              Effect.flatMap((user) =>
-                Option.match(user, {
-                  onNone: () => Effect.die("MCP tool request is missing its authenticated user"),
-                  onSome: (currentUser) =>
-                    built.handle(tool.name, payload).pipe(
-                      Stream.unwrap,
-                      Stream.run(Sink.last()),
-                      Effect.flatMap(Effect.fromOption),
-                      Effect.provideService(CurrentUser, currentUser),
-                      Effect.map(
-                        (result) =>
-                          new McpSchema.CallToolResult({
-                            isError: false,
-                            structuredContent:
-                              typeof result.encodedResult === "object"
-                                ? result.encodedResult
-                                : undefined,
-                            content: [{ type: "text", text: JSON.stringify(result.encodedResult) }],
-                          }),
-                      ),
-                    ),
-                }),
-              ),
-              Effect.catchCause((cause) =>
-                Effect.succeed(
-                  new McpSchema.CallToolResult({
-                    isError: true,
-                    content: [{ type: "text", text: Cause.pretty(cause) }],
-                  }),
-                ),
-              ),
-            ),
-        });
-      }
-    }),
-  ).pipe(Layer.provide(toolkit.toLayer(handlers)));
-
-  return registration.pipe(
-    Layer.provide(
-      McpServer.layerHttp({
-        name: "MacroGraph Cloud",
-        version: "1.0.0",
-        path: "/api/mcp",
-        protocols: [McpProtocol.v2025_06_18],
-      }).pipe(Layer.orDie),
-    ),
+        ),
+      ),
   );
 };
 

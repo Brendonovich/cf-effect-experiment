@@ -35,6 +35,7 @@
     "@macrograph/module-string": "workspace:*",
     "@macrograph/module-twitch": "workspace:*",
     "@macrograph/module-utilities": "workspace:*",
+    "@macrograph/mcp": "workspace:*",
     "@macrograph/persistence": "workspace:*",
     "@macrograph/persistence-sqlite": "workspace:*",
     "@macrograph/planetscale-logical-db": "workspace:*",

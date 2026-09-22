@@ -82,6 +82,14 @@ the application origin, `POST`, and the `Content-Type` request header. The serve
 configured collector and public WebSocket origins to `connect-src`; reverse proxies that replace
 CSP must preserve those sources. Do not put collector credentials in the browser endpoint URL.
 
+### MCP
+
+The server exposes a Streamable HTTP MCP endpoint at `${MACROGRAPH_BASE_PATH}/mcp` using protocol
+version `2025-06-18`. Authenticate every request with `Authorization: Bearer <token>`, using the
+opaque local browser session token stored by the server. Only owner and admin sessions are accepted;
+read-only sessions receive `403`. Cloud access tokens and server registration credentials are not
+valid MCP credentials.
+
 ### Server Tracing
 
 Server tracing is disabled unless a collector endpoint is configured. It exports existing Effect

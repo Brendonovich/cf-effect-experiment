@@ -49,6 +49,7 @@
     "@macrograph/module-vtube-studio": "workspace:*",
     "@macrograph/module-websocket-client": "workspace:*",
     "@macrograph/module-websocket-server": "workspace:*",
+    "@macrograph/mcp": "workspace:*",
     "@macrograph/persistence": "workspace:*",
     "@macrograph/persistence-sqlite": "workspace:*",
     "@macrograph/project-host": "workspace:*",

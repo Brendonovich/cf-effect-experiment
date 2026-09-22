@@ -16,6 +16,7 @@
     { "path": "../../packages/module" },
     { "path": "../../packages/execution" },
     { "path": "../../packages/live-runtime" },
+    { "path": "../../packages/mcp" },
     { "path": "../../packages/project-host" },
     { "path": "../../packages/modules/twitch" },
     { "path": "../../packages/modules/obs" },
