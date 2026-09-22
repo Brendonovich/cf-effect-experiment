@@ -319,8 +319,9 @@ export async function singleSchemaDrop(context) {
   const project = await saved(page);
   const nodes = Object.values(project.graphs.demo.canvas.nodes);
   assert.equal(nodes.length, 3);
-  const inserted = Object.values(project.graphs.demo.canvas.scopeProjections ?? {})[0];
-  assert(inserted, "Dropping a scope should insert a scope projection");
+  const insertedEntry = project.graphs.demo.canvas.scopeProjections?.[0];
+  assert(insertedEntry, "Dropping a scope should insert a scope projection");
+  const inserted = { id: insertedEntry[0], position: insertedEntry[1] };
   assert(
     project.graphs.demo.canvas.connections.some(
       (wire) =>

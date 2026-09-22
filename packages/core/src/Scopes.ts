@@ -17,10 +17,18 @@ export const Projection = Schema.Struct({
 });
 export type Projection = typeof Projection.Type;
 
-export const Collection = Schema.Record(Schema.String, Projection).pipe(
-  Schema.withDecodingDefaultKey(Effect.succeed({})),
+export const Collection = Schema.toCodecJson(Schema.ReadonlyMap(Schema.String, Position)).pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed([])),
 );
 export type Collection = typeof Collection.Type;
+
+export const values = (collection: Collection | undefined): ReadonlyArray<Projection> =>
+  Array.from(collection ?? [], ([id, position]) => ({ id: NodeId.make(id), position }));
+
+export const get = (collection: Collection | undefined, id: string): Projection | undefined => {
+  const position = collection?.get(id);
+  return position === undefined ? undefined : { id: NodeId.make(id), position };
+};
 
 export const ProjectionInputId = IoId.make("scope");
 export const ProjectionExecutionId = IoId.make("exec");
@@ -75,7 +83,7 @@ export const projectCanvas = (canvas: Canvas.Model): Canvas.Model => ({
   nodes: {
     ...canvas.nodes,
     ...Object.fromEntries(
-      Object.values(canvas.scopeProjections ?? {}).map((projection) => [
+      values(canvas.scopeProjections).map((projection) => [
         projection.id,
         projectionNode(projection),
       ]),
@@ -110,7 +118,7 @@ export const projectionIO = (
 
 /** Remove presentation-only projections by wiring their consumers to scope projections. */
 export const lowerProjections = (canvas: Canvas.Model): Canvas.Model => {
-  const projectionIds = new Set(Object.keys(canvas.scopeProjections ?? {}));
+  const projectionIds = new Set(canvas.scopeProjections?.keys());
   const bindings = new Map(
     [...projectionIds].flatMap((id) => {
       const wire = binding(canvas, id);
@@ -119,7 +127,7 @@ export const lowerProjections = (canvas: Canvas.Model): Canvas.Model => {
   );
   return {
     ...canvas,
-    scopeProjections: {},
+    scopeProjections: new Map(),
     connections: canvas.connections.flatMap((wire) => {
       if (projectionIds.has(wire.inNodeId)) return [];
       const source = bindings.get(wire.outNodeId);

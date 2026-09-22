@@ -109,7 +109,7 @@ export function createEditorCommands(
       return schema?.internal === true || Scopes.isProjectionNode(node) ? [] : [node];
     });
     const scopeProjections = nodeIds.flatMap((id) => {
-      const projection = graph.scopeProjections?.[id];
+      const projection = Scopes.get(graph.scopeProjections, id);
       return projection === undefined ? [] : [projection];
     });
     const ids = new Set([
