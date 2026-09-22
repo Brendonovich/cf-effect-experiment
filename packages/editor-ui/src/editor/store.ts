@@ -8,6 +8,7 @@ import {
   Node,
   type NodeIO,
   Package,
+  Queue,
   ResourceConstant,
   Scopes,
 } from "@macrograph/core";
@@ -18,7 +19,7 @@ type MutableGraph = {
   id: Canvas.CanvasId;
   name: string;
   nodes: Record<string, Node.Model>;
-  scopeProjections: Map<string, Scopes.Projection["position"]>;
+  scopeProjections: Record<string, Scopes.Projection>;
   connections: Connection.Model[];
 };
 
@@ -29,6 +30,7 @@ type MutableProject = {
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
   types: Project.Model["types"];
+  queues: Record<string, Queue.Model>;
 };
 
 type MutableEditorStore = {
@@ -72,7 +74,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                     {
                       ...graph,
                       nodes: { ...graph.nodes },
-                      scopeProjections: new Map(graph.scopeProjections),
+                      scopeProjections: { ...(graph.scopeProjections ?? {}) },
                       connections: [...graph.connections],
                     },
                   ]),
@@ -80,6 +82,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                 functions: { ...current.project.functions },
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
+                queues: { ...current.project.queues },
               },
         packages: [...current.packages],
         // Event reducers edit declarations, never the previous inferred types.
@@ -104,7 +107,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         const declarations = next.declaredNodeIO[graph.id] ?? {};
         const result = resolver.resolve(graph, declarations, next.project!.types);
         next.nodeIO[graph.id] = { ...result.io };
-        for (const projection of Scopes.values(graph.scopeProjections))
+        for (const projection of Object.values(graph.scopeProjections ?? {}))
           next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(
             graph,
             projection.id,
@@ -136,6 +139,32 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     if (!store.project) return;
 
     switch (event._tag) {
+      case "QueueUpdated":
+        setStore((store) => {
+          const project = store.project!;
+          project.queues[event.queue.id] = event.queue;
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queue.id)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  event.queue,
+                  project.functions,
+                );
+        });
+        break;
+      case "QueueDeleted":
+        setStore((store) => {
+          const project = store.project!;
+          delete project.queues[event.queueId];
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queueId)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  undefined,
+                  project.functions,
+                );
+        });
+        break;
       case "TypeDefinitionsUpdated":
         setStore((store) => {
           if (!store.project) return;
@@ -162,7 +191,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (event._tag === "FragmentPasted") {
             for (const node of event.nodes) graph.nodes[node.id] = node;
             for (const projection of event.scopeProjections ?? []) {
-              graph.scopeProjections.set(projection.id, projection.position);
+              graph.scopeProjections[projection.id] = projection;
               graph.nodes[projection.id] = Scopes.projectionNode(projection);
             }
             store.nodeIO[event.graphId] = { ...store.nodeIO[event.graphId], ...event.nodeIO };
@@ -173,7 +202,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           } else {
             for (const id of event.nodeIds) {
               delete graph.nodes[id];
-              graph.scopeProjections.delete(id);
+              delete graph.scopeProjections[id];
               delete store.nodeIO[event.graphId]?.[id];
             }
             const deleted = new Set(event.deletedConnectionIds);
@@ -188,7 +217,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (store.project) {
             store.project.graphs[event.graph.id] = {
               ...event.graph,
-              scopeProjections: new Map(event.graph.scopeProjections),
+              scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
               nodes: { ...event.graph.nodes },
               connections: [...event.graph.connections],
             };
@@ -216,7 +245,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (!store.project) return;
           store.project.graphs[event.graph.id] = {
             ...event.graph,
-            scopeProjections: new Map(event.graph.scopeProjections),
+            scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
             nodes: Object.fromEntries(
               GraphFunction.boundaryNodes(event.fn).map((node) => [node.id, node]),
             ),
@@ -253,6 +282,16 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             for (const node of Object.values(caller.nodes))
               if (GraphFunction.isCall(node) && node.properties.function === event.fn.canvas.id)
                 (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(event.fn);
+              else if (Queue.isEnqueue(node)) {
+                const queueId = node.properties.queue;
+                const queue =
+                  typeof queueId === "string" ? store.project.queues[queueId] : undefined;
+                if (queue?.functionId === event.fn.canvas.id)
+                  (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                    queue,
+                    store.project.functions,
+                  );
+              }
         });
         break;
       case "GraphNameChanged": {
@@ -283,10 +322,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           const target = store.project?.graphs[event.graphId];
           if (target === undefined) return;
           target.nodes[event.node.id] = event.node;
-          target.scopeProjections = new Map(target.scopeProjections).set(
-            event.projection.id,
-            event.projection.position,
-          );
+          target.scopeProjections = {
+            ...target.scopeProjections,
+            [event.projection.id]: event.projection,
+          };
           target.connections.push(event.connection);
           (store.nodeIO[event.graphId] ??= {})[event.node.id] = event.io;
         });
@@ -300,7 +339,8 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         setStore((store) => {
           if (store.project) {
             store.project.graphs[event.graphId]!.nodes = nodes;
-            store.project.graphs[event.graphId]!.scopeProjections.delete(event.nodeId);
+            if (store.project.graphs[event.graphId]!.scopeProjections)
+              delete store.project.graphs[event.graphId]!.scopeProjections![event.nodeId];
             const deleted = new Set(event.deletedConnectionIds);
             store.project.graphs[event.graphId]!.connections = graph.connections.filter(
               (connection) => !deleted.has(connection.id),
@@ -332,13 +372,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         };
         setStore((store) => {
           if (store.project) store.project.graphs[event.graphId]!.nodes[event.nodeId] = updated;
-          const projection = store.project?.graphs[event.graphId]?.scopeProjections.get(
-            event.nodeId,
-          );
+          const projection = store.project?.graphs[event.graphId]?.scopeProjections?.[event.nodeId];
           if (projection !== undefined)
-            store.project!.graphs[event.graphId]!.scopeProjections = new Map(
-              store.project!.graphs[event.graphId]!.scopeProjections,
-            ).set(event.nodeId, updated.position);
+            store.project!.graphs[event.graphId]!.scopeProjections![event.nodeId] = {
+              ...projection,
+              position: updated.position,
+            };
         });
         break;
       }
@@ -519,7 +558,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             {
               ...graph,
               nodes: { ...graph.nodes },
-              scopeProjections: new Map(graph.scopeProjections),
+              scopeProjections: { ...(graph.scopeProjections ?? {}) },
               connections: [...graph.connections],
             },
           ]),

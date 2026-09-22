@@ -10,7 +10,6 @@ import { Effect, Redacted } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
 const stateKey = "macrograph-auth-v2";
-const previewIdentityKey = "macrograph-preview-identity-v1";
 
 export type Status =
   | { readonly state: "disconnected" }
@@ -81,69 +80,31 @@ export default class CloudAuthDO extends Cloudflare.DurableObject<CloudAuthDO>()
             }
           : status;
 
-      const previewIdentity = () =>
-        durableState.storage
-          .get<{ readonly userId: string; readonly email: string }>(previewIdentityKey)
-          .pipe(Effect.provide(runtimeContext), Effect.orDie);
-      const previewStatus = () =>
-        previewIdentity().pipe(
-          Effect.map((identity) =>
-            identity === undefined
-              ? ({ state: "disconnected" } as const)
-              : ({ state: "connected", ...identity } as const),
-          ),
-        );
-      const status = () =>
-        previewIdentity().pipe(
-          Effect.flatMap((identity) =>
-            identity === undefined
-              ? client.auth.status.pipe(Effect.map(toStatus), Effect.orDie)
-              : Effect.succeed({ state: "connected" as const, ...identity }),
-          ),
-        );
+      const status = () => client.auth.status.pipe(Effect.map(toStatus), Effect.orDie);
       const start = () => client.auth.start.pipe(Effect.map(toStatus), Effect.orDie);
       const poll = () => client.auth.poll.pipe(Effect.map(toStatus), Effect.orDie);
-      const disconnect = () =>
-        durableState.storage
-          .delete(previewIdentityKey)
-          .pipe(
-            Effect.provide(runtimeContext),
-            Effect.andThen(client.auth.disconnect),
-            Effect.orDie,
-          );
+      const disconnect = () => client.auth.disconnect.pipe(Effect.orDie);
       const userId = () =>
         status().pipe(
           Effect.map((current) => (current.state === "connected" ? current.userId : undefined)),
         );
-      const previewUserId = () =>
-        previewIdentity().pipe(Effect.map((identity) => identity?.userId));
       const getCredentials = () =>
         client.get.pipe(Effect.map((values) => values.map(transferCredential)));
       const refreshCredential = (provider: string, id: string) =>
         client.refresh(provider, id).pipe(Effect.map(transferCredential));
       const credentialCatalog = () => client.catalog;
       const refetchCredentials = () => client.refetch;
-      const establishPreviewIdentity = (identity: {
-        readonly userId: string;
-        readonly email: string;
-      }) =>
-        durableState.storage
-          .put(previewIdentityKey, identity)
-          .pipe(Effect.provide(runtimeContext), Effect.orDie);
 
       return {
         status,
-        previewStatus,
         start,
         poll,
         disconnect,
         userId,
-        previewUserId,
         getCredentials,
         refreshCredential,
         credentialCatalog,
         refetchCredentials,
-        establishPreviewIdentity,
       };
     });
   }),

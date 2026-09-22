@@ -1,4 +1,4 @@
-import { Canvas, Connection, Graph, Node, Project } from "@macrograph/core";
+import { Canvas, Connection, Graph, Node, Project, Queue } from "@macrograph/core";
 import { Cause, Context, Data, Effect, Layer, Option, Ref, Schema } from "effect";
 
 export class PersistenceError extends Schema.TaggedError<PersistenceError>()("PersistenceError", {
@@ -278,11 +278,18 @@ export const layerMemory = Layer.effect(Service)(
     const cache = yield* Ref.make<Option.Option<Project.Model>>(Option.none());
 
     return Service.of({
-      saveProject: (project) => Ref.set(cache, Option.some(project)),
+      saveProject: (project) =>
+        Queue.validateProject(project).pipe(
+          PersistenceError.refail,
+          Effect.andThen(Ref.set(cache, Option.some(project))),
+        ),
       loadProject: () =>
         Effect.gen(function* () {
           const cached = yield* Ref.get(cache);
-          if (Option.isSome(cached)) return cached.value;
+          if (Option.isSome(cached)) {
+            yield* Queue.validateProject(cached.value).pipe(PersistenceError.refail);
+            return cached.value;
+          }
           return yield* new Project.NotFoundError();
         }),
 

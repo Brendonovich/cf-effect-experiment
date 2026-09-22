@@ -6,6 +6,7 @@ import {
   type NodeIO,
   OutputRef,
   Project,
+  Queue,
   ResourceConstant,
   Scopes,
   TypeDefinition,
@@ -170,9 +171,17 @@ export interface Service {
 
 export interface FunctionInvocationOptions {
   readonly executionPath?: string;
+  readonly queueLineage?: ReadonlyArray<string>;
   readonly executionTraceId?: string;
   readonly eventNodeId?: string;
   readonly stack?: ReadonlyArray<string>;
+}
+
+export interface QueueInvocation {
+  readonly key: NodeExecutionKey;
+  readonly inputs: Readonly<Record<string, unknown>>;
+  readonly queueId: string;
+  readonly queueLineage: ReadonlyArray<string>;
 }
 
 type ExecutionRequest =
@@ -288,6 +297,9 @@ export const durableExecution = (
 ): DurableExecutionEnvironment => ({ _tag: "Durable", executeNode });
 
 export interface MakeOptions {
+  readonly queueInvocation?: (
+    invocation: QueueInvocation,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly projectId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
@@ -622,6 +634,12 @@ export const make = Effect.fnUntraced(function* (
         const fn = typeof target === "string" ? currentProject.functions[target] : undefined;
         const io = registeredIO(GraphFunction.callIO(fn));
         return syntheticSchema("call", "Execute Function", "exec", io, () => Effect.void);
+      }
+      if (Queue.isEnqueue(node)) {
+        const target = node.properties.queue;
+        const queue = typeof target === "string" ? currentProject.queues[target] : undefined;
+        const io = registeredIO(Queue.enqueueIO(queue, currentProject.functions));
+        return syntheticSchema("enqueue", "Add to Queue", "exec", io, () => Effect.void);
       }
       const owner = currentProject.functions[invocation?.canvasId ?? ""];
       if (owner !== undefined && node.id === GraphFunction.InputBoundaryNodeId) {
@@ -1140,7 +1158,10 @@ export const make = Effect.fnUntraced(function* (
         };
         yield* Effect.annotateCurrentSpan(nodeAttributes);
         const registeredModule = registeredModules.get(node.schema.package);
-        const synthetic = GraphFunction.isCall(node) || GraphFunction.isBoundaryNodeId(node.id);
+        const synthetic =
+          GraphFunction.isCall(node) ||
+          GraphFunction.isBoundaryNodeId(node.id) ||
+          Queue.isEnqueue(node);
         if (registeredModule === undefined && !synthetic)
           return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
         if (
@@ -1171,6 +1192,30 @@ export const make = Effect.fnUntraced(function* (
 
         const runEffect = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
+          if (Queue.isEnqueue(node)) {
+            const selected = node.properties.queue;
+            const queueId = typeof selected === "string" ? selected : "";
+            const queue = currentProject.queues[queueId];
+            if (queue === undefined || currentProject.functions[queue.functionId] === undefined)
+              return yield* new GraphFunction.InvocationError({
+                canvasId: queue?.functionId ?? "",
+                reason: "Add to Queue must select a queue with an existing function",
+              });
+            if (options?.queueInvocation === undefined)
+              return yield* new GraphFunction.InvocationError({
+                canvasId: queue.functionId,
+                reason: "Queue invocation is not hosted",
+              });
+            const result = yield* options.queueInvocation({
+              key,
+              inputs: Object.fromEntries(inputs),
+              queueId,
+              queueLineage: invocation?.options?.queueLineage ?? [],
+            });
+            for (const output of nodeIO.dataOutputs)
+              outputs.push({ outputId: output.id, value: result[output.id] });
+            return { outputs, executionOutputId: "exec" } satisfies NodeExecutionResult;
+          }
           if (GraphFunction.isCall(node)) {
             const target = node.properties.function;
             if (typeof target !== "string" || currentProject.functions[target] === undefined)
@@ -1183,10 +1228,11 @@ export const make = Effect.fnUntraced(function* (
                 canvasId: target,
                 reason: "Recursive function calls are not supported",
               });
+            const callInputs = Object.fromEntries(inputs);
             const result = yield* execute({
               _tag: "Function",
               canvasId: target,
-              inputs: Object.fromEntries(inputs),
+              inputs: callInputs,
               options: {
                 executionPath: `${executionPath}/function:${node.id}:${target}`,
                 executionTraceId,

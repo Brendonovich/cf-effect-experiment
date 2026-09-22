@@ -12,8 +12,6 @@ let dataDirectory = "";
 const basePath = "/macrograph";
 let setupKey = "";
 let approved = false;
-let ownerToken = "";
-let readerToken = "";
 const cloud = createServer((request, response) => {
   response.setHeader("content-type", "application/json");
   const path = request.url?.split("?")[0];
@@ -307,7 +305,6 @@ describe("built self-hosted server", () => {
     const result = (await completed.json()) as { state: string; token: string };
     expect(result.state).toBe("connected");
     expect(result.token).toMatch(/^[\w-]{43}$/);
-    ownerToken = result.token;
     const session = await fetch(`${origin}${basePath}/auth/session`, {
       headers: { authorization: `Bearer ${result.token}` },
     });
@@ -335,7 +332,6 @@ describe("built self-hosted server", () => {
       body: JSON.stringify({ deviceCode: "reader-device" }),
     });
     const readerSession = (await reader.json()) as { token: string };
-    readerToken = readerSession.token;
     const readerStatus = await fetch(`${origin}${basePath}/auth/session`, {
       headers: { authorization: `Bearer ${readerSession.token}` },
     });
@@ -344,63 +340,6 @@ describe("built self-hosted server", () => {
       canEdit: false,
       setupRequired: false,
     });
-  });
-
-  it("serves MCP to owner sessions only", async () => {
-    const initialize = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-06-18",
-        capabilities: {},
-        clientInfo: { name: "production-test", version: "1.0.0" },
-      },
-    };
-    const send = (body: object, token?: string, sessionId?: string) =>
-      fetch(`${origin}${basePath}/mcp`, {
-        method: "POST",
-        headers: {
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-          ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
-          ...(sessionId === undefined
-            ? {}
-            : {
-                "mcp-session-id": sessionId,
-                "mcp-protocol-version": "2025-06-18",
-              }),
-        },
-        body: JSON.stringify(body),
-      });
-
-    expect((await send(initialize)).status).toBe(401);
-    expect((await send(initialize, readerToken)).status).toBe(403);
-    const initialized = await send(initialize, ownerToken);
-    expect(initialized.status).toBe(200);
-    const sessionId = initialized.headers.get("mcp-session-id");
-    expect(sessionId).not.toBeNull();
-    if (sessionId === null) throw new Error("MCP initialization returned no session ID");
-
-    const listed = await send(
-      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
-      ownerToken,
-      sessionId,
-    );
-    expect(listed.status).toBe(200);
-    const body = (await listed.json()) as { result: { tools: ReadonlyArray<{ name: string }> } };
-    expect(body.result.tools.map((tool) => tool.name)).toEqual([
-      "listGraphs",
-      "getGraph",
-      "createGraph",
-      "deleteGraph",
-      "searchSchemas",
-      "listResources",
-      "createNode",
-      "createConnection",
-    ]);
-    expect((await fetch(`${origin}${basePath}/mcp/unknown`)).status).toBe(404);
-    expect((await fetch(`${origin}/mcp`)).status).toBe(404);
   });
 
   it("stops idempotently with an active WebSocket", async () => {

@@ -1,10 +1,11 @@
 import type { Project } from "@macrograph/core";
 
-import { Editor, EditorEvents } from "@macrograph/editor";
+import { Queue } from "@macrograph/core";
+import { Editor, EditorEvents, Packages, QueueRuntime } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
-import { ProjectExecutor } from "@macrograph/project-host";
-import { Context, Effect, Layer, Stream } from "effect";
+import { ProjectQueues } from "@macrograph/project-host";
+import { Context, Effect, Layer, Option, Stream } from "effect";
 
 export interface Options {
   readonly projectId?: string;
@@ -20,6 +21,8 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
   const persistence = yield* Persistence.Service;
   const editor = yield* Editor.Service;
   const events = yield* EditorEvents.Service;
+  const packages = yield* Packages.Service;
+  yield* packages.loadPackage(Queue.packageModel);
   const activity = yield* RuntimeActivity.Service;
   const initialProject = options.initialProject;
   const project = yield* initialProject === undefined
@@ -31,13 +34,16 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
             persistence.saveProject(initialProject).pipe(Effect.as(initialProject)),
           ),
         );
-  const executor = yield* ProjectExecutor.make(project, {
+  const hosted = yield* ProjectQueues.make(project, {
     ...(options.projectId === undefined ? {} : { projectId: options.projectId }),
     executionEnvironment: activity.executionEnvironment,
     engineClient: (moduleId) => editor.engine.getRuntimeClient(moduleId).pipe(Effect.orDie),
     resourceValues: ({ package: moduleId, resource }) =>
       editor.engine.getResourceValues(moduleId, resource).pipe(Effect.orDie),
   });
+  const executor = hosted.executor;
+  const queueMount = yield* Effect.serviceOption(QueueRuntime.Mount);
+  if (Option.isSome(queueMount)) yield* queueMount.value.set(hosted.queues);
   yield* Stream.fromSubscription(yield* events.subscribe).pipe(
     Stream.runForEach(() =>
       persistence.loadProject().pipe(Effect.flatMap(executor.loadProject), Effect.orDie),

@@ -134,6 +134,7 @@ const seed: Project.Model = {
   name: "Types",
   types: definitions,
   constants: {},
+  queues: {},
   engines: {},
   functions: {},
   graphs: {
@@ -905,36 +906,31 @@ describe("type authoring preserve-invalid", () => {
       }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("signed tokens expire, reject tampering, and serialize concurrent confirmation", () =>
-    Effect.gen(function* () {
-      const editor = yield* Editor.Service;
-      expect((yield* Effect.flip(editor.typeDefinition.confirm({ token: "guess" })))._tag).toBe(
-        "StalePreviewError",
-      );
-      const tampered = yield* editor.typeDefinition.preview(fresh);
-      const replacement = tampered.token.endsWith("a") ? "b" : "a";
-      expect(
-        (yield* Effect.flip(
-          editor.typeDefinition.confirm({ token: tampered.token.slice(0, -1) + replacement }),
-        ))._tag,
-      ).toBe("StalePreviewError");
-      const expired = yield* editor.typeDefinition.preview(fresh);
-      yield* TestClock.adjust("5 minutes");
-      expect(
-        (yield* Effect.flip(editor.typeDefinition.confirm({ token: expired.token })))._tag,
-      ).toBe("StalePreviewError");
-      const impact = yield* editor.typeDefinition.preview(fresh);
-      expect(impact.nodes).toEqual([]);
-      expect(impact.affectedTypes).toEqual([]);
-      const results = yield* Effect.all(
-        [
-          editor.typeDefinition.confirm({ token: impact.token }).pipe(Effect.result),
-          editor.typeDefinition.confirm({ token: impact.token }).pipe(Effect.result),
-        ],
-        { concurrency: "unbounded" },
-      );
-      expect(results.map((result) => result._tag).sort()).toEqual(["Failure", "Success"]);
-    }).pipe(Effect.provide(testLayer)),
+  it.effect(
+    "tokens expire, cannot be guessed/replayed, and concurrent confirmation is serialized",
+    () =>
+      Effect.gen(function* () {
+        const editor = yield* Editor.Service;
+        expect((yield* Effect.flip(editor.typeDefinition.confirm({ token: "guess" })))._tag).toBe(
+          "StalePreviewError",
+        );
+        const expired = yield* editor.typeDefinition.preview(fresh);
+        yield* TestClock.adjust("5 minutes");
+        expect(
+          (yield* Effect.flip(editor.typeDefinition.confirm({ token: expired.token })))._tag,
+        ).toBe("StalePreviewError");
+        const impact = yield* editor.typeDefinition.preview(fresh);
+        expect(impact.nodes).toEqual([]);
+        expect(impact.affectedTypes).toEqual([]);
+        const results = yield* Effect.all(
+          [
+            editor.typeDefinition.confirm({ token: impact.token }).pipe(Effect.result),
+            editor.typeDefinition.confirm({ token: impact.token }).pipe(Effect.result),
+          ],
+          { concurrency: "unbounded" },
+        );
+        expect(results.map((result) => result._tag).sort()).toEqual(["Failure", "Success"]);
+      }).pipe(Effect.provide(testLayer)),
   );
 
   it.effect(
@@ -966,21 +962,20 @@ describe("type authoring preserve-invalid", () => {
       }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("keeps previews stateless and invalidates them when package IO changes", () =>
+  it.effect("bounds cancelled previews and invalidates previews when package IO changes", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       const old = yield* editor.typeDefinition.preview(fresh);
       for (let i = 0; i < 128; i++) yield* editor.typeDefinition.preview(fresh);
-      yield* editor.typeDefinition.confirm({ token: old.token });
+      expect((yield* Effect.flip(editor.typeDefinition.confirm({ token: old.token })))._tag).toBe(
+        "StalePreviewError",
+      );
       const impact = yield* editor.typeDefinition.preview(fresh);
       yield* (yield* Packages.Service).loadPackage({ ...pkg, name: "Replaced" });
       expect(
         (yield* Effect.flip(editor.typeDefinition.confirm({ token: impact.token })))._tag,
       ).toBe("StalePreviewError");
-      expect((yield* editor.project.get()).types).toEqual({
-        ...definitions,
-        fresh: fresh.definition,
-      });
+      expect((yield* editor.project.get()).types).toEqual(definitions);
     }).pipe(Effect.provide(testLayer)),
   );
 

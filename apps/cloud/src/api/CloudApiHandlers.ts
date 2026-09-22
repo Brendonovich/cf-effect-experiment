@@ -3,7 +3,6 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
-import * as PreviewAuth from "../auth/PreviewAuth.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as EditorRpc from "../editor/EditorRpc.ts";
 import * as Event from "../execution/Event.ts";
@@ -31,18 +30,6 @@ export const sessionHandlers = HttpApiBuilder.group(
       .handle("revokeApiKey", ({ params, request }) =>
         authentication.revokeApiKey(params.apiKeyId, request),
       );
-  }),
-);
-
-export const previewAuthHandlers = HttpApiBuilder.group(
-  Api,
-  "previewAuth",
-  Effect.fnUntraced(function* (handlers) {
-    const previewAuth = yield* PreviewAuth.Service;
-    return handlers
-      .handleRaw("authorize", ({ query, request }) => previewAuth.authorize(query, request))
-      .handle("token", ({ payload, request }) => previewAuth.token(payload, request))
-      .handle("exchange", ({ payload, request }) => previewAuth.exchange(payload, request));
   }),
 );
 
@@ -189,7 +176,6 @@ export const editorRpcHandlers = HttpApiBuilder.group(
 
 export const layer = Layer.mergeAll(
   sessionHandlers,
-  previewAuthHandlers,
   teamHandlers,
   projectHandlers,
   deploymentHandlers,

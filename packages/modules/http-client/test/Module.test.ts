@@ -267,6 +267,7 @@ describe("HTTP client module", () => {
           engines: {},
           constants: {},
           types: {},
+          queues: {},
           graphs: {
             [graphId]: {
               canvas: {

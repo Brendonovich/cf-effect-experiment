@@ -7,12 +7,11 @@ import {
   PackageId,
   Project,
   SchemaId,
-  Scopes,
   OutputRef,
 } from "@macrograph/core";
 import { DataType, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer } from "effect";
 
 import { Editor, Packages } from "../src/index.ts";
 
@@ -287,10 +286,12 @@ it.effect("persists scope projections separately from schema nodes", () =>
       nodeID: unpack.node.id,
       position: { x: 120, y: 80 },
     });
-    const project = yield* editor.project.get();
-    const graph = Project.canvases(project).graph!;
+    const graph = Project.canvases(yield* editor.project.get()).graph!;
     expect(graph.nodes[unpack.node.id]).toBeUndefined();
-    expect(graph.scopeProjections?.get(unpack.node.id)).toEqual({ x: 120, y: 80 });
+    expect(graph.scopeProjections?.[unpack.node.id]).toEqual({
+      id: unpack.node.id,
+      position: { x: 120, y: 80 },
+    });
     expect((yield* editor.project.snapshot()).nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual([
       { id: 'field:"value"', name: "value", type: DataType.String },
     ]);
@@ -301,7 +302,7 @@ it.effect("persists scope projections separately from schema nodes", () =>
         format: "macrograph/nodes",
         version: 1,
         nodes: Object.values(graph.nodes),
-        scopeProjections: Scopes.values(graph.scopeProjections),
+        scopeProjections: Object.values(graph.scopeProjections ?? {}),
         connections: graph.connections,
       }),
     });
@@ -310,14 +311,5 @@ it.effect("persists scope projections separately from schema nodes", () =>
     expect(pasted.nodeIO[pasted.scopeProjections[0]!.id]?.dataOutputs).toEqual([
       { id: 'field:"value"', name: "value", type: DataType.String },
     ]);
-    const encoded = Schema.encodeUnknownSync(Project.Model)(project);
-    expect(encoded.graphs.graph?.canvas.scopeProjections).toEqual([
-      [unpack.node.id, { x: 120, y: 80 }],
-    ]);
-    expect(
-      Project.canvases(
-        Schema.decodeUnknownSync(Project.Model)(encoded),
-      ).graph?.scopeProjections?.get(unpack.node.id),
-    ).toEqual({ x: 120, y: 80 });
   }).pipe(Effect.provide(TestLayer)),
 );

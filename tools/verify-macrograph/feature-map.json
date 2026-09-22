@@ -20,6 +20,21 @@
       "evidence": ["screenshot", "server-log"]
     },
     {
+      "id": "function.queues",
+      "name": "Function queues expose local definitions and live controls",
+      "documentation": ".opencode/skills/verify-macrograph/features/function-queues.md",
+      "status": "covered",
+      "verification": "function-queues",
+      "userJourney": [
+        "Create function",
+        "Open Queues tab",
+        "Create queue referencing function",
+        "Pause queue",
+        "Resume queue"
+      ],
+      "evidence": ["screenshot", "server-log"]
+    },
+    {
       "id": "module.reference",
       "name": "Module panes expose info, settings, and configurable node and resource references",
       "documentation": ".opencode/skills/verify-macrograph/features/module-reference.md",

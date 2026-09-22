@@ -13,8 +13,6 @@ import { WorkspaceHomeRoute } from "./routes";
 import { CredentialOAuthCallbackRoute } from "./routes/credential-oauth-callback";
 import { CredentialsRoute } from "./routes/credentials";
 import { NotFoundRoute } from "./routes/not-found";
-import { PreviewAuthAuthorizeRoute } from "./routes/preview-auth-authorize";
-import { PreviewAuthCallbackRoute } from "./routes/preview-auth-callback";
 import { SignInRoute } from "./routes/sign-in";
 import { TeamHomeRoute } from "./routes/teams";
 import { DeploymentsRoute } from "./routes/teams/projects/deployments";
@@ -58,8 +56,6 @@ const Router = createRouter({
   base: import.meta.env.BASE_URL,
   routes: [
     { path: "/sign-in", component: SignInRoute },
-    { path: "/preview-auth/authorize", component: PreviewAuthAuthorizeRoute },
-    { path: "/preview-auth/callback", component: PreviewAuthCallbackRoute },
     { path: "/credential-oauth/callback", component: CredentialOAuthCallbackRoute },
     {
       path: "/",

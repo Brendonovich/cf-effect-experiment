@@ -187,6 +187,7 @@ describe("local browser runtime", () => {
           "list",
           "logic",
           "macrograph-functions",
+          "macrograph-queues",
           "math",
           "obs",
           "string",

@@ -11,6 +11,20 @@ export const apply = (
   event: EditorEvent.EditorEvent,
 ): Effect.Effect<void, ApplyError> => {
   switch (event._tag) {
+    case "QueueUpdated":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        yield* persistence.saveProject({
+          ...project,
+          queues: { ...project.queues, [event.queue.id]: event.queue },
+        });
+      }).pipe(PersistenceError.refail);
+    case "QueueDeleted":
+      return Effect.gen(function* () {
+        const project = yield* persistence.loadProject();
+        const { [event.queueId]: _, ...queues } = project.queues;
+        yield* persistence.saveProject({ ...project, queues });
+      }).pipe(PersistenceError.refail);
     case "TypeDefinitionsUpdated":
       return Effect.gen(function* () {
         const project = yield* persistence.loadProject();
@@ -43,22 +57,22 @@ export const apply = (
           return yield* persistence.saveGraph({
             ...graph,
             nodes,
-            scopeProjections: new Map([
-              ...(graph.scopeProjections ?? []),
-              ...(event.scopeProjections ?? []).map(
-                (projection) => [projection.id, projection.position] as const,
+            scopeProjections: {
+              ...graph.scopeProjections,
+              ...Object.fromEntries(
+                (event.scopeProjections ?? []).map((projection) => [projection.id, projection]),
               ),
-            ]),
+            },
             connections: [
               ...graph.connections,
               ...event.connections.filter((connection) => !existing.has(connection.id)),
             ],
           });
         }
-        const scopeProjections = new Map(graph.scopeProjections);
+        const scopeProjections = { ...graph.scopeProjections };
         for (const id of event.nodeIds) {
           delete nodes[id];
-          scopeProjections.delete(id);
+          delete scopeProjections[id];
         }
         const deleted = new Set(event.deletedConnectionIds);
         return yield* persistence.saveGraph({
@@ -123,10 +137,10 @@ export const apply = (
         const graph = yield* persistence.loadGraph(event.graphId);
         return yield* persistence.saveGraph({
           ...graph,
-          scopeProjections: new Map(graph.scopeProjections).set(
-            event.projection.id,
-            event.projection.position,
-          ),
+          scopeProjections: {
+            ...graph.scopeProjections,
+            [event.projection.id]: event.projection,
+          },
           connections: [...graph.connections, event.connection],
         });
       }).pipe(PersistenceError.refail);
@@ -141,14 +155,14 @@ export const apply = (
     case "NodePositionChanged":
       return Effect.gen(function* () {
         const graph = yield* persistence.loadGraph(event.graphId);
-        const projection = graph.scopeProjections?.get(event.nodeId);
+        const projection = graph.scopeProjections?.[event.nodeId];
         if (projection !== undefined)
           return yield* persistence.saveGraph({
             ...graph,
-            scopeProjections: new Map(graph.scopeProjections).set(event.nodeId, {
-              x: event.x,
-              y: event.y,
-            }),
+            scopeProjections: {
+              ...graph.scopeProjections,
+              [event.nodeId]: { ...projection, position: { x: event.x, y: event.y } },
+            },
           });
         if (GraphFunction.isBoundaryNodeId(event.nodeId)) {
           const project = yield* persistence.loadProject();
@@ -221,8 +235,7 @@ export const apply = (
       return Effect.gen(function* () {
         const graph = yield* persistence.loadGraph(event.graphId);
         const { [event.nodeId]: _, ...nodes } = graph.nodes;
-        const scopeProjections = new Map(graph.scopeProjections);
-        scopeProjections.delete(event.nodeId);
+        const { [event.nodeId]: _projection, ...scopeProjections } = graph.scopeProjections ?? {};
         const deleted = new Set(event.deletedConnectionIds);
         return yield* persistence.saveGraph({
           ...graph,

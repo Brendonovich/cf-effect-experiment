@@ -49,6 +49,7 @@ export function PropertyControl(props: {
     { readonly type: unknown } | { readonly function: true }
   >;
   functions?: ReadonlyArray<GraphFunction.Model>;
+  options?: ReadonlyArray<{ readonly id: string; readonly name: string }>;
   value: unknown;
   onSet: (value: unknown) => void;
   onClear: () => void;
@@ -95,7 +96,24 @@ export function PropertyControl(props: {
           onChange={props.onSet}
         />
       </Show>
-      <Show when={"type" in props.property && props.property.type._tag === "String"}>
+      <Show when={props.options}>
+        {(options) => (
+          <Select
+            options={options()}
+            value={typeof props.value === "string" ? props.value : ""}
+            valid={options().some((option) => option.id === props.value)}
+            placeholder={`Select ${props.property.name.toLowerCase()}`}
+            onChange={props.onSet}
+          />
+        )}
+      </Show>
+      <Show
+        when={
+          props.options === undefined &&
+          "type" in props.property &&
+          props.property.type._tag === "String"
+        }
+      >
         <input
           sx={styles.input}
           value={draft()}

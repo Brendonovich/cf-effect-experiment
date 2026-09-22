@@ -114,6 +114,7 @@ describe("Logic execution", () => {
           engines: {},
           constants: {},
           types: {},
+          queues: {},
           graphs: {
             [graphId]: {
               canvas: {
@@ -211,6 +212,7 @@ describe("Logic execution", () => {
           engines: {},
           constants: {},
           types: {},
+          queues: {},
           graphs: { [graphId]: { canvas: graph } },
         };
         const executor = yield* Executor.make(project);

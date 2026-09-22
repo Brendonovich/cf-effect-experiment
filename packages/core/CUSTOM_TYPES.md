@@ -14,11 +14,8 @@ with the variant name. These reserved markers survive JSON conversion and durabl
 The Types panel authors named structs and tagged variants with a nested type picker.
 `PreviewTypeDefinition` validates the proposal and reports transitive dependent types
 and affected nodes across every graph, including IO, stored defaults, properties and wires.
-`ConfirmTypeDefinition` verifies a short-lived, self-contained HMAC-signed preview token under
-the editor lock. The token carries the reviewed change, expiry, and signed project/package state
-fingerprints; proposals are not retained server-side. Any intervening project or package-catalog
-change invalidates confirmation. Signing keys are ephemeral to an editor service instance, so a
-restart also invalidates outstanding previews.
+`ConfirmTypeDefinition` consumes a short-lived opaque preview token under the editor lock.
+Any intervening project or package-catalog change invalidates confirmation.
 
 The confirmed policy is **preserve invalid**, not migration by deletion. Type edits and
 deletions retain nodes, connections, defaults, and dependent definitions exactly as saved.

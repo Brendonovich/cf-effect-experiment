@@ -326,29 +326,6 @@ it.layer(TestLayer)((it) => {
       }),
   );
 
-  it.effect("accepts prototype names as scope projection IDs", () =>
-    Effect.gen(function* () {
-      const decoded = yield* Clipboard.decode(
-        JSON.stringify({
-          format: "macrograph/nodes",
-          version: 1,
-          nodes: [],
-          scopeProjections: [{ id: "__proto__", position: { x: 0, y: 0 } }],
-          connections: [],
-        }),
-      );
-      expect(decoded.scopeProjections?.[0]?.id).toBe("__proto__");
-      const canvas = Schema.decodeUnknownSync(Canvas.Model)({
-        id: "graph",
-        name: "Graph",
-        nodes: {},
-        scopeProjections: [["__proto__", { x: 0, y: 0 }]],
-        connections: [],
-      });
-      expect(canvas.scopeProjections?.get("__proto__")).toEqual({ x: 0, y: 0 });
-    }),
-  );
-
   for (const [name, invalid] of [
     ["malformed", "{"],
     ["version", JSON.stringify({ ...fragment, version: 2 })],

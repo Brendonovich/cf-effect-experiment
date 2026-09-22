@@ -38,6 +38,7 @@
     "verify:doctor": "node tools/verify-macrograph/verify.mjs doctor",
     "verify:playground:smoke": "node tools/verify-macrograph/verify.mjs smoke",
     "verify:playground:function-navigation": "node tools/verify-macrograph/verify.mjs function-navigation",
+    "verify:playground:function-queues": "node tools/verify-macrograph/verify.mjs function-queues",
     "verify:playground:module-reference": "node tools/verify-macrograph/verify.mjs module-reference",
     "verify:playground:journey": "node tools/verify-macrograph/verify.mjs journey",
     "verify:playground": "node tools/verify-macrograph/verify.mjs all",

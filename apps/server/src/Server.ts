@@ -11,6 +11,7 @@ import {
   EditorServer,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
@@ -34,7 +35,6 @@ import { ClientSessions } from "./ClientSessions.ts";
 import { ModuleHost } from "./ModuleHost.ts";
 import { Observability } from "./Observability.ts";
 import { ServerConfig } from "./ServerConfig.ts";
-import { ServerMcp } from "./ServerMcp.ts";
 import { ServerSetup } from "./ServerSetup.ts";
 import { StaticRoutes } from "./StaticRoutes.ts";
 
@@ -272,7 +272,6 @@ const ApiRoutes = Layer.mergeAll(
   ClientAuthRoutes,
   ModuleHost.rpcRoute(config.basePath, canEditRequest),
   HealthRoute,
-  ServerMcp.layer(config.basePath),
 );
 
 const StaticRoute = StaticRoutes.layer({
@@ -302,6 +301,7 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provide(RpcSerialization.layerJsonRpc()),
   Layer.provide(LiveRuntimeLayer),
   Layer.provide(RuntimeActivity.layer),
+  Layer.provide(QueueRuntime.layer),
   Layer.provide(
     Layer.succeed(Engine.Credentials, {
       ...cloudCredentials.credentials,
@@ -371,38 +371,16 @@ const ShutdownLayer = Layer.effectDiscard(
   }),
 );
 
-const requestMiddleware = HttpMiddleware.make((httpEffect) =>
+const pathGuard = HttpMiddleware.make((httpEffect) =>
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    if (StaticRoutes.isUnsafePath(request.originalUrl))
-      return HttpServerResponse.text("Invalid path", { status: 400 });
-    if (new URL(request.url, config.publicOrigin).pathname !== `${config.basePath}/mcp`)
-      return yield* httpEffect;
-
-    return yield* ServerMcp.authenticated(
-      httpEffect,
-      Effect.gen(function* () {
-        const authorization = request.headers.authorization;
-        const token = authorization?.startsWith("Bearer ")
-          ? authorization.slice("Bearer ".length)
-          : undefined;
-        const [session, ownerId] = yield* Effect.all([
-          clientSessions.resolve(token),
-          serverOwnerId,
-        ]);
-        if (session === undefined) return { status: "unauthorized" as const };
-        if (session.userId !== ownerId && !config.adminIds.has(session.userId))
-          return { status: "forbidden" as const };
-        return { status: "authorized" as const, session };
-      }),
-    );
+    return StaticRoutes.isUnsafePath(request.originalUrl)
+      ? HttpServerResponse.text("Invalid path", { status: 400 })
+      : yield* httpEffect;
   }),
 );
 
-const Served = HttpRouter.serve(AppLayer, {
-  disableLogger: true,
-  middleware: requestMiddleware,
-}).pipe(
+const Served = HttpRouter.serve(AppLayer, { disableLogger: true, middleware: pathGuard }).pipe(
   Layer.provide(
     NodeHttpServer.layer(() => nodeServer, {
       port: config.port,

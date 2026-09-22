@@ -13,7 +13,7 @@ import {
 } from "@macrograph/core";
 import { QueryClient, useMutation } from "@tanstack/solid-query";
 import { Effect, Result, type Schema } from "effect";
-import { createSignal, onCleanup } from "solid-js";
+import { createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { createEditorConnection } from "./session/createEditorConnection";
 import type { createEditorStore } from "./store";
@@ -54,6 +54,53 @@ export function createEditorCommands(
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { networkMode: "always" } },
   });
+  const queueMutation = useMutation(
+    () => ({
+      mutationFn: (operation: () => Promise<void>) => operation(),
+      retry: false,
+    }),
+    () => queryClient,
+  );
+  const queueAction = (operation: () => Promise<unknown>) =>
+    queueMutation.mutate(() => operation().then(() => undefined));
+  const createQueue = () => {
+    const c = client();
+    const fn = Object.values(editor.store.project?.functions ?? {})[0];
+    if (c && canEdit() && fn !== undefined)
+      queueAction(() =>
+        runPromise(applyMutation(c.CreateQueue({ name: "New Queue", functionId: fn.canvas.id }))),
+      );
+  };
+  const renameQueue = (queueId: string, name: string) => {
+    const c = client();
+    if (c && canEdit())
+      queueAction(() => runPromise(applyMutation(c.RenameQueue({ queueId, name }))));
+  };
+  const setQueueFunction = (queueId: string, functionId: string) => {
+    const c = client();
+    if (c && canEdit())
+      queueAction(() => runPromise(applyMutation(c.SetQueueFunction({ queueId, functionId }))));
+  };
+  const deleteQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(() => runPromise(applyMutation(c.DeleteQueue({ queueId }))));
+  };
+  const pauseQueue = (queueId: string, paused: boolean) => {
+    const c = client();
+    if (c && canEdit()) queueAction(() => runPromise(c.SetQueuePaused({ queueId, paused })));
+  };
+  const advanceQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(() => runPromise(c.AdvanceQueue({ queueId })));
+  };
+  const clearQueue = (queueId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(() => runPromise(c.ClearQueue({ queueId })));
+  };
+  const removeQueueItem = (queueId: string, itemId: string) => {
+    const c = client();
+    if (c && canEdit()) queueAction(() => runPromise(c.RemoveQueueItem({ queueId, itemId })));
+  };
   onCleanup(() => queryClient.clear());
   const clipboardMutation = useMutation(
     () => ({
@@ -109,7 +156,7 @@ export function createEditorCommands(
       return schema?.internal === true || Scopes.isProjectionNode(node) ? [] : [node];
     });
     const scopeProjections = nodeIds.flatMap((id) => {
-      const projection = Scopes.get(graph.scopeProjections, id);
+      const projection = graph.scopeProjections?.[id];
       return projection === undefined ? [] : [projection];
     });
     const ids = new Set([
@@ -658,6 +705,15 @@ export function createEditorCommands(
     editingGraphNameId,
     editingNodeNameId,
     createConstant,
+    queueError: createMemo(() => queueMutation.error?.message ?? null),
+    createQueue,
+    renameQueue,
+    setQueueFunction,
+    deleteQueue,
+    pauseQueue,
+    advanceQueue,
+    clearQueue,
+    removeQueueItem,
     renameConstant,
     selectConstant,
     setDefaultConstant,

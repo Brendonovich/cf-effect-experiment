@@ -11,7 +11,6 @@ import {
   EditorServer,
   Packages,
   Presence,
-  ProjectOperations,
 } from "@macrograph/editor";
 import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
 import GitHubModule from "@macrograph/module-github";
@@ -516,12 +515,73 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         );
 
       const createGraph = (input: CreateGraphRequest, userId: string) =>
-        editorEvents.withActor(ProjectOperations.createGraph(editor, input), {
-          type: "CLIENT",
-          id: userId,
-        });
+        editorEvents.withActor(
+          Effect.gen(function* () {
+            const nodes = input.nodes ?? {};
+            const connections = input.connections ?? [];
 
-      const getGraph = (graphId: string) => ProjectOperations.getGraph(editor, graphId);
+            for (const connection of connections) {
+              if (
+                !Object.hasOwn(nodes, connection.outNodeId) ||
+                !Object.hasOwn(nodes, connection.inNodeId)
+              ) {
+                return yield* new Connection.InvalidError({
+                  reason: "Connection references a node that is not being created",
+                });
+              }
+            }
+
+            const created = yield* editor.graph.create(
+              input.name === undefined ? {} : { name: input.name },
+            );
+
+            return yield* Effect.gen(function* () {
+              const nodeIds = new Map<string, string>();
+
+              for (const [reference, node] of Object.entries(nodes)) {
+                const event = yield* editor.node
+                  .create({ graphID: created.graph.id, node })
+                  .pipe(
+                    Effect.catchTag("FunctionEventNodeNotAllowedError", () =>
+                      Effect.die("A newly-created graph was unexpectedly treated as a function"),
+                    ),
+                  );
+                nodeIds.set(reference, event.node.id);
+              }
+
+              for (const connection of connections) {
+                const outNodeId = nodeIds.get(connection.outNodeId);
+                const inNodeId = nodeIds.get(connection.inNodeId);
+                if (outNodeId === undefined || inNodeId === undefined) {
+                  return yield* new Connection.InvalidError({
+                    reason: "Connection references a node that is not being created",
+                  });
+                }
+
+                yield* editor.connection.create({
+                  graphID: created.graph.id,
+                  connection: { ...connection, outNodeId, inNodeId },
+                });
+              }
+
+              return yield* persistence.loadGraph(created.graph.id);
+            }).pipe(
+              Effect.catchCause((cause) =>
+                editor.graph
+                  .delete({ graphID: created.graph.id })
+                  .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
+              ),
+            );
+          }),
+          { type: "CLIENT", id: userId },
+        );
+
+      const getGraph = Effect.fnUntraced(function* (graphId: string) {
+        const snapshot = yield* editor.project.snapshot();
+        const graph = snapshot.project.graphs[graphId];
+        if (graph === undefined) return yield* new Graph.NotFoundError({ id: graphId });
+        return { graph, nodeIO: snapshot.nodeIO[graphId] ?? {} };
+      });
 
       const deleteGraph = Effect.fnUntraced(function* (
         graphId: string,

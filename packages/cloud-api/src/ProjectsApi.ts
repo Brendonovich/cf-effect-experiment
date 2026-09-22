@@ -28,7 +28,21 @@ export const CreateProjectRequest = Schema.Struct({
   userIds: Schema.optional(Schema.Array(Schema.String)),
 });
 
-export const CreateGraphRequest = Canvas.CreateRequest;
+export const CreateGraphRequest = Schema.Struct({
+  name: Schema.optional(Schema.String.annotate({ description: "Display name for the new graph." })),
+  nodes: Schema.optional(
+    Schema.Record(Schema.String, Node.CreateInput).annotate({
+      description:
+        "Node definitions keyed by temporary client-defined IDs. Connections in this request reference those IDs.",
+    }),
+  ),
+  connections: Schema.optional(
+    Schema.Array(Connection.CreateInput).annotate({
+      description:
+        "Connections between nodes in this request, using their temporary node IDs and schema port IDs.",
+    }),
+  ),
+});
 export type CreateGraphRequest = typeof CreateGraphRequest.Type;
 
 export class ProjectsApiGroup extends HttpApiGroup.make("projects").add(

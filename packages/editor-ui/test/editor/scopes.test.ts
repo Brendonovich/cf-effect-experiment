@@ -43,7 +43,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
           },
           break: Scopes.projectionNode({ id: NodeId.make("break"), position: { x: 0, y: 0 } }),
         },
-        scopeProjections: [["break", { x: 0, y: 0 }]],
+        scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
       },
     },
   },

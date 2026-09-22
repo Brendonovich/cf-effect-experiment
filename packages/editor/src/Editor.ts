@@ -19,6 +19,7 @@ import {
   Package,
   PackageId,
   Project,
+  Queue,
   RenderedProject,
   ResourceConstant,
   SchemaId,
@@ -47,31 +48,6 @@ import { Packages } from "./Packages.ts";
 
 const ResourceKey = Schema.String.pipe(Schema.brand("ResourceKey"));
 type ResourceKey = typeof ResourceKey.Type;
-
-const TypePreviewToken = Schema.Struct({
-  version: Schema.Literal(1),
-  change: TypeDefinition.Change,
-  expires: Schema.Number,
-  projectState: Schema.String,
-  packagesState: Schema.String,
-});
-
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-
-const encodeBase64Url = (value: Uint8Array): string => {
-  let binary = "";
-  for (const byte of value) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-};
-
-const decodeBase64Url = (value: string): Uint8Array<ArrayBuffer> => {
-  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
-  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
-  const decoded = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) decoded[index] = binary.charCodeAt(index);
-  return decoded;
-};
 
 type GraphUpdateOptions = {
   readonly graphID: string;
@@ -132,6 +108,7 @@ export const ProjectSnapshot = Schema.Struct({
     functions: Project.Model.fields.functions,
     engines: Project.Model.fields.engines,
     constants: Project.Model.fields.constants,
+    queues: Project.Model.fields.queues,
     types: Project.Model.fields.types,
   }),
   nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
@@ -160,11 +137,9 @@ const emptyNodeIO: NodeIO = {
 // Exact canonical state, not a hash: no collision can authorize a stale proposal.
 const projectState = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
-    item instanceof Map
-      ? [...item.entries()].sort(([a], [b]) => String(a).localeCompare(String(b)))
-      : item !== null && typeof item === "object" && !Array.isArray(item)
-        ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
-        : item,
+    item !== null && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
   );
 
 export class EngineNotRegistered extends Schema.TaggedError<EngineNotRegistered>()(
@@ -270,6 +245,39 @@ export interface Interface {
     ) => Effect.Effect<
       EditorEvent.ResourceConstantDefaultChanged,
       PersistenceError | Project.NotFoundError | ResourceConstant.NotFoundError
+    >;
+  };
+  readonly queue: {
+    readonly create: (
+      name: string,
+      functionId: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueUpdated,
+      PersistenceError | Project.NotFoundError | GraphFunction.NotFoundError
+    >;
+    readonly rename: (
+      id: string,
+      name: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueUpdated,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
+    >;
+    readonly setFunction: (
+      id: string,
+      functionId: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueUpdated,
+      | PersistenceError
+      | Project.NotFoundError
+      | Queue.NotFoundError
+      | GraphFunction.NotFoundError
+      | Queue.RecursiveEnqueueError
+    >;
+    readonly delete: (
+      id: string,
+    ) => Effect.Effect<
+      EditorEvent.QueueDeleted,
+      PersistenceError | Project.NotFoundError | Queue.NotFoundError
     >;
   };
   readonly graph: {
@@ -462,48 +470,15 @@ export const layer = Layer.effect(Service)(
       Effect.orDie,
     );
     yield* packages.setTypeDefinitions(initialProject?.types ?? {});
-    const previewSigningKey = yield* Effect.promise(() =>
-      crypto.subtle.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]),
-    );
-    const signPreviewValue = (value: string) =>
-      Effect.promise(() =>
-        crypto.subtle.sign("HMAC", previewSigningKey, textEncoder.encode(value)),
-      ).pipe(Effect.map((signature) => encodeBase64Url(new Uint8Array(signature))));
-    const makePreviewToken = Effect.fnUntraced(function* (
-      change: TypeDefinition.Change,
-      project: Project.Model,
-    ) {
-      const payload = JSON.stringify({
-        version: 1,
-        change,
-        expires: (yield* Clock.currentTimeMillis) + 300_000,
-        projectState: yield* signPreviewValue(`project\0${projectState(project)}`),
-        packagesState: yield* signPreviewValue(
-          `packages\0${projectState(yield* packages.getPackages())}`,
-        ),
-      } satisfies typeof TypePreviewToken.Type);
-      return `${encodeBase64Url(textEncoder.encode(payload))}.${yield* signPreviewValue(payload)}`;
-    });
-    const readPreviewToken = (token: string) =>
-      Effect.tryPromise({
-        try: async () => {
-          const segments = token.split(".");
-          if (segments.length !== 2) throw new Error("Malformed preview token");
-          const payloadBytes = decodeBase64Url(segments[0]!);
-          const payload = textDecoder.decode(payloadBytes);
-          const valid = await crypto.subtle.verify(
-            "HMAC",
-            previewSigningKey,
-            decodeBase64Url(segments[1]!),
-            textEncoder.encode(payload),
-          );
-          if (!valid) throw new Error("Invalid preview token signature");
-          return Schema.decodeUnknownSync(TypePreviewToken, { onExcessProperty: "error" })(
-            JSON.parse(payload),
-          );
-        },
-        catch: () => new TypeDefinition.StalePreviewError(),
-      });
+    const previews = new Map<
+      string,
+      {
+        readonly state: string;
+        readonly change: TypeDefinition.Change;
+        readonly expires: number;
+        readonly packages: string;
+      }
+    >();
     const clipboardSession = crypto.randomUUID();
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -552,11 +527,54 @@ export const layer = Layer.effect(Service)(
               );
             }),
           )
-        : resolveIOProperties(node.schema, node.properties).pipe(
-            Effect.flatMap((properties) =>
-              packages.getNodeIO(node.schema, properties, definitions),
-            ),
-          );
+        : Queue.isEnqueue(node)
+          ? persistence.loadProject().pipe(
+              Effect.map((project) => {
+                const target = node.properties.queue;
+                const queue = typeof target === "string" ? project.queues[target] : undefined;
+                return Queue.enqueueIO(queue, project.functions);
+              }),
+            )
+          : resolveIOProperties(node.schema, node.properties).pipe(
+              Effect.flatMap((properties) =>
+                packages.getNodeIO(node.schema, properties, definitions),
+              ),
+            );
+    const validateQueueTarget = Effect.fnUntraced(function* (
+      node: Pick<Node.Model, "schema" | "properties">,
+    ) {
+      if (!Queue.isEnqueue(node)) return;
+      const queueId = node.properties.queue;
+      const project = yield* persistence.loadProject();
+      if (typeof queueId !== "string" || project.queues[queueId] === undefined)
+        return yield* new Package.InvalidPropertyError({
+          property: "queue",
+          reason: "Selected queue does not exist",
+        });
+    });
+    const validateQueueDependencies = (
+      project: Project.Model,
+      graphId: string,
+      canvas: Canvas.Model,
+    ) => {
+      const fn = project.functions[graphId];
+      if (fn === undefined) return Effect.void;
+      return Queue.validateProject({
+        queues: project.queues,
+        functions: { ...project.functions, [graphId]: { ...fn, canvas } },
+      }).pipe(
+        Effect.mapError(
+          (error) =>
+            new Package.InvalidPropertyError({
+              property: "queue",
+              reason:
+                error._tag === "QueueRecursiveEnqueueError"
+                  ? `Queue dependency cycle from ${error.queueId} to ${error.targetQueueId}`
+                  : "Queue or function reference does not exist",
+            }),
+        ),
+      );
+    };
     const getNodeIO = Effect.fnUntraced(function* (
       node: Node.Model,
       definitions?: DataType.Definitions,
@@ -564,7 +582,7 @@ export const layer = Layer.effect(Service)(
       if (Scopes.isProjectionNode(node)) {
         const project = yield* persistence.loadProject();
         const graph = Object.values(Project.canvases(project)).find(
-          (graph) => graph.scopeProjections?.has(node.id) === true,
+          (graph) => graph.scopeProjections?.[node.id] !== undefined,
         );
         if (graph === undefined) return emptyNodeIO;
         const { declarations } = yield* graphWildcards(graph, {}, undefined, definitions);
@@ -608,7 +626,7 @@ export const layer = Layer.effect(Service)(
           ));
         if (io !== undefined) declarations.set(node.id, io);
       }
-      for (const projection of Scopes.values(graph.scopeProjections))
+      for (const projection of Object.values(graph.scopeProjections ?? {}))
         declarations.set(
           projection.id,
           Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
@@ -623,7 +641,7 @@ export const layer = Layer.effect(Service)(
           const derived = cache.derivedIO(id);
           if (derived !== undefined) declarations.set(id, { ...io, ...derived });
         }
-        for (const projection of Scopes.values(graph.scopeProjections))
+        for (const projection of Object.values(graph.scopeProjections ?? {}))
           declarations.set(
             projection.id,
             Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
@@ -791,7 +809,7 @@ export const layer = Layer.effect(Service)(
             after[nodeId] = io;
           }
         }
-        for (const projection of Scopes.values(graph.scopeProjections)) {
+        for (const projection of Object.values(graph.scopeProjections ?? {})) {
           before[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => before[id]);
           after[projection.id] = Scopes.projectionIO(graph, projection.id, (id) => after[id]);
           if (projectState(before[projection.id]) !== projectState(after[projection.id]))
@@ -826,8 +844,19 @@ export const layer = Layer.effect(Service)(
         for (const [nodeId, entries] of [...reasons].sort(([a], [b]) => a.localeCompare(b)))
           nodes.push({ graphId, nodeId, reasons: [...entries].sort() });
       }
+      const now = yield* Clock.currentTimeMillis;
+      for (const [token, preview] of previews) if (preview.expires <= now) previews.delete(token);
+      while (previews.size >= 128) previews.delete(previews.keys().next().value!);
+      const token = crypto.randomUUID();
+      // Clone the proposal so in-process callers cannot alter an already reviewed change.
+      previews.set(token, {
+        state: projectState(project),
+        change: structuredClone(change),
+        expires: now + 300_000,
+        packages: projectState(yield* packages.getPackages()),
+      });
       return {
-        token: yield* makePreviewToken(change, project),
+        token,
         change,
         affectedTypes: definitionsChanged ? affectedTypes.filter((typeId) => typeId !== id) : [],
         nodes,
@@ -839,13 +868,14 @@ export const layer = Layer.effect(Service)(
     }: {
       readonly token: string;
     }) {
-      const preview = yield* readPreviewToken(token);
+      const preview = previews.get(token);
+      if (preview === undefined) return yield* new TypeDefinition.StalePreviewError();
+      previews.delete(token);
       const project = yield* persistence.loadProject();
       if (
         preview.expires <= (yield* Clock.currentTimeMillis) ||
-        preview.projectState !== (yield* signPreviewValue(`project\0${projectState(project)}`)) ||
-        preview.packagesState !==
-          (yield* signPreviewValue(`packages\0${projectState(yield* packages.getPackages())}`))
+        preview.state !== projectState(project) ||
+        preview.packages !== projectState(yield* packages.getPackages())
       )
         return yield* new TypeDefinition.StalePreviewError();
       const types = yield* proposedTypes(project, preview.change);
@@ -876,7 +906,7 @@ export const layer = Layer.effect(Service)(
               resolved.add(nodeId);
             }
           }
-          for (const projection of Scopes.values(graph.scopeProjections)) {
+          for (const projection of Object.values(graph.scopeProjections ?? {})) {
             nodeIO[graphId][projection.id] = Scopes.projectionIO(
               graph,
               projection.id,
@@ -923,7 +953,7 @@ export const layer = Layer.effect(Service)(
     ) {
       const node = graph.nodes[nodeId];
       if (node !== undefined) return yield* getNodeIO(node);
-      if (graph.scopeProjections?.has(nodeId) === true) {
+      if (graph.scopeProjections?.[nodeId] !== undefined) {
         const { declarations } = yield* graphWildcards(graph);
         return declarations.get(nodeId) ?? emptyNodeIO;
       }
@@ -1116,6 +1146,7 @@ export const layer = Layer.effect(Service)(
         initialProperties,
       );
       yield* validateResourceBindings(options.node.schema, properties);
+      yield* validateQueueTarget({ schema: options.node.schema, properties });
       const inputDefaults: Record<string, Schema.Json> = {};
       const ioProperties = yield* resolveIOProperties(options.node.schema, properties);
       for (const [input, value] of Object.entries(options.node.inputDefaults ?? {})) {
@@ -1147,6 +1178,13 @@ export const layer = Layer.effect(Service)(
         const graph = yield* Project.getGraph(project, options.graphID);
         yield* Graph.validateNode(graph, node, schema);
       }
+      yield* validateQueueDependencies(project, options.graphID, {
+        ...(fn?.canvas ?? project.graphs[options.graphID]!.canvas),
+        nodes: {
+          ...(fn?.canvas.nodes ?? project.graphs[options.graphID]!.canvas.nodes),
+          [node.id]: node,
+        },
+      });
       const io = yield* getNodeIO(node);
       return yield* events.publish({ _tag: "NodeCreated", graphId: options.graphID, node, io });
     }, lock.withPermit);
@@ -1315,7 +1353,7 @@ export const layer = Layer.effect(Service)(
           let id = NodeId.make(crypto.randomUUID());
           while (
             Object.hasOwn(graph.nodes, id) ||
-            graph.scopeProjections?.has(id) === true ||
+            Object.hasOwn(graph.scopeProjections ?? {}, id) ||
             nodes.some((node) => node.id === id) ||
             scopeProjections.some((projection) => projection.id === id)
           )
@@ -1338,10 +1376,12 @@ export const layer = Layer.effect(Service)(
         const proposedGraph: Canvas.Model = {
           ...graph,
           nodes: { ...graph.nodes, ...Object.fromEntries(nodes.map((node) => [node.id, node])) },
-          scopeProjections: new Map([
-            ...(graph.scopeProjections ?? []),
-            ...scopeProjections.map((projection) => [projection.id, projection.position] as const),
-          ]),
+          scopeProjections: {
+            ...graph.scopeProjections,
+            ...Object.fromEntries(
+              scopeProjections.map((projection) => [projection.id, projection]),
+            ),
+          },
           connections: [
             ...graph.connections,
             ...[...fragment.connections, ...external]
@@ -1356,6 +1396,11 @@ export const layer = Layer.effect(Service)(
               })),
           ],
         };
+        yield* validateQueueDependencies(project, options.graphID, proposedGraph).pipe(
+          Effect.mapError(
+            (error) => new Clipboard.InvalidError({ reason: `${error.property}: ${error.reason}` }),
+          ),
+        );
         if (nodes.some(CustomTypes.isOperationNode) || scopeProjections.length > 0) {
           const inferred = yield* graphWildcards(proposedGraph, nodeIO);
           for (const node of nodes) {
@@ -1384,7 +1429,7 @@ export const layer = Layer.effect(Service)(
               ? yield* getNodeIO(graph.nodes[outNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : graph.scopeProjections?.has(outNodeId) === true
+              : graph.scopeProjections?.[outNodeId] !== undefined
                 ? yield* endpointIO(project, graph, outNodeId).pipe(
                     Effect.catchCause(() => Effect.succeed(undefined)),
                   )
@@ -1395,7 +1440,7 @@ export const layer = Layer.effect(Service)(
               ? yield* getNodeIO(graph.nodes[inNodeId]!).pipe(
                   Effect.catchCause(() => Effect.succeed(undefined)),
                 )
-              : graph.scopeProjections?.has(inNodeId) === true
+              : graph.scopeProjections?.[inNodeId] !== undefined
                 ? yield* endpointIO(project, graph, inNodeId).pipe(
                     Effect.catchCause(() => Effect.succeed(undefined)),
                   )
@@ -1483,7 +1528,7 @@ export const layer = Layer.effect(Service)(
         return yield* new Clipboard.InvalidError({ reason: "Invalid cut selection" });
       const graph = yield* persistence.loadGraph(options.graphID);
       for (const id of options.nodeIds) {
-        if (graph.scopeProjections?.has(id) === true) continue;
+        if (graph.scopeProjections?.[id] !== undefined) continue;
         if (!Object.hasOwn(graph.nodes, id)) return yield* new Node.NotFoundError({ id });
         const node = yield* Canvas.getNode(graph, id);
         const schema = yield* packages.getSchema(node.schema).pipe(
@@ -1517,7 +1562,7 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       const persistedNode = graph.nodes[options.nodeID];
       if (persistedNode === undefined) {
-        if (graph.scopeProjections?.has(options.nodeID) === true) {
+        if (graph.scopeProjections?.[options.nodeID] !== undefined) {
           if (options.name !== undefined)
             return yield* new Node.NotFoundError({ id: options.nodeID });
         } else {
@@ -1555,7 +1600,7 @@ export const layer = Layer.effect(Service)(
       const graph = yield* persistence.loadGraph(options.graphID);
       if (
         graph.nodes[options.nodeID] === undefined &&
-        graph.scopeProjections?.has(options.nodeID) !== true
+        graph.scopeProjections?.[options.nodeID] === undefined
       )
         return yield* new Node.NotFoundError({ id: options.nodeID });
       const connections = graph.connections
@@ -1599,7 +1644,7 @@ export const layer = Layer.effect(Service)(
       };
       const candidate = {
         ...graph,
-        scopeProjections: new Map(graph.scopeProjections).set(id, projection.position),
+        scopeProjections: { ...graph.scopeProjections, [id]: projection },
         connections: [...graph.connections, connection],
       };
       const io = Scopes.projectionIO(candidate, id, (nodeId) =>
@@ -1679,12 +1724,17 @@ export const layer = Layer.effect(Service)(
       else candidate[options.property] = options.value;
       const properties = yield* packages.normalizeProperties(node.schema, candidate);
       yield* validateResourceBindings(node.schema, properties);
+      yield* validateQueueTarget({ schema: node.schema, properties });
       const updated: Node.Model = {
         ...node,
         properties,
       };
       const io = yield* getNodeIO(updated);
       const project = yield* persistence.loadProject();
+      yield* validateQueueDependencies(project, graph.id, {
+        ...graph,
+        nodes: { ...graph.nodes, [updated.id]: updated },
+      });
       const definitions = project.types;
       const oldIO = yield* getNodeIO(node);
       const preservesTypeData =
@@ -2058,6 +2108,46 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
+    const queueCreate = Effect.fn("Editor.queue.create")(function* (
+      name: string,
+      functionId: string,
+    ) {
+      const project = yield* persistence.loadProject();
+      if (project.functions[functionId] === undefined)
+        return yield* new GraphFunction.NotFoundError({ canvasId: functionId });
+      const id = Queue.QueueId.make(crypto.randomUUID());
+      return yield* events.publish({ _tag: "QueueUpdated", queue: { id, name, functionId } });
+    }, lock.withPermit);
+    const getQueue = Effect.fnUntraced(function* (id: string) {
+      const queue = (yield* persistence.loadProject()).queues[id];
+      if (queue === undefined) return yield* new Queue.NotFoundError({ id });
+      return queue;
+    });
+    const queueRename = Effect.fn("Editor.queue.rename")(function* (id: string, name: string) {
+      const queue = yield* getQueue(id);
+      return yield* events.publish({ _tag: "QueueUpdated", queue: { ...queue, name } });
+    }, lock.withPermit);
+    const queueSetFunction = Effect.fn("Editor.queue.setFunction")(function* (
+      id: string,
+      functionId: string,
+    ) {
+      const project = yield* persistence.loadProject();
+      const queue = project.queues[id];
+      if (queue === undefined) return yield* new Queue.NotFoundError({ id });
+      if (project.functions[functionId] === undefined)
+        return yield* new GraphFunction.NotFoundError({ canvasId: functionId });
+      const updated = { ...queue, functionId };
+      yield* Queue.validateProject({
+        queues: { ...project.queues, [id]: updated },
+        functions: project.functions,
+      });
+      return yield* events.publish({ _tag: "QueueUpdated", queue: updated });
+    }, lock.withPermit);
+    const queueDelete = Effect.fn("Editor.queue.delete")(function* (id: string) {
+      yield* getQueue(id);
+      return yield* events.publish({ _tag: "QueueDeleted", queueId: id });
+    }, lock.withPermit);
+
     const getConstant = Effect.fnUntraced(function* (id: string) {
       const constant = (yield* persistence.loadProject()).constants[id];
       if (constant === undefined) return yield* new ResourceConstant.NotFoundError({ id });
@@ -2400,6 +2490,12 @@ export const layer = Layer.effect(Service)(
         select: constantSelect,
         setDefault: constantSetDefault,
         delete: constantDelete,
+      },
+      queue: {
+        create: queueCreate,
+        rename: queueRename,
+        setFunction: queueSetFunction,
+        delete: queueDelete,
       },
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
       function: {

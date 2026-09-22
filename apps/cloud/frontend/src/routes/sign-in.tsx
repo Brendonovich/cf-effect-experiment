@@ -2,12 +2,10 @@ import { LoadingState, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { useMutation } from "@tanstack/solid-query";
 import { Loading, Show } from "solid-js";
 
 import { useAuth } from "../Auth";
 import { signInReturnPath } from "../authRedirect";
-import { beginPreviewAuthentication, isPreviewDeployment } from "../previewAuth";
 import { Redirect } from "../Redirect";
 
 export function SignInRoute() {
@@ -18,16 +16,6 @@ export function SignInRoute() {
     const status = auth.status();
     return status.state === "pending" ? status.verificationUrl : undefined;
   };
-  const previewAuthentication = useMutation(() => ({
-    networkMode: "always" as const,
-    mutationFn: () =>
-      beginPreviewAuthentication(
-        signInReturnPath(
-          new URLSearchParams(location.search).get("next"),
-          import.meta.env.BASE_URL,
-        ),
-      ),
-  }));
 
   return (
     <main sx={styles.root}>
@@ -76,51 +64,27 @@ export function SignInRoute() {
                   </>
                 }
               >
-                <Show
-                  when={isPreviewDeployment()}
-                  fallback={
-                    <>
-                      <h1 sx={styles.title}>Connect to MacroGraph Cloud</h1>
-                      <p sx={styles.description}>
-                        Sign in in a new tab, then return here. Keep this tab open while MacroGraph
-                        completes the connection.
-                      </p>
-                      <a
-                        href={verificationUrl()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-disabled={verificationUrl() === undefined ? "true" : "false"}
-                        onClick={(event) => {
-                          if (verificationUrl() === undefined) event.preventDefault();
-                        }}
-                        sx={styles.button}
-                      >
-                        Continue to sign in
-                      </a>
-                      <div sx={styles.waiting}>
-                        <span sx={styles.waitingDot} />
-                        Waiting for authorization
-                      </div>
-                    </>
-                  }
+                <h1 sx={styles.title}>Connect to MacroGraph Cloud</h1>
+                <p sx={styles.description}>
+                  Sign in in a new tab, then return here. Keep this tab open while MacroGraph
+                  completes the connection.
+                </p>
+                <a
+                  href={verificationUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-disabled={verificationUrl() === undefined ? "true" : "false"}
+                  onClick={(event) => {
+                    if (verificationUrl() === undefined) event.preventDefault();
+                  }}
+                  sx={styles.button}
                 >
-                  <h1 sx={styles.title}>Sign in to this preview</h1>
-                  <p sx={styles.description}>
-                    Continue with your production MacroGraph account. Your production session stays
-                    on the production site.
-                  </p>
-                  <button
-                    type="button"
-                    sx={styles.button}
-                    disabled={previewAuthentication.isPending}
-                    onClick={() => previewAuthentication.mutate()}
-                  >
-                    {previewAuthentication.isPending ? "Redirecting…" : "Continue with MacroGraph"}
-                  </button>
-                  <Show when={previewAuthentication.isError}>
-                    <p sx={styles.error}>Could not start preview sign-in. Please try again.</p>
-                  </Show>
-                </Show>
+                  Continue to sign in
+                </a>
+                <div sx={styles.waiting}>
+                  <span sx={styles.waitingDot} />
+                  Waiting for authorization
+                </div>
               </Show>
             </Show>
           </Loading>
@@ -175,5 +139,4 @@ const styles = stylex.create({
     backgroundColor: "#60a5fa",
     animation: `${pulse} 2s infinite`,
   },
-  error: { marginTop: 12, fontSize: 12, color: "#f87171" },
 });

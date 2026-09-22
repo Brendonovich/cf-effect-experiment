@@ -424,10 +424,10 @@ describe("generated custom operations", () => {
                   forbidden: node("forbidden", module.id, "forbidden"),
                   enumAnchor: node("enumAnchor", module.id, "enum-anchor"),
                 },
-                scopeProjections: [
-                  ["scope", { x: 0, y: 0 }],
-                  ["failureScope", { x: 0, y: 0 }],
-                ],
+                scopeProjections: {
+                  scope: { id: "scope", position: { x: 0, y: 0 } },
+                  failureScope: { id: "failureScope", position: { x: 0, y: 0 } },
+                },
                 connections: [
                   wire("exec", "event", "exec", "match", "exec"),
                   wire("value", "construct", "value", "match", "value"),

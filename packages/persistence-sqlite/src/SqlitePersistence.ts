@@ -11,6 +11,7 @@ import {
   SchemaId,
   IoId,
   Function as GraphFunction,
+  Queue,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { eq } from "drizzle-orm";
@@ -27,6 +28,7 @@ export const layer = Layer.effect(Persistence.Service)(
       Effect.sync(() => impl(db)).pipe(PersistenceError.refail);
 
     const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
+      yield* Queue.validateProject(project).pipe(PersistenceError.refail);
       yield* exec((db) => {
         db.transaction((tx) => {
           tx.delete(schema.projectMeta).run();
@@ -35,6 +37,7 @@ export const layer = Layer.effect(Persistence.Service)(
               name: project.name,
               engines: project.engines,
               constants: project.constants,
+              queues: project.queues,
               types: project.types,
             })
             .run();
@@ -215,6 +218,7 @@ export const layer = Layer.effect(Persistence.Service)(
           functions,
           engines: meta.engines,
           constants: meta.constants,
+          queues: meta.queues,
           types: meta.types,
         };
       });
@@ -223,14 +227,17 @@ export const layer = Layer.effect(Persistence.Service)(
         return yield* new Project.NotFoundError({});
       }
 
-      return yield* Schema.decodeUnknownEffect(Project.Model)({
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         name: result.name,
         graphs: result.graphs,
         functions: result.functions,
         engines: result.engines,
         constants: result.constants,
+        queues: result.queues,
         types: result.types,
       }).pipe(PersistenceError.refail);
+      yield* Queue.validateProject(project).pipe(PersistenceError.refail);
+      return project;
     });
 
     const loadGraph = Effect.fnUntraced(function* (graphId: string) {

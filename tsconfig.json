@@ -29,9 +29,6 @@
       "path": "packages/cloud-api"
     },
     {
-      "path": "packages/mcp"
-    },
-    {
       "path": "packages/core"
     },
     {

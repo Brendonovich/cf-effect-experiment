@@ -150,6 +150,7 @@ describe("LiveRuntime", () => {
       assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
         "CustomTypes",
         "macrograph-functions",
+        "macrograph-queues",
         "obs",
         "twitch",
       ]);

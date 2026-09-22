@@ -4,8 +4,7 @@ import {
   CurrentUser,
   ProjectNotFound,
 } from "@macrograph/cloud-api";
-import { Connection, Node, Policy } from "@macrograph/core";
-import { ProjectOperations } from "@macrograph/editor";
+import { Connection, Node, Policy, ResourceConstant } from "@macrograph/core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
@@ -275,12 +274,65 @@ export const make = (
           const editor = projectEditors.getByName(project.id);
           const packages = yield* editor.getPackages();
           const resources = yield* editor.listResources().pipe(Effect.orDie);
+          const searches = [...(query === undefined ? [] : [query]), ...(queries ?? [])]
+            .map((value) => value.trim().toLowerCase())
+            .filter(Boolean);
+          const schemas = packages.flatMap((pkg) =>
+            pkg.schemas
+              .map((schema) => {
+                const fields = [
+                  schema.id,
+                  schema.name,
+                  pkg.id,
+                  pkg.name,
+                  schema.description ?? "",
+                ].map((value) => value.toLowerCase());
+                const text = fields.join(" ");
+                const scores = searches
+                  .filter((search) => search.split(/\s+/).every((term) => text.includes(term)))
+                  .map((search) => {
+                    const exact = fields.findIndex((field) => field === search);
+                    if (exact !== -1) return exact;
+                    const prefix = fields.findIndex((field) => field.startsWith(search));
+                    if (prefix !== -1) return fields.length + prefix;
+                    const substring = fields.findIndex((field) => field.includes(search));
+                    if (substring !== -1) return fields.length * 2 + substring;
+                    return fields.length * 3;
+                  });
+                if (searches.length > 0 && scores.length === 0) return undefined;
+
+                const matchingResources: Record<
+                  string,
+                  { id: ResourceConstant.Id; name: string }[]
+                > = {};
+                for (const property of schema.properties) {
+                  if (!("resource" in property)) continue;
+                  matchingResources[property.id] = resources
+                    .filter(
+                      (resource) =>
+                        resource.resource.package === pkg.id &&
+                        resource.resource.resource === property.resource,
+                    )
+                    .map(({ id, name }) => ({ id, name }));
+                }
+
+                return {
+                  package: pkg.id,
+                  schema,
+                  resources: matchingResources,
+                  score: scores.length === 0 ? 0 : Math.min(...scores),
+                };
+              })
+              .filter((schema) => schema !== undefined),
+          );
+          schemas.sort(
+            (left, right) =>
+              left.score - right.score ||
+              left.package.localeCompare(right.package) ||
+              left.schema.id.localeCompare(right.schema.id),
+          );
           return {
-            schemas: ProjectOperations.searchSchemas(packages, resources, {
-              ...(query === undefined ? {} : { query }),
-              ...(queries === undefined ? {} : { queries }),
-              ...(limit === undefined ? {} : { limit }),
-            }),
+            schemas: schemas.slice(0, limit ?? 20).map(({ score: _, ...schema }) => schema),
           };
         }).pipe(Policy.withPolicy(projectPolicy.canView(projectId))),
       listResources: ({ projectId }: { readonly projectId: string }) =>

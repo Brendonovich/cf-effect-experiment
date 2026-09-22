@@ -5,6 +5,7 @@ import {
   Graph,
   Node,
   Project,
+  Queue,
   ResourceConstant,
   TypeDefinition,
 } from "@macrograph/core";
@@ -34,6 +35,7 @@ const ProjectMeta = Schema.Struct({
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
   functions: Schema.optional(Schema.Record(Schema.String, FunctionMetadata)),
+  queues: Queue.Collection,
 });
 
 export const layer = (dir: string) =>
@@ -50,6 +52,7 @@ export const layer = (dir: string) =>
       const lock = yield* Semaphore.make(1);
 
       const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
+        yield* Queue.validateProject(project).pipe(PersistenceError.refail);
         yield* fs.makeDirectory(graphsDir, { recursive: true }).pipe(PersistenceError.refail);
 
         yield* fs
@@ -60,6 +63,7 @@ export const layer = (dir: string) =>
                 name: project.name,
                 engines: project.engines,
                 constants: project.constants,
+                queues: project.queues,
                 types: project.types,
                 functions: Object.fromEntries(
                   Object.entries(project.functions).map(([id, fn]) => [
@@ -80,11 +84,8 @@ export const layer = (dir: string) =>
           .pipe(PersistenceError.refail);
 
         for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
-          const encoded = yield* Schema.encodeUnknownEffect(Canvas.Model)(graph).pipe(
-            PersistenceError.refail,
-          );
           yield* fs
-            .writeFileString(graphFilePath(graphId), JSON.stringify(encoded, null, 2))
+            .writeFileString(graphFilePath(graphId), JSON.stringify(graph, null, 2))
             .pipe(PersistenceError.refail);
         }
       }, lock.withPermit);
@@ -125,15 +126,18 @@ export const layer = (dir: string) =>
           }
         }
 
-        return {
+        const project: Project.Model = {
           // id: ProjectId.make(meta.id),
           name: meta.name,
           graphs,
           functions,
           engines: meta.engines ?? {},
           constants: meta.constants ?? {},
+          queues: meta.queues,
           types: meta.types ?? {},
         };
+        yield* Queue.validateProject(project).pipe(PersistenceError.refail);
+        return project;
       }, lock.withPermit);
 
       const loadGraph = Effect.fnUntraced(function* (graphId: string) {
@@ -169,11 +173,8 @@ export const layer = (dir: string) =>
       // }, lock.withPermit);
 
       const saveGraph = Effect.fnUntraced(function* (graph: Canvas.Model) {
-        const encoded = yield* Schema.encodeUnknownEffect(Canvas.Model)(graph).pipe(
-          PersistenceError.refail,
-        );
         yield* fs
-          .writeFileString(graphFilePath(graph.id), JSON.stringify(encoded, null, 2))
+          .writeFileString(graphFilePath(graph.id), JSON.stringify(graph, null, 2))
           .pipe(PersistenceError.refail);
       }, lock.withPermit);
 

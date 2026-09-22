@@ -113,7 +113,11 @@ export const decode = (text: string) =>
         if (!validPosition(node.position)) throw new Error("Invalid node position");
       }
       for (const projection of fragment.scopeProjections ?? []) {
-        if (!projection.id || ids.has(projection.id))
+        if (
+          !projection.id ||
+          ["__proto__", "constructor", "prototype"].includes(projection.id) ||
+          ids.has(projection.id)
+        )
           throw new Error("Invalid or duplicate projection id");
         ids.add(projection.id);
         if (!validPosition(projection.position)) throw new Error("Invalid projection position");
