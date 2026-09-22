@@ -226,11 +226,19 @@ export type RunContext<IO, Definition extends Engine.AnyDef> = {
   readonly node: NodeExecutionContext;
 };
 
+export type Replay = "safe" | "unsafe";
+
 type CommonSchema<IO, Definition extends Engine.AnyDef, Properties extends PropertyDefinitions> = {
   readonly id: string;
   readonly internal?: boolean;
   readonly name?: string;
   readonly description?: string;
+  /**
+   * Whether an unfinished invocation may be repeated when its outcome is unknown,
+   * such as after a worker crash. Defaults to "unsafe", independently of node type.
+   * This does not make ordinary failures retryable; those must explicitly fail with Retry.
+   */
+  readonly replay?: Replay;
   readonly properties?: Properties;
   readonly io: (
     context: IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
@@ -293,6 +301,7 @@ export interface RegisteredSchema {
   readonly name: string;
   readonly description?: string;
   readonly type: "base" | "event" | "exec" | "pure";
+  readonly replay: Replay;
   readonly properties: ReadonlyArray<RegisteredProperty>;
   readonly dataInputs: ReadonlyArray<DataInputRef>;
   readonly dataOutputs: ReadonlyArray<DataOutputRef>;
@@ -431,6 +440,7 @@ const makeRegistered = <
     name: schema.name ?? schema.id,
     ...(schema.description === undefined ? {} : { description: schema.description }),
     type,
+    replay: schema.replay ?? "unsafe",
     properties: Object.entries(schema.properties ?? {}).map(([id, property]) =>
       "resource" in property
         ? {

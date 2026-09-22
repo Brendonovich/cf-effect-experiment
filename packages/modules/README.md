@@ -22,6 +22,25 @@ event emission through `mg`; implementations do not yield `MyEngine.EngineContex
 Reusable engine builders accept `mg: Engine.ContextOf<typeof MyEngine>` directly.
 `EngineContext` remains the host/test injection point.
 
+## Replay policy
+
+Schema registrations accept `replay: "safe" | "unsafe"`. The default is `"unsafe"`
+for every node type, including pure and event nodes. Declare `"safe"` only when an
+unfinished invocation can be repeated with the same inputs despite an unknown
+outcome, such as after a worker crash. Reads can be replay-safe even if their
+results change between attempts.
+
+This is separate from the `Retry` error: `Retry` grants permission to repeat a
+particular reported failure, while `replay` describes recovery when no reliable
+outcome was recorded. A safe replay policy does not make a permanent failure
+retryable. An unsafe schema can still report `Retry` when a particular attempt
+is known to be safe to repeat.
+
+The executor resolves the default and includes `replay` in the node execution key,
+including serialized requests. Workflow adapters can inspect it before starting
+the node. Backend crash-recovery enforcement is not implemented yet; the metadata
+alone does not prevent a workflow backend from replaying an unfinished step.
+
 ## Added modules
 
 | Package               | Functionality                                                           | Runtime                            |
@@ -56,7 +75,7 @@ are mounted in Cloudflare runtimes.
 ## Cloudflare
 
 The hosted editor and execution registry share the new module lists in
-`apps/cloudflare/src/modules/CloudModules.ts`. Existing editor Durable Objects
+`apps/cloud/src/modules/CloudModules.ts`. Existing editor Durable Objects
 rebuild the in-memory catalog when updated Worker code initializes them; no
 project storage migration or reset is required. Reconnect the editor after
 deploying the Worker to fetch the updated catalog.

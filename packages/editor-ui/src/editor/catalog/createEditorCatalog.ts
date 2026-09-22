@@ -1,6 +1,6 @@
 import type { ResourceConstant } from "@macrograph/core";
 
-import { createSignal } from "solid-js";
+import { createMemo, createSignal, mapArray } from "solid-js";
 
 import type { createEditorWorkspace } from "../workspace/createEditorWorkspace";
 
@@ -22,10 +22,10 @@ export function createEditorCatalog(
         fields: [graph.name, id],
       })),
     );
-  const filteredPackages = () =>
-    rankedSearch(
-      navSearch(),
-      store.packages.map((pkg) => ({
+  const packageDocuments = mapArray(
+    () => store.packages,
+    (pkg) =>
+      createMemo(() => ({
         item: pkg,
         key: pkg.id,
         fields: [
@@ -34,7 +34,15 @@ export function createEditorCatalog(
           ...pkg.schemas.flatMap((schema) => [schema.name, schema.id, schema.description]),
         ],
       })),
+  );
+  const filteredPackages = createMemo(() => {
+    const query = navSearch();
+    if (query.trim() === "") return store.packages;
+    return rankedSearch(
+      query,
+      packageDocuments().map((document) => document()),
     );
+  });
   const resourceDefinition = (resource: ResourceConstant.ResourceRef) => {
     const pkg = store.packages.find((candidate) => candidate.id === resource.package);
     const definition = pkg?.resources.find((candidate) => candidate.id === resource.resource);

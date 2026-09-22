@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { EngineTest, Registration } from "@macrograph/module";
+import { EngineTest, Registration, Retry } from "@macrograph/module";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 
@@ -387,6 +387,7 @@ const setup = Effect.fnUntraced(function* (
     scopes?: ReadonlyArray<string>;
     credentialAvailable?: boolean;
     validationUnavailable?: boolean;
+    helixUnavailable?: boolean;
   } = {},
 ) {
   const calls: Array<HttpCall> = [];
@@ -413,7 +414,10 @@ const setup = Effect.fnUntraced(function* (
             : undefined,
         headers: { ...request.headers },
       });
-      if (request.url === validationUrl && options.validationUnavailable)
+      if (
+        (request.url === validationUrl && options.validationUnavailable) ||
+        (request.url !== validationUrl && options.helixUnavailable)
+      )
         return Effect.fail(
           new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({ request }),
@@ -498,6 +502,63 @@ const node = {
 };
 
 describe("Twitch authenticated action nodes", () => {
+  it.effect("signals transient read failures after runtime RPC and HTTP error mapping", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect(TwitchModule.effect);
+      for (const id of ["GetUsers", "GetChatters", "WarnUser", "ValidateToken"]) {
+        const fixture = cases.find((fixture) => fixture.id === id);
+        const schema = schemas.find((schema) => schema.id === id)!;
+        for (const status of ["transport", 400, 401, 403, 404, 408, 429, 503, 200] as const) {
+          // OAuth validation has its own fixed response in this transport fixture.
+          if (id === "ValidateToken" && status !== "transport") continue;
+          const test = yield* setup({
+            helixUnavailable: status === "transport",
+            validationUnavailable: id === "ValidateToken",
+          });
+          test.respond({ message: "Twitch rejected the request" }, [
+            status === "transport" ? 503 : status,
+          ]);
+          const outputs = new Map<string, unknown>();
+          const error = yield* Effect.flip(
+            schema.run({
+              input: (ref) =>
+                ref.type._tag === "Option"
+                  ? Option.fromNullishOr(fixture?.inputs[ref.id])
+                  : fixture?.inputs[ref.id],
+              output: (ref, value) => outputs.set(ref.id, value),
+              properties: { account: accountId },
+              engine: test.runtime,
+              event: undefined,
+              execution,
+              node,
+            }),
+          );
+          const transient =
+            status === "transport" || status === 408 || status === 429 || status === 503;
+          const shouldRetry = transient && id !== "WarnUser";
+          assert.strictEqual(error instanceof Retry, shouldRetry, `${id}: ${status}`);
+          const cause = error instanceof Retry ? error.cause : error;
+          assert.instanceOf(cause, HelixError, `${id}: ${status}`);
+          if (cause instanceof HelixError) {
+            assert.strictEqual(cause.transient === true, transient, `${id}: ${status}`);
+            if (status !== "transport" && status !== 200) {
+              assert.strictEqual(cause.status, status);
+              assert.strictEqual(cause.reason, "Twitch rejected the request");
+              assert.strictEqual(cause.rateLimitRemaining, 0);
+              assert.strictEqual(cause.rateLimitReset, 123456);
+            }
+          }
+          assert.strictEqual(outputs.size, 0);
+          if (id !== "ValidateToken")
+            assert.strictEqual(
+              test.calls.filter(({ url }) => url !== validationUrl).length,
+              status === 401 ? 2 : 1,
+            );
+        }
+      }
+    }),
+  );
+
   it.effect(
     "stops catalog execution without writing outputs when runtime authorization fails",
     () =>

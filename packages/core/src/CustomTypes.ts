@@ -332,6 +332,7 @@ export const schemas = (
               ? "Updates any subset of fields immutably. None keeps the original; Some replaces it."
               : `${operation.name} using the type inferred from its wildcard.`,
         type: operation.id === "MatchEnum" ? "base" : "pure",
+        replay: "unsafe",
         properties: propertiesFor(operation),
         ...(() => {
           const { run: _, ...io } = resolve(operation, {}, definitions);

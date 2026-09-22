@@ -74,6 +74,13 @@
       "path": "packages/workflow-runtime-vercel"
     },
     {
+      "path": "packages/workflow-runtime-cloudflare"
+    },
+    { "path": "packages/workflow-runtime/test-app" },
+    { "path": "packages/workflow-runtime-cloudflare/test-app" },
+    { "path": "packages/workflow-runtime-effect-cluster/test-app" },
+    { "path": "packages/workflow-runtime-vercel/test-app" },
+    {
       "path": "packages/modules/twitch"
     },
     {
@@ -121,13 +128,13 @@
       "path": "apps/server/client"
     },
     {
-      "path": "apps/cloudflare"
+      "path": "apps/cloud"
     },
     {
       "path": "apps/opencode-bot"
     },
     {
-      "path": "apps/cloudflare/frontend"
+      "path": "apps/cloud/frontend"
     },
     {
       "path": "apps/playground"

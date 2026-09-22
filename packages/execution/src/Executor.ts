@@ -15,6 +15,7 @@ import { DataType } from "@macrograph/module/DataType";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
+import { Retry } from "@macrograph/module/Retry";
 import { Cause, Effect, Option, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
@@ -100,7 +101,26 @@ const isEngineClientUnavailable = (value: unknown): value is EngineClientUnavail
   "_tag" in value &&
   value._tag === "EngineClientUnavailable";
 
+const isRetryReason = (reason: Cause.Reason<unknown>): reason is Cause.Fail<Retry> =>
+  Cause.isFailReason(reason) && reason.error instanceof Retry;
+
+const handleRunCause =
+  (nodeId: string) =>
+  (
+    cause: Cause.Cause<unknown>,
+  ): Effect.Effect<never, Retry | EngineClientUnavailable | NodeExecutionError> => {
+    const [reason] = cause.reasons;
+    // A defect or a compound failure must not become permission to retry.
+    if (cause.reasons.length === 1 && reason !== undefined && isRetryReason(reason))
+      return Effect.failCause(Cause.fromReasons([reason]));
+    const error = Cause.squash(cause);
+    return isEngineClientUnavailable(error)
+      ? Effect.fail(error)
+      : Effect.fail(new NodeExecutionError({ nodeId, cause }));
+  };
+
 export type ExecutorError =
+  | Retry
   | GraphFunction.InvocationError
   | ModuleNotRegistered
   | SchemaNotRegistered
@@ -174,6 +194,8 @@ export interface NodeExecutionKey {
   readonly eventNodeId: string;
   readonly nodeId: string;
   readonly kind: "base" | "event" | "exec";
+  /** Resolved schema policy for recovery of an invocation with an unknown outcome. */
+  readonly replay: Registration.Replay;
   readonly executionPath: string;
   readonly executionTraceId: string;
   readonly traceId: string;
@@ -440,14 +462,6 @@ export const make = Effect.fnUntraced(function* (
           ? {}
           : { "macrograph.trace.parent.id": request.key.parentTraceId }),
       };
-      const handleRunCause = (
-        cause: Cause.Cause<unknown>,
-      ): Effect.Effect<never, EngineClientUnavailable | NodeExecutionError> => {
-        const error = Cause.squash(cause);
-        return isEngineClientUnavailable(error)
-          ? Effect.fail(error)
-          : Effect.fail(new NodeExecutionError({ nodeId: request.key.nodeId, cause }));
-      };
       const selected = yield* Effect.suspend(() =>
         schema.run({
           types: {
@@ -485,7 +499,7 @@ export const make = Effect.fnUntraced(function* (
         Effect.withSpan(`Schema.run ${request.moduleId}.${request.schemaId}`, {
           attributes: nodeAttributes,
         }),
-        Effect.catchCause(handleRunCause),
+        Effect.catchCause(handleRunCause(request.key.nodeId)),
       );
       const executionOutput =
         selected ??
@@ -592,6 +606,7 @@ export const make = Effect.fnUntraced(function* (
       id,
       name,
       type,
+      replay: "unsafe",
       properties: [],
       ...io,
       generateIO: () => io,
@@ -1154,14 +1169,6 @@ export const make = Effect.fnUntraced(function* (
           { discard: true },
         );
 
-        const handleRunCause = (
-          cause: Cause.Cause<unknown>,
-        ): Effect.Effect<never, EngineClientUnavailable | NodeExecutionError> => {
-          const error = Cause.squash(cause);
-          return isEngineClientUnavailable(error)
-            ? Effect.fail(error)
-            : Effect.fail(new NodeExecutionError({ nodeId: node.id, cause }));
-        };
         const runEffect = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
           if (GraphFunction.isCall(node)) {
@@ -1232,7 +1239,7 @@ export const make = Effect.fnUntraced(function* (
               Effect.withSpan(`Schema.run ${node.schema.package}.${node.schema.schema}`, {
                 attributes: nodeAttributes,
               }),
-              Effect.catchCause(handleRunCause),
+              Effect.catchCause(handleRunCause(node.id)),
             ),
           );
           return {
@@ -1332,6 +1339,7 @@ export const make = Effect.fnUntraced(function* (
           eventNodeId: rootEventNodeId,
           nodeId: node.id,
           kind: schema.type === "pure" ? "base" : schema.type,
+          replay: schema.replay,
           executionPath,
           executionTraceId,
           traceId,

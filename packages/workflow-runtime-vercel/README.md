@@ -15,3 +15,6 @@ export async function executeGraph(input: VercelRuntime.ExecutionInput) {
 ```
 
 Each non-pure graph node crosses the workflow boundary as a serializable `NodeExecution.Request`. Pure nodes and graph traversal remain in the workflow invocation.
+
+`test-app/` contains a deployable Next.js / Workflow SDK app and an Alchemy-managed
+Vercel infrastructure test. See [infrastructure test instructions](../workflow-runtime/test-app/README.md).

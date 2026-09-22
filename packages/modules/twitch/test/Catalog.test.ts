@@ -1,11 +1,19 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Registration } from "@macrograph/module";
+import { Registration, Retry } from "@macrograph/module";
 import { Effect, Option } from "effect";
 
 import { actions } from "../src/Actions.ts";
 import { actionIds, existingActionIds, count, events, ids } from "../src/Catalog.ts";
-import { AccountId, TwitchAccount, TwitchEventSub } from "../src/Definition.ts";
+import {
+  AccountId,
+  CredentialAuthorizationError,
+  MissingCredential,
+  TwitchAccount,
+  TwitchEventSub,
+  TwitchExecutionUnavailable,
+} from "../src/Definition.ts";
 import { SubscriptionEvent } from "../src/EventSub.ts";
+import { HelixError } from "../src/Helix.ts";
 import TwitchModule from "../src/Module.ts";
 
 const expected = [
@@ -88,6 +96,91 @@ const node = {
 };
 
 describe("Twitch catalog", () => {
+  it.effect("only read nodes grant retry permission, preserving the original failure", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect(TwitchModule.effect);
+      const readIds = new Set([
+        "GetChatSettings",
+        "GetChannelInformation",
+        "GetStreams",
+        "GetUsers",
+        "GetFollowers",
+        ...actions.filter(({ method }) => method === "GET").map(({ id }) => id),
+      ]);
+      const transient = new HelixError({
+        reason: "Too many requests",
+        transient: true,
+        status: 429,
+        rateLimit: 800,
+        rateLimitRemaining: 0,
+        rateLimitReset: 123456,
+      });
+      for (const schema of schemas)
+        assert.strictEqual(schema.replay, readIds.has(schema.id) ? "safe" : "unsafe", schema.id);
+      for (const failure of [
+        transient,
+        new HelixError({ reason: "Forbidden", transient: false, status: 403 }),
+        new HelixError({ reason: "Invalid input or response" }),
+        new MissingCredential({ accountId: AccountId.make("account-1"), reason: "Missing" }),
+        new CredentialAuthorizationError({
+          accountId: AccountId.make("account-1"),
+          reason: "Missing scopes",
+          requiredScopes: ["channel:read:subscriptions"],
+        }),
+        new TwitchExecutionUnavailable({ reason: "Not available" }),
+        new Error("RPC failed"),
+      ]) {
+        const calls: Array<string> = [];
+        const fail = (id: string) => {
+          calls.push(id);
+          return Effect.fail(failure);
+        };
+        const engine = {
+          ...Object.fromEntries(existingActionIds.map((id) => [id, () => fail(id)])),
+          ExecuteAction: ({ action }: { action: string }) => fail(action),
+        };
+        for (const id of actionIds) {
+          const schema = schemas.find((candidate) => candidate.id === id)!;
+          const outputs = new Map<string, unknown>();
+          const error = yield* Effect.flip(
+            schema.run({
+              input: (ref) =>
+                ref.type._tag === "Option"
+                  ? id === "UpdateChatSettings" && ref.id === "emoteMode"
+                    ? Option.some(true)
+                    : id === "ModifyChannelInformation" && ref.id === "title"
+                      ? Option.some("Title")
+                      : Option.none()
+                  : ref.type._tag === "Int"
+                    ? 60
+                    : ref.type._tag === "Bool"
+                      ? false
+                      : ref.id === "status"
+                        ? id === "EndPoll"
+                          ? "TERMINATED"
+                          : "CANCELED"
+                        : ref.id === "moderatorId"
+                          ? "account-1"
+                          : "value",
+              output: (ref, value) => outputs.set(ref.id, value),
+              properties: { account: AccountId.make("account-1") },
+              event: undefined,
+              engine,
+              execution,
+              node,
+            }),
+          );
+          if (failure === transient && readIds.has(id)) {
+            assert.instanceOf(error, Retry, id);
+            if (error instanceof Retry) assert.strictEqual(error.cause, failure, id);
+          } else assert.strictEqual(error, failure, id);
+          assert.strictEqual(outputs.size, 0, id);
+        }
+        assert.deepStrictEqual(calls, [...actionIds]);
+      }
+    }),
+  );
+
   it.effect("matches the exact active reference catalog", () =>
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(TwitchModule.effect);

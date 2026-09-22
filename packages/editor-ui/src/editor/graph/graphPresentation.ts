@@ -177,7 +177,11 @@ export function graphNodeWidth(
     io?.dataInputs.some((port) => ["String", "Int", "Float", "Bool"].includes(port.type._tag)) ??
     false;
   const ioWidth = 72 + input + output + (hasDefaultControl ? 76 : 0);
-  return Math.max(104, name.length * 6.5 + 16, ioWidth);
+  // Node titles use a proportional, medium-weight font. Leave enough room for
+  // wider glyphs and comfortable padding instead of sizing to the average
+  // port-label character width.
+  const titleWidth = name.length * 7 + 28;
+  return Math.max(104, titleWidth, ioWidth);
 }
 
 export const connectedPortIds = (graph: Canvas.Model, nodeId: string, direction: PortDirection) =>

@@ -1,0 +1,632 @@
+import type {
+  ProjectEventRecord,
+  ProjectExecutionRecord,
+  ProjectIngressEventRecord,
+} from "@macrograph/cloud-api";
+
+import {
+  Button,
+  EventDetailHeader,
+  EventExecutionRow,
+  EventExecutions,
+  EventListItem,
+  EventPayload,
+  EventSearch,
+  EventsLayout,
+  EventTimeline,
+  LoadingState,
+} from "@macrograph/editor-ui";
+import { styles } from "@macrograph/editor-ui/events.stylex";
+import GitHubModule from "@macrograph/module-github";
+import KofiModule from "@macrograph/module-kofi";
+import TwitchModule from "@macrograph/module-twitch";
+import * as stylex from "@stylexjs/stylex";
+import { createQuery } from "@tanstack/solid-query";
+import { Effect } from "effect";
+import { For, Show, createEffect, createMemo, createSignal, type Component } from "solid-js";
+
+import type { CredentialsApiClient, EventsApiClient } from "../../../../api";
+
+import { runApi } from "../../../../api";
+
+interface EventsProps {
+  readonly projectId: string;
+  readonly selectedEventId: string | undefined;
+  readonly canViewTraces: boolean;
+  readonly canEdit: boolean;
+  readonly currentDeploymentId: string | null | undefined;
+  readonly api: EventsApiClient;
+  readonly credentialsApi: CredentialsApiClient;
+  readonly onSelectionChange: (eventId?: string) => void;
+}
+
+type TimelineItem =
+  | { readonly kind: "ingress"; readonly record: ProjectIngressEventRecord }
+  | {
+      readonly kind: "event";
+      readonly record: ProjectEventRecord;
+      readonly ingress?: ProjectIngressEventRecord;
+    };
+
+const eventSource = (
+  event: ProjectEventRecord,
+): "Ingress" | "Engine" | "Timer" | "Internal" | "Replay" => {
+  switch (event.source) {
+    case "ingress":
+      return "Ingress";
+    case "engine":
+      return "Engine";
+    case "timer":
+      return "Timer";
+    case "internal":
+      return "Internal";
+    case "replay":
+      return "Replay";
+  }
+};
+
+const axiomTraceUrl = (traceId: string, from: number, to: number): string | undefined => {
+  const organizationId = import.meta.env.VITE_AXIOM_ORG_ID;
+  if (!organizationId) return undefined;
+
+  const url = new URL(`/${encodeURIComponent(organizationId)}/trace`, "https://app.axiom.co");
+  url.searchParams.set("traceId", traceId);
+  url.searchParams.set("startTime", new Date(from - 5 * 60 * 1000).toISOString());
+  url.searchParams.set("endTime", new Date(to + 5 * 60 * 1000).toISOString());
+  if (import.meta.env.VITE_AXIOM_TRACE_DATASET)
+    url.searchParams.set("traceDataset", import.meta.env.VITE_AXIOM_TRACE_DATASET);
+  return url.href;
+};
+
+export const Events: Component<EventsProps> = (props) => {
+  const [eventSearch, setEventSearch] = createSignal("");
+  const [selectedIngressId, setSelectedIngressId] = createSignal<string>();
+  const [ingressSearch, setIngressSearch] = createSignal("");
+  const [now, setNow] = createSignal(Date.now());
+  const [replaying, setReplaying] = createSignal(false);
+  // Signal writes are deferred, so guard duplicate requests synchronously.
+  let replayInFlight = false;
+  const [replayFeedback, setReplayFeedback] = createSignal<{
+    readonly projectId: string;
+    readonly eventId: string;
+    readonly error: boolean;
+    readonly message: string;
+  }>();
+  const selectedReplayFeedback = createMemo(() => {
+    const feedback = replayFeedback();
+    return feedback?.projectId === props.projectId && feedback.eventId === props.selectedEventId
+      ? feedback
+      : undefined;
+  });
+  createEffect(
+    () => true,
+    () => {
+      const interval = setInterval(() => setNow(Date.now()), 60_000);
+      return () => clearInterval(interval);
+    },
+  );
+  const eventQuery = createQuery(() => ({
+    queryKey: ["events", props.projectId],
+    queryFn: async () => {
+      const body = await runApi(props.api.list({ params: { projectId: props.projectId } }));
+      if (body === undefined) throw new Error("Could not load event activity");
+      return body;
+    },
+    refetchInterval: 2000,
+    staleTime: 2000,
+    gcTime: 5 * 60 * 1000,
+    retry: false,
+  }));
+
+  const credentialsQuery = createQuery(() => ({
+    queryKey: ["account-credentials"],
+    queryFn: async () => {
+      const catalog = await runApi(props.credentialsApi.list());
+      if (catalog === undefined) throw new Error("Could not load credentials");
+      return catalog;
+    },
+    retry: false,
+  }));
+  const credentials = () => {
+    const catalog = credentialsQuery.data;
+    return catalog?._tag === "CredentialCatalogAvailable" ? catalog.credentials : [];
+  };
+
+  const ingressEvents = () => eventQuery.data?.ingressEvents ?? [];
+  const ingresses = () => eventQuery.data?.ingresses ?? [];
+  const sidebarIngresses = createMemo(() => {
+    const search = ingressSearch().trim().toLowerCase();
+    return search === ""
+      ? ingresses()
+      : ingresses().filter((ingress) =>
+          [ingress.displayName, ingress.schema.displayName, ingress.id].some((value) =>
+            value?.toLowerCase().includes(search),
+          ),
+        );
+  });
+  const events = () => eventQuery.data?.events ?? [];
+  const executions = () => eventQuery.data?.executions ?? [];
+  const selectedIngress = () => ingresses().find((ingress) => ingress.id === selectedIngressId());
+  const visibleIngressEvents = () => {
+    const endpointId = selectedIngressId();
+    return endpointId === undefined
+      ? ingressEvents()
+      : ingressEvents().filter((event) => event.endpointId === endpointId);
+  };
+  const visibleEvents = () => {
+    const endpointId = selectedIngressId();
+    if (endpointId === undefined) return events();
+    const ingressIds = new Set(
+      ingressEvents()
+        .filter((event) => event.endpointId === endpointId)
+        .map((event) => event.id),
+    );
+    return events().filter(
+      (event) => event.ingressEventId !== null && ingressIds.has(event.ingressEventId),
+    );
+  };
+  const timeline = createMemo<ReadonlyArray<TimelineItem>>(() => {
+    const ingressesById = new Map(visibleIngressEvents().map((ingress) => [ingress.id, ingress]));
+    const linkedIngressIds = new Set(
+      visibleEvents().flatMap((event) =>
+        event.ingressEventId === null ? [] : [event.ingressEventId],
+      ),
+    );
+
+    return [
+      ...visibleIngressEvents()
+        .filter((record) => !linkedIngressIds.has(record.id))
+        .map((record): TimelineItem => ({ kind: "ingress", record })),
+      ...visibleEvents().map((record): TimelineItem => {
+        const ingress =
+          record.ingressEventId === null ? undefined : ingressesById.get(record.ingressEventId);
+        return {
+          kind: "event",
+          record,
+          ...(ingress === undefined ? {} : { ingress }),
+        };
+      }),
+    ].sort((left, right) => right.record.receivedAt.localeCompare(left.record.receivedAt));
+  });
+  const filteredTimeline = createMemo(() => {
+    const search = eventSearch().trim().toLowerCase();
+    return search === ""
+      ? timeline()
+      : timeline().filter((item) =>
+          [item.record.eventType, item.record.moduleId, item.record.id].some((value) =>
+            value.toLowerCase().includes(search),
+          ),
+        );
+  });
+  const selectedItem = (): TimelineItem | undefined => {
+    const event = events().find((record) => record.id === props.selectedEventId);
+    if (event !== undefined) {
+      const ingress = ingressEvents().find((record) => record.id === event.ingressEventId);
+      return {
+        kind: "event",
+        record: event,
+        ...(ingress === undefined ? {} : { ingress }),
+      };
+    }
+
+    const ingress = ingressEvents().find((record) => record.id === props.selectedEventId);
+    return ingress === undefined ? undefined : { kind: "ingress", record: ingress };
+  };
+  const replay = async () => {
+    const item = selectedItem();
+    if (item === undefined || replayInFlight || !props.canEdit || props.currentDeploymentId == null)
+      return;
+    if (
+      !window.confirm(
+        `Replay "${item.record.eventType}"?\n\nThis creates a new event and runs all matching graphs in the latest current deployment, not unpublished edits or the event's original deployment.\n\nThis performs real actions and may repeat side effects. It is not a dry run.`,
+      )
+    )
+      return;
+
+    const projectId = props.projectId;
+    const eventId = item.record.id;
+    replayInFlight = true;
+    setReplaying(true);
+    setReplayFeedback(undefined);
+    const failure = (message: string) => Effect.succeed({ error: true, message });
+    try {
+      const result = await Effect.runPromise(
+        props.api.replay({ params: { projectId, eventId }, payload: { kind: item.kind } }).pipe(
+          Effect.map((result) => ({
+            error: false,
+            message: `Replay queued on deployment ${result.deploymentId}. A new event will appear in the timeline shortly; execution results may take longer.`,
+          })),
+          Effect.catchTags({
+            EventNotFound: () => failure("This event is no longer available to replay."),
+            DeploymentNotFound: () =>
+              failure("There is no current deployment. Deploy this project before replaying."),
+            ProjectNotFound: () =>
+              failure("The project is unavailable or you do not have permission to replay events."),
+            Unauthorized: () =>
+              failure("Your session has expired. Sign in again to replay events."),
+          }),
+          Effect.catchCause(() =>
+            failure(
+              "Could not confirm the replay. Check the timeline before trying again to avoid duplicate actions.",
+            ),
+          ),
+        ),
+      );
+      setReplayFeedback({ projectId, eventId, ...result });
+    } finally {
+      replayInFlight = false;
+      setReplaying(false);
+    }
+  };
+  const toggleIngress = (endpointId: string) => {
+    setSelectedIngressId((selected) => (selected === endpointId ? undefined : endpointId));
+  };
+  const IngressEndpoint: Component<{
+    readonly ingress: ReturnType<typeof ingresses>[number];
+  }> = (endpointProps) => (
+    <div>
+      <div sx={styles.betweenStart}>
+        <div sx={styles.minWidth}>
+          <div
+            sx={styles.handler}
+            title={
+              credentials().find(
+                (credential) =>
+                  credential.provider === "twitch" &&
+                  credential.id === endpointProps.ingress.instanceKey,
+              )?.displayName ??
+              endpointProps.ingress.displayName ??
+              endpointProps.ingress.schema.displayName
+            }
+          >
+            {credentials().find(
+              (credential) =>
+                credential.provider === "twitch" &&
+                credential.id === endpointProps.ingress.instanceKey,
+            )?.displayName ??
+              endpointProps.ingress.displayName ??
+              endpointProps.ingress.schema.displayName}
+          </div>
+          <div sx={styles.instance}>
+            {endpointProps.ingress.schema.displayName} ·{" "}
+            {[KofiModule, TwitchModule, GitHubModule].find((module) =>
+              endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
+            )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
+          </div>
+        </div>
+        <div sx={styles.badges}>
+          <Show when={endpointProps.ingress.deployed}>
+            <span sx={[styles.badge, styles.deployed]}>Deployed</span>
+          </Show>
+          <Show when={endpointProps.ingress.preview}>
+            <span sx={[styles.badge, styles.preview]}>Preview</span>
+          </Show>
+        </div>
+      </div>
+      <div sx={[styles.endpointId, styles.inlineEndpointId]} title={endpointProps.ingress.id}>
+        {endpointProps.ingress.id}
+      </div>
+    </div>
+  );
+
+  return (
+    <EventsLayout
+      sidebar={
+        <section sx={styles.ingressPanel}>
+          <header sx={styles.ingressPanelHeader}>
+            <div sx={styles.timelineHeaderTitle}>
+              <div sx={styles.titleRow}>
+                <h1 sx={[styles.panelTitle, styles.timelineHeading]}>Ingress endpoints</h1>
+                <Show when={eventQuery.data !== undefined}>
+                  <span sx={styles.executionCount}>{ingresses().length}</span>
+                </Show>
+              </div>
+              <p sx={styles.panelDescription}>Deployment and preview endpoint state</p>
+            </div>
+            <EventSearch
+              ingress
+              placeholder="Search endpoints"
+              value={ingressSearch()}
+              onChange={setIngressSearch}
+            />
+          </header>
+          <div sx={[styles.scrollBody, styles.flushIngressList, styles.ingressScrollBody]}>
+            <Show
+              when={sidebarIngresses().length > 0}
+              fallback={
+                <Show
+                  when={!eventQuery.isPending}
+                  fallback={
+                    <div sx={styles.skeleton} role="status">
+                      <div sx={styles.skeletonTitle} />
+                      <div sx={styles.skeletonLine} />
+                      <div sx={styles.skeletonShort} />
+                    </div>
+                  }
+                >
+                  <div sx={styles.emptyIngress}>
+                    {ingresses().length > 0
+                      ? "No ingress endpoints match your search."
+                      : "No ingress endpoints are deployed or in preview."}
+                  </div>
+                </Show>
+              }
+            >
+              <div sx={styles.buttonList}>
+                <For each={sidebarIngresses()}>
+                  {(ingress) => (
+                    <button
+                      sx={[
+                        styles.listButton,
+                        selectedIngressId() === ingress.id
+                          ? styles.selectedSidebarAccent
+                          : styles.ingressSidebarUnselected,
+                        selectedIngressId() === ingress.id && styles.ingressSidebarSelectedHover,
+                      ]}
+                      onClick={() => toggleIngress(ingress.id)}
+                    >
+                      <IngressEndpoint ingress={ingress} />
+                    </button>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </section>
+      }
+    >
+      <EventTimeline
+        description="Ingress and runtime events"
+        search={eventSearch()}
+        onSearch={setEventSearch}
+        searchPlaceholder={
+          selectedIngress() === undefined
+            ? "Search events"
+            : `Search ${
+                credentials().find(
+                  (credential) =>
+                    credential.provider === "twitch" &&
+                    credential.id === selectedIngress()?.instanceKey,
+                )?.displayName ??
+                selectedIngress()?.displayName ??
+                selectedIngress()?.schema.displayName
+              } (${selectedIngress()?.schema.displayName}) events`
+        }
+        onRefresh={() => void eventQuery.refetch()}
+        loading={eventQuery.isPending}
+        error={eventQuery.error?.message ?? ""}
+        empty={filteredTimeline().length === 0}
+        emptyDescription={
+          selectedIngressId() === undefined
+            ? "Ingress and runtime events will appear here."
+            : "No events have been received by this ingress."
+        }
+      >
+        <For each={filteredTimeline()}>
+          {(item) => (
+            <EventListItem
+              id={item.record.id}
+              name={item.record.eventType}
+              moduleName={
+                [KofiModule, TwitchModule, GitHubModule].find(
+                  (module) => module.id === item.record.moduleId,
+                )?.name ?? item.record.moduleId
+              }
+              source={item.kind === "event" ? eventSource(item.record) : "Ingress"}
+              receivedAt={item.record.receivedAt}
+              now={now()}
+              selected={props.selectedEventId === item.record.id}
+              onSelect={() => props.onSelectionChange(item.record.id)}
+            />
+          )}
+        </For>
+      </EventTimeline>
+
+      <section sx={styles.detailPanel}>
+        <Show
+          when={!eventQuery.isPending}
+          fallback={<LoadingState label="Loading event activity" style={styles.fullHeight} />}
+        >
+          <Show
+            when={selectedItem()}
+            fallback={
+              <div sx={styles.detailEmpty}>
+                <div sx={styles.detailEmptyText}>
+                  {props.selectedEventId === undefined ? "Select an event" : "Event not found"}
+                </div>
+              </div>
+            }
+          >
+            {(item) => {
+              const ingressDetails = createMemo(() => {
+                const selected = item();
+                const ingress = selected.kind === "ingress" ? selected.record : selected.ingress;
+                const endpoint =
+                  ingress === undefined
+                    ? undefined
+                    : ingresses().find((candidate) => candidate.id === ingress.endpointId);
+                const ingressName =
+                  endpoint === undefined
+                    ? undefined
+                    : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
+                const moduleName =
+                  [KofiModule, TwitchModule, GitHubModule].find(
+                    (module) => module.id === selected.record.moduleId,
+                  )?.name ?? selected.record.moduleId;
+
+                return {
+                  name: ingressName === undefined ? moduleName : `${moduleName} · ${ingressName}`,
+                  id: ingress?.endpointId,
+                  endpoint,
+                };
+              });
+              const eventExecutions = createMemo<ReadonlyArray<ProjectExecutionRecord>>(() =>
+                item().kind === "event"
+                  ? executions().filter(
+                      (execution) => execution.projectEventId === item().record.id,
+                    )
+                  : [],
+              );
+              const payload = createMemo(() => JSON.stringify(item().record.eventPayload, null, 2));
+              const source = createMemo(() => {
+                const selected = item();
+                return selected.kind === "event" ? eventSource(selected.record) : "Ingress";
+              });
+              const traceUrl = createMemo(() => {
+                const selected = item();
+                const anchor =
+                  (selected.record.traceContext?.traceId ?? selected.record.traceId) != null
+                    ? selected.record
+                    : selected.kind === "event" && selected.record.source !== "replay"
+                      ? selected.ingress
+                      : undefined;
+                const traceId = anchor?.traceContext?.traceId ?? anchor?.traceId;
+                if (anchor === undefined || traceId == null) return undefined;
+
+                const from = Date.parse(anchor.traceContext?.startedAt ?? anchor.receivedAt);
+                let to = Math.max(from, Date.parse(selected.record.receivedAt));
+                const relatedIngressIds = new Set<string>();
+                for (const ingress of ingressEvents()) {
+                  if ((ingress.traceContext?.traceId ?? ingress.traceId) !== traceId) continue;
+                  relatedIngressIds.add(ingress.id);
+                  to = Math.max(to, Date.parse(ingress.receivedAt));
+                }
+                const relatedEventIds = new Set<string>();
+                for (const event of events()) {
+                  const eventTraceId = event.traceContext?.traceId ?? event.traceId;
+                  if (
+                    eventTraceId !== traceId &&
+                    !(
+                      eventTraceId == null &&
+                      event.source !== "replay" &&
+                      event.ingressEventId !== null &&
+                      relatedIngressIds.has(event.ingressEventId)
+                    )
+                  )
+                    continue;
+                  relatedEventIds.add(event.id);
+                  to = Math.max(to, Date.parse(event.receivedAt));
+                }
+                for (const execution of executions()) {
+                  if (!relatedEventIds.has(execution.projectEventId)) continue;
+                  to = Math.max(
+                    to,
+                    Date.parse(execution.receivedAt),
+                    Date.parse(execution.startedAt ?? execution.receivedAt),
+                    Date.parse(execution.completedAt ?? execution.receivedAt),
+                    execution.status === "queued" || execution.status === "running" ? now() : 0,
+                  );
+                }
+                return axiomTraceUrl(traceId, from, to);
+              });
+              return (
+                <div sx={styles.detail}>
+                  <EventDetailHeader
+                    id={item().record.id}
+                    name={item().record.eventType}
+                    receivedAt={item().record.receivedAt}
+                    now={now()}
+                  >
+                    <Show when={props.canEdit}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={replaying() || props.currentDeploymentId == null}
+                        onClick={() => void replay()}
+                      >
+                        {replaying() ? "Replaying..." : "Replay"}
+                      </Button>
+                    </Show>
+                    <Show when={props.canViewTraces && traceUrl()}>
+                      {(href) => (
+                        <a
+                          sx={[styles.receivedTime, styles.link]}
+                          href={href()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Trace
+                          <IconTablerExternalLink {...stylex.attrs(styles.traceIcon)} />
+                        </a>
+                      )}
+                    </Show>
+                  </EventDetailHeader>
+
+                  <Show when={props.canEdit && props.currentDeploymentId == null}>
+                    <p sx={styles.panelDescription}>Deploy this project to replay events.</p>
+                  </Show>
+                  <Show when={selectedReplayFeedback()}>
+                    {(feedback) => (
+                      <div
+                        sx={[
+                          styles.fields,
+                          styles.panelDescription,
+                          feedback().error && styles.runError,
+                        ]}
+                        role={feedback().error ? "alert" : "status"}
+                      >
+                        {feedback().message}
+                      </div>
+                    )}
+                  </Show>
+
+                  <div sx={styles.detailBody}>
+                    <EventPayload eventId={item().record.id} source={source()} payload={payload()}>
+                      <Show
+                        when={ingressDetails().endpoint}
+                        fallback={
+                          <>
+                            <span sx={styles.fieldValue} title={ingressDetails().name}>
+                              {ingressDetails().name}
+                            </span>
+                            <Show when={ingressDetails().id}>
+                              {(id) => (
+                                <span
+                                  sx={[
+                                    styles.runDeployment,
+                                    styles.ingressId,
+                                    styles.inlineFallbackId,
+                                  ]}
+                                  title={id()}
+                                >
+                                  {id()}
+                                </span>
+                              )}
+                            </Show>
+                          </>
+                        }
+                      >
+                        {(endpoint) => <IngressEndpoint ingress={endpoint()} />}
+                      </Show>
+                    </EventPayload>
+
+                    <EventExecutions
+                      count={eventExecutions().length}
+                      emptyDescription="This event did not trigger any executions."
+                    >
+                      <For each={eventExecutions()}>
+                        {(execution, index) => (
+                          <EventExecutionRow
+                            number={index() + 1}
+                            status={execution.status}
+                            target={execution.deploymentId}
+                            startedAt={execution.startedAt}
+                          >
+                            <Show when={execution.error}>
+                              {(error) => <div sx={styles.runError}>{error()}</div>}
+                            </Show>
+                          </EventExecutionRow>
+                        )}
+                      </For>
+                    </EventExecutions>
+                  </div>
+                </div>
+              );
+            }}
+          </Show>
+        </Show>
+      </section>
+    </EventsLayout>
+  );
+};

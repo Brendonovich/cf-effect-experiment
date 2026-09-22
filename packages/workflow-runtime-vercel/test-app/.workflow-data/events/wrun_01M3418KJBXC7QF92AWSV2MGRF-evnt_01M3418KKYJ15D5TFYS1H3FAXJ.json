@@ -1,0 +1,13 @@
+{
+  "eventType": "step_failed",
+  "specVersion": 3,
+  "correlationId": "step_01M3418KJECS4R98EHA14VXPFC",
+  "eventData": {
+    "stepName": "step//@macrograph/workflow-runtime-vercel@0.0.1//executeNode",
+    "error": "NodeExecutionError",
+    "stack": "FatalError: NodeExecutionError\n    at executeNode (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__04gaxfz._.js:1:11740)\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:117013\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:98118\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:116968\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:98118\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:96271\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:111886\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:50:32218\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:140189\n    at async rV.do (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/node_modules/.pnpm/next@16.3.5_@babel+core@7.29.7_supports-color@8.1.1__@opentelemetry+api@1.9.1_@types+no_16454ceca2401236eb710d4b047c9e9d/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.prod.js:5:23405)"
+  },
+  "runId": "wrun_01M3418KJBXC7QF92AWSV2MGRF",
+  "eventId": "evnt_01M3418KKYJ15D5TFYS1H3FAXJ",
+  "createdAt": "2026-09-22T07:46:09.150Z"
+}

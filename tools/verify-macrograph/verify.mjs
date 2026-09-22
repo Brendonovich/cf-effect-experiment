@@ -201,6 +201,7 @@ async function openBrowser(url) {
     reducedMotion: "reduce",
     acceptDownloads: true,
   });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
   const page = context.pages()[0] ?? (await context.newPage());
   page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
@@ -279,7 +280,20 @@ async function functionNavigation(page) {
 async function moduleReference(page) {
   await waitForAppShell(page);
   await page.getByRole("button", { name: "Modules", exact: true }).click();
+  const moduleSearch = page.getByPlaceholder("Search modules", { exact: true });
+  await moduleSearch.fill("Concat");
+  await page.getByRole("button", { name: "Utilities", exact: true }).waitFor();
+  check("module navigation search matches node metadata", "passed");
+  await moduleSearch.fill("");
   await page.getByRole("button", { name: "Utilities", exact: true }).click();
+  await page.getByRole("tab", { name: "Engine", exact: true }).click();
+  await page.getByRole("heading", { name: "Tick engine", exact: true }).waitFor();
+  const engineStatus = page.getByRole("status").filter({ hasText: /^(Running|Stopped)$/ });
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await engineStatus.filter({ hasText: "Stopped" }).waitFor();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await engineStatus.filter({ hasText: "Running" }).waitFor();
+  check("module engine settings render and update runtime state", "passed");
   const moduleInfo = page.locator('[data-component="module-info"]');
   await moduleInfo.getByText("Module", { exact: true }).waitFor();
   await moduleInfo.getByText("Utilities", { exact: true }).waitFor();
@@ -309,7 +323,22 @@ async function moduleReference(page) {
   await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
   await page.reload();
   await page.getByRole("heading", { name: "Concat Strings", exact: true }).waitFor();
-  await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
+  const referencePreview = page.locator('[data-graph-node-id="module-reference-preview"]');
+  await referencePreview.waitFor();
+  await referencePreview.locator('[data-node-header="module-reference-preview"]').click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+C" : "Control+C");
+  const clipboard = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  const copiedReferenceNode = clipboard?.nodes?.[0];
+  check(
+    "selected module reference node copies with its configured schema",
+    clipboard?.format === "macrograph/nodes" &&
+      clipboard?.version === 1 &&
+      clipboard?.nodes?.length === 1 &&
+      copiedReferenceNode?.name === "Concat Strings" &&
+      copiedReferenceNode?.schema?.schema === "ConcatStrings"
+      ? "passed"
+      : "failed",
+  );
   const persistedReferenceTab = await page
     .getByRole("tab", { name: "Reference", exact: true })
     .getAttribute("aria-selected");
@@ -323,6 +352,43 @@ async function moduleReference(page) {
   check(
     "module view and reference selection persist with the pane",
     persistedReferenceTab === "true" && persistedReferenceItem === "true" ? "passed" : "failed",
+  );
+  await page.getByRole("button", { name: "Graphs", exact: true }).click();
+  await page.getByRole("button", { name: "New graph", exact: true }).click();
+  const newGraph = page.getByRole("button", { name: "New Graph", exact: true }).first();
+  await newGraph.waitFor();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+  await page
+    .locator('[data-graph-node-id]:not([data-graph-node-id="module-reference-preview"])')
+    .waitFor();
+  const pastedProject = await exportProject(page, "reference-paste-project.json");
+  const pastedNodes = graphEntries(pastedProject).flatMap(([, graph]) =>
+    Object.values(graph.canvas?.nodes ?? graph.nodes ?? {}),
+  );
+  check(
+    "copied reference node pastes into a graph through the normal clipboard path",
+    pastedNodes.some(
+      (node) =>
+        node.id !== copiedReferenceNode.id &&
+        node.schema?.package === copiedReferenceNode.schema.package &&
+        node.schema?.schema === copiedReferenceNode.schema.schema &&
+        JSON.stringify(node.properties) === JSON.stringify(copiedReferenceNode.properties),
+    )
+      ? "passed"
+      : "failed",
+  );
+  const pastePath = join(outputDirectory, "reference-paste.png");
+  await page.screenshot({ path: pastePath, fullPage: true });
+  await evidence(pastePath, "screenshot");
+  await newGraph.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete graph", exact: true }).click();
+  await newGraph.waitFor({ state: "hidden" });
+  check(
+    "module navigation avoids broad reactive subscriptions",
+    manifest.browser.console.some((message) => message.text.includes("[HUGE_FAN_IN]"))
+      ? "failed"
+      : "passed",
   );
 }
 

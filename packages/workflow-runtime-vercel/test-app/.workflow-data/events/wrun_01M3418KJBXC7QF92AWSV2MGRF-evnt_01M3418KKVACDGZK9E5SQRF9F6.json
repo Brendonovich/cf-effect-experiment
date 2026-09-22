@@ -1,0 +1,11 @@
+{
+  "eventType": "step_started",
+  "specVersion": 3,
+  "correlationId": "step_01M3418KJECS4R98EHA14VXPFC",
+  "eventData": {
+    "stepName": "step//@macrograph/workflow-runtime-vercel@0.0.1//executeNode"
+  },
+  "runId": "wrun_01M3418KJBXC7QF92AWSV2MGRF",
+  "eventId": "evnt_01M3418KKVACDGZK9E5SQRF9F6",
+  "createdAt": "2026-09-22T07:46:09.147Z"
+}

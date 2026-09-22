@@ -6,6 +6,36 @@ import { expectTypeOf } from "vitest";
 import { DataType, Engine, Module, Registration } from "../src/index.ts";
 
 describe("Module.make", () => {
+  it.effect("defaults replay to unsafe for every node type and preserves explicit policies", () =>
+    Effect.gen(function* () {
+      const schemas = yield* Registration.collect<never>((context) =>
+        Effect.gen(function* () {
+          for (const replay of [undefined, "unsafe", "safe"] as const) {
+            for (const type of ["base", "pure", "exec", undefined] as const) {
+              yield* context.schema.register({
+                id: `${type ?? "default"}/${replay ?? "default"}`,
+                type,
+                ...(replay === undefined ? {} : { replay }),
+                io: () => ({}),
+                run: () => Effect.void,
+              });
+            }
+            yield* context.schema.register({
+              id: `event/${replay ?? "default"}`,
+              type: "event",
+              ...(replay === undefined ? {} : { replay }),
+              event: () => Effect.succeed(true),
+              io: () => ({}),
+              run: () => Effect.void,
+            });
+          }
+        }),
+      );
+      for (const schema of schemas)
+        assert.strictEqual(schema.replay, schema.id.endsWith("/safe") ? "safe" : "unsafe");
+    }),
+  );
+
   it.effect("only preconfigures execution ports for exec and event schemas", () =>
     Effect.gen(function* () {
       const schemas = yield* Registration.collect<never>((context) =>

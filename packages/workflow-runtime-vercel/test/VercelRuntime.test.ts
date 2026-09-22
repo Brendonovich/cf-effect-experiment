@@ -20,6 +20,7 @@ const TestModule = Module.make({
   effect: (registration) =>
     registration.schema.register({
       id: "trigger",
+      replay: "safe",
       type: "event",
       event: () => Effect.succeed(true),
       io: (io) => ({ value: io.data.out("value", DataType.String) }),
@@ -79,13 +80,16 @@ it("executes each node through a serialized step request", async () => {
   assert.deepStrictEqual(
     await VercelRuntime.runWorkflow(input, {
       modules,
-      executeNode: async (nodeInput) => {
+      executeNode: async function (nodeInput) {
+        assert.isUndefined(
+          this,
+          "Workflow steps must not capture the options/module registry receiver",
+        );
         steps++;
         const serialized = JSON.parse(JSON.stringify(nodeInput));
-        return VercelRuntime.runNodeStep(
-          Schema.decodeUnknownSync(VercelRuntime.NodeStepInput)(serialized),
-          { modules },
-        );
+        const decoded = Schema.decodeUnknownSync(VercelRuntime.NodeStepInput)(serialized);
+        assert.strictEqual(decoded.request.key.replay, "safe");
+        return VercelRuntime.runNodeStep(decoded, { modules });
       },
     }),
     { executionId: "execution-1", projectId: "project-1" },

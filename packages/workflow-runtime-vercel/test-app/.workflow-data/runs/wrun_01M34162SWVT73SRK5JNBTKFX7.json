@@ -1,0 +1,27 @@
+{
+  "runId": "wrun_01M34162SWVT73SRK5JNBTKFX7",
+  "deploymentId": "dpl_local@4.4.1",
+  "workflowName": "workflow//@macrograph/workflow-runtime-vercel@0.0.1//executeGraph",
+  "specVersion": 3,
+  "executionContext": {
+    "traceCarrier": {},
+    "workflowCoreVersion": "4.8.9",
+    "features": {
+      "encryption": false
+    }
+  },
+  "input": {
+    "__type": "Uint8Array",
+    "data": "ZGV2bFtbMV0seyJleGVjdXRpb25JZCI6MiwicHJvamVjdElkIjozLCJtb2R1bGVJZCI6NCwicHJvamVjdCI6NSwiZXZlbnQiOjI3fSwiY2E0ODIxNDQtMWMyYy00MzcyLWEyZDItODU0MzkzYzVlOTYwIiwiaW5mcmEtcHJvamVjdCIsImluZnJhLXRlc3QiLHsibmFtZSI6NiwiZ3JhcGhzIjo3LCJmdW5jdGlvbnMiOjIzLCJlbmdpbmVzIjoyNCwiY29uc3RhbnRzIjoyNSwidHlwZXMiOjI2fSwiTmV3IFByb2plY3QiLHsiZ3JhcGgiOjh9LHsiY2FudmFzIjo5fSx7ImlkIjoxMCwibmFtZSI6MTEsIm5vZGVzIjoxMiwiY29ubmVjdGlvbnMiOjIyfSwiZ3JhcGgiLCJJbmZyYXN0cnVjdHVyZSB0ZXN0Iix7InRyaWdnZXIiOjEzfSx7ImlkIjoxNCwibmFtZSI6MTUsInNjaGVtYSI6MTYsInByb3BlcnRpZXMiOjE3LCJpbnB1dERlZmF1bHRzIjoxOCwiZm9sZFBpbnMiOjE5LCJwb3NpdGlvbiI6MjB9LCJ0cmlnZ2VyIiwiVHJpZ2dlciIseyJwYWNrYWdlIjo0LCJzY2hlbWEiOjE0fSx7fSx7fSxmYWxzZSx7IngiOjIxLCJ5IjoyMX0sMCxbXSx7fSx7fSx7fSx7fSx7Il90YWciOjE1LCJ2YWx1ZSI6Mjh9LCJkdXJhYmxlIl0="
+  },
+  "createdAt": "2026-09-22T07:44:46.403Z",
+  "startedAt": "2026-09-22T07:44:46.489Z",
+  "status": "failed",
+  "error": {
+    "message": "Failed to serialize step arguments at path \".thisVal.modules.entries[0].register\". Ensure you're passing serializable types (plain objects, arrays, primitives, Date, RegExp, Map, Set).\n\nLearn more: https://useworkflow.dev/err/serialization-failed",
+    "stack": "Error: Failed to serialize step arguments at path \".thisVal.modules.entries[0].register\". Ensure you're passing serializable types (plain objects, arrays, primitives, Date, RegExp, Map, Set).\n\nLearn more: https://useworkflow.dev/err/serialization-failed\n    at j (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:50:76862)\n    at /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:147703\n    at f (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:148635)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at listOnTimeout (node:internal/timers:569:9)\n    at process.processTimers (node:internal/timers:543:7)\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:129829\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:98118\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:124349\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:96271\nCaused by: DevalueError: Cannot stringify a function\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:13718)\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16551)\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:14602)\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16551)\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16551)\n    at r (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16551)\n    at /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16601\n    at /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:53:16625\n    at j (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:50:76711)\n    at /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:147703",
+    "code": "USER_ERROR"
+  },
+  "completedAt": "2026-09-22T07:44:46.744Z",
+  "updatedAt": "2026-09-22T07:44:46.744Z"
+}

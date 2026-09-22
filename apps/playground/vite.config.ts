@@ -15,7 +15,7 @@ const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
   generateBundle(_options, bundle) {
     const forbidden = [
-      "/apps/cloudflare/",
+      "/apps/cloud/",
       "/apps/server/",
       "/packages/cloud-api/",
       "/packages/persistence-sqlite/",

@@ -1,0 +1,39 @@
+{
+  "name": "@macrograph/workflow-runtime-cloudflare",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./CloudflareRuntime": "./src/CloudflareRuntime.ts",
+    "./Alchemy": "./src/Alchemy.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "test:infra": "pnpm --dir test-app test:infra",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/execution": "workspace:*",
+    "@macrograph/workflow-runtime": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260825.1",
+    "@effect/vitest": "catalog:",
+    "@macrograph/workflow-runtime-test": "workspace:*",
+    "alchemy": "2.0.0-beta.72",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "peerDependencies": {
+    "alchemy": "2.0.0-beta.72"
+  },
+  "peerDependenciesMeta": {
+    "alchemy": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@macrograph/workflow-runtime-vercel-test-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
+    "deploy": "pnpm alchemy deploy",
+    "destroy": "pnpm alchemy destroy",
+    "build": "next build",
+    "dev": "next dev",
+    "test:infra": "bun test infra.test.ts",
+    "test:infra:local": "WORKFLOW_INFRA_LOCAL=1 bun test infra.test.ts"
+  },
+  "dependencies": {
+    "@macrograph/workflow-runtime-test": "workspace:*",
+    "@macrograph/workflow-runtime-vercel": "workspace:*",
+    "effect": "catalog:",
+    "next": "16.3.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "workflow": "4.8.9"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "@types/react": "^19.2.0",
+    "alchemy": "2.0.0-beta.72",
+    "typescript": "^5.8",
+    "vercel": "59.25.0"
+  }
+}
