@@ -567,6 +567,88 @@ export const noSchemaClassMutation = {
   },
 };
 
+const unsafeObjectKeys = new Set(["__proto__", "constructor", "prototype"]);
+
+export const noUnsafeObjectKeyAssignment = {
+  meta: {
+    type: "problem",
+    schema: false,
+    messages: {
+      assignment:
+        "Do not assign the unsafe object key {{key}}; use a safe domain key or Effect's Record.set.",
+    },
+  },
+  create(context) {
+    return {
+      AssignmentExpression(node) {
+        if (node.left.type !== "MemberExpression") return;
+        const key = memberName(node.left);
+        if (typeof key === "string" && unsafeObjectKeys.has(key))
+          context.report({ node, messageId: "assignment", data: { key } });
+      },
+    };
+  },
+};
+
+export const requireSafeObjectKeyBrand = {
+  meta: {
+    type: "problem",
+    schema: false,
+    messages: {
+      unsafeBrand:
+        "Derive {{brand}} from SafeObjectKey so branded IDs cannot be prototype-polluting object keys.",
+    },
+  },
+  create(context) {
+    const schemas = new Set();
+    const safeObjectKeys = new Set();
+    const isStringSchema = (node) => {
+      if (
+        node.type === "MemberExpression" &&
+        node.object.type === "Identifier" &&
+        schemas.has(node.object.name)
+      )
+        return memberName(node) === "String";
+      return (
+        node.type === "CallExpression" &&
+        node.callee.type === "MemberExpression" &&
+        isStringSchema(node.callee.object)
+      );
+    };
+    return {
+      ImportDeclaration(node) {
+        const source = staticSpecifier(node.source);
+        for (const specifier of node.specifiers) {
+          if (source === "effect" && specifier.imported?.name === "Schema")
+            schemas.add(importedLocal(specifier));
+          if (
+            ["@macrograph/module", "./SafeObjectKey.ts"].includes(source) &&
+            specifier.imported?.name === "SafeObjectKey"
+          )
+            safeObjectKeys.add(importedLocal(specifier));
+        }
+      },
+      CallExpression(node) {
+        if (node.callee.type !== "MemberExpression" || memberName(node.callee) !== "pipe") return;
+        const brandCall = node.arguments.find(
+          (argument) =>
+            argument.type === "CallExpression" &&
+            argument.callee.type === "MemberExpression" &&
+            argument.callee.object.type === "Identifier" &&
+            schemas.has(argument.callee.object.name) &&
+            memberName(argument.callee) === "brand",
+        );
+        if (brandCall === undefined) return;
+        const brand = staticSpecifier(brandCall.arguments[0]);
+        const source = node.callee.object;
+        if (typeof brand !== "string" || !/Id$/.test(brand) || !isStringSchema(source)) return;
+        if (source.type !== "Identifier" || !safeObjectKeys.has(source.name))
+          context.report({ node, messageId: "unsafeBrand", data: { brand } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "macrograph" },
   rules: {
@@ -583,5 +665,7 @@ export default {
     "no-unhandled-run-fork": noUnhandledRunFork,
     "no-private-workspace-subpath-imports": noPrivateWorkspaceSubpathImports,
     "no-schema-class-mutation": noSchemaClassMutation,
+    "no-unsafe-object-key-assignment": noUnsafeObjectKeyAssignment,
+    "require-safe-object-key-brand": requireSafeObjectKeyBrand,
   },
 };

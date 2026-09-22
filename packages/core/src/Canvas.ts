@@ -1,10 +1,11 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import * as Connection from "./Connection.ts";
 import { Node } from "./Node.ts";
 import { Collection as ScopeProjections } from "./Scopes.ts";
 
-export const CanvasId = Schema.String.pipe(Schema.brand("CanvasId"));
+export const CanvasId = SafeObjectKey.pipe(Schema.brand("CanvasId"));
 export type CanvasId = typeof CanvasId.Type;
 
 export const Model = Schema.Struct({

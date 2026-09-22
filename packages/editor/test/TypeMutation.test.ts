@@ -983,8 +983,8 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
+        expect(() => DataType.DefinitionId.make("__proto__")).toThrow();
         const bad: readonly DataType.Definition[] = [
-          { ...person, id: DataType.DefinitionId.make("__proto__") },
           { ...person, name: "constructor" },
           { ...person, name: "Group" },
           {

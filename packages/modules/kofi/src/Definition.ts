@@ -1,8 +1,8 @@
-import { Engine, Resource } from "@macrograph/module";
+import { Engine, Resource, SafeObjectKey } from "@macrograph/module";
 import { Array, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const WebhookId = Schema.String.pipe(Schema.brand("KofiWebhookId"));
+export const WebhookId = SafeObjectKey.pipe(Schema.brand("KofiWebhookId"));
 export type WebhookId = typeof WebhookId.Type;
 
 export class KofiWebhook extends Resource.make<KofiWebhook, WebhookId>()("KofiWebhook", {

@@ -3,6 +3,8 @@ import type * as EffectOption from "effect/Option";
 
 import { Schema } from "effect";
 
+import { SafeObjectKey } from "./SafeObjectKey.ts";
+
 declare const TypeId: unique symbol;
 
 export interface Type<Value> {
@@ -39,7 +41,7 @@ export interface Option<Inner extends Any = Any> extends Type<EffectOption.Optio
   readonly inner: Inner;
 }
 
-export const DefinitionId = Schema.String.pipe(Schema.brand("TypeDefinitionId"));
+export const DefinitionId = SafeObjectKey.pipe(Schema.brand("TypeDefinitionId"));
 export type DefinitionId = typeof DefinitionId.Type;
 
 export interface Custom extends Type<Readonly<Record<string, unknown>>> {

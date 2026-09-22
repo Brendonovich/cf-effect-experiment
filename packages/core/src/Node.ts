@@ -1,10 +1,11 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import { IoId } from "./IO.ts";
 import { Position } from "./Position.ts";
 import { SchemaRef } from "./SchemaRef.ts";
 
-export const NodeId = Schema.String.pipe(Schema.brand("NodeId"));
+export const NodeId = SafeObjectKey.pipe(Schema.brand("NodeId"));
 export type NodeId = typeof NodeId.Type;
 
 export const Model = Schema.Struct({

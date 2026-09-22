@@ -1,10 +1,10 @@
-import { Engine, Resource } from "@macrograph/module";
+import { Engine, Resource, SafeObjectKey } from "@macrograph/module";
 import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const AccountId = Schema.String.pipe(Schema.brand("GitHubAccountId"));
+export const AccountId = SafeObjectKey.pipe(Schema.brand("GitHubAccountId"));
 export type AccountId = typeof AccountId.Type;
-export const WebhookId = Schema.String.pipe(Schema.brand("GitHubWebhookId"));
+export const WebhookId = SafeObjectKey.pipe(Schema.brand("GitHubWebhookId"));
 export type WebhookId = typeof WebhookId.Type;
 
 export class GitHubAccount extends Resource.make<GitHubAccount, AccountId>()("GitHubAccount", {

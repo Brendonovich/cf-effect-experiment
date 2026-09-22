@@ -1,7 +1,8 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import { Schema } from "effect";
 
-export const IoId = Schema.String.pipe(Schema.brand("IoId"));
+export const IoId = SafeObjectKey.pipe(Schema.brand("IoId"));
 export type IoId = typeof IoId.Type;
 
 export const ScopeField = Schema.Struct({

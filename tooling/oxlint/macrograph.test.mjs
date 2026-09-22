@@ -9,8 +9,10 @@ import {
   noNodeImportsInBrowser,
   noPrivateWorkspaceSubpathImports,
   noSchemaClassMutation,
+  noUnsafeObjectKeyAssignment,
   noUnhandledRunFork,
   preferCurriedLayerEffect,
+  requireSafeObjectKeyBrand,
   solidV2CreateEffectSignature,
   solidV2NoEagerComponentPropRead,
   solidV2NoMirroredDerivedState,
@@ -255,6 +257,44 @@ tester.run("no-private-workspace-subpath-imports", noPrivateWorkspaceSubpathImpo
           data: { specifier: "@macrograph/core/src/Graph" },
         },
       ],
+    },
+  ],
+});
+
+tester.run("no-unsafe-object-key-assignment", noUnsafeObjectKeyAssignment, {
+  valid: [{ code: "record[safeKey] = value" }, { code: 'record["ordinary"] = value' }],
+  invalid: [
+    {
+      code: 'record["__proto__"] = value',
+      errors: [{ messageId: "assignment", data: { key: "__proto__" } }],
+    },
+    {
+      code: "record.constructor = value",
+      errors: [{ messageId: "assignment", data: { key: "constructor" } }],
+    },
+  ],
+});
+
+tester.run("require-safe-object-key-brand", requireSafeObjectKeyBrand, {
+  valid: [
+    {
+      code: 'import { Schema } from "effect"; import { SafeObjectKey } from "@macrograph/module"; const NodeId = SafeObjectKey.pipe(Schema.brand("NodeId"))',
+    },
+    {
+      code: 'import { Schema } from "effect"; const Label = Schema.String.pipe(Schema.brand("Label"))',
+    },
+    {
+      code: 'import { Schema } from "effect"; const NumericId = Schema.Int.pipe(Schema.brand("NumericId"))',
+    },
+  ],
+  invalid: [
+    {
+      code: 'import { Schema } from "effect"; const NodeId = Schema.String.pipe(Schema.brand("NodeId"))',
+      errors: [{ messageId: "unsafeBrand", data: { brand: "NodeId" } }],
+    },
+    {
+      code: 'import { Schema } from "effect"; const ResourceId = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("ResourceId"))',
+      errors: [{ messageId: "unsafeBrand", data: { brand: "ResourceId" } }],
     },
   ],
 });

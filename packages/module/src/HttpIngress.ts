@@ -1,6 +1,7 @@
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect";
 
 import * as HttpEndpoint from "./HttpEndpoint.ts";
+import { SafeObjectKey } from "./SafeObjectKey.ts";
 
 export interface HttpRequest<Metadata, Configuration = unknown> {
   readonly endpoint: HttpEndpoint.Resolved<Metadata>;
@@ -132,7 +133,7 @@ export const ManifestEntry = Schema.Struct({
 });
 export type ManifestEntry = typeof ManifestEntry.Type;
 
-export const ManifestEntryKey = Schema.String.pipe(Schema.brand("HttpIngressManifestEntryKey"));
+export const ManifestEntryKey = SafeObjectKey.pipe(Schema.brand("HttpIngressManifestEntryKey"));
 export type ManifestEntryKey = typeof ManifestEntryKey.Type;
 
 export const manifestEntryKey = (entry: ManifestEntry): ManifestEntryKey =>

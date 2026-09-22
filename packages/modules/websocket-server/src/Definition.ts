@@ -1,11 +1,11 @@
-import { Engine, Resource } from "@macrograph/module";
+import { Engine, Resource, SafeObjectKey } from "@macrograph/module";
 import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const ServerId = Schema.String.pipe(Schema.brand("WebSocketServerId"));
+export const ServerId = SafeObjectKey.pipe(Schema.brand("WebSocketServerId"));
 export type ServerId = typeof ServerId.Type;
 
-export const ClientId = Schema.String.pipe(Schema.brand("WebSocketServerClientId"));
+export const ClientId = SafeObjectKey.pipe(Schema.brand("WebSocketServerClientId"));
 export type ClientId = typeof ClientId.Type;
 
 export const ServerDefinition = Schema.Struct({

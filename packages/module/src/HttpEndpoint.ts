@@ -1,12 +1,14 @@
 import { Context, Effect, Option, Redacted, Schema } from "effect";
 
-export const Id = Schema.String.pipe(Schema.brand("HttpEndpointId"));
+import { SafeObjectKey } from "./SafeObjectKey.ts";
+
+export const Id = SafeObjectKey.pipe(Schema.brand("HttpEndpointId"));
 export type Id = typeof Id.Type;
 
-export const HandlerId = Schema.String.pipe(Schema.brand("HttpEndpointHandlerId"));
+export const HandlerId = SafeObjectKey.pipe(Schema.brand("HttpEndpointHandlerId"));
 export type HandlerId = typeof HandlerId.Type;
 
-export const InstanceKey = Schema.String.pipe(Schema.brand("HttpEndpointInstanceKey"));
+export const InstanceKey = SafeObjectKey.pipe(Schema.brand("HttpEndpointInstanceKey"));
 export type InstanceKey = typeof InstanceKey.Type;
 
 export const EndpointSchema = Schema.Struct({

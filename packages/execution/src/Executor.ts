@@ -11,13 +11,14 @@ import {
   TypeDefinition,
   Wildcards,
 } from "@macrograph/core";
+import { SafeObjectKey } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
 import { Cause, Effect, Option, Ref, Result, Schema } from "effect";
 
-const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
+const NodeOutputKey = SafeObjectKey.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
 
 export class ModuleNotRegistered extends Schema.TaggedError<ModuleNotRegistered>()(

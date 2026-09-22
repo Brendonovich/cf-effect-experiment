@@ -6,10 +6,11 @@ import {
   SchemaRef,
   type SchemaAuthoring,
 } from "@macrograph/core";
+import { SafeObjectKey } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import { Context, Effect, Layer, Ref, Result, Schema } from "effect";
 
-const SchemaRuntimeKey = Schema.String.pipe(Schema.brand("SchemaRuntimeKey"));
+const SchemaRuntimeKey = SafeObjectKey.pipe(Schema.brand("SchemaRuntimeKey"));
 type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
 
 export type IOCalculator = (

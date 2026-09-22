@@ -103,21 +103,12 @@ export const decode = (text: string) =>
         throw new Error("Clipboard must contain 1-500 nodes and at most 2000 connections");
       const ids = new Set<string>();
       for (const node of fragment.nodes) {
-        if (
-          !node.id ||
-          ["__proto__", "constructor", "prototype"].includes(node.id) ||
-          ids.has(node.id)
-        )
-          throw new Error("Invalid or duplicate node id");
+        if (!node.id || ids.has(node.id)) throw new Error("Invalid or duplicate node id");
         ids.add(node.id);
         if (!validPosition(node.position)) throw new Error("Invalid node position");
       }
       for (const projection of fragment.scopeProjections ?? []) {
-        if (
-          !projection.id ||
-          ["__proto__", "constructor", "prototype"].includes(projection.id) ||
-          ids.has(projection.id)
-        )
+        if (!projection.id || ids.has(projection.id))
           throw new Error("Invalid or duplicate projection id");
         ids.add(projection.id);
         if (!validPosition(projection.position)) throw new Error("Invalid projection position");

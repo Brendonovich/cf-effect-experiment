@@ -1,6 +1,7 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
-export const Id = Schema.String.pipe(Schema.brand("ResourceConstantId"));
+export const Id = SafeObjectKey.pipe(Schema.brand("ResourceConstantId"));
 export type Id = typeof Id.Type;
 
 export const ResourceRef = Schema.Struct({

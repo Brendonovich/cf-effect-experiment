@@ -1,9 +1,10 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { Schema } from "effect";
 
 import { IoId } from "./IO.ts";
 import * as OutputRef from "./OutputRef.ts";
 
-export const ConnectionId = Schema.String.pipe(Schema.brand("ConnectionId"));
+export const ConnectionId = SafeObjectKey.pipe(Schema.brand("ConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;
 
 export const Model = Schema.Struct({

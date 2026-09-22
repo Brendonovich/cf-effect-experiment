@@ -1,3 +1,4 @@
+import { SafeObjectKey } from "@macrograph/module";
 import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
 
@@ -6,7 +7,7 @@ import { Function as GraphFunction } from "./Function.ts";
 import { Graph } from "./Graph.ts";
 import { Collection as ResourceConstants } from "./ResourceConstant.ts";
 
-export const ProjectId = Schema.String.pipe(Schema.brand("ProjectId"));
+export const ProjectId = SafeObjectKey.pipe(Schema.brand("ProjectId"));
 export type ProjectId = typeof ProjectId.Type;
 
 export const Model = Schema.Struct({
