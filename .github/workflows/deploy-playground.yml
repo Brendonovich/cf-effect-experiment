@@ -2,7 +2,7 @@ name: Deploy Playground
 
 on:
   push:
-    branches: [deploy/playground]
+    branches: [feat/function-queues]
   workflow_dispatch:
 
 permissions:
