@@ -143,7 +143,15 @@ describe("editor store", () => {
         { id: "account-1", display: "Streamer" },
       ]);
       setProject(
-        { name: "New Project", graphs: {}, functions: {}, engines: {}, constants: {}, types: {} },
+        {
+          name: "New Project",
+          graphs: {},
+          functions: {},
+          engines: {},
+          constants: {},
+          types: {},
+          queues: {},
+        },
         {},
       );
       expect(store.project?.name).toBe("New Project");

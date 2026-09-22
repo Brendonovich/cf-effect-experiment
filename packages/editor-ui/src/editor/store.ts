@@ -8,6 +8,7 @@ import {
   Node,
   type NodeIO,
   Package,
+  Queue,
   ResourceConstant,
   Scopes,
 } from "@macrograph/core";
@@ -29,6 +30,7 @@ type MutableProject = {
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
   types: Project.Model["types"];
+  queues: Record<string, Queue.Model>;
 };
 
 type MutableEditorStore = {
@@ -80,6 +82,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                 functions: { ...current.project.functions },
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
+                queues: { ...current.project.queues },
               },
         packages: [...current.packages],
         // Event reducers edit declarations, never the previous inferred types.
@@ -136,6 +139,16 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     if (!store.project) return;
 
     switch (event._tag) {
+      case "QueueUpdated":
+        setStore((store) => {
+          store.project!.queues[event.queue.id] = event.queue;
+        });
+        break;
+      case "QueueDeleted":
+        setStore((store) => {
+          delete store.project!.queues[event.queueId];
+        });
+        break;
       case "TypeDefinitionsUpdated":
         setStore((store) => {
           if (!store.project) return;

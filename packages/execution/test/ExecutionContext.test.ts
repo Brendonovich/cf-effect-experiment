@@ -110,6 +110,7 @@ describe("schema execution context", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
         graphs: {
           [graphId]: {
             canvas: {

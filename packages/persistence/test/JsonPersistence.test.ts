@@ -127,6 +127,7 @@ describe("JsonPersistence", () => {
         engines: {},
         constants,
         types: {},
+        queues: {},
       });
       const project = yield* persistence.loadProject();
       expect(project.constants).toEqual(constants);
@@ -157,6 +158,7 @@ describe("JsonPersistence", () => {
         engines: { twitch: { accounts: { one: { subscriptions: ["channel.ban"] } } } },
         constants: {},
         types: {},
+        queues: {},
       };
       yield* persistence.saveProject(project);
 
@@ -187,6 +189,7 @@ describe("JsonPersistence", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
       };
       yield* persistence.saveProject(project);
 
@@ -221,6 +224,7 @@ describe("JsonPersistence", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
       };
       yield* persistence.saveProject(project);
 
@@ -296,6 +300,7 @@ describe("JsonPersistence", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
       };
       yield* persistence.saveProject(project);
 

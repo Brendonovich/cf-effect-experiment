@@ -5,6 +5,7 @@ import {
   Graph,
   Node,
   Project,
+  Queue,
   ResourceConstant,
   TypeDefinition,
 } from "@macrograph/core";
@@ -34,6 +35,7 @@ const ProjectMeta = Schema.Struct({
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
   functions: Schema.optional(Schema.Record(Schema.String, FunctionMetadata)),
+  queues: Queue.Collection,
 });
 
 export const layer = (dir: string) =>
@@ -60,6 +62,7 @@ export const layer = (dir: string) =>
                 name: project.name,
                 engines: project.engines,
                 constants: project.constants,
+                queues: project.queues,
                 types: project.types,
                 functions: Object.fromEntries(
                   Object.entries(project.functions).map(([id, fn]) => [
@@ -129,6 +132,7 @@ export const layer = (dir: string) =>
           functions,
           engines: meta.engines ?? {},
           constants: meta.constants ?? {},
+          queues: meta.queues,
           types: meta.types ?? {},
         };
       }, lock.withPermit);

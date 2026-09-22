@@ -47,6 +47,7 @@ describe("Utilities execution", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
         graphs: {
           [graphId]: {
             canvas: {

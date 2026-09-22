@@ -170,9 +170,18 @@ export interface Service {
 
 export interface FunctionInvocationOptions {
   readonly executionPath?: string;
+  readonly queueLineage?: ReadonlyArray<string>;
   readonly executionTraceId?: string;
   readonly eventNodeId?: string;
   readonly stack?: ReadonlyArray<string>;
+}
+
+export interface QueueInvocation {
+  readonly key: NodeExecutionKey;
+  readonly functionId: string;
+  readonly inputs: Readonly<Record<string, unknown>>;
+  readonly queueId: string;
+  readonly queueLineage: ReadonlyArray<string>;
 }
 
 type ExecutionRequest =
@@ -288,6 +297,9 @@ export const durableExecution = (
 ): DurableExecutionEnvironment => ({ _tag: "Durable", executeNode });
 
 export interface MakeOptions {
+  readonly queueInvocation?: (
+    invocation: QueueInvocation,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly projectId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
@@ -1183,17 +1195,41 @@ export const make = Effect.fnUntraced(function* (
                 canvasId: target,
                 reason: "Recursive function calls are not supported",
               });
-            const result = yield* execute({
-              _tag: "Function",
-              canvasId: target,
-              inputs: Object.fromEntries(inputs),
-              options: {
-                executionPath: `${executionPath}/function:${node.id}:${target}`,
-                executionTraceId,
-                eventNodeId: rootEventNodeId,
-                stack: [...invocationStack, target],
-              },
-            });
+            const queueId = GraphFunction.isQueuedCall(node) ? node.properties.queue : undefined;
+            if (
+              GraphFunction.isQueuedCall(node) &&
+              (typeof queueId !== "string" || currentProject.queues[queueId] === undefined)
+            )
+              return yield* new GraphFunction.InvocationError({
+                canvasId: target,
+                reason: "Add to Queue has a missing queue target",
+              });
+            const callInputs = Object.fromEntries(inputs);
+            const result =
+              typeof queueId === "string"
+                ? options?.queueInvocation === undefined
+                  ? yield* new GraphFunction.InvocationError({
+                      canvasId: target,
+                      reason: "Queue invocation is not hosted",
+                    })
+                  : yield* options.queueInvocation({
+                      key,
+                      functionId: target,
+                      inputs: callInputs,
+                      queueId,
+                      queueLineage: invocation?.options?.queueLineage ?? [],
+                    })
+                : yield* execute({
+                    _tag: "Function",
+                    canvasId: target,
+                    inputs: callInputs,
+                    options: {
+                      executionPath: `${executionPath}/function:${node.id}:${target}`,
+                      executionTraceId,
+                      eventNodeId: rootEventNodeId,
+                      stack: [...invocationStack, target],
+                    },
+                  });
             for (const output of nodeIO.dataOutputs)
               outputs.push({ outputId: output.id, value: result[output.id] });
             return { outputs, executionOutputId: "exec" } satisfies NodeExecutionResult;

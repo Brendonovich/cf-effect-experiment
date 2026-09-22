@@ -1,7 +1,7 @@
 import {
   BuiltinAuthoring,
   type Canvas,
-  type Function as GraphFunction,
+  Function as GraphFunction,
   type SchemaAuthoring,
   TypeDefinition,
   type Node,
@@ -82,6 +82,7 @@ export function Inspector(props: {
   authoring?: SchemaAuthoring.Registry;
   nodeDiagnostics?: Readonly<Record<string, ReadonlyArray<string>>>;
   constants: Project.Model["constants"];
+  queues?: Project.Model["queues"];
   definitions?: DataType.Definitions;
   nodeIO?: Readonly<Record<string, NodeIO>>;
   onSaveDefault?: (nodeId: string, input: string, value: unknown) => Promise<unknown>;
@@ -305,6 +306,17 @@ export function Inspector(props: {
                                     {...(props.functions === undefined
                                       ? {}
                                       : { functions: props.functions })}
+                                    {...(GraphFunction.isQueuedCall(node()) &&
+                                    property.id === "queue"
+                                      ? {
+                                          options: Object.values(props.queues ?? {}).map(
+                                            (queue) => ({
+                                              id: queue.id,
+                                              name: queue.name,
+                                            }),
+                                          ),
+                                        }
+                                      : {})}
                                     value={node().properties[property.id]}
                                     onSet={(value) => props.onSetNodeProperty(property.id, value)}
                                     onClear={() => props.onClearNodeProperty(property.id)}

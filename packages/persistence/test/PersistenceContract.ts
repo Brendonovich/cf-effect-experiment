@@ -35,6 +35,7 @@ const emptyProject = (): Project.Model => ({
   engines: {},
   constants: {},
   types: {},
+  queues: {},
 });
 
 export const persistenceContract = <E>(

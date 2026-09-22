@@ -207,6 +207,7 @@ const SeedLayer = Layer.effectDiscard(
       engines: {},
       constants: {},
       types: {},
+      queues: {},
     }),
   ),
 );

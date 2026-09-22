@@ -35,6 +35,7 @@ export const layer = Layer.effect(Persistence.Service)(
               name: project.name,
               engines: project.engines,
               constants: project.constants,
+              queues: project.queues,
               types: project.types,
             })
             .run();
@@ -215,6 +216,7 @@ export const layer = Layer.effect(Persistence.Service)(
           functions,
           engines: meta.engines,
           constants: meta.constants,
+          queues: meta.queues,
           types: meta.types,
         };
       });
@@ -229,6 +231,7 @@ export const layer = Layer.effect(Persistence.Service)(
         functions: result.functions,
         engines: result.engines,
         constants: result.constants,
+        queues: result.queues,
         types: result.types,
       }).pipe(PersistenceError.refail);
     });

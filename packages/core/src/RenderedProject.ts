@@ -2,6 +2,7 @@ import { DataType } from "@macrograph/module/DataType";
 import { Schema } from "effect";
 
 import { Function as GraphFunction } from "./Function.ts";
+import { Collection as Queues } from "./Queue.ts";
 import { RenderedGraph } from "./RenderedGraph.ts";
 import { Collection as ResourceConstants } from "./ResourceConstant.ts";
 
@@ -11,6 +12,7 @@ export const Model = Schema.Struct({
   functions: GraphFunction.Collection,
   engines: Schema.Record(Schema.String, Schema.Json),
   constants: ResourceConstants,
+  queues: Queues,
   types: DataType.Definitions,
 });
 export type Model = typeof Model.Type;

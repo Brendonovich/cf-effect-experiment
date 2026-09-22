@@ -15,10 +15,15 @@ export const InputBoundaryNodeId = NodeId.make("$function:input");
 export const OutputBoundaryNodeId = NodeId.make("$function:output");
 export const ExecutionIoId = IoId.make("exec");
 export const packageId = PackageId.make("macrograph-functions");
+export const queuePackageId = PackageId.make("macrograph-queues");
 export const CallSchemaId = SchemaId.make("call");
+export const QueuedCallSchemaId = SchemaId.make("add");
+
+export const isQueuedCall = (node: Pick<NodeModel, "schema">): boolean =>
+  node.schema.package === queuePackageId && node.schema.schema === QueuedCallSchemaId;
 
 export const isCall = (node: Pick<NodeModel, "schema">): boolean =>
-  node.schema.package === packageId && node.schema.schema === CallSchemaId;
+  (node.schema.package === packageId && node.schema.schema === CallSchemaId) || isQueuedCall(node);
 
 export const Field = Schema.Struct({
   id: IoId,
@@ -79,6 +84,24 @@ export const packageModel: Package.Model = {
       name: "Execute Function",
       type: "exec",
       properties: [{ id: "function", name: "Function", function: true, optional: true }],
+      ...callIO(undefined),
+    },
+  ],
+};
+
+export const queuePackageModel: Package.Model = {
+  id: queuePackageId,
+  name: "Queues",
+  resources: [],
+  schemas: [
+    {
+      id: QueuedCallSchemaId,
+      name: "Add to Queue",
+      type: "exec",
+      properties: [
+        { id: "queue", name: "Queue", type: { _tag: "String" }, optional: true },
+        { id: "function", name: "Function", function: true, optional: true },
+      ],
       ...callIO(undefined),
     },
   ],

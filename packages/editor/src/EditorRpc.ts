@@ -8,6 +8,7 @@ import {
   Package as PkgTypes,
   Policy,
   Project,
+  Queue,
   Position,
   ResourceConstant,
   TypeDefinition,
@@ -16,7 +17,7 @@ import { Credential } from "@macrograph/module/Credential";
 import * as Engine from "@macrograph/module/Engine";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import { PersistenceError } from "@macrograph/persistence";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { Rpc, RpcGroup, RpcMiddleware } from "effect/unstable/rpc";
 
 import * as Editor from "./Editor.ts";
@@ -25,6 +26,7 @@ import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
 import { Packages } from "./Packages.ts";
 import { Presence } from "./Presence.ts";
+import { QueueRuntime } from "./QueueRuntime.ts";
 
 /** Resolves and authorizes editor RPC connections while attributing their events. */
 export class ConnectionMiddleware extends RpcMiddleware.Service<
@@ -35,6 +37,7 @@ export class ConnectionMiddleware extends RpcMiddleware.Service<
 const readOnlyRpcs = new Set([
   "GetClipboardIdentity",
   "GetProject",
+  "QueueStateStream",
   "PreviewTypeDefinition",
   "GetInputSuggestions",
   "GetPackages",
@@ -135,6 +138,43 @@ class CreateGraph extends Rpc.make("CreateGraph", {
   payload: { graph: Graph.CreateInput },
   success: EditorEvent.GraphCreated,
   error: PersistenceError,
+}) {}
+
+class CreateQueue extends Rpc.make("CreateQueue", {
+  payload: { name: Schema.String },
+  success: EditorEvent.QueueUpdated,
+  error: PersistenceError,
+}) {}
+class RenameQueue extends Rpc.make("RenameQueue", {
+  payload: { queueId: Schema.String, name: Schema.String },
+  success: EditorEvent.QueueUpdated,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, Queue.NotFoundError]),
+}) {}
+class DeleteQueue extends Rpc.make("DeleteQueue", {
+  payload: { queueId: Schema.String },
+  success: EditorEvent.QueueDeleted,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, Queue.NotFoundError]),
+}) {}
+const queueErrors = Schema.Union([Queue.NotFoundError, Queue.OperationError]);
+class QueueStateStream extends Rpc.make("QueueStateStream", {
+  success: Schema.Array(Queue.State),
+  stream: true,
+}) {}
+class SetQueuePaused extends Rpc.make("SetQueuePaused", {
+  payload: { queueId: Schema.String, paused: Schema.Boolean },
+  error: queueErrors,
+}) {}
+class AdvanceQueue extends Rpc.make("AdvanceQueue", {
+  payload: { queueId: Schema.String },
+  error: queueErrors,
+}) {}
+class RemoveQueueItem extends Rpc.make("RemoveQueueItem", {
+  payload: { queueId: Schema.String, itemId: Schema.String },
+  error: queueErrors,
+}) {}
+class ClearQueue extends Rpc.make("ClearQueue", {
+  payload: { queueId: Schema.String },
+  error: queueErrors,
 }) {}
 
 class GetProject extends Rpc.make("GetProject", {
@@ -555,6 +595,8 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.ResourceConstantUpdated,
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
+    EditorEvent.QueueUpdated,
+    EditorEvent.QueueDeleted,
   ]),
   stream: true,
 });
@@ -574,6 +616,14 @@ export const EditorRpcs = RpcGroup.make(
   PreviewTypeDefinition,
   ConfirmTypeDefinition,
   CreateGraph,
+  CreateQueue,
+  RenameQueue,
+  DeleteQueue,
+  QueueStateStream,
+  SetQueuePaused,
+  AdvanceQueue,
+  RemoveQueueItem,
+  ClearQueue,
   GetProject,
   DeleteGraph,
   SetGraphName,
@@ -630,10 +680,22 @@ export const handlerLayer = EditorRpcs.toLayer(
     const pubsub = yield* EditorEvents.Service;
     const presence = yield* Presence.Registry;
     const credentials = yield* Engine.Credentials;
+    const queues = Option.getOrElse(
+      yield* Effect.serviceOption(QueueRuntime.Service),
+      () => QueueRuntime.unavailable,
+    );
     return EditorRpcs.of({
       PreviewTypeDefinition: ({ change }) => editor.typeDefinition.preview(change),
       ConfirmTypeDefinition: (payload) => editor.typeDefinition.confirm(payload),
       CreateGraph: (payload) => editor.graph.create(payload.graph),
+      CreateQueue: ({ name }) => editor.queue.create(name),
+      RenameQueue: ({ queueId, name }) => editor.queue.rename(queueId, name),
+      DeleteQueue: ({ queueId }) => editor.queue.delete(queueId),
+      QueueStateStream: () => queues.changes,
+      SetQueuePaused: ({ queueId, paused }) => queues.pause(queueId, paused),
+      AdvanceQueue: ({ queueId }) => queues.advance(queueId),
+      RemoveQueueItem: ({ queueId, itemId }) => queues.remove(queueId, itemId),
+      ClearQueue: ({ queueId }) => queues.clear(queueId),
       GetProject: () =>
         Effect.gen(function* () {
           const identity = yield* EditorAccess.Connection;

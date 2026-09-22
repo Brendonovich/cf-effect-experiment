@@ -17,6 +17,7 @@ const supportedModes = new Set([
   "doctor",
   "smoke",
   "function-navigation",
+  "function-queues",
   "module-reference",
   "journey",
   "all",
@@ -275,6 +276,23 @@ async function functionNavigation(page) {
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
   check("function navigation and split constants are visible", "passed");
+}
+
+async function functionQueues(page) {
+  await waitForAppShell(page);
+  await page.getByRole("button", { name: "Queues", exact: true }).click();
+  await page.getByRole("button", { name: "New queue", exact: true }).click();
+  const queue = page.getByRole("region", { name: "New Queue", exact: true });
+  await queue.waitFor();
+  await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
+  await queue.getByRole("button", { name: "Pause", exact: true }).click();
+  await queue.getByText(/Paused \/ 0 running \/ 0 waiting/).waitFor();
+  await queue.getByRole("button", { name: "Resume", exact: true }).click();
+  await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
+  const path = join(outputDirectory, "function-queues.png");
+  await page.screenshot({ path, fullPage: true });
+  await evidence(path, "screenshot");
+  check("queue definitions and live pause controls are visible", "passed");
 }
 
 async function moduleReference(page) {
@@ -539,7 +557,7 @@ process.once("SIGTERM", () => void handleSignal("SIGTERM"));
 async function main() {
   if (!supportedModes.has(mode))
     throw new Error(
-      `Usage: verify.mjs [doctor|smoke|function-navigation|module-reference|journey|all]`,
+      `Usage: verify.mjs [doctor|smoke|function-navigation|function-queues|module-reference|journey|all]`,
     );
   await mkdir(outputDirectory, { recursive: true });
   await doctor();
@@ -548,6 +566,7 @@ async function main() {
     const page = await openBrowser(url);
     if (mode === "smoke" || mode === "all") await smoke(page);
     if (mode === "function-navigation" || mode === "all") await functionNavigation(page);
+    if (mode === "function-queues" || mode === "all") await functionQueues(page);
     if (mode === "module-reference" || mode === "all") await moduleReference(page);
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);

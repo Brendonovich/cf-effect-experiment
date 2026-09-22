@@ -11,6 +11,7 @@ import {
   EditorServer,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
@@ -300,6 +301,7 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provide(RpcSerialization.layerJsonRpc()),
   Layer.provide(LiveRuntimeLayer),
   Layer.provide(RuntimeActivity.layer),
+  Layer.provide(QueueRuntime.layer),
   Layer.provide(
     Layer.succeed(Engine.Credentials, {
       ...cloudCredentials.credentials,

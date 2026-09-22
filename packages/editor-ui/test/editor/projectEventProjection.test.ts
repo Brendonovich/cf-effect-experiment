@@ -308,6 +308,7 @@ describe("project event projections", () => {
             functions,
             engines: view.engines,
             constants: view.constants,
+            queues: view.queues,
             types: view.types,
           }).toEqual(persisted);
         }
