@@ -30,6 +30,8 @@ jobs:
 
       - name: Build playground
         run: pnpm --filter @macrograph/playground build
+        env:
+          VITE_MACROGRAPH_CREDENTIALS_BASE_URL: https://macrograph-playground.pages.dev/__macrograph_credentials
 
       - name: Create Pages project
         working-directory: apps/cloudflare
