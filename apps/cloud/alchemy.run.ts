@@ -61,6 +61,7 @@ export default Alchemy.Stack(
               ? {}
               : { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
             VITE_AXIOM_TRACE_DATASET: traceDatasetName,
+            VITE_DEPLOYMENT_STAGE: stage,
           },
         })
       : undefined;
@@ -106,7 +107,7 @@ export default Alchemy.Stack(
 
 					Commit: \`${github.sha.slice(0, 7)}\`
 
-					Cloud preview login uses manual device authorization.
+					Preview data is isolated and removed when the pull request closes.
 				`,
       });
     }

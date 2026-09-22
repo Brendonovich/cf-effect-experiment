@@ -19,6 +19,7 @@ import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
+import * as PreviewAuth from "../auth/PreviewAuth.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as DeploymentPolicy from "../deployment/DeploymentPolicy.ts";
@@ -121,6 +122,7 @@ export default Layer.unwrap(
         ).pipe(Layer.provideMerge(Layer.mergeAll(ProjectPolicy.layer, TeamPolicy.layer)));
         const services = Layer.mergeAll(
           Credential.layer,
+          PreviewAuth.layer,
           EditorRpc.layer,
           Event.layer(workerOperations),
         ).pipe(

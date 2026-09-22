@@ -26,6 +26,7 @@ export const makeApiClient = (publicWorkerOrigin: string, isSigningOut: () => bo
             response.status === 401 &&
             // Let coordinated logout finish its website request before navigating away.
             !isSigningOut() &&
+            !location.pathname.toLowerCase().endsWith("/preview-auth/callback") &&
             location.pathname.replace(/\/+$/, "").toLowerCase() !==
               `${import.meta.env.BASE_URL}sign-in`.toLowerCase()
           ) {

@@ -3,6 +3,7 @@ import {
   CredentialsApiGroup,
   EventsApiGroup,
   PreviewsApiGroup,
+  PreviewAuthApiGroup,
   ProjectsApiGroup,
   DeploymentsApiGroup,
   SessionApiGroup,
@@ -15,6 +16,7 @@ import { EditorRpcApiGroup } from "../editor/EditorRpcApi.ts";
 
 export class Api extends HttpApi.make("Api")
   .add(SessionApiGroup)
+  .add(PreviewAuthApiGroup)
   .add(TeamsApiGroup)
   .add(ProjectsApiGroup)
   .add(DeploymentsApiGroup)
