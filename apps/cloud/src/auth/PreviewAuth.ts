@@ -69,7 +69,6 @@ export const make = Effect.gen(function* () {
   const stage = yield* DeploymentStage;
   const authentication = yield* Authentication.Service;
   const database = yield* Database.Service;
-  const grants = (yield* PreviewAuthGrantDO).getByName("preview-auth-grants-v1");
 
   const noStore = HttpEffect.appendPreResponseHandler((_request, response) =>
     Effect.succeed(
@@ -158,6 +157,7 @@ export const make = Effect.gen(function* () {
         const status = yield* authentication.cloudAuth(sessionId).status();
         if (status.state !== "connected" || status.email.trim().toLowerCase() !== canonicalEmail)
           return yield* new HttpApiError.Unauthorized();
+        const grants = (yield* PreviewAuthGrantDO).getByName("preview-auth-grants-v1");
         const code = yield* grants.issue({
           redirectUri: query.redirectUri,
           codeChallenge: query.codeChallenge,
@@ -177,6 +177,7 @@ export const make = Effect.gen(function* () {
         if (parsePreviewRedirectUri(payload.redirectUri) === undefined)
           return yield* new HttpApiError.BadRequest();
         const challenge = yield* pkceChallenge(payload.codeVerifier);
+        const grants = (yield* PreviewAuthGrantDO).getByName("preview-auth-grants-v1");
         const grant = yield* grants.consume(payload.code, payload.redirectUri, challenge);
         if (grant === undefined || grant.email !== canonicalEmail)
           return yield* new HttpApiError.Unauthorized();
