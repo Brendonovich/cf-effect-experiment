@@ -1,0 +1,16 @@
+{
+  "eventType": "step_created",
+  "specVersion": 3,
+  "correlationId": "step_01M3418JJ8XDDC48TWJAT115JE",
+  "eventData": {
+    "stepName": "step//@macrograph/workflow-runtime-vercel@0.0.1//executeNode",
+    "workflowName": "workflow//@macrograph/workflow-runtime-vercel@0.0.1//executeGraph",
+    "input": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImFyZ3MiOjEsImNsb3N1cmVWYXJzIjotMSwidGhpc1ZhbCI6LTF9LFsyXSx7InByb2plY3QiOjMsInJlcXVlc3QiOjI2fSx7Im5hbWUiOjQsImdyYXBocyI6NSwiZnVuY3Rpb25zIjoyMiwiZW5naW5lcyI6MjMsImNvbnN0YW50cyI6MjQsInR5cGVzIjoyNX0sIk5ldyBQcm9qZWN0Iix7ImdyYXBoIjo2fSx7ImNhbnZhcyI6N30seyJpZCI6OCwibmFtZSI6OSwibm9kZXMiOjEwLCJjb25uZWN0aW9ucyI6MjF9LCJncmFwaCIsIkluZnJhc3RydWN0dXJlIHRlc3QiLHsidHJpZ2dlciI6MTF9LHsiaWQiOjEyLCJuYW1lIjoxMywic2NoZW1hIjoxNCwicHJvcGVydGllcyI6MTYsImlucHV0RGVmYXVsdHMiOjE3LCJmb2xkUGlucyI6MTgsInBvc2l0aW9uIjoxOX0sInRyaWdnZXIiLCJUcmlnZ2VyIix7InBhY2thZ2UiOjE1LCJzY2hlbWEiOjEyfSwiaW5mcmEtdGVzdCIse30se30sZmFsc2UseyJ4IjoyMCwieSI6MjB9LDAsW10se30se30se30se30seyJrZXkiOjI3LCJtb2R1bGVJZCI6MTUsInNjaGVtYUlkIjoxMiwiaW5wdXRzIjozMywicHJvcGVydGllcyI6MzQsImV2ZW50IjozNSwidHlwZXMiOjM3LCJyZXNvbHZlZFR5cGVzIjozOH0seyJwcm9qZWN0SWQiOjI4LCJncmFwaElkIjo4LCJldmVudE5vZGVJZCI6MTIsIm5vZGVJZCI6MTIsImtpbmQiOjI5LCJleGVjdXRpb25QYXRoIjozMCwiZXhlY3V0aW9uVHJhY2VJZCI6MzEsInRyYWNlSWQiOjMyfSwiaW5mcmEtcHJvamVjdCIsImV2ZW50IiwiZXZlbnQ6dHJpZ2dlciIsIjJiMGZhOTJmLTYxN2YtNGU0Ny1hOTg0LTk1YmYxZWYxYWUyMiIsImU3Mjc3M2Q3LWNkYjQtNDdhMy04YzM4LTk2ZTU0NjY4ZWY3NyIse30se30seyJfdGFnIjoxMywidmFsdWUiOjM2fSwiZHVyYWJsZSIse30seyJ7XCJfdGFnXCI6XCJTdHJpbmdcIn0iOjM5fSx7Il90YWciOjQwfSwiU3RyaW5nIl0="
+    }
+  },
+  "runId": "wrun_01M3418JFFQYKDNWW613M97J5X",
+  "eventId": "evnt_01M3418JPE5GTPPXB4RDT1VAKD",
+  "createdAt": "2026-09-22T07:46:08.206Z"
+}

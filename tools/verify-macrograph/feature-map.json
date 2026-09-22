@@ -27,16 +27,19 @@
       "verification": "module-reference",
       "userJourney": [
         "Open Modules tab",
+        "Search by node metadata and clear the module search without broad reactive subscriptions",
         "Open Utilities module",
+        "Open Engine settings and stop and start the Tick engine",
         "Observe module metadata under the Module title",
         "Select Reference",
         "Observe resources above nodes with the shared section header style",
         "Observe nodes grouped by variant",
         "Select an exposed node",
         "Reload and observe the same module view and reference selection",
-        "Observe its preview and configurable wildcard types and value properties"
+        "Observe its preview and configurable wildcard types and value properties",
+        "Copy the preview, paste into a new graph, and export the pasted node"
       ],
-      "evidence": ["screenshot", "server-log"]
+      "evidence": ["screenshot", "server-log", "reference-paste-project.json"]
     },
     {
       "id": "project.graph.local-persistence-export",

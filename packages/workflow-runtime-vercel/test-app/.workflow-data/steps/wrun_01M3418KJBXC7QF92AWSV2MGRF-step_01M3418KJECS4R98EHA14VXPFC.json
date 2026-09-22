@@ -1,0 +1,20 @@
+{
+  "runId": "wrun_01M3418KJBXC7QF92AWSV2MGRF",
+  "stepId": "step_01M3418KJECS4R98EHA14VXPFC",
+  "stepName": "step//@macrograph/workflow-runtime-vercel@0.0.1//executeNode",
+  "status": "failed",
+  "input": {
+    "__type": "Uint8Array",
+    "data": "ZGV2bFt7ImFyZ3MiOjEsImNsb3N1cmVWYXJzIjotMSwidGhpc1ZhbCI6LTF9LFsyXSx7InByb2plY3QiOjMsInJlcXVlc3QiOjI2fSx7Im5hbWUiOjQsImdyYXBocyI6NSwiZnVuY3Rpb25zIjoyMiwiZW5naW5lcyI6MjMsImNvbnN0YW50cyI6MjQsInR5cGVzIjoyNX0sIk5ldyBQcm9qZWN0Iix7ImdyYXBoIjo2fSx7ImNhbnZhcyI6N30seyJpZCI6OCwibmFtZSI6OSwibm9kZXMiOjEwLCJjb25uZWN0aW9ucyI6MjF9LCJncmFwaCIsIkluZnJhc3RydWN0dXJlIHRlc3QiLHsidHJpZ2dlciI6MTF9LHsiaWQiOjEyLCJuYW1lIjoxMywic2NoZW1hIjoxNCwicHJvcGVydGllcyI6MTYsImlucHV0RGVmYXVsdHMiOjE3LCJmb2xkUGlucyI6MTgsInBvc2l0aW9uIjoxOX0sInRyaWdnZXIiLCJUcmlnZ2VyIix7InBhY2thZ2UiOjE1LCJzY2hlbWEiOjEyfSwiaW5mcmEtdGVzdCIse30se30sZmFsc2UseyJ4IjoyMCwieSI6MjB9LDAsW10se30se30se30se30seyJrZXkiOjI3LCJtb2R1bGVJZCI6MTUsInNjaGVtYUlkIjoxMiwiaW5wdXRzIjozMywicHJvcGVydGllcyI6MzQsImV2ZW50IjozNSwidHlwZXMiOjM3LCJyZXNvbHZlZFR5cGVzIjozOH0seyJwcm9qZWN0SWQiOjI4LCJncmFwaElkIjo4LCJldmVudE5vZGVJZCI6MTIsIm5vZGVJZCI6MTIsImtpbmQiOjI5LCJleGVjdXRpb25QYXRoIjozMCwiZXhlY3V0aW9uVHJhY2VJZCI6MzEsInRyYWNlSWQiOjMyfSwiaW5mcmEtcHJvamVjdCIsImV2ZW50IiwiZXZlbnQ6dHJpZ2dlciIsImExNmIwMTc2LTNjZjEtNGNjOC05ZTdmLWFmMDhkYjdlYTI1NiIsIjMxYmU3MDdlLTZmNzYtNGEyOS05MDQ0LTkwNGY4Y2ZlNTQwNCIse30se30seyJfdGFnIjoxMywidmFsdWUiOjM2fSwiZmFpbCIse30seyJ7XCJfdGFnXCI6XCJTdHJpbmdcIn0iOjM5fSx7Il90YWciOjQwfSwiU3RyaW5nIl0="
+  },
+  "attempt": 1,
+  "startedAt": "2026-09-22T07:46:09.147Z",
+  "createdAt": "2026-09-22T07:46:09.140Z",
+  "updatedAt": "2026-09-22T07:46:09.150Z",
+  "specVersion": 3,
+  "error": {
+    "message": "NodeExecutionError",
+    "stack": "FatalError: NodeExecutionError\n    at executeNode (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__04gaxfz._.js:1:11740)\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:117013\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:98118\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:116968\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:98118\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:96271\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:111886\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:50:32218\n    at async /Users/brendonovich/github.com/brendonovich/cf-effect-experiment/packages/workflow-runtime-vercel/test-app/.next/server/chunks/[root-of-the-server]__20yhfwe._.js:33:140189\n    at async rV.do (/Users/brendonovich/github.com/brendonovich/cf-effect-experiment/node_modules/.pnpm/next@16.3.5_@babel+core@7.29.7_supports-color@8.1.1__@opentelemetry+api@1.9.1_@types+no_16454ceca2401236eb710d4b047c9e9d/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.prod.js:5:23405)"
+  },
+  "completedAt": "2026-09-22T07:46:09.150Z"
+}
