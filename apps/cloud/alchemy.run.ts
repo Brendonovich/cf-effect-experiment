@@ -44,7 +44,7 @@ export default Alchemy.Stack(
     const ctx = yield* Alchemy.AlchemyContext;
     const stage = yield* Alchemy.Stage;
     const github = yield* GitHub.GitHubEnv;
-    const isPreview = /^pr-\d+$/.test(stage);
+    const isPreview = /^pr\d+$/.test(stage);
     const credentialOAuthStateSecret = yield* Alchemy.makeRandom("CredentialOAuthStateSecret");
     yield* DatabaseHyperdrive;
     yield* DeploymentObjectsBucket;
