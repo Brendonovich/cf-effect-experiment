@@ -1139,6 +1139,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@macrograph/core':
+        specifier: workspace:*
+        version: link:../core
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.107
