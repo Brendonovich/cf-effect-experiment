@@ -23,12 +23,6 @@ export const ProjectSettingsRoute = () => {
   const queryClient = useQueryClient();
   const [deleteState, setDeleteState] = createSignal<"idle" | "deleting" | "error">("idle");
   const canManage = () => workspace.selectedTeam()?.role === "owner";
-  const canManageCredentials = () => {
-    const role = workspace.selectedTeam()?.role;
-    return (
-      (role === "owner" || role === "member") && project()?.createdBy === workspace.currentUserId()
-    );
-  };
   const projectAccessKey = () => ["project-access", projectId()] as const;
   const projectAccessQuery = createQuery(() => ({
     queryKey: projectAccessKey(),
@@ -43,13 +37,11 @@ export const ProjectSettingsRoute = () => {
     gcTime: 5 * 60 * 1000,
     retry: false,
   }));
-  const credentialsKey = () => ["credentials", projectId()] as const;
+  const credentialsKey = () => ["account-credentials"] as const;
   const credentialsQuery = createQuery(() => ({
     queryKey: credentialsKey(),
     queryFn: async () => {
-      const catalog = await runApi(
-        workspace.api.credentials.list({ params: { projectId: projectId() } }),
-      );
+      const catalog = await runApi(workspace.api.credentials.list());
       if (catalog === undefined) throw new Error("Could not load credentials");
       return catalog;
     },
@@ -162,9 +154,7 @@ export const ProjectSettingsRoute = () => {
   const refetchCredentials = useMutation(() => ({
     networkMode: "always" as const,
     mutationFn: async () => {
-      const catalog = await runApi(
-        workspace.api.credentials.refetch({ params: { projectId: projectId() } }),
-      );
+      const catalog = await runApi(workspace.api.credentials.refetch());
       if (catalog === undefined) throw new Error("Could not refresh credentials");
       return catalog;
     },
@@ -183,9 +173,7 @@ export const ProjectSettingsRoute = () => {
       );
       if (popup === null) throw new Error("Your browser blocked the credential window");
       sessionStorage.setItem("macrograph-credential-provider", provider);
-      const connection = await runApi(
-        workspace.api.credentials.connect({ params: { projectId: projectId(), provider } }),
-      );
+      const connection = await runApi(workspace.api.credentials.connect({ params: { provider } }));
       if (connection === undefined) {
         popup.close();
         throw new Error("Could not start credential connection");
@@ -221,11 +209,7 @@ export const ProjectSettingsRoute = () => {
     mutationFn: async (credential: { readonly provider: string; readonly id: string }) => {
       const removed = await runApiResult(
         workspace.api.credentials.remove({
-          params: {
-            projectId: projectId(),
-            provider: credential.provider,
-            credentialId: credential.id,
-          },
+          params: { provider: credential.provider, credentialId: credential.id },
         }),
       );
       if (!removed) throw new Error("Could not remove credential");
@@ -341,36 +325,26 @@ export const ProjectSettingsRoute = () => {
               </span>
             </div>
             <div sx={styles.credentialActions}>
-              <Show when={canManageCredentials()}>
-                <select
-                  sx={styles.providerSelect}
-                  disabled={connectCredential.isPending}
-                  value=""
-                  onChange={(event) => {
-                    const provider = event.currentTarget.value;
-                    event.currentTarget.value = "";
-                    if (provider !== "") connectCredential.mutate(provider);
-                  }}
-                >
-                  <option value="">Add credential...</option>
-                  <For each={credentialProvidersQuery.data ?? []}>
-                    {(provider) => <option value={provider.id}>{provider.displayName}</option>}
-                  </For>
-                </select>
-              </Show>
+              <select
+                sx={styles.providerSelect}
+                disabled={connectCredential.isPending}
+                value=""
+                onChange={(event) => {
+                  const provider = event.currentTarget.value;
+                  event.currentTarget.value = "";
+                  if (provider !== "") connectCredential.mutate(provider);
+                }}
+              >
+                <option value="">Add credential...</option>
+                <For each={credentialProvidersQuery.data ?? []}>
+                  {(provider) => <option value={provider.id}>{provider.displayName}</option>}
+                </For>
+              </select>
               <button
                 type="button"
-                disabled={
-                  !canManageCredentials() ||
-                  refetchCredentials.isPending ||
-                  credentialsQuery.isPending
-                }
+                disabled={refetchCredentials.isPending || credentialsQuery.isPending}
                 sx={styles.refetch}
-                title={
-                  canManageCredentials()
-                    ? "Reload credentials"
-                    : "Only the project creator with an owner or member role can refresh credentials"
-                }
+                title="Reload credentials"
                 onClick={() => refetchCredentials.mutate()}
               >
                 {refetchCredentials.isPending ? "Refreshing..." : "Refresh"}
@@ -397,9 +371,7 @@ export const ProjectSettingsRoute = () => {
                     <div sx={styles.tableContainer}>
                       <CredentialTable
                         credentials={credentials()}
-                        {...(canManageCredentials()
-                          ? { onRemove: (credential) => removeCredential.mutate(credential) }
-                          : {})}
+                        onRemove={(credential) => removeCredential.mutate(credential)}
                         removing={(credential) =>
                           removeCredential.isPending &&
                           removeCredential.variables?.provider === credential.provider &&

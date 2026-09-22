@@ -3,7 +3,6 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi";
 
 import { Authentication } from "./Authentication.ts";
-import { ProjectNotFound } from "./Errors.ts";
 
 export const CredentialProvider = Schema.Struct({
   id: Schema.String,
@@ -18,29 +17,24 @@ export class CredentialsApiGroup extends HttpApiGroup.make("credentials").add(
   HttpApiEndpoint.get("providers", "/api/credential-providers", {
     success: Schema.Array(CredentialProvider),
   }).middleware(Authentication),
-  HttpApiEndpoint.get("list", "/api/projects/:projectId/credentials", {
-    params: { projectId: Schema.String },
+  HttpApiEndpoint.get("list", "/api/credentials", {
     success: Credential.Catalog,
-    error: ProjectNotFound,
   }).middleware(Authentication),
-  HttpApiEndpoint.post("refetch", "/api/projects/:projectId/credentials/refetch", {
-    params: { projectId: Schema.String },
+  HttpApiEndpoint.post("refetch", "/api/credentials/refetch", {
     success: Credential.Catalog,
-    error: [ProjectNotFound, HttpApiError.Forbidden],
   }).middleware(Authentication),
-  HttpApiEndpoint.post("connect", "/api/projects/:projectId/credentials/:provider/connect", {
-    params: { projectId: Schema.String, provider: Schema.String },
+  HttpApiEndpoint.post("connect", "/api/credentials/:provider/connect", {
+    params: { provider: Schema.String },
     success: CredentialConnection,
-    error: [ProjectNotFound, HttpApiError.BadRequest, HttpApiError.Forbidden],
+    error: HttpApiError.BadRequest,
+  }).middleware(Authentication),
+  HttpApiEndpoint.delete("remove", "/api/credentials/:provider/:credentialId", {
+    params: { provider: Schema.String, credentialId: Schema.String },
+    success: Schema.Void,
   }).middleware(Authentication),
   HttpApiEndpoint.post("complete", "/api/credentials/oauth/complete", {
     payload: Schema.Struct({ provider: Schema.String, code: Schema.String, state: Schema.String }),
-    success: Schema.Struct({ projectId: Schema.String, credential: Credential.Summary }),
-    error: [ProjectNotFound, HttpApiError.BadRequest, HttpApiError.Forbidden],
-  }).middleware(Authentication),
-  HttpApiEndpoint.delete("remove", "/api/projects/:projectId/credentials/:provider/:credentialId", {
-    params: { projectId: Schema.String, provider: Schema.String, credentialId: Schema.String },
-    success: Schema.Void,
-    error: [ProjectNotFound, HttpApiError.Forbidden],
+    success: Schema.Struct({ credential: Credential.Summary }),
+    error: [HttpApiError.BadRequest, HttpApiError.Forbidden],
   }).middleware(Authentication),
 ) {}

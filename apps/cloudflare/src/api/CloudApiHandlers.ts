@@ -149,18 +149,16 @@ export const credentialHandlers = HttpApiBuilder.group(
     const credential = yield* Credential.Service;
     return handlers
       .handle("providers", () => credential.providers)
-      .handle("list", ({ params }) => credential.list(params.projectId))
-      .handle("refetch", ({ params }) => credential.refetch(params.projectId))
+      .handle("list", () => credential.list)
+      .handle("refetch", () => credential.refetch)
       .handle("connect", ({ params, request }) =>
-        credential.connect(params.projectId, params.provider, credential.publicOrigin(request)),
+        credential.connect(params.provider, credential.publicOrigin(request)),
       )
       .handle("complete", ({ payload }) =>
         credential.complete(payload.provider, payload.code, payload.state),
       )
       .handle("remove", ({ params }) =>
-        credential
-          .remove(params.projectId, params.provider, params.credentialId)
-          .pipe(Effect.asVoid),
+        credential.remove(params.provider, params.credentialId).pipe(Effect.asVoid),
       );
   }),
 );
