@@ -5,17 +5,18 @@ import {
   sessionSecurity,
 } from "@macrograph/cloud-api";
 import { and, eq } from "drizzle-orm";
-import { Config, Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import { apiKeys, users } from "../database/DatabaseSchema.ts";
+import { DeploymentStage } from "../DeploymentStage.ts";
 import CloudAuthDO from "./CloudAuthDO.ts";
 
 export const make = Effect.gen(function* () {
-  const stage = yield* Config.string("ALCHEMY_STAGE").pipe(Config.withDefault("development"));
+  const stage = yield* DeploymentStage;
   const isPreview = /^pr\d+$/.test(stage);
   const database = yield* Database.Service;
   const cloudAuths = yield* CloudAuthDO;
@@ -199,7 +200,7 @@ export const layer = Layer.effect(Service)(make);
 export const middleware = Layer.effect(Authentication)(
   Effect.gen(function* () {
     const authentication = yield* Service;
-    const stage = yield* Config.string("ALCHEMY_STAGE").pipe(Config.withDefault("development"));
+    const stage = yield* DeploymentStage;
     const isPreview = /^pr\d+$/.test(stage);
     return {
       bearer: (effect) =>

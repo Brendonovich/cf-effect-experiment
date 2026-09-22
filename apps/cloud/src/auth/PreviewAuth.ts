@@ -4,13 +4,14 @@ import {
   sessionSecurity,
   type PreviewTokenRequest,
 } from "@macrograph/cloud-api";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import { projects, teamMemberships, teams, users } from "../database/DatabaseSchema.ts";
+import { DeploymentStage } from "../DeploymentStage.ts";
 import * as Authentication from "./Authentication.ts";
 import PreviewAuthGrantDO from "./PreviewAuthGrantDO.ts";
 
@@ -65,7 +66,7 @@ export const pkceChallenge = (verifier: string) =>
   );
 
 export const make = Effect.gen(function* () {
-  const stage = yield* Config.string("ALCHEMY_STAGE");
+  const stage = yield* DeploymentStage;
   const authentication = yield* Authentication.Service;
   const database = yield* Database.Service;
   const grants = (yield* PreviewAuthGrantDO).getByName("preview-auth-grants-v1");

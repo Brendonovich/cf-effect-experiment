@@ -23,6 +23,7 @@ import * as PreviewAuth from "../auth/PreviewAuth.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as DeploymentPolicy from "../deployment/DeploymentPolicy.ts";
+import { DeploymentStage } from "../DeploymentStage.ts";
 import * as EditorRpc from "../editor/EditorRpc.ts";
 import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
@@ -73,6 +74,7 @@ export default Layer.unwrap(
     const credentialOAuthStateSecret = Option.getOrUndefined(
       yield* Effect.serviceOption(CredentialOAuthStateSecret),
     );
+    const deploymentStage = yield* DeploymentStage;
     const databaseResource = yield* DatabaseHyperdrive;
     const deploymentsResource = yield* DeploymentObjectsBucket;
     const credentialEnvironment = Object.fromEntries(
@@ -130,6 +132,7 @@ export default Layer.unwrap(
           Layer.provideMerge(Project.layer(workerOperations, deploymentsResource)),
           Layer.provideMerge(Team.layer),
           Layer.provideMerge(Authentication.layer),
+          Layer.provideMerge(Layer.succeed(DeploymentStage, deploymentStage)),
           Layer.provideMerge(OAuthProviders.layer),
           Layer.provideMerge(policies),
           Layer.provideMerge(Database.layer(databaseResource)),
