@@ -1,10 +1,19 @@
 import { HttpEndpoint, HttpIngress } from "@macrograph/module";
 import { Effect, Redacted, Schema } from "effect";
 
-import { WebhookDelivery, WebhookEventName, WebhookId } from "./Definition.ts";
+import { makeAppApi } from "./AppApi.ts";
+import {
+  InstallationId,
+  RepositoryId,
+  WebhookDelivery,
+  WebhookEventName,
+  WebhookId,
+} from "./Definition.ts";
 
 export const WebhookMetadata = Schema.Struct({
   webhookId: WebhookId,
+  installationId: InstallationId,
+  repositoryId: RepositoryId,
   owner: Schema.String,
   repository: Schema.String,
 });
@@ -37,10 +46,48 @@ const safeEqual = (left: string, right: string) => {
   return result === 0;
 };
 
+const belongsToEndpoint = (hookUrl: string, endpointUrl: string) => {
+  if (hookUrl === endpointUrl) return true;
+  if (!URL.canParse(hookUrl) || !URL.canParse(endpointUrl)) return false;
+  return new URL(hookUrl).pathname === new URL(endpointUrl).pathname;
+};
+
 export const handler = WebhookIngress.implement(
   Effect.gen(function* () {
     const endpoints = yield* HttpEndpoint.Host;
+    const app = yield* makeAppApi();
     return Effect.succeed({
+      mount: Effect.fnUntraced(function* ({ endpoint, configuration }) {
+        const metadata = endpoint.metadata;
+        const token = yield* app.installationToken(metadata.installationId);
+        const hooks = yield* app.listHooks(token, metadata.owner, metadata.repository);
+        const owned = hooks.filter((hook) => belongsToEndpoint(hook.url, endpoint.url));
+        const primary = owned.find((hook) => hook.url === endpoint.url) ?? owned[0];
+        yield* Effect.forEach(
+          owned.filter((hook) => hook.id !== primary?.id),
+          (hook) => app.deleteHook(token, metadata.owner, metadata.repository, hook.id),
+          { discard: true },
+        );
+        yield* app.saveHook(
+          token,
+          metadata.owner,
+          metadata.repository,
+          endpoint.url,
+          yield* endpoints.secret(endpoint.id),
+          configuration.events,
+          primary?.id,
+        );
+      }),
+      unmount: Effect.fnUntraced(function* ({ endpoint }) {
+        const metadata = endpoint.metadata;
+        const token = yield* app.installationToken(metadata.installationId);
+        const hooks = yield* app.listHooks(token, metadata.owner, metadata.repository);
+        yield* Effect.forEach(
+          hooks.filter((hook) => belongsToEndpoint(hook.url, endpoint.url)),
+          (hook) => app.deleteHook(token, metadata.owner, metadata.repository, hook.id),
+          { discard: true },
+        );
+      }),
       handle: Effect.fnUntraced(function* (request) {
         const deliveryId = header(request.headers, "x-github-delivery");
         const event = header(request.headers, "x-github-event");
@@ -84,6 +131,21 @@ export const handler = WebhookIngress.implement(
         )
           return { status: 400 };
         const object = payload.value as Record<string, unknown>;
+        const installation = object.installation;
+        const repository = object.repository;
+        if (
+          typeof installation !== "object" ||
+          installation === null ||
+          !("id" in installation) ||
+          typeof installation.id !== "number" ||
+          String(installation.id) !== request.endpoint.metadata.installationId ||
+          typeof repository !== "object" ||
+          repository === null ||
+          !("id" in repository) ||
+          typeof repository.id !== "number" ||
+          String(repository.id) !== request.endpoint.metadata.repositoryId
+        )
+          return { status: 400 };
         const action = typeof object.action === "string" ? object.action : "";
         const sender =
           typeof object.sender === "object" &&

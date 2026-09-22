@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/Module.ts",
     "./Api": "./src/Api.ts",
+    "./AppApi": "./src/AppApi.ts",
     "./Definition": "./src/Definition.ts",
     "./Deployment": "./src/Deployment.ts",
     "./Deployment/Webhook": "./src/Deployment/Webhook.ts",

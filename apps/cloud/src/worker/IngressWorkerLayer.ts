@@ -12,6 +12,10 @@ import {
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import * as Database from "../database/Database.ts";
+import {
+  AppIdConfig as GitHubAppIdConfig,
+  PrivateKeyConfig as GitHubPrivateKeyConfig,
+} from "../GitHubCredentials.ts";
 import { IngressApi } from "../ingress/IngressApi.ts";
 import * as IngressHandlers from "../ingress/IngressHandlers.ts";
 import { ProjectIngressDOLayer } from "../ingress/ProjectIngressDO.ts";
@@ -45,6 +49,8 @@ export default Layer.unwrap(
         env: {
           TWITCH_CLIENT_ID: TwitchClientIdConfig,
           TWITCH_CLIENT_SECRET: TwitchClientSecretConfig,
+          GITHUB_APP_ID: GitHubAppIdConfig,
+          GITHUB_APP_PRIVATE_KEY: GitHubPrivateKeyConfig,
         },
         dev: { port: 1338, strictPort: true },
       },

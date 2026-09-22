@@ -11,6 +11,7 @@ import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
+import { AppCredentialsLayer as GitHubAppCredentialsLayer } from "../GitHubCredentials.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../TwitchCredentials.ts";
 import { DurableObjectHttpEndpointHost } from "./DurableObjectHttpEndpointHost.ts";
@@ -610,6 +611,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
   }).pipe(
     Effect.provide(endpointHostLayer),
     Effect.provide(FetchHttpClient.layer),
+    Effect.provide(GitHubAppCredentialsLayer),
     Effect.provide(TwitchAppCredentialsLayer),
   );
 });

@@ -1,7 +1,7 @@
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { ClientSettings } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
-import { useMutation } from "@tanstack/solid-query";
+import { useMutation, useQuery } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { For, Show, createSignal, type Component } from "solid-js";
 
@@ -9,6 +9,8 @@ import {
   ClientRpcs,
   ClientState,
   AccountId,
+  InstallationId,
+  RepositoryId,
   type WebhookEventName,
   type WebhookId,
 } from "./Definition.ts";
@@ -71,10 +73,33 @@ export interface SettingsProps {
     readonly GitHubCreateWebhook: (input: {
       readonly name: string;
       readonly accountId: AccountId;
+      readonly installationId: InstallationId;
+      readonly repositoryId: RepositoryId;
       readonly owner: string;
       readonly repository: string;
       readonly events: ReadonlyArray<WebhookEventName>;
     }) => Effect.Effect<WebhookId, unknown>;
+    readonly GitHubListInstallations: (input: { readonly accountId: AccountId }) => Effect.Effect<
+      ReadonlyArray<{
+        readonly id: InstallationId;
+        readonly accountId: string;
+        readonly accountLogin: string;
+        readonly accountType: string;
+      }>,
+      unknown
+    >;
+    readonly GitHubListRepositories: (input: {
+      readonly accountId: AccountId;
+      readonly installationId: InstallationId;
+    }) => Effect.Effect<
+      ReadonlyArray<{
+        readonly id: RepositoryId;
+        readonly name: string;
+        readonly fullName: string;
+        readonly owner: string;
+      }>,
+      unknown
+    >;
     readonly GitHubUpdateWebhook: (input: {
       readonly webhookId: WebhookId;
       readonly name: string;
@@ -92,6 +117,8 @@ type Mutation =
       readonly type: "create";
       readonly name: string;
       readonly accountId: AccountId;
+      readonly installationId: InstallationId;
+      readonly repositoryId: RepositoryId;
       readonly owner: string;
       readonly repository: string;
       readonly events: ReadonlyArray<WebhookEventName>;
@@ -101,9 +128,9 @@ type Mutation =
 
 const Settings: Component<SettingsProps> = (props) => {
   const [name, setName] = createSignal("");
-  const [owner, setOwner] = createSignal("");
-  const [repository, setRepository] = createSignal("");
   const [accountId, setAccountId] = createSignal<AccountId>();
+  const [installationId, setInstallationId] = createSignal<InstallationId>();
+  const [repositoryId, setRepositoryId] = createSignal<RepositoryId>();
   const [selectedEvents, setSelectedEvents] = createSignal<ReadonlyArray<WebhookEventName>>([
     "push",
     "pull_request",
@@ -126,20 +153,70 @@ const Settings: Component<SettingsProps> = (props) => {
     onSuccess: (_value, input) => {
       if (input.type !== "create") return;
       setName("");
-      setOwner("");
-      setRepository("");
     },
   }));
+  const selectedAccount = () => {
+    const selected = accountId();
+    return (
+      props.state().accounts.find((account) => account.id === selected)?.id ??
+      props.state().accounts[0]?.id
+    );
+  };
+  const installations = useQuery(() => {
+    const account = selectedAccount();
+    return {
+      queryKey: ["github-installations", account],
+      enabled: account !== undefined,
+      networkMode: "always" as const,
+      queryFn: () =>
+        account === undefined
+          ? Promise.resolve([])
+          : Effect.runPromise(props.rpc.GitHubListInstallations({ accountId: account })),
+    };
+  });
+  const selectedInstallation = () => {
+    const selected = installationId();
+    return (
+      installations.data?.find((installation) => installation.id === selected)?.id ??
+      installations.data?.[0]?.id
+    );
+  };
+  const repositories = useQuery(() => {
+    const account = selectedAccount();
+    const installation = selectedInstallation();
+    return {
+      queryKey: ["github-repositories", account, installation],
+      enabled: account !== undefined && installation !== undefined,
+      networkMode: "always" as const,
+      queryFn: () =>
+        account === undefined || installation === undefined
+          ? Promise.resolve([])
+          : Effect.runPromise(
+              props.rpc.GitHubListRepositories({
+                accountId: account,
+                installationId: installation,
+              }),
+            ),
+    };
+  });
+  const selectedRepository = () => {
+    const selected = repositoryId();
+    return (
+      repositories.data?.find((repository) => repository.id === selected) ?? repositories.data?.[0]
+    );
+  };
   const toggle = (event: WebhookEventName) =>
     setSelectedEvents((current) =>
       current.includes(event) ? current.filter((value) => value !== event) : [...current, event],
     );
   const create = () => {
-    const account = accountId() ?? props.state().accounts[0]?.id;
+    const account = selectedAccount();
+    const installation = selectedInstallation();
+    const repository = selectedRepository();
     if (
       account === undefined ||
-      owner().trim() === "" ||
-      repository().trim() === "" ||
+      installation === undefined ||
+      repository === undefined ||
       selectedEvents().length === 0
     )
       return;
@@ -147,8 +224,10 @@ const Settings: Component<SettingsProps> = (props) => {
       type: "create",
       name: name().trim(),
       accountId: account,
-      owner: owner().trim(),
-      repository: repository().trim(),
+      installationId: installation,
+      repositoryId: repository.id,
+      owner: repository.owner,
+      repository: repository.name,
       events: selectedEvents(),
     });
   };
@@ -170,7 +249,11 @@ const Settings: Component<SettingsProps> = (props) => {
                 sx={styles.input}
                 aria-label="GitHub account"
                 value={accountId() ?? props.state().accounts[0]?.id}
-                onChange={(event) => setAccountId(AccountId.make(event.currentTarget.value))}
+                onChange={(event) => {
+                  setAccountId(AccountId.make(event.currentTarget.value));
+                  setInstallationId(undefined);
+                  setRepositoryId(undefined);
+                }}
               >
                 <For each={props.state().accounts}>
                   {(account) => <option value={account.id}>{account.displayName}</option>}
@@ -185,21 +268,55 @@ const Settings: Component<SettingsProps> = (props) => {
               />
             </div>
             <div sx={styles.row}>
-              <input
+              <select
                 sx={styles.input}
-                aria-label="Repository owner"
-                placeholder="Owner"
-                value={owner()}
-                onInput={(event) => setOwner(event.currentTarget.value)}
-              />
-              <input
+                aria-label="GitHub App installation"
+                value={selectedInstallation()}
+                disabled={installations.isPending || (installations.data?.length ?? 0) === 0}
+                onChange={(event) => {
+                  setInstallationId(InstallationId.make(event.currentTarget.value));
+                  setRepositoryId(undefined);
+                }}
+              >
+                <For each={installations.data ?? []}>
+                  {(installation) => (
+                    <option value={installation.id}>
+                      {installation.accountLogin} ({installation.accountType})
+                    </option>
+                  )}
+                </For>
+              </select>
+              <select
                 sx={styles.input}
-                aria-label="Repository name"
-                placeholder="Repository"
-                value={repository()}
-                onInput={(event) => setRepository(event.currentTarget.value)}
-              />
+                aria-label="GitHub repository"
+                value={selectedRepository()?.id}
+                disabled={repositories.isPending || (repositories.data?.length ?? 0) === 0}
+                onChange={(event) => setRepositoryId(RepositoryId.make(event.currentTarget.value))}
+              >
+                <For each={repositories.data ?? []}>
+                  {(repository) => <option value={repository.id}>{repository.fullName}</option>}
+                </For>
+              </select>
             </div>
+            <Show when={!installations.isPending && installations.data?.length === 0}>
+              <p sx={styles.note}>
+                No GitHub App installations are available to this account. Install the MacroGraph
+                GitHub App, then reconnect or refresh this module.
+              </p>
+            </Show>
+            <button
+              type="button"
+              sx={styles.button}
+              disabled={installations.isFetching}
+              onClick={() => void installations.refetch()}
+            >
+              {installations.isFetching ? "Refreshing GitHub access…" : "Refresh GitHub access"}
+            </button>
+            <Show when={installations.error ?? repositories.error}>
+              <p role="alert" sx={styles.error}>
+                Could not load GitHub App installations and repositories.
+              </p>
+            </Show>
             <div sx={styles.events}>
               <For each={events}>
                 {(event) => (
@@ -219,8 +336,8 @@ const Settings: Component<SettingsProps> = (props) => {
               sx={styles.button}
               disabled={
                 mutation.isPending ||
-                owner().trim() === "" ||
-                repository().trim() === "" ||
+                selectedInstallation() === undefined ||
+                selectedRepository() === undefined ||
                 selectedEvents().length === 0
               }
               onClick={create}

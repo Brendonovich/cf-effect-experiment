@@ -161,7 +161,7 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
     tokenUrl: "https://github.com/login/oauth/access_token",
     scopes: [],
     tokenHeaders: () => ({ Accept: "application/json" }),
-    refresh: false,
+    refresh: true,
     user: async (token) => {
       const user = object(
         await json("https://api.github.com/user", {

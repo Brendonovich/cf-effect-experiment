@@ -148,6 +148,8 @@ describe("Project ingress preview", () => {
               ConfigProvider.fromUnknown({
                 TWITCH_CLIENT_ID: "test-client-id",
                 TWITCH_CLIENT_SECRET: "test-client-secret",
+                GITHUB_APP_ID: "test-app-id",
+                GITHUB_APP_PRIVATE_KEY: "test-private-key",
               }),
             ),
           ),

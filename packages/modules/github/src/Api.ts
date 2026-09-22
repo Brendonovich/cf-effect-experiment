@@ -1,10 +1,17 @@
 import { Effect, Redacted, Schema } from "effect";
 import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/unstable/http";
 
-import { type AccountId, type ActionId, GitHubFailure } from "./Definition.ts";
+import {
+  type AccountId,
+  type ActionId,
+  GitHubFailure,
+  InstallationId,
+  RepositoryId,
+} from "./Definition.ts";
 
 const apiOrigin = "https://api.github.com";
 const maxResponseBytes = 1024 * 1024;
+const pageSize = 100;
 const segment = (value: string) => encodeURIComponent(value);
 const stringInput = (
   inputs: Readonly<Record<string, Schema.Json>>,
@@ -42,6 +49,26 @@ export interface ApiResponse {
   readonly status: number;
   readonly body: Schema.Json;
 }
+
+const InstallationPage = Schema.Struct({
+  installations: Schema.Array(
+    Schema.Struct({
+      id: Schema.Int,
+      account: Schema.Struct({ id: Schema.Int, login: Schema.String, type: Schema.String }),
+    }),
+  ),
+});
+
+const RepositoryPage = Schema.Struct({
+  repositories: Schema.Array(
+    Schema.Struct({
+      id: Schema.Int,
+      name: Schema.String,
+      full_name: Schema.String,
+      owner: Schema.Struct({ login: Schema.String }),
+    }),
+  ),
+});
 
 export const prepare = (action: ActionId, inputs: Readonly<Record<string, Schema.Json>>) => {
   const owner = segment(stringInput(inputs, "owner"));
@@ -223,5 +250,70 @@ export const makeApi = Effect.fnUntraced(function* (
         orElse: () => new GitHubFailure({ reason: "GitHub request timed out" }),
       }),
     );
-  return { execute };
+  const listInstallations = Effect.fnUntraced(function* (accountId: AccountId) {
+    const installations: Array<{
+      readonly id: InstallationId;
+      readonly accountId: string;
+      readonly accountLogin: string;
+      readonly accountType: string;
+    }> = [];
+    for (let page = 1; page <= 100; page++) {
+      const response = yield* execute(accountId, {
+        method: "GET",
+        path: "/user/installations",
+        query: { page, per_page: pageSize },
+      });
+      const decoded = yield* Schema.decodeUnknownEffect(InstallationPage)(response.body).pipe(
+        Effect.mapError(
+          () => new GitHubFailure({ reason: "GitHub returned invalid installation data" }),
+        ),
+      );
+      installations.push(
+        ...decoded.installations.map((installation) => ({
+          id: InstallationId.make(String(installation.id)),
+          accountId: String(installation.account.id),
+          accountLogin: installation.account.login,
+          accountType: installation.account.type,
+        })),
+      );
+      if (decoded.installations.length < pageSize) return installations;
+    }
+    return yield* new GitHubFailure({ reason: "GitHub returned too many installations" });
+  });
+
+  const listRepositories = Effect.fnUntraced(function* (
+    accountId: AccountId,
+    installationId: InstallationId,
+  ) {
+    const repositories: Array<{
+      readonly id: RepositoryId;
+      readonly name: string;
+      readonly fullName: string;
+      readonly owner: string;
+    }> = [];
+    for (let page = 1; page <= 100; page++) {
+      const response = yield* execute(accountId, {
+        method: "GET",
+        path: `/user/installations/${encodeURIComponent(installationId)}/repositories`,
+        query: { page, per_page: pageSize },
+      });
+      const decoded = yield* Schema.decodeUnknownEffect(RepositoryPage)(response.body).pipe(
+        Effect.mapError(
+          () => new GitHubFailure({ reason: "GitHub returned invalid repository data" }),
+        ),
+      );
+      repositories.push(
+        ...decoded.repositories.map((repository) => ({
+          id: RepositoryId.make(String(repository.id)),
+          name: repository.name,
+          fullName: repository.full_name,
+          owner: repository.owner.login,
+        })),
+      );
+      if (decoded.repositories.length < pageSize) return repositories;
+    }
+    return yield* new GitHubFailure({ reason: "GitHub returned too many repositories" });
+  });
+
+  return { execute, listInstallations, listRepositories };
 });
