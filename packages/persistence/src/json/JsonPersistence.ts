@@ -28,6 +28,12 @@ const FunctionMetadata = Schema.Union([
     outputPosition: GraphFunction.Model.fields.outputPosition,
   }),
 ]);
+const QueueMetadata = Schema.Struct({
+  arguments: Schema.Array(Queue.Field),
+  returns: Schema.Array(Queue.Field),
+  inputPosition: Queue.Model.fields.inputPosition,
+  outputPosition: Queue.Model.fields.outputPosition,
+});
 
 const ProjectMeta = Schema.Struct({
   name: Schema.String,
@@ -35,7 +41,9 @@ const ProjectMeta = Schema.Struct({
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
   functions: Schema.optional(Schema.Record(Schema.String, FunctionMetadata)),
-  queues: Queue.Collection,
+  queues: Schema.Record(Schema.String, QueueMetadata).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed({})),
+  ),
 });
 
 export const layer = (dir: string) =>
@@ -62,7 +70,17 @@ export const layer = (dir: string) =>
                 name: project.name,
                 engines: project.engines,
                 constants: project.constants,
-                queues: project.queues,
+                queues: Object.fromEntries(
+                  Object.entries(project.queues).map(([id, queue]) => [
+                    id,
+                    {
+                      arguments: queue.arguments,
+                      returns: queue.returns,
+                      inputPosition: queue.inputPosition,
+                      outputPosition: queue.outputPosition,
+                    },
+                  ]),
+                ),
                 types: project.types,
                 functions: Object.fromEntries(
                   Object.entries(project.functions).map(([id, fn]) => [
@@ -100,6 +118,7 @@ export const layer = (dir: string) =>
 
         const graphs: Record<string, Graph.Model> = {};
         const functions: Record<string, GraphFunction.Model> = {};
+        const queues: Record<string, Queue.Model> = {};
         const graphsExist = yield* fs.exists(graphsDir).pipe(PersistenceError.refail);
         if (graphsExist) {
           const graphFiles = yield* fs.readDirectory(graphsDir).pipe(PersistenceError.refail);
@@ -113,8 +132,8 @@ export const layer = (dir: string) =>
               JSON.parse(content),
             ).pipe(PersistenceError.refail);
             const metadata = meta.functions?.[graphId];
-            if (metadata === undefined) graphs[graphId] = { canvas };
-            else
+            const queueMetadata = meta.queues[graphId];
+            if (metadata !== undefined)
               functions[graphId] = {
                 canvas,
                 arguments: "arguments" in metadata ? metadata.arguments : metadata.inputs,
@@ -122,6 +141,8 @@ export const layer = (dir: string) =>
                 inputPosition: metadata.inputPosition,
                 outputPosition: metadata.outputPosition,
               };
+            else if (queueMetadata !== undefined) queues[graphId] = { canvas, ...queueMetadata };
+            else graphs[graphId] = { canvas };
           }
         }
 
@@ -132,7 +153,7 @@ export const layer = (dir: string) =>
           functions,
           engines: meta.engines ?? {},
           constants: meta.constants ?? {},
-          queues: meta.queues,
+          queues,
           types: meta.types ?? {},
         };
       }, lock.withPermit);

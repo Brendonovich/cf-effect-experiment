@@ -289,10 +289,14 @@ async function functionQueues(page) {
   await queue.getByText(/Paused \/ 0 running \/ 0 waiting/).waitFor();
   await queue.getByRole("button", { name: "Resume", exact: true }).click();
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
+  await page.getByText("Queue Input", { exact: true }).waitFor();
+  await page.getByText("Queue Output", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Add argument", exact: true }).click();
+  await page.getByText("Input 1", { exact: true }).waitFor();
   const path = join(outputDirectory, "function-queues.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
-  check("queue definitions and live pause controls are visible", "passed");
+  check("queue canvas, signature, and live pause controls are visible", "passed");
 }
 
 async function moduleReference(page) {

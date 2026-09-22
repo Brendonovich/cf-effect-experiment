@@ -1,4 +1,4 @@
-import type { ResourceConstant, OutputRef, IoId, Queue } from "@macrograph/core";
+import type { ResourceConstant, OutputRef, IoId } from "@macrograph/core";
 import type { DataType } from "@macrograph/module/DataType";
 import type { Schema } from "effect";
 
@@ -15,10 +15,6 @@ export const projectMeta = sqliteTable("project_meta", {
     .notNull()
     .$type<Record<string, ResourceConstant.Model>>()
     .default({}),
-  queues: text("queues", { mode: "json" })
-    .notNull()
-    .$type<Record<string, Queue.Model>>()
-    .default({}),
 });
 
 export const canvases = sqliteTable("canvases", {
@@ -33,6 +29,28 @@ export const graphs = sqliteTable("graphs", {
 });
 
 export const functions = sqliteTable("functions", {
+  canvasId: text("canvas_id")
+    .primaryKey()
+    .references(() => canvases.id, { onDelete: "cascade" }),
+  arguments: text("arguments", { mode: "json" })
+    .notNull()
+    .$type<
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+    >(),
+  returns: text("returns", { mode: "json" })
+    .notNull()
+    .$type<
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+    >(),
+  inputPosition: text("input_position", { mode: "json" })
+    .notNull()
+    .$type<{ readonly x: number; readonly y: number }>(),
+  outputPosition: text("output_position", { mode: "json" })
+    .notNull()
+    .$type<{ readonly x: number; readonly y: number }>(),
+});
+
+export const queues = sqliteTable("queues", {
   canvasId: text("canvas_id")
     .primaryKey()
     .references(() => canvases.id, { onDelete: "cascade" }),

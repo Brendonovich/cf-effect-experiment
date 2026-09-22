@@ -155,6 +155,44 @@ class DeleteQueue extends Rpc.make("DeleteQueue", {
   success: EditorEvent.QueueDeleted,
   error: Schema.Union([PersistenceError, Project.NotFoundError, Queue.NotFoundError]),
 }) {}
+const queueFieldErrors = Schema.Union([
+  PersistenceError,
+  Project.NotFoundError,
+  Queue.NotFoundError,
+]);
+class AddQueueField extends Rpc.make("AddQueueField", {
+  payload: { queueId: Schema.String, direction: Schema.Literals(["input", "output"]) },
+  success: EditorEvent.QueueUpdated,
+  error: queueFieldErrors,
+}) {}
+class UpdateQueueField extends Rpc.make("UpdateQueueField", {
+  payload: {
+    queueId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    field: Queue.Field,
+  },
+  success: EditorEvent.QueueUpdated,
+  error: queueFieldErrors,
+}) {}
+class ReorderQueueField extends Rpc.make("ReorderQueueField", {
+  payload: {
+    queueId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    fieldId: Schema.String,
+    targetFieldId: Schema.String,
+  },
+  success: EditorEvent.QueueUpdated,
+  error: queueFieldErrors,
+}) {}
+class DeleteQueueField extends Rpc.make("DeleteQueueField", {
+  payload: {
+    queueId: Schema.String,
+    direction: Schema.Literals(["input", "output"]),
+    fieldId: Schema.String,
+  },
+  success: EditorEvent.QueueUpdated,
+  error: queueFieldErrors,
+}) {}
 const queueErrors = Schema.Union([Queue.NotFoundError, Queue.OperationError]);
 class QueueStateStream extends Rpc.make("QueueStateStream", {
   success: Schema.Array(Queue.State),
@@ -619,6 +657,10 @@ export const EditorRpcs = RpcGroup.make(
   CreateQueue,
   RenameQueue,
   DeleteQueue,
+  AddQueueField,
+  UpdateQueueField,
+  ReorderQueueField,
+  DeleteQueueField,
   QueueStateStream,
   SetQueuePaused,
   AdvanceQueue,
@@ -691,6 +733,13 @@ export const handlerLayer = EditorRpcs.toLayer(
       CreateQueue: ({ name }) => editor.queue.create(name),
       RenameQueue: ({ queueId, name }) => editor.queue.rename(queueId, name),
       DeleteQueue: ({ queueId }) => editor.queue.delete(queueId),
+      AddQueueField: ({ queueId, direction }) => editor.queue.addField(queueId, direction),
+      UpdateQueueField: ({ queueId, direction, field }) =>
+        editor.queue.updateField(queueId, direction, field),
+      ReorderQueueField: ({ queueId, direction, fieldId, targetFieldId }) =>
+        editor.queue.reorderField(queueId, direction, fieldId, targetFieldId),
+      DeleteQueueField: ({ queueId, direction, fieldId }) =>
+        editor.queue.deleteField(queueId, direction, fieldId),
       QueueStateStream: () => queues.changes,
       SetQueuePaused: ({ queueId, paused }) => queues.pause(queueId, paused),
       AdvanceQueue: ({ queueId }) => queues.advance(queueId),

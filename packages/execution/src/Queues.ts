@@ -15,11 +15,7 @@ export interface Service {
   readonly snapshot: Effect.Effect<ReadonlyArray<State>>;
   readonly changes: Stream.Stream<ReadonlyArray<State>>;
   readonly configure: (definitions: Readonly<Record<string, Queue.Model>>) => Effect.Effect<void>;
-  readonly enqueue: (
-    queueId: string,
-    functionId: string,
-    values: Values,
-  ) => Effect.Effect<Values, Error>;
+  readonly enqueue: (queueId: string, values: Values) => Effect.Effect<Values, Error>;
   readonly pause: (queueId: string, paused: boolean) => Effect.Effect<void, Error>;
   readonly advance: (queueId: string) => Effect.Effect<void, Error>;
   readonly remove: (queueId: string, itemId: string) => Effect.Effect<void, Error>;
@@ -28,12 +24,12 @@ export interface Service {
 
 export const make = Effect.fnUntraced(function* (
   definitions: Readonly<Record<string, Queue.Model>>,
-  invoke: (functionId: string, values: Values) => Effect.Effect<Values, unknown>,
+  invoke: (queueId: string, values: Values) => Effect.Effect<Values, unknown>,
 ): Effect.fn.Return<Service, never, Scope.Scope> {
   const scope = yield* Effect.scope;
   type Work = {
     readonly id: string;
-    readonly functionId: string;
+    readonly queueId: string;
     readonly values: Values;
     readonly lineage: ReadonlyArray<string>;
     readonly result: Deferred.Deferred<Values, Error>;
@@ -54,8 +50,8 @@ export const make = Effect.fnUntraced(function* (
       (queue): State => ({
         queueId: queue.id,
         paused: queue.paused,
-        waiting: queue.waiting.map(({ id, functionId }) => ({ id, functionId })),
-        running: Array.from(queue.running.values(), ({ id, functionId }) => ({ id, functionId })),
+        waiting: queue.waiting.map(({ id }) => ({ id })),
+        running: Array.from(queue.running.values(), ({ id }) => ({ id })),
       }),
     ),
   );
@@ -86,7 +82,7 @@ export const make = Effect.fnUntraced(function* (
       const item = queue.waiting.shift();
       if (item === undefined) return;
       queue.running.set(item.id, item);
-      item.fiber = yield* Effect.suspend(() => invoke(item.functionId, item.values)).pipe(
+      item.fiber = yield* Effect.suspend(() => invoke(item.queueId, item.values)).pipe(
         Effect.provideService(Lineage, [...item.lineage, queue.id]),
         Effect.interruptible,
         Effect.onExit((exit) =>
@@ -157,7 +153,7 @@ export const make = Effect.fnUntraced(function* (
     snapshot,
     changes: Stream.fromPubSub(snapshots),
     configure,
-    enqueue: (queueId, functionId, values) =>
+    enqueue: (queueId, values) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const queue = yield* get(queueId);
@@ -172,7 +168,7 @@ export const make = Effect.fnUntraced(function* (
           });
           const item: Work = {
             id: crypto.randomUUID(),
-            functionId,
+            queueId,
             values: captured,
             lineage,
             result: yield* Deferred.make<Values, Error>(),

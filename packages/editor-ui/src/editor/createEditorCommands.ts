@@ -6,6 +6,7 @@ import {
   IoId,
   type NodeIO,
   OutputRef,
+  Queue,
   Scopes,
   type ResourceConstant,
   type SchemaRef,
@@ -66,7 +67,11 @@ export function createEditorCommands(
   const createQueue = () => {
     const c = client();
     if (c && canEdit())
-      queueAction(() => runPromise(applyMutation(c.CreateQueue({ name: "New Queue" }))));
+      queueAction(() =>
+        runPromise(applyMutation(c.CreateQueue({ name: "New Queue" }))).then((event) => {
+          setSelectedGraphId(event.queue.canvas.id);
+        }),
+      );
   };
   const renameQueue = (queueId: string, name: string) => {
     const c = client();
@@ -331,7 +336,7 @@ export function createEditorCommands(
       );
   };
   const deleteNode = (nodeId: string) => {
-    if (GraphFunction.isBoundaryNodeId(nodeId)) return;
+    if (GraphFunction.isBoundaryNodeId(nodeId) || Queue.isBoundaryNodeId(nodeId)) return;
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
@@ -369,6 +374,18 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return Promise.resolve(undefined);
+    if (editor.store.project?.queues[graphId] !== undefined)
+      return runPromise(
+        applyMutation(c.AddQueueField({ queueId: graphId, direction })).pipe(
+          Effect.tapError(Effect.log),
+          Effect.tapDefect(Effect.log),
+        ),
+      )
+        .then((event) => {
+          const fields = direction === "input" ? event.queue.arguments : event.queue.returns;
+          return fields.at(-1)?.id;
+        })
+        .catch(() => undefined);
     return runPromise(
       applyMutation(c.AddFunctionField({ graphId, direction })).pipe(
         Effect.tapError(Effect.log),
@@ -385,6 +402,15 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
+    if (editor.store.project?.queues[graphId] !== undefined) {
+      runFork(
+        applyMutation(c.UpdateQueueField({ queueId: graphId, direction, field })).pipe(
+          Effect.tapError(Effect.log),
+          Effect.tapDefect(Effect.log),
+        ),
+      );
+      return;
+    }
     runFork(
       applyMutation(c.UpdateFunctionField({ graphId, direction, field })).pipe(
         Effect.tapError(Effect.log),
@@ -396,6 +422,15 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
+    if (editor.store.project?.queues[graphId] !== undefined) {
+      runFork(
+        applyMutation(c.DeleteQueueField({ queueId: graphId, direction, fieldId })).pipe(
+          Effect.tapError(Effect.log),
+          Effect.tapDefect(Effect.log),
+        ),
+      );
+      return;
+    }
     runFork(
       applyMutation(c.DeleteFunctionField({ graphId, direction, fieldId })).pipe(
         Effect.tapError(Effect.log),
@@ -411,6 +446,14 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
+    if (editor.store.project?.queues[graphId] !== undefined) {
+      runFork(
+        applyMutation(
+          c.ReorderQueueField({ queueId: graphId, direction, fieldId, targetFieldId }),
+        ).pipe(Effect.tapError(Effect.log), Effect.tapDefect(Effect.log)),
+      );
+      return;
+    }
     runFork(
       applyMutation(c.ReorderFunctionField({ graphId, direction, fieldId, targetFieldId })).pipe(
         Effect.tapError(Effect.log),
@@ -550,7 +593,7 @@ export function createEditorCommands(
     );
   };
   const setNodeFoldPins = (nodeId: string, foldPins: boolean) => {
-    if (GraphFunction.isBoundaryNodeId(nodeId)) return;
+    if (GraphFunction.isBoundaryNodeId(nodeId) || Queue.isBoundaryNodeId(nodeId)) return;
     const c = client();
     const graphId = selectedGraphId();
     if (!c || !graphId || !canEdit()) return;
@@ -565,7 +608,11 @@ export function createEditorCommands(
     const c = client();
     const graphId = selectedGraphId();
     const nodeId = selectedNodeId();
-    if (nodeId !== null && GraphFunction.isBoundaryNodeId(nodeId)) return;
+    if (
+      nodeId !== null &&
+      (GraphFunction.isBoundaryNodeId(nodeId) || Queue.isBoundaryNodeId(nodeId))
+    )
+      return;
     if (!c || !graphId || !nodeId || name.trim().length === 0 || !canEdit()) return;
     runFork(
       applyMutation(c.SetNodeName({ graphId, nodeId, name: name.trim() })).pipe(

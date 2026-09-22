@@ -11,6 +11,7 @@ import {
   SchemaId,
   IoId,
   Function as GraphFunction,
+  Queue,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { eq } from "drizzle-orm";
@@ -35,7 +36,6 @@ export const layer = Layer.effect(Persistence.Service)(
               name: project.name,
               engines: project.engines,
               constants: project.constants,
-              queues: project.queues,
               types: project.types,
             })
             .run();
@@ -44,6 +44,7 @@ export const layer = Layer.effect(Persistence.Service)(
           tx.delete(schema.nodes).run();
           tx.delete(schema.graphs).run();
           tx.delete(schema.functions).run();
+          tx.delete(schema.queues).run();
           tx.delete(schema.canvases).run();
 
           for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
@@ -91,6 +92,17 @@ export const layer = Layer.effect(Persistence.Service)(
                 returns: fn.returns,
                 inputPosition: fn.inputPosition,
                 outputPosition: fn.outputPosition,
+              })
+              .run();
+          }
+          for (const queue of Object.values(project.queues)) {
+            tx.insert(schema.queues)
+              .values({
+                canvasId: queue.canvas.id,
+                arguments: queue.arguments,
+                returns: queue.returns,
+                inputPosition: queue.inputPosition,
+                outputPosition: queue.outputPosition,
               })
               .run();
           }
@@ -154,6 +166,7 @@ export const layer = Layer.effect(Persistence.Service)(
         const nodeRows = db.select().from(schema.nodes).all();
         const connectionRows = db.select().from(schema.connections).all();
         const functionRows = db.select().from(schema.functions).all();
+        const queueRows = db.select().from(schema.queues).all();
 
         const nodesByGraph = new Map<string, Array<typeof schema.nodes.$inferSelect>>();
         for (const nodeRow of nodeRows) {
@@ -180,34 +193,49 @@ export const layer = Layer.effect(Persistence.Service)(
 
         const graphs: Record<string, Graph.Model> = {};
         const functions: Record<string, GraphFunction.Model> = {};
+        const queues: Record<string, Queue.Model> = {};
         const functionRowsByCanvas = new Map(functionRows.map((row) => [row.canvasId, row]));
+        const queueRowsByCanvas = new Map(queueRows.map((row) => [row.canvasId, row]));
         const graphCanvasIds = new Set(graphRows.map((row) => row.canvasId));
         for (const canvasRow of canvasRows) {
           const functionRow = functionRowsByCanvas.get(canvasRow.id);
+          const queueRow = queueRowsByCanvas.get(canvasRow.id);
           const isGraph = graphCanvasIds.has(canvasRow.id);
-          if (isGraph === (functionRow !== undefined))
+          if (
+            Number(isGraph) + Number(functionRow !== undefined) + Number(queueRow !== undefined) !==
+            1
+          )
             throw new Error(
-              `Canvas ${canvasRow.id} must have exactly one graph or function subtype`,
+              `Canvas ${canvasRow.id} must have exactly one graph, function, or queue subtype`,
             );
           const canvas = canvases[canvasRow.id];
           if (canvas === undefined) throw new Error(`Canvas ${canvasRow.id} is missing`);
-          if (functionRow === undefined) {
+          if (isGraph) {
             graphs[canvasRow.id] = { canvas };
             continue;
           }
-          functions[functionRow.canvasId] = {
-            canvas,
-            arguments: functionRow.arguments.map((field) => ({
-              ...field,
-              id: IoId.make(field.id),
-            })),
-            returns: functionRow.returns.map((field) => ({
-              ...field,
-              id: IoId.make(field.id),
-            })),
-            inputPosition: functionRow.inputPosition,
-            outputPosition: functionRow.outputPosition,
-          };
+          if (functionRow !== undefined)
+            functions[functionRow.canvasId] = {
+              canvas,
+              arguments: functionRow.arguments.map((field) => ({
+                ...field,
+                id: IoId.make(field.id),
+              })),
+              returns: functionRow.returns.map((field) => ({
+                ...field,
+                id: IoId.make(field.id),
+              })),
+              inputPosition: functionRow.inputPosition,
+              outputPosition: functionRow.outputPosition,
+            };
+          else if (queueRow !== undefined)
+            queues[queueRow.canvasId] = {
+              canvas,
+              arguments: queueRow.arguments.map((field) => ({ ...field, id: IoId.make(field.id) })),
+              returns: queueRow.returns.map((field) => ({ ...field, id: IoId.make(field.id) })),
+              inputPosition: queueRow.inputPosition,
+              outputPosition: queueRow.outputPosition,
+            };
         }
 
         return {
@@ -216,7 +244,7 @@ export const layer = Layer.effect(Persistence.Service)(
           functions,
           engines: meta.engines,
           constants: meta.constants,
-          queues: meta.queues,
+          queues,
           types: meta.types,
         };
       });

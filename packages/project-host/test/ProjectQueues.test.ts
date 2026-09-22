@@ -1,13 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import {
-  ConnectionId,
-  Function as GraphFunction,
-  GraphId,
-  IoId,
-  OutputRef,
-  Project,
-  Queue,
-} from "@macrograph/core";
+import { ConnectionId, Queue, GraphId, IoId, OutputRef, Project } from "@macrograph/core";
 import { DataType } from "@macrograph/module";
 import { DateTime, Effect, Fiber, Stream } from "effect";
 
@@ -21,24 +13,14 @@ const connection = (outNodeId: string, outIo: string, inNodeId: string, inIoId: 
   inIoId: IoId.make(inIoId),
 });
 
-const identity = (id: string): GraphFunction.Model => ({
+const identity = (id: string): Queue.Model => ({
   canvas: {
     id: GraphId.make(id),
     name: id,
     nodes: {},
     connections: [
-      connection(
-        GraphFunction.InputBoundaryNodeId,
-        "exec",
-        GraphFunction.OutputBoundaryNodeId,
-        "exec",
-      ),
-      connection(
-        GraphFunction.InputBoundaryNodeId,
-        "value",
-        GraphFunction.OutputBoundaryNodeId,
-        "result",
-      ),
+      connection(Queue.InputBoundaryNodeId, "exec", Queue.OutputBoundaryNodeId, "exec"),
+      connection(Queue.InputBoundaryNodeId, "value", Queue.OutputBoundaryNodeId, "result"),
     ],
   },
   arguments: [{ id: IoId.make("value"), name: "Value", type: DataType.DateTime }],
@@ -48,25 +30,24 @@ const identity = (id: string): GraphFunction.Model => ({
 });
 
 describe("ProjectQueues", () => {
-  it.effect("encodes captured values, invokes typed functions, and reloads definitions", () =>
+  it.effect("encodes captured values, invokes typed queue canvases, and reloads definitions", () =>
     Effect.gen(function* () {
       const echo = identity("echo");
       const project: Project.Model = {
         ...Project.empty(),
-        functions: { echo },
-        queues: { work: { id: Queue.QueueId.make("work"), name: "Work" } },
+        queues: { echo },
       };
       const runtime = yield* ProjectQueues.make(project);
       const value = DateTime.makeUnsafe("2026-08-31T12:00:00Z");
-      yield* runtime.queues.pause("work", true);
+      yield* runtime.queues.pause("echo", true);
       const pending = yield* runtime.queues
-        .enqueue("work", "echo", { value: DateTime.formatIso(value) })
+        .enqueue("echo", { value: DateTime.formatIso(value) })
         .pipe(Effect.forkChild);
       yield* runtime.queues.changes.pipe(
         Stream.filter((states) => states[0]?.waiting.length === 1),
         Stream.runHead,
       );
-      yield* runtime.queues.pause("work", false);
+      yield* runtime.queues.pause("echo", false);
       const returned = (yield* Fiber.join(pending)).result;
       assert.isTrue(DateTime.isDateTime(returned));
       yield* runtime.executor.loadProject({ ...project, queues: {} });

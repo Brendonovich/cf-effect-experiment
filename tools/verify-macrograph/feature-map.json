@@ -25,7 +25,13 @@
       "documentation": ".opencode/skills/verify-macrograph/features/function-queues.md",
       "status": "covered",
       "verification": "function-queues",
-      "userJourney": ["Open Queues tab", "Create queue", "Pause queue", "Resume queue"],
+      "userJourney": [
+        "Open Queues tab",
+        "Create queue canvas",
+        "Add signature argument",
+        "Pause queue",
+        "Resume queue"
+      ],
       "evidence": ["screenshot", "server-log"]
     },
     {

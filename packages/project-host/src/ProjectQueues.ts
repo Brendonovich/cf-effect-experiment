@@ -9,19 +9,19 @@ export const make = Effect.fnUntraced(function* (
   options?: Executor.MakeOptions,
 ) {
   let executor: Executor.Service;
-  const queues = yield* Queues.make(initialProject.queues, (functionId, inputs) =>
+  const queues = yield* Queues.make(initialProject.queues, (queueId, inputs) =>
     Effect.gen(function* () {
       const queueLineage = yield* Queues.Lineage;
       const project = yield* executor.project;
-      const fn = project.functions[functionId];
+      const queue = project.queues[queueId];
       const decoded = { ...inputs };
-      for (const field of fn?.arguments ?? []) {
+      for (const field of queue?.arguments ?? []) {
         if (Object.hasOwn(inputs, field.id))
           decoded[field.id] = yield* Schema.decodeUnknownEffect(
             DataType.JsonValueSchema(field.type, project.types),
           )(inputs[field.id]);
       }
-      return yield* executor.invokeFunction(functionId, decoded, { queueLineage });
+      return yield* executor.invokeQueue(queueId, decoded, { queueLineage });
     }),
   );
   executor = yield* Executor.make(initialProject, {
@@ -29,15 +29,15 @@ export const make = Effect.fnUntraced(function* (
     queueInvocation: (invocation) =>
       Effect.gen(function* () {
         const project = yield* executor.project;
-        const fn = project.functions[invocation.functionId];
+        const queue = project.queues[invocation.queueId];
         const captured: Record<string, unknown> = { ...invocation.inputs };
-        for (const field of fn?.arguments ?? []) {
+        for (const field of queue?.arguments ?? []) {
           if (Object.hasOwn(invocation.inputs, field.id))
             captured[field.id] = yield* Schema.encodeUnknownEffect(
               DataType.JsonValueSchema(field.type, project.types),
             )(invocation.inputs[field.id]);
         }
-        return yield* queues.enqueue(invocation.queueId, invocation.functionId, captured);
+        return yield* queues.enqueue(invocation.queueId, captured);
       }).pipe(
         Effect.provideService(Queues.Lineage, invocation.queueLineage),
         Effect.mapError(

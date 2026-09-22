@@ -76,7 +76,10 @@ export const applyMutation = (
       return Option.some({ ...project, graphs, functions });
     },
     SaveNode: ({ graphId, node }) => {
-      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
+      const graph =
+        project.graphs[graphId]?.canvas ??
+        project.functions[graphId]?.canvas ??
+        project.queues[graphId]?.canvas;
       if (!graph) return Option.none();
       return Option.some(
         Project.replaceCanvas(project, {
@@ -86,13 +89,19 @@ export const applyMutation = (
       );
     },
     DeleteNode: ({ graphId, nodeId }) => {
-      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
+      const graph =
+        project.graphs[graphId]?.canvas ??
+        project.functions[graphId]?.canvas ??
+        project.queues[graphId]?.canvas;
       if (!graph) return Option.none();
       const { [nodeId]: _, ...nodes } = graph.nodes;
       return Option.some(Project.replaceCanvas(project, { ...graph, nodes }));
     },
     SaveConnection: ({ graphId, connection }) => {
-      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
+      const graph =
+        project.graphs[graphId]?.canvas ??
+        project.functions[graphId]?.canvas ??
+        project.queues[graphId]?.canvas;
       if (!graph) return Option.none();
       const existing = graph.connections.some((c) => c.id === connection.id);
       const connections = existing
@@ -101,7 +110,10 @@ export const applyMutation = (
       return Option.some(Project.replaceCanvas(project, { ...graph, connections }));
     },
     DeleteConnection: ({ graphId, connectionId }) => {
-      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
+      const graph =
+        project.graphs[graphId]?.canvas ??
+        project.functions[graphId]?.canvas ??
+        project.queues[graphId]?.canvas;
       if (!graph) return Option.none();
       return Option.some(
         Project.replaceCanvas(project, {
@@ -291,7 +303,9 @@ export const layerMemory = Layer.effect(Service)(
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
             const graph =
-              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
+              cached.value.graphs[graphId]?.canvas ??
+              cached.value.functions[graphId]?.canvas ??
+              cached.value.queues[graphId]?.canvas;
             if (graph) return graph;
           }
           return yield* new Graph.NotFoundError({ id: graphId });
@@ -302,7 +316,9 @@ export const layerMemory = Layer.effect(Service)(
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
             const canvas =
-              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
+              cached.value.graphs[graphId]?.canvas ??
+              cached.value.functions[graphId]?.canvas ??
+              cached.value.queues[graphId]?.canvas;
             const node = canvas?.nodes[nodeId];
             if (node) return node;
           }

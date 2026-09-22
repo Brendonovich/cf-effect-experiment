@@ -7,7 +7,6 @@ import {
   NodeId,
   OutputRef,
   Project,
-  Queue,
 } from "@macrograph/core";
 import { DataType } from "@macrograph/module";
 import { Effect, Result } from "effect";
@@ -152,57 +151,6 @@ describe("function execution", () => {
         if (Result.isFailure(result))
           assert.strictEqual(result.failure._tag, "FunctionInvocationError");
       }
-    }),
-  );
-
-  it.effect("routes Add to Queue calls through the hosted hook with identity and lineage", () =>
-    Effect.gen(function* () {
-      const leaf = identity("leaf");
-      const queuedBase = identity("queued");
-      const callId = NodeId.make("queued-call");
-      const call = {
-        id: callId,
-        name: "Add to Queue",
-        schema: {
-          package: GraphFunction.queuePackageId,
-          schema: GraphFunction.QueuedCallSchemaId,
-        },
-        properties: { queue: "work", function: leaf.canvas.id },
-        inputDefaults: {},
-        foldPins: false,
-        position: { x: 200, y: 0 },
-      };
-      const queued: GraphFunction.Model = {
-        ...queuedBase,
-        canvas: {
-          ...queuedBase.canvas,
-          nodes: { [callId]: call },
-          connections: [
-            connection(GraphFunction.InputBoundaryNodeId, "exec", callId, "exec"),
-            connection(callId, "exec", GraphFunction.OutputBoundaryNodeId, "exec"),
-            connection(GraphFunction.InputBoundaryNodeId, argument.id, callId, argument.id),
-            connection(callId, returned.id, GraphFunction.OutputBoundaryNodeId, returned.id),
-          ],
-        },
-      };
-      const project: Project.Model = {
-        ...Project.empty(),
-        queues: { work: { id: Queue.QueueId.make("work"), name: "Work" } },
-        functions: { leaf, queued },
-      };
-      let captured: Executor.QueueInvocation | undefined;
-      const executor = yield* Executor.make(project, {
-        queueInvocation: (invocation) => {
-          captured = invocation;
-          return Effect.succeed({ result: invocation.inputs.value });
-        },
-      });
-      assert.deepStrictEqual(
-        yield* executor.invokeFunction("queued", { value: "hello" }, { queueLineage: ["parent"] }),
-        { result: "hello" },
-      );
-      assert.strictEqual(captured?.key.nodeId, callId);
-      assert.deepStrictEqual(captured?.queueLineage, ["parent"]);
     }),
   );
 });

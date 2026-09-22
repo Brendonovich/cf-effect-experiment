@@ -141,12 +141,43 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     switch (event._tag) {
       case "QueueUpdated":
         setStore((store) => {
-          store.project!.queues[event.queue.id] = event.queue;
+          const project = store.project!;
+          const id = event.queue.canvas.id;
+          project.queues[id] = event.queue;
+          const boundaries = Queue.boundaryNodes(event.queue);
+          project.graphs[id] = {
+            ...event.queue.canvas,
+            scopeProjections: { ...(event.queue.canvas.scopeProjections ?? {}) },
+            nodes: {
+              ...event.queue.canvas.nodes,
+              ...Object.fromEntries(boundaries.map((node) => [node.id, node])),
+            },
+            connections: [...event.queue.canvas.connections],
+          };
+          store.nodeIO[id] = {
+            ...store.nodeIO[id],
+            [Queue.InputBoundaryNodeId]: Queue.boundaryIO(event.queue, Queue.InputBoundaryNodeId)!,
+            [Queue.OutputBoundaryNodeId]: Queue.boundaryIO(
+              event.queue,
+              Queue.OutputBoundaryNodeId,
+            )!,
+          };
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === id)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(event.queue);
         });
         break;
       case "QueueDeleted":
         setStore((store) => {
-          delete store.project!.queues[event.queueId];
+          const project = store.project!;
+          delete project.queues[event.queueId];
+          delete project.graphs[event.queueId];
+          delete store.nodeIO[event.queueId];
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queueId)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(undefined);
         });
         break;
       case "TypeDefinitionsUpdated":

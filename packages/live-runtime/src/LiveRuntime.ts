@@ -1,6 +1,6 @@
 import type { Project } from "@macrograph/core";
 
-import { Function as GraphFunction } from "@macrograph/core";
+import { Queue } from "@macrograph/core";
 import { Editor, EditorEvents, Packages, QueueRuntime } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Persistence } from "@macrograph/persistence";
@@ -22,7 +22,7 @@ export const make = Effect.fnUntraced(function* (options: Options = {}) {
   const editor = yield* Editor.Service;
   const events = yield* EditorEvents.Service;
   const packages = yield* Packages.Service;
-  yield* packages.loadPackage(GraphFunction.queuePackageModel);
+  yield* packages.loadPackage(Queue.packageModel);
   const activity = yield* RuntimeActivity.Service;
   const initialProject = options.initialProject;
   const project = yield* initialProject === undefined

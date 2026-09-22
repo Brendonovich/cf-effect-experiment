@@ -1,4 +1,4 @@
-import { Function as GraphFunction, Node, Project } from "@macrograph/core";
+import { Function as GraphFunction, Node, Project, Queue } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { Effect } from "effect";
 
@@ -16,7 +16,7 @@ export const apply = (
         const project = yield* persistence.loadProject();
         yield* persistence.saveProject({
           ...project,
-          queues: { ...project.queues, [event.queue.id]: event.queue },
+          queues: { ...project.queues, [event.queue.canvas.id]: event.queue },
         });
       }).pipe(PersistenceError.refail);
     case "QueueDeleted":
@@ -43,7 +43,40 @@ export const apply = (
             },
           };
         }
-        return yield* persistence.saveProject({ ...project, types: event.types, graphs });
+        const canvases = Object.fromEntries(
+          Object.entries(Project.canvases(project)).map(([id, canvas]) => {
+            const deleted = new Set(event.deletedConnectionIds[id] ?? []);
+            return [
+              id,
+              {
+                ...canvas,
+                connections: canvas.connections.filter((wire) => !deleted.has(wire.id)),
+              },
+            ];
+          }),
+        );
+        return yield* persistence.saveProject({
+          ...project,
+          types: event.types,
+          graphs: Object.fromEntries(
+            Object.entries(project.graphs).map(([id, graph]) => [
+              id,
+              { ...graph, canvas: canvases[id]! },
+            ]),
+          ),
+          functions: Object.fromEntries(
+            Object.entries(project.functions).map(([id, fn]) => [
+              id,
+              { ...fn, canvas: canvases[id]! },
+            ]),
+          ),
+          queues: Object.fromEntries(
+            Object.entries(project.queues).map(([id, queue]) => [
+              id,
+              { ...queue, canvas: canvases[id]! },
+            ]),
+          ),
+        });
       }).pipe(PersistenceError.refail);
 
     case "FragmentPasted":
@@ -90,8 +123,9 @@ export const apply = (
         const project = yield* persistence.loadProject();
         const { [event.graphId]: _graph, ...graphs } = project.graphs;
         const { [event.graphId]: _function, ...functions } = project.functions;
+        const { [event.graphId]: _queue, ...queues } = project.queues;
         yield* persistence.deleteGraph(event.graphId);
-        return yield* persistence.saveProject({ ...project, graphs, functions });
+        return yield* persistence.saveProject({ ...project, graphs, functions, queues });
       }).pipe(PersistenceError.refail);
 
     case "GraphNameChanged":
@@ -177,6 +211,22 @@ export const apply = (
                 event.nodeId === GraphFunction.InputBoundaryNodeId
                   ? { ...fn, inputPosition: position }
                   : { ...fn, outputPosition: position },
+            },
+          });
+        }
+        if (Queue.isBoundaryNodeId(event.nodeId)) {
+          const project = yield* persistence.loadProject();
+          const queue = project.queues[event.graphId];
+          if (queue === undefined) return yield* new Node.NotFoundError({ id: event.nodeId });
+          const position = { x: event.x, y: event.y };
+          return yield* persistence.saveProject({
+            ...project,
+            queues: {
+              ...project.queues,
+              [event.graphId]:
+                event.nodeId === Queue.InputBoundaryNodeId
+                  ? { ...queue, inputPosition: position }
+                  : { ...queue, outputPosition: position },
             },
           });
         }

@@ -2,6 +2,7 @@ import {
   BuiltinAuthoring,
   type Canvas,
   Function as GraphFunction,
+  Queue,
   type SchemaAuthoring,
   TypeDefinition,
   type Node,
@@ -186,6 +187,7 @@ export function Inspector(props: {
                 <FunctionInfo
                   graph={graph()}
                   fn={fn()}
+                  title={props.queues?.[graph().id] === undefined ? "Function" : "Queue"}
                   definitions={props.definitions ?? {}}
                   canEdit={props.canEdit}
                   editingName={props.editingGraphNameId === graph().id}
@@ -306,13 +308,12 @@ export function Inspector(props: {
                                     {...(props.functions === undefined
                                       ? {}
                                       : { functions: props.functions })}
-                                    {...(GraphFunction.isQueuedCall(node()) &&
-                                    property.id === "queue"
+                                    {...(Queue.isEnqueue(node()) && property.id === "queue"
                                       ? {
                                           options: Object.values(props.queues ?? {}).map(
                                             (queue) => ({
-                                              id: queue.id,
-                                              name: queue.name,
+                                              id: queue.canvas.id,
+                                              name: queue.canvas.name,
                                             }),
                                           ),
                                         }

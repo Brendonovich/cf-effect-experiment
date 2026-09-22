@@ -47,7 +47,7 @@ export function QueuesPanel(props: {
   search: string;
   canEdit: boolean;
   error: string | null;
-  functionName: (id: string) => string;
+  onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onPause: (id: string, paused: boolean) => void;
@@ -57,7 +57,7 @@ export function QueuesPanel(props: {
 }) {
   const queues = createMemo(() =>
     Object.values(props.queues).filter((queue) =>
-      queue.name.toLowerCase().includes(props.search.toLowerCase()),
+      queue.canvas.name.toLowerCase().includes(props.search.toLowerCase()),
     ),
   );
   return (
@@ -75,24 +75,26 @@ export function QueuesPanel(props: {
         each={queues()}
         fallback={
           <p sx={styles.description}>
-            No queues found. Create a queue, then use Add to Queue in a graph.
+            No queues found. Create a queue, edit its canvas, then use Add to Queue in a graph.
           </p>
         }
       >
         {(queue) => {
-          const state = createMemo(() => props.states.find((state) => state.queueId === queue.id));
+          const state = createMemo(() =>
+            props.states.find((state) => state.queueId === queue.canvas.id),
+          );
           const items = createMemo(() => [
             ...(state()?.running ?? []).map((item) => ({ ...item, status: "Running" })),
             ...(state()?.waiting ?? []).map((item) => ({ ...item, status: "Waiting" })),
           ]);
           return (
-            <section sx={styles.queue} aria-label={queue.name}>
+            <section sx={styles.queue} aria-label={queue.canvas.name}>
               <input
                 sx={styles.name}
-                aria-label={`Queue name ${queue.name}`}
-                value={queue.name}
+                aria-label={`Queue name ${queue.canvas.name}`}
+                value={queue.canvas.name}
                 disabled={!props.canEdit}
-                onChange={(event) => props.onRename(queue.id, event.currentTarget.value)}
+                onChange={(event) => props.onRename(queue.canvas.id, event.currentTarget.value)}
               />
               <div sx={styles.status}>
                 {state() === undefined
@@ -103,7 +105,7 @@ export function QueuesPanel(props: {
                 <button
                   sx={styles.button}
                   disabled={!props.canEdit || !state()}
-                  onClick={() => props.onPause(queue.id, !state()?.paused)}
+                  onClick={() => props.onPause(queue.canvas.id, !state()?.paused)}
                 >
                   {state()?.paused ? "Resume" : "Pause"}
                 </button>
@@ -112,37 +114,38 @@ export function QueuesPanel(props: {
                   disabled={
                     !props.canEdit || !state() || state()?.paused || !state()?.waiting.length
                   }
-                  onClick={() => props.onAdvance(queue.id)}
+                  onClick={() => props.onAdvance(queue.canvas.id)}
                 >
                   Advance
                 </button>
                 <button
                   sx={styles.button}
                   disabled={!props.canEdit || !items().length}
-                  onClick={() => props.onClear(queue.id)}
+                  onClick={() => props.onClear(queue.canvas.id)}
                 >
                   Clear
                 </button>
                 <button
                   sx={styles.button}
                   disabled={!props.canEdit}
-                  onClick={() => props.onDelete(queue.id)}
+                  onClick={() => props.onDelete(queue.canvas.id)}
                 >
                   Delete
+                </button>
+                <button sx={styles.button} onClick={() => props.onOpen(queue.canvas.id)}>
+                  Open canvas
                 </button>
               </div>
               <ul sx={styles.items}>
                 <For each={items()}>
                   {(item) => (
                     <li sx={styles.item}>
-                      <span sx={styles.label}>
-                        {item.status}: {props.functionName(item.functionId)}
-                      </span>
+                      <span sx={styles.label}>{item.status}</span>
                       <button
                         sx={styles.button}
-                        aria-label={`Remove ${props.functionName(item.functionId)}`}
+                        aria-label={`Remove ${item.status} item`}
                         disabled={!props.canEdit}
-                        onClick={() => props.onRemove(queue.id, item.id)}
+                        onClick={() => props.onRemove(queue.canvas.id, item.id)}
                       >
                         Remove
                       </button>

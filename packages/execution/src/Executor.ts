@@ -6,6 +6,7 @@ import {
   type NodeIO,
   OutputRef,
   Project,
+  Queue,
   ResourceConstant,
   Scopes,
   TypeDefinition,
@@ -136,6 +137,7 @@ export type ExecutorError =
   | NodeExecutionError
   | NodeExecutionNotPending
   | InvalidGraph
+  | Queue.InvocationError
   | Node.NotFoundError;
 
 interface RegisteredModule {
@@ -165,6 +167,11 @@ export interface Service {
     inputs: Readonly<Record<string, unknown>>,
     options?: FunctionInvocationOptions,
   ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
+  readonly invokeQueue: (
+    queueId: string,
+    inputs: Readonly<Record<string, unknown>>,
+    options?: FunctionInvocationOptions,
+  ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly executeSerializedNode: SerializedNodeExecutor["executeNode"];
 }
 
@@ -178,7 +185,6 @@ export interface FunctionInvocationOptions {
 
 export interface QueueInvocation {
   readonly key: NodeExecutionKey;
-  readonly functionId: string;
   readonly inputs: Readonly<Record<string, unknown>>;
   readonly queueId: string;
   readonly queueLineage: ReadonlyArray<string>;
@@ -192,6 +198,12 @@ type ExecutionRequest =
     }
   | {
       readonly _tag: "Function";
+      readonly canvasId: string;
+      readonly inputs: Readonly<Record<string, unknown>>;
+      readonly options?: FunctionInvocationOptions;
+    }
+  | {
+      readonly _tag: "Queue";
       readonly canvasId: string;
       readonly inputs: Readonly<Record<string, unknown>>;
       readonly options?: FunctionInvocationOptions;
@@ -582,7 +594,8 @@ export const make = Effect.fnUntraced(function* (
     const currentProject = yield* Ref.get(project);
     const definition = request._tag === "Event" ? request.definition : undefined;
     const event = request._tag === "Event" ? request.event : undefined;
-    const invocation = request._tag === "Function" ? request : undefined;
+    const invocation =
+      request._tag === "Function" || request._tag === "Queue" ? request : undefined;
     const invocationStack =
       invocation?.options?.stack ?? (invocation === undefined ? [] : [invocation.canvasId]);
     const invocationResult: Record<string, unknown> = {};
@@ -635,6 +648,12 @@ export const make = Effect.fnUntraced(function* (
         const io = registeredIO(GraphFunction.callIO(fn));
         return syntheticSchema("call", "Execute Function", "exec", io, () => Effect.void);
       }
+      if (Queue.isEnqueue(node)) {
+        const target = node.properties.queue;
+        const queue = typeof target === "string" ? currentProject.queues[target] : undefined;
+        const io = registeredIO(Queue.enqueueIO(queue));
+        return syntheticSchema("enqueue", "Add to Queue", "exec", io, () => Effect.void);
+      }
       const owner = currentProject.functions[invocation?.canvasId ?? ""];
       if (owner !== undefined && node.id === GraphFunction.InputBoundaryNodeId) {
         const io = registeredIO(GraphFunction.boundaryIO(owner, node.id)!);
@@ -649,6 +668,25 @@ export const make = Effect.fnUntraced(function* (
       if (owner !== undefined && node.id === GraphFunction.OutputBoundaryNodeId) {
         const io = registeredIO(GraphFunction.boundaryIO(owner, node.id)!);
         return syntheticSchema("output", "Function Output", "exec", io, (context) =>
+          Effect.sync(() => {
+            for (const input of io.dataInputs) invocationResult[input.id] = context.input(input);
+          }),
+        );
+      }
+      const queueOwner = currentProject.queues[invocation?.canvasId ?? ""];
+      if (queueOwner !== undefined && node.id === Queue.InputBoundaryNodeId) {
+        const io = registeredIO(Queue.boundaryIO(queueOwner, node.id)!);
+        return syntheticSchema("input", "Queue Input", "event", io, (context) =>
+          Effect.sync(() => {
+            for (const output of io.dataOutputs)
+              context.output(output, invocation?.inputs[output.id]);
+            return io.executionOutputs[0];
+          }),
+        );
+      }
+      if (queueOwner !== undefined && node.id === Queue.OutputBoundaryNodeId) {
+        const io = registeredIO(Queue.boundaryIO(queueOwner, node.id)!);
+        return syntheticSchema("output", "Queue Output", "exec", io, (context) =>
           Effect.sync(() => {
             for (const input of io.dataInputs) invocationResult[input.id] = context.input(input);
           }),
@@ -1152,7 +1190,11 @@ export const make = Effect.fnUntraced(function* (
         };
         yield* Effect.annotateCurrentSpan(nodeAttributes);
         const registeredModule = registeredModules.get(node.schema.package);
-        const synthetic = GraphFunction.isCall(node) || GraphFunction.isBoundaryNodeId(node.id);
+        const synthetic =
+          GraphFunction.isCall(node) ||
+          GraphFunction.isBoundaryNodeId(node.id) ||
+          Queue.isEnqueue(node) ||
+          Queue.isBoundaryNodeId(node.id);
         if (registeredModule === undefined && !synthetic)
           return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
         if (
@@ -1183,6 +1225,28 @@ export const make = Effect.fnUntraced(function* (
 
         const runEffect = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
+          if (Queue.isEnqueue(node)) {
+            const queueId = node.properties.queue;
+            if (typeof queueId !== "string" || currentProject.queues[queueId] === undefined)
+              return yield* new Queue.InvocationError({
+                queueId: typeof queueId === "string" ? queueId : "",
+                reason: "Select an existing queue",
+              });
+            if (options?.queueInvocation === undefined)
+              return yield* new Queue.InvocationError({
+                queueId,
+                reason: "Queue invocation is not hosted",
+              });
+            const result = yield* options.queueInvocation({
+              key,
+              inputs: Object.fromEntries(inputs),
+              queueId,
+              queueLineage: invocation?.options?.queueLineage ?? [],
+            });
+            for (const output of nodeIO.dataOutputs)
+              outputs.push({ outputId: output.id, value: result[output.id] });
+            return { outputs, executionOutputId: "exec" } satisfies NodeExecutionResult;
+          }
           if (GraphFunction.isCall(node)) {
             const target = node.properties.function;
             if (typeof target !== "string" || currentProject.functions[target] === undefined)
@@ -1195,41 +1259,18 @@ export const make = Effect.fnUntraced(function* (
                 canvasId: target,
                 reason: "Recursive function calls are not supported",
               });
-            const queueId = GraphFunction.isQueuedCall(node) ? node.properties.queue : undefined;
-            if (
-              GraphFunction.isQueuedCall(node) &&
-              (typeof queueId !== "string" || currentProject.queues[queueId] === undefined)
-            )
-              return yield* new GraphFunction.InvocationError({
-                canvasId: target,
-                reason: "Add to Queue has a missing queue target",
-              });
             const callInputs = Object.fromEntries(inputs);
-            const result =
-              typeof queueId === "string"
-                ? options?.queueInvocation === undefined
-                  ? yield* new GraphFunction.InvocationError({
-                      canvasId: target,
-                      reason: "Queue invocation is not hosted",
-                    })
-                  : yield* options.queueInvocation({
-                      key,
-                      functionId: target,
-                      inputs: callInputs,
-                      queueId,
-                      queueLineage: invocation?.options?.queueLineage ?? [],
-                    })
-                : yield* execute({
-                    _tag: "Function",
-                    canvasId: target,
-                    inputs: callInputs,
-                    options: {
-                      executionPath: `${executionPath}/function:${node.id}:${target}`,
-                      executionTraceId,
-                      eventNodeId: rootEventNodeId,
-                      stack: [...invocationStack, target],
-                    },
-                  });
+            const result = yield* execute({
+              _tag: "Function",
+              canvasId: target,
+              inputs: callInputs,
+              options: {
+                executionPath: `${executionPath}/function:${node.id}:${target}`,
+                executionTraceId,
+                eventNodeId: rootEventNodeId,
+                stack: [...invocationStack, target],
+              },
+            });
             for (const output of nodeIO.dataOutputs)
               outputs.push({ outputId: output.id, value: result[output.id] });
             return { outputs, executionOutputId: "exec" } satisfies NodeExecutionResult;
@@ -1865,6 +1906,19 @@ export const make = Effect.fnUntraced(function* (
     });
 
     if (invocation !== undefined) {
+      if (invocation._tag === "Queue") {
+        const queue = currentProject.queues[invocation.canvasId];
+        if (queue === undefined)
+          return yield* new Queue.InvocationError({
+            queueId: invocation.canvasId,
+            reason: "Queue does not exist",
+          });
+        const canvas = Scopes.lowerProjections(Queue.projectCanvas(queue));
+        const inputNode = yield* Canvas.getNode(canvas, Queue.InputBoundaryNodeId);
+        const inputSchema = yield* getSchema(registeredModules, inputNode);
+        yield* executeEventNode(canvas, inputNode, inputSchema);
+        return invocationResult;
+      }
       const fn = currentProject.functions[invocation.canvasId];
       if (fn === undefined)
         return yield* new GraphFunction.InvocationError({
@@ -1937,6 +1991,13 @@ export const make = Effect.fnUntraced(function* (
     invokeFunction: (canvasId, inputs, invocationOptions) =>
       execute({
         _tag: "Function",
+        canvasId,
+        inputs,
+        ...(invocationOptions === undefined ? {} : { options: invocationOptions }),
+      }),
+    invokeQueue: (canvasId, inputs, invocationOptions) =>
+      execute({
+        _tag: "Queue",
         canvasId,
         inputs,
         ...(invocationOptions === undefined ? {} : { options: invocationOptions }),

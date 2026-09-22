@@ -120,6 +120,7 @@ type FieldLocation = { readonly direction: "input" | "output"; readonly id: stri
 export function FunctionInfo(props: {
   graph: Canvas.Model;
   fn: GraphFunction.Model;
+  title?: string;
   definitions: DataType.Definitions;
   canEdit: boolean;
   editingName: boolean;
@@ -135,7 +136,7 @@ export function FunctionInfo(props: {
 
   return (
     <div sx={styles.panel}>
-      <span sx={styles.title}>Function</span>
+      <span sx={styles.title}>{props.title ?? "Function"}</span>
       <div sx={styles.field}>
         <span sx={styles.fieldLabel}>Name</span>
         <Show when={props.canEdit} fallback={<span sx={styles.value}>{props.graph.name}</span>}>

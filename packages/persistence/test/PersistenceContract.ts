@@ -88,12 +88,27 @@ export const persistenceContract = <E>(
             nodes: {},
             connections: [],
           };
+          const queueCanvas = {
+            id: GraphId.make("project-queue"),
+            name: "Project Queue",
+            nodes: {},
+            connections: [],
+          };
           const project: Project.Model = {
             ...emptyProject(),
             graphs: { [canvas.id]: { canvas } },
             functions: {
               [functionCanvas.id]: {
                 canvas: functionCanvas,
+                arguments: [],
+                returns: [],
+                inputPosition: { x: -100, y: 0 },
+                outputPosition: { x: 100, y: 0 },
+              },
+            },
+            queues: {
+              [queueCanvas.id]: {
+                canvas: queueCanvas,
                 arguments: [],
                 returns: [],
                 inputPosition: { x: -100, y: 0 },
@@ -107,6 +122,7 @@ export const persistenceContract = <E>(
           expect(yield* persistence.loadProject()).toEqual(project);
           expect(yield* persistence.loadGraph(canvas.id)).toEqual(canvas);
           expect(yield* persistence.loadGraph(functionCanvas.id)).toEqual(functionCanvas);
+          expect(yield* persistence.loadGraph(queueCanvas.id)).toEqual(queueCanvas);
           expect(yield* persistence.loadNode(canvas.id, firstNode.id)).toEqual(firstNode);
         }),
       ),
