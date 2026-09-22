@@ -8,8 +8,9 @@ ordinary exec. Right-click a scope output and choose **Split scope**: its branch
 label becomes an exec pin and its fields appear underneath, inside a left rail
 with top/bottom caps. No extra node is created. Right-click the group to bundle it
 again. Mode changes are blocked while that scope has output wires, so no connected
-pins disappear. The existing **Scopes → Break Scope** node also remains available
-as an explicit consumer of a bundled scope.
+pins disappear. Dropping a bundled scope on empty canvas creates a **Break Scope**
+projection. Projections are canvas presentation objects rather than registered
+schemas or executable nodes.
 
 The editor lays inputs and outputs out in independent columns, one row per pin.
 Each expanded scope is a bordered wrapper around its output rows; its padding and
@@ -45,7 +46,9 @@ Reading an inactive scope raises `ScopeNotActive`: it neither reuses a previous
 payload nor runs the source node on demand. Pure dependencies resolve in the
 consuming execution's scope context, with their cache reset between exec steps.
 
-Splitting creates no hidden nodes, additional runtime steps, or checkpoints.
+Splitting and Break Scope projections create no hidden executable nodes, additional
+runtime steps, or checkpoints. Before execution, projection wires are lowered to
+the same `ScopeExec` and `ScopeField` references used by inline splitting.
 Replay restores the source's validated result and recreates the same activation.
 
 ## Module API
@@ -72,7 +75,7 @@ explicit execution inputs/outputs rather than the implicit `exec` ports.
 
 Internally, scope ports share execution routing and cycle checks. An execution
 port's `scope` is absent for ordinary exec, an array of field descriptors for a
-typed scope, or `null` for Break Scope's inferred input. Fields match by ID and
+typed scope, or `null` for a projection's inferred input. Fields match by ID and
 type (including nominal custom-type identity), independently of labels and order.
 
 Execution results carry `scopePayload` alongside `executionOutputId`. Every field

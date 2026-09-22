@@ -50,11 +50,11 @@ export default defineConfig({
       ],
       "macrograph/no-node-imports-in-browser": [
         "error",
-        ["apps/cloudflare/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
+        ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
       ],
       "macrograph/no-unhandled-run-fork": [
         "error",
-        ["apps/cloudflare/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
+        ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
       ],
     },
   },

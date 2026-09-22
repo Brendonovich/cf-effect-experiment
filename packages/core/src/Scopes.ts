@@ -1,18 +1,45 @@
-import * as Registration from "@macrograph/module/Registration";
-import { Effect, Result } from "effect";
+import type * as Registration from "@macrograph/module/Registration";
+
+import { Effect, Schema } from "effect";
 
 import type { Canvas } from "./Canvas.ts";
 import type { Node } from "./Node.ts";
-import type { Package } from "./Package.ts";
-import type * as SchemaAuthoring from "./SchemaAuthoring.ts";
 
 import { IoId, type NodeIO, type ExecutionPort } from "./IO.ts";
+import { NodeId } from "./Node.ts";
 import * as OutputRef from "./OutputRef.ts";
+import { Position } from "./Position.ts";
 import { PackageId, SchemaId } from "./SchemaRef.ts";
 
-export const packageId = PackageId.make("Scopes");
-export const isBreakScope = (node: Pick<Node.Model, "schema">) =>
-  node.schema.package === packageId && node.schema.schema === "BreakScope";
+export const Projection = Schema.Struct({
+  id: NodeId,
+  position: Position,
+});
+export type Projection = typeof Projection.Type;
+
+export const Collection = Schema.Record(Schema.String, Projection).pipe(
+  Schema.withDecodingDefaultKey(Effect.succeed({})),
+);
+export type Collection = typeof Collection.Type;
+
+export const ProjectionInputId = IoId.make("scope");
+export const ProjectionExecutionId = IoId.make("exec");
+
+export const emptyIO: NodeIO = {
+  dataInputs: [],
+  dataOutputs: [],
+  executionInputs: [{ id: ProjectionInputId, scope: null, name: "Scope" }],
+  executionOutputs: [{ id: ProjectionExecutionId }],
+};
+
+const projectionSchema = {
+  package: PackageId.make("$macrograph"),
+  schema: SchemaId.make("scope-projection"),
+};
+
+export const isProjectionNode = (node: Pick<Node.Model, "schema">) =>
+  node.schema.package === projectionSchema.package &&
+  node.schema.schema === projectionSchema.schema;
 
 export const executionPort = (
   port: Registration.ExecutionInputRef | Registration.ExecutionOutputRef,
@@ -33,79 +60,81 @@ export const executionPort = (
       }),
 });
 
-export const schema: Registration.RegisteredSchema = {
-  id: "BreakScope",
+export const projectionNode = (projection: Projection): Node.Model => ({
+  id: projection.id,
   name: "Break Scope",
-  type: "base",
-  properties: [],
-  dataInputs: [],
-  dataOutputs: [],
-  executionInputs: [new Registration.ScopeInputRef("scope", null, "Scope")],
-  executionOutputs: [new Registration.ExecutionOutputRef("exec")],
-  generateIO: () => schema,
-  matches: () => Effect.succeed(false),
-  // The executor materializes the connected fields before continuing execution.
-  run: () => Effect.void,
-};
+  properties: {},
+  inputDefaults: {},
+  foldPins: false,
+  schema: projectionSchema,
+  position: projection.position,
+});
 
-export const emptyIO: NodeIO = {
-  dataInputs: [],
-  dataOutputs: [],
-  executionInputs: schema.executionInputs.map(executionPort),
-  executionOutputs: schema.executionOutputs.map(executionPort),
-};
-
-export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = {
-  BreakScope: {
-    generateIO: (context) =>
-      Result.succeed({
-        ...emptyIO,
-        dataOutputs: context.inputScope("scope") ?? [],
-      }),
+export const projectCanvas = (canvas: Canvas.Model): Canvas.Model => ({
+  ...canvas,
+  nodes: {
+    ...canvas.nodes,
+    ...Object.fromEntries(
+      Object.values(canvas.scopeProjections ?? {}).map((projection) => [
+        projection.id,
+        projectionNode(projection),
+      ]),
+    ),
   },
-};
+});
 
-export const packageModel: Package.Model = {
-  id: packageId,
-  name: "Scopes",
-  resources: [],
-  schemas: [
-    {
-      id: SchemaId.make(schema.id),
-      name: schema.name,
-      type: schema.type,
-      properties: [],
-      ...emptyIO,
-    },
-  ],
-};
-
-/** Derived from the wire, never persisted as a second copy of its source's type. */
-export const resolveIO = (
-  graph: Canvas.Model,
-  nodeId: string,
-  ioForNode: (nodeId: string) => NodeIO | undefined,
-): NodeIO | undefined => {
-  const node = graph.nodes[nodeId];
-  if (node === undefined || !isBreakScope(node)) return ioForNode(nodeId);
-  const connections = graph.connections.filter(
-    (wire) => wire.inNodeId === nodeId && wire.inIoId === "scope",
+export const binding = (canvas: Canvas.Model, projectionId: string) => {
+  const connections = canvas.connections.filter(
+    (wire) => wire.inNodeId === projectionId && wire.inIoId === ProjectionInputId,
   );
-  const wire = connections.length === 1 ? connections[0] : undefined;
-  const fields =
-    wire === undefined
-      ? undefined
-      : wire.outIo._tag === "Port"
-        ? ioForNode(wire.outNodeId)?.executionOutputs.find(
-            (port) => port.id === OutputRef.parentId(wire.outIo),
-          )?.scope
-        : undefined;
-  const result = authoring.BreakScope!.generateIO!({
-    properties: node.properties,
-    definitions: {},
-    declared: emptyIO,
-    resolve: (type) => type,
-    inputScope: () => fields ?? undefined,
-  });
-  return Result.isSuccess(result) ? result.success : emptyIO;
+  return connections.length === 1 ? connections[0] : undefined;
+};
+
+/** Projection IO is derived from its single incoming scope wire. */
+export const projectionIO = (
+  canvas: Canvas.Model,
+  projectionId: string,
+  ioForNode: (nodeId: string) => NodeIO | undefined,
+): NodeIO => {
+  const wire = binding(canvas, projectionId);
+  const sourceOutput = wire?.outIo;
+  const scope =
+    wire !== undefined && sourceOutput?._tag === "Port"
+      ? ioForNode(wire.outNodeId)?.executionOutputs.find((port) => port.id === sourceOutput.id)
+      : undefined;
+  return {
+    ...emptyIO,
+    dataOutputs: scope?.scope ?? [],
+  };
+};
+
+/** Remove presentation-only projections by wiring their consumers to scope projections. */
+export const lowerProjections = (canvas: Canvas.Model): Canvas.Model => {
+  const projectionIds = new Set(Object.keys(canvas.scopeProjections ?? {}));
+  const bindings = new Map(
+    [...projectionIds].flatMap((id) => {
+      const wire = binding(canvas, id);
+      return wire?.outIo._tag === "Port" ? [[id, wire] as const] : [];
+    }),
+  );
+  return {
+    ...canvas,
+    scopeProjections: {},
+    connections: canvas.connections.flatMap((wire) => {
+      if (projectionIds.has(wire.inNodeId)) return [];
+      const source = bindings.get(wire.outNodeId);
+      if (source === undefined || source.outIo._tag !== "Port" || wire.outIo._tag !== "Port")
+        return [wire];
+      return [
+        {
+          ...wire,
+          outNodeId: source.outNodeId,
+          outIo:
+            wire.outIo.id === ProjectionExecutionId
+              ? OutputRef.scopeExec(source.outIo.id)
+              : OutputRef.scopeField(source.outIo.id, wire.outIo.id),
+        },
+      ];
+    }),
+  };
 };

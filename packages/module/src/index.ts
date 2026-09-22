@@ -9,3 +9,4 @@ export * as HttpIngress from "./HttpIngress.ts";
 export * as Module from "./Module.ts";
 export * as Registration from "./Registration.ts";
 export * as Resource from "./Resource.ts";
+export { Retry } from "./Retry.ts";

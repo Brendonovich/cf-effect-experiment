@@ -18,6 +18,7 @@ export const Key = Schema.Struct({
   eventNodeId: Schema.String,
   nodeId: Schema.String,
   kind: Schema.Literals(["base", "event", "exec"]),
+  replay: Schema.Literals(["safe", "unsafe"]),
   executionPath: Schema.String,
   executionTraceId: Schema.String,
   traceId: Schema.String,

@@ -7,6 +7,7 @@ import { NodeId } from "./Node.ts";
 import { Package } from "./Package.ts";
 import { Position } from "./Position.ts";
 import { SchemaRef } from "./SchemaRef.ts";
+import { Collection as ScopeProjections } from "./Scopes.ts";
 
 export const Node = Schema.Struct({
   id: NodeId,
@@ -25,6 +26,7 @@ export const Model = Schema.Struct({
   id: GraphId,
   name: Schema.String,
   nodes: Schema.Record(Schema.String, Node),
+  scopeProjections: Schema.optional(ScopeProjections),
   connections: Schema.Array(Connection.Model),
   schemas: Schema.Record(Schema.String, Schema.Record(Schema.String, Package.SchemaModel)),
 });

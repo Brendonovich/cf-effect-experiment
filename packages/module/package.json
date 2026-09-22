@@ -15,6 +15,7 @@
     "./Module": "./src/Module.ts",
     "./Registration": "./src/Registration.ts",
     "./Resource": "./src/Resource.ts",
+    "./Retry": "./src/Retry.ts",
     "./vite": "./src/vite.ts"
   },
   "scripts": {

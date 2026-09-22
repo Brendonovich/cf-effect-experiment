@@ -82,11 +82,12 @@ export const ScopeOutput: Story = {
 
 export const BreakScope: Story = {
   args: {
-    node: { ...branchNode, name: "Break Scope", position: { x: 24, y: 24 } },
-    schema: Scopes.packageModel.schemas[0]!,
+    node: Scopes.projectionNode({ id: branchNode.id, position: { x: 24, y: 24 } }),
     io: {
-      ...Scopes.emptyIO,
+      dataInputs: [],
       dataOutputs: [{ id: IoId.make("value"), name: "Value", type: DataType.String }],
+      executionInputs: [{ id: IoId.make("scope"), scope: null, name: "Scope" }],
+      executionOutputs: [{ id: IoId.make("exec") }],
     },
     connectedInputIds: new Set(["scope"]),
   },

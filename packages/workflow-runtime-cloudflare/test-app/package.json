@@ -1,0 +1,21 @@
+{
+  "name": "@macrograph/workflow-runtime-cloudflare-test-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
+    "deploy": "pnpm alchemy deploy",
+    "destroy": "pnpm alchemy destroy",
+    "test:infra": "bun test infra.test.ts"
+  },
+  "dependencies": {
+    "@macrograph/workflow-runtime": "workspace:*",
+    "@macrograph/workflow-runtime-cloudflare": "workspace:*",
+    "@macrograph/workflow-runtime-test": "workspace:*",
+    "alchemy": "2.0.0-beta.72",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0"
+  }
+}

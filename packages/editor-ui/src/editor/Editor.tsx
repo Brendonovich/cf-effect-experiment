@@ -429,6 +429,7 @@ function EditorContent(
   let editorRoot: HTMLDivElement | undefined;
   const canvas = createEditorCanvas({
     createNode: controller.commands.createNode,
+    createScopeProjection: controller.commands.createScopeProjection,
     editor: controller.editor,
     client: controller.connection.client,
     canEdit: controller.connection.canEdit,

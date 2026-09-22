@@ -127,6 +127,7 @@ const styles = stylex.create({
   pureHeader: { backgroundColor: colors.pure },
   baseHeader: { backgroundColor: colors.base },
   dragHandle: {
+    boxSizing: "border-box",
     display: "flex",
     width: "100%",
     height: "100%",

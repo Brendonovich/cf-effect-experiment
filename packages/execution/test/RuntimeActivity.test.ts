@@ -24,6 +24,7 @@ const key = (id: string): Executor.NodeExecutionKey => ({
   eventNodeId: "event-node",
   nodeId: `node-${id}`,
   kind: "exec",
+  replay: "unsafe",
   executionPath: `event:event-node/exec:${id}`,
   executionTraceId: `execution-${id}`,
   traceId: id,

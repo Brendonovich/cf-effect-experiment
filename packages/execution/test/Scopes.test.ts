@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Project, Scopes } from "@macrograph/core";
+import { Project } from "@macrograph/core";
 import { DataType, Engine, Module, Registration } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
@@ -78,11 +78,11 @@ const project = (target = "break") =>
           name: "Scopes",
           nodes: {
             event: node("event", "scope-test", "event"),
-            break: node("break", Scopes.packageId, "BreakScope"),
             sink: node("sink", "scope-test", "sink"),
             scopeSink: node("scopeSink", "scope-test", "scopeSink"),
             wrongSink: node("wrongSink", "scope-test", "wrongSink"),
           },
+          scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
           connections:
             target === "break"
               ? [
@@ -120,8 +120,8 @@ describe("scope execution", () => {
               name: "Empty scope",
               nodes: {
                 event: node("event", module.id, "event"),
-                break: node("break", Scopes.packageId, "BreakScope"),
               },
+              scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
               connections: [wire("scope", "event", "empty", "break", "scope")],
             },
           },
@@ -142,7 +142,7 @@ describe("scope execution", () => {
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
-      expect(ran).toEqual(["event", "break"]);
+      expect(ran).toEqual(["event"]);
     }),
   );
 

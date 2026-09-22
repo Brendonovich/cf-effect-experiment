@@ -90,6 +90,10 @@ describe("graph presentation", () => {
     ).toBe(graphNodeWidth(io));
   });
 
+  it("leaves comfortable header padding around long node names", () => {
+    expect(graphNodeWidth(undefined, "WebSocket Connection")).toBe(168);
+  });
+
   it("shows orphan defaults without wires and omits nominally incompatible wires", () => {
     expect(retainedPorts([], new Set(), ["removed"])).toEqual([
       {

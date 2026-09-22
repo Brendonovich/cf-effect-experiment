@@ -4,7 +4,9 @@ import {
   Clipboard,
   Function as GraphFunction,
   IoId,
+  type NodeIO,
   OutputRef,
+  Scopes,
   type ResourceConstant,
   type SchemaRef,
   type TypeDefinition,
@@ -104,9 +106,16 @@ export function createEditorCommands(
       const schema = editor.store.packages
         .find((pkg) => pkg.id === node.schema.package)
         ?.schemas.find((schema) => schema.id === node.schema.schema);
-      return schema?.internal === true ? [] : [node];
+      return schema?.internal === true || Scopes.isProjectionNode(node) ? [] : [node];
     });
-    const ids = new Set(nodes.map((node) => String(node.id)));
+    const scopeProjections = nodeIds.flatMap((id) => {
+      const projection = graph.scopeProjections?.[id];
+      return projection === undefined ? [] : [projection];
+    });
+    const ids = new Set([
+      ...nodes.map((node) => String(node.id)),
+      ...scopeProjections.map((projection) => String(projection.id)),
+    ]);
     const capturedIO = Object.fromEntries(
       nodes.flatMap((node) => {
         const io = editor.store.nodeIO[graphId]?.[node.id];
@@ -133,12 +142,13 @@ export function createEditorCommands(
     return clipboardMutation
       .mutateAsync(async () => {
         try {
-          if (nodes.length === 0) return;
+          if (ids.size === 0) return;
           const session = c ? await runPromise(c.GetClipboardIdentity()) : undefined;
           const text = JSON.stringify({
             format: "macrograph/nodes",
             version: 1,
             nodes,
+            scopeProjections,
             connections: internalConnections,
             externalConnections,
             nodeIO: capturedIO,
@@ -462,6 +472,44 @@ export function createEditorCommands(
       ),
     );
   };
+  const createScopeProjection = (
+    position: { x: number; y: number },
+    source: Pick<PortEndpoint, "nodeId" | "direction" | "port">,
+    shiftKey = false,
+  ) => {
+    const c = client();
+    const graphId = selectedGraphId();
+    if (
+      !c ||
+      !graphId ||
+      !canEdit() ||
+      source.direction !== "output" ||
+      source.port.kind !== "scope" ||
+      source.port.scope == null
+    )
+      return;
+    const io: NodeIO = {
+      dataInputs: [],
+      dataOutputs: source.port.scope,
+      executionInputs: [{ id: IoId.make("scope"), scope: null, name: "Scope" }],
+      executionOutputs: [{ id: IoId.make("exec") }],
+    };
+    const offset = graphPortOffset(graphNodeWidth(io, "Break Scope"), "input", 0);
+    const alignedPosition = snapGraphPosition(
+      { x: position.x - offset.x, y: position.y - offset.y },
+      shiftKey,
+    );
+    return runPromise(
+      applyMutation(
+        c.CreateScopeProjection({
+          graphId,
+          position: alignedPosition,
+          sourceNodeId: source.nodeId,
+          sourceOutput: outputRefForPort(source.port),
+        }),
+      ).pipe(Effect.asVoid, Effect.catchCause(Effect.log)),
+    );
+  };
   const setNodeFoldPins = (nodeId: string, foldPins: boolean) => {
     if (GraphFunction.isBoundaryNodeId(nodeId)) return;
     const c = client();
@@ -621,6 +669,7 @@ export function createEditorCommands(
     reorderFunctionField,
     deleteFunctionField,
     createNode,
+    createScopeProjection,
     deleteNode,
     setNodeFoldPins,
     renameNode,

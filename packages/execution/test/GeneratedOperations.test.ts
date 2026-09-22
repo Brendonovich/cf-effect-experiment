@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { CustomTypes, Package, Project, SchemaId, Scopes } from "@macrograph/core";
+import { CustomTypes, Package, Project, SchemaId } from "@macrograph/core";
 import { DataType, Engine, Module, Registration } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
@@ -421,10 +421,12 @@ describe("generated custom operations", () => {
                     {},
                   ),
                   sink: node("sink", module.id, "sink"),
-                  scope: node("scope", Scopes.packageId, "BreakScope"),
-                  failureScope: node("failureScope", Scopes.packageId, "BreakScope"),
                   forbidden: node("forbidden", module.id, "forbidden"),
                   enumAnchor: node("enumAnchor", module.id, "enum-anchor"),
+                },
+                scopeProjections: {
+                  scope: { id: "scope", position: { x: 0, y: 0 } },
+                  failureScope: { id: "failureScope", position: { x: 0, y: 0 } },
                 },
                 connections: [
                   wire("exec", "event", "exec", "match", "exec"),

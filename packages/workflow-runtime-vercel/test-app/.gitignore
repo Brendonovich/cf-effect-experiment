@@ -1,0 +1,5 @@
+.next/
+.vercel/
+.workflow-data/
+next-env.d.ts
+/.swc

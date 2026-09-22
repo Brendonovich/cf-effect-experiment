@@ -1,10 +1,20 @@
 import type * as Registration from "@macrograph/module/Registration";
 
 import { DataType } from "@macrograph/module/DataType";
+import { Retry } from "@macrograph/module/Retry";
 import { Effect, Option, Schema } from "effect";
 
 import { actions } from "./Actions.ts";
 import { TwitchAccount, TwitchEngine, TwitchEventSub } from "./Definition.ts";
+import { HelixError } from "./Helix.ts";
+
+// Retry permission belongs to the read node, not the shared HTTP/RPC client.
+const retryRead = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.mapError((cause) =>
+      cause instanceof HelixError && cause.transient === true ? new Retry({ cause }) : cause,
+    ),
+  );
 
 type Context = Registration.ModuleContext<typeof TwitchEngine>;
 type Kind = "string" | "int" | "bool";
@@ -527,6 +537,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   });
   yield* context.schema.register({
     id: "GetChatSettings",
+    replay: "safe",
     name: "Get Chat Settings",
     description: "Gets chat settings for a broadcaster's channel.",
     properties: accountProperty,
@@ -549,7 +560,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           io.slowMode(result.slow_mode);
           io.subscriberMode(result.subscriber_mode);
         }
-      }),
+      }).pipe(retryRead),
   });
   yield* context.schema.register({
     id: "UpdateChatSettings",
@@ -625,6 +636,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   });
   yield* context.schema.register({
     id: "GetChannelInformation",
+    replay: "safe",
     name: "Get Channel Information",
     description: "Gets information about a Twitch channel.",
     properties: accountProperty,
@@ -655,7 +667,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           io.title(result.title);
           io.language(result.broadcaster_language);
         }
-      }),
+      }).pipe(retryRead),
   });
   yield* context.schema.register({
     id: "ModifyChannelInformation",
@@ -688,6 +700,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   });
   yield* context.schema.register({
     id: "GetStreams",
+    replay: "safe",
     name: "Get Streams",
     description: "Looks up a user's active Twitch stream.",
     properties: accountProperty,
@@ -708,7 +721,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
         io.viewerCount(stream?.viewer_count ?? 0);
         io.gameName(stream?.game_name ?? "");
         io.title(stream?.title ?? "");
-      }),
+      }).pipe(retryRead),
   });
   yield* context.schema.register({
     id: "CreateClip",
@@ -850,6 +863,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   });
   yield* context.schema.register({
     id: "GetUsers",
+    replay: "safe",
     name: "Get Users",
     description: "Gets a Twitch user by ID or login.",
     properties: accountProperty,
@@ -876,10 +890,11 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           io.broadcasterType(user.broadcaster_type);
           io.description(user.description);
         }
-      }),
+      }).pipe(retryRead),
   });
   yield* context.schema.register({
     id: "GetFollowers",
+    replay: "safe",
     name: "Get Followers",
     description: "Gets the total followers for a broadcaster.",
     properties: accountProperty,
@@ -895,11 +910,12 @@ export const register = Effect.fnUntraced(function* (context: Context) {
             broadcaster_id: io.broadcasterId,
           })).total,
         );
-      }),
+      }).pipe(retryRead),
   });
   for (const action of actions) {
     yield* context.schema.register({
       id: action.id,
+      replay: action.method === "GET" ? "safe" : "unsafe",
       name: action.name,
       description: `${action.name} using authenticated Twitch ${action.id === "ValidateToken" ? "OAuth validation" : "Helix"}.${action.scopes.length ? ` Requires ${action.scopes.join(" or ")}.` : ""}`,
       properties: accountProperty,
@@ -950,11 +966,12 @@ export const register = Effect.fnUntraced(function* (context: Context) {
               return yield* Effect.fail(new Error(`Invalid ${field.id}`));
             inputs[field.id] = value;
           }
-          const result = yield* engine.ExecuteAction({
+          const request = engine.ExecuteAction({
             account_id: properties.account,
             action: action.id,
             inputs,
           });
+          const result = yield* action.method === "GET" ? retryRead(request) : request;
           io.responseJson(JSON.stringify(result.response));
           for (const [index, field] of (action.outputs ?? []).entries()) {
             const raw = result.outputs[field.id];

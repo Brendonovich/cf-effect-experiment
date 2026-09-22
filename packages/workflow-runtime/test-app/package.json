@@ -1,0 +1,18 @@
+{
+  "name": "@macrograph/workflow-runtime-test",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./fixture": "./fixture.ts",
+    "./verify": "./verify.ts"
+  },
+  "dependencies": {
+    "@macrograph/core": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@macrograph/project-host": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0"
+  }
+}

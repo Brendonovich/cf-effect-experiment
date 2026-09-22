@@ -139,7 +139,6 @@ describe("Self-hosted modules", () => {
         [
           "CustomTypes",
           "macrograph-functions",
-          "Scopes",
           ...deployments.map((deployment) => deployment.moduleId),
           ...statelessModules.map((module) => module.id),
         ].sort(),

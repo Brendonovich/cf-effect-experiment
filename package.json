@@ -3,9 +3,10 @@
   "workspaces": {
     "packages": [
       "packages/*",
+      "packages/workflow-runtime*/test-app",
       "packages/modules/*",
       "apps/*",
-      "apps/cloudflare/frontend",
+      "apps/cloud/frontend",
       "apps/server/client"
     ],
     "catalog": {
@@ -22,6 +23,7 @@
   },
   "type": "module",
   "scripts": {
+    "dev": "pnpm --filter cloud dev",
     "build": "tsgo --build",
     "typecheck": "tsgo -b",
     "test": "pnpm test:unit",

@@ -7,12 +7,11 @@ import {
   PackageId,
   Project,
   SchemaId,
-  Scopes,
   OutputRef,
 } from "@macrograph/core";
 import { DataType, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer } from "effect";
 
 import { Editor, Packages } from "../src/index.ts";
 
@@ -78,11 +77,11 @@ const setup = Effect.gen(function* () {
       inIoId: IoId.make("value"),
     },
   });
-  const unpack = yield* editor.node.create({
+  const unpack = yield* editor.scopeProjection.create({
     graphID: "graph",
-    node: {
-      schema: { package: Scopes.packageId, schema: SchemaId.make("BreakScope") },
-    },
+    position: { x: 0, y: 0 },
+    sourceNodeID: match.node.id,
+    sourceOutput: OutputRef.port('variant:"Found"'),
   });
   const sink = yield* editor.node.create({
     graphID: "graph",
@@ -120,7 +119,8 @@ it.effect(
   "persists inline split mode, validates projected wires, blocks connected mode switches and copies the group",
   () =>
     Effect.gen(function* () {
-      const { editor, match, sink, source } = yield* setup;
+      const { editor, match, unpack, sink, source } = yield* setup;
+      yield* editor.node.delete({ graphID: "graph", nodeID: unpack.node.id });
       const scope = 'variant:"Found"';
       const split = yield* editor.node.setScopeSplit({
         graphID: "graph",
@@ -223,10 +223,12 @@ it.effect(
     }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect("infers Break Scope pins on connect, type edits and disconnect", () =>
+it.effect("infers scope projection pins on creation, type edits and disconnect", () =>
   Effect.gen(function* () {
     const { editor, match, unpack, sink } = yield* setup;
-    expect(unpack.io.dataOutputs).toEqual([]);
+    expect(unpack.io.dataOutputs).toEqual([
+      { id: 'field:"value"', name: "value", type: DataType.String },
+    ]);
     expect(match.io.dataOutputs).toEqual([]);
     expect(match.io.executionOutputs).toEqual([
       {
@@ -241,10 +243,15 @@ it.effect("infers Break Scope pins on connect, type edits and disconnect", () =>
     ).toBeInstanceOf(Connection.InvalidError);
     expect(
       yield* Effect.flip(
-        connect(editor, match.node.id, 'variant:"Empty"', unpack.node.id, "scope"),
+        editor.scopeProjection.create({
+          graphID: "graph",
+          position: { x: 0, y: 0 },
+          sourceNodeID: match.node.id,
+          sourceOutput: OutputRef.port('variant:"Empty"'),
+        }),
       ),
     ).toBeInstanceOf(Connection.InvalidError);
-    const scope = yield* connect(editor, match.node.id, 'variant:"Found"', unpack.node.id, "scope");
+    const scope = unpack;
     const snapshot = yield* editor.project.snapshot();
     expect(snapshot.nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual([
       { id: 'field:"value"', name: "value", type: DataType.String },
@@ -269,34 +276,40 @@ it.effect("infers Break Scope pins on connect, type edits and disconnect", () =>
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it.effect(
-  "pastes scopes and field wires regardless of connection order, deriving rather than trusting copied IO",
-  () =>
-    Effect.gen(function* () {
-      const { editor, match, unpack, sink } = yield* setup;
-      yield* connect(editor, match.node.id, 'variant:"Found"', unpack.node.id, "scope");
-      yield* connect(editor, unpack.node.id, 'field:"value"', sink.node.id, "value");
-      yield* connect(editor, unpack.node.id, "exec", sink.node.id, "exec");
-      const project = yield* editor.project.get();
-      const graph = Project.canvases(project).graph!;
-      const pasted = yield* editor.fragment.paste({
-        graphID: "graph",
-        position: { x: 300, y: 0 },
-        text: JSON.stringify({
-          format: "macrograph/nodes",
-          version: 1,
-          nodes: Object.values(graph.nodes),
-          connections: [...graph.connections].reverse(),
-        }),
-      });
-      const broken = pasted.nodes.find(Scopes.isBreakScope)!;
-      expect(pasted.connections).toHaveLength(4);
-      expect(pasted.nodeIO[broken.id]?.dataOutputs).toEqual([
-        { id: 'field:"value"', name: "value", type: DataType.String },
-      ]);
-      expect(
-        Project.canvases(Schema.decodeUnknownSync(Project.Model)(yield* editor.project.get())).graph
-          ?.nodes[broken.id]?.properties,
-      ).toEqual({});
-    }).pipe(Effect.provide(TestLayer)),
+it.effect("persists scope projections separately from schema nodes", () =>
+  Effect.gen(function* () {
+    const { editor, unpack, sink } = yield* setup;
+    yield* connect(editor, unpack.node.id, 'field:"value"', sink.node.id, "value");
+    yield* connect(editor, unpack.node.id, "exec", sink.node.id, "exec");
+    yield* editor.node.update({
+      graphID: "graph",
+      nodeID: unpack.node.id,
+      position: { x: 120, y: 80 },
+    });
+    const graph = Project.canvases(yield* editor.project.get()).graph!;
+    expect(graph.nodes[unpack.node.id]).toBeUndefined();
+    expect(graph.scopeProjections?.[unpack.node.id]).toEqual({
+      id: unpack.node.id,
+      position: { x: 120, y: 80 },
+    });
+    expect((yield* editor.project.snapshot()).nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual([
+      { id: 'field:"value"', name: "value", type: DataType.String },
+    ]);
+    const pasted = yield* editor.fragment.paste({
+      graphID: "graph",
+      position: { x: 400, y: 200 },
+      text: JSON.stringify({
+        format: "macrograph/nodes",
+        version: 1,
+        nodes: Object.values(graph.nodes),
+        scopeProjections: Object.values(graph.scopeProjections ?? {}),
+        connections: graph.connections,
+      }),
+    });
+    expect(pasted.scopeProjections).toHaveLength(1);
+    expect(pasted.connections).toHaveLength(graph.connections.length);
+    expect(pasted.nodeIO[pasted.scopeProjections[0]!.id]?.dataOutputs).toEqual([
+      { id: 'field:"value"', name: "value", type: DataType.String },
+    ]);
+  }).pipe(Effect.provide(TestLayer)),
 );

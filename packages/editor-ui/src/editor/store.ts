@@ -9,6 +9,7 @@ import {
   type NodeIO,
   Package,
   ResourceConstant,
+  Scopes,
 } from "@macrograph/core";
 import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
 import { createStore, runWithOwner } from "solid-js";
@@ -17,6 +18,7 @@ type MutableGraph = {
   id: Canvas.CanvasId;
   name: string;
   nodes: Record<string, Node.Model>;
+  scopeProjections: Record<string, Scopes.Projection>;
   connections: Connection.Model[];
 };
 
@@ -67,7 +69,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                 graphs: Object.fromEntries(
                   Object.entries(current.project.graphs).map(([id, graph]) => [
                     id,
-                    { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
+                    {
+                      ...graph,
+                      nodes: { ...graph.nodes },
+                      scopeProjections: { ...(graph.scopeProjections ?? {}) },
+                      connections: [...graph.connections],
+                    },
                   ]),
                 ),
                 functions: { ...current.project.functions },
@@ -97,6 +104,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         const declarations = next.declaredNodeIO[graph.id] ?? {};
         const result = resolver.resolve(graph, declarations, next.project!.types);
         next.nodeIO[graph.id] = { ...result.io };
+        for (const projection of Object.values(graph.scopeProjections ?? {}))
+          next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(
+            graph,
+            projection.id,
+            (id) => next.nodeIO[graph.id]?.[id],
+          );
         next.nodeDiagnostics[graph.id] = result.diagnostics;
       }
       // Solid's server store setter invokes the callback without reconciling its return value.
@@ -148,6 +161,10 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (graph === undefined) return;
           if (event._tag === "FragmentPasted") {
             for (const node of event.nodes) graph.nodes[node.id] = node;
+            for (const projection of event.scopeProjections ?? []) {
+              graph.scopeProjections[projection.id] = projection;
+              graph.nodes[projection.id] = Scopes.projectionNode(projection);
+            }
             store.nodeIO[event.graphId] = { ...store.nodeIO[event.graphId], ...event.nodeIO };
             const existing = new Set(graph.connections.map((connection) => connection.id));
             graph.connections.push(
@@ -156,6 +173,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           } else {
             for (const id of event.nodeIds) {
               delete graph.nodes[id];
+              delete graph.scopeProjections[id];
               delete store.nodeIO[event.graphId]?.[id];
             }
             const deleted = new Set(event.deletedConnectionIds);
@@ -170,6 +188,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (store.project) {
             store.project.graphs[event.graph.id] = {
               ...event.graph,
+              scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
               nodes: { ...event.graph.nodes },
               connections: [...event.graph.connections],
             };
@@ -197,6 +216,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           if (!store.project) return;
           store.project.graphs[event.graph.id] = {
             ...event.graph,
+            scopeProjections: { ...(event.graph.scopeProjections ?? {}) },
             nodes: Object.fromEntries(
               GraphFunction.boundaryNodes(event.fn).map((node) => [node.id, node]),
             ),
@@ -256,6 +276,22 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         });
         break;
       }
+      case "ScopeProjectionCreated": {
+        const graph = store.project.graphs[event.graphId];
+        if (!graph) break;
+        setStore((store) => {
+          const target = store.project?.graphs[event.graphId];
+          if (target === undefined) return;
+          target.nodes[event.node.id] = event.node;
+          target.scopeProjections = {
+            ...target.scopeProjections,
+            [event.projection.id]: event.projection,
+          };
+          target.connections.push(event.connection);
+          (store.nodeIO[event.graphId] ??= {})[event.node.id] = event.io;
+        });
+        break;
+      }
       case "NodeDeleted": {
         const graph = store.project.graphs[event.graphId];
         if (!graph) break;
@@ -264,6 +300,8 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         setStore((store) => {
           if (store.project) {
             store.project.graphs[event.graphId]!.nodes = nodes;
+            if (store.project.graphs[event.graphId]!.scopeProjections)
+              delete store.project.graphs[event.graphId]!.scopeProjections![event.nodeId];
             const deleted = new Set(event.deletedConnectionIds);
             store.project.graphs[event.graphId]!.connections = graph.connections.filter(
               (connection) => !deleted.has(connection.id),
@@ -295,6 +333,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         };
         setStore((store) => {
           if (store.project) store.project.graphs[event.graphId]!.nodes[event.nodeId] = updated;
+          const projection = store.project?.graphs[event.graphId]?.scopeProjections?.[event.nodeId];
+          if (projection !== undefined)
+            store.project!.graphs[event.graphId]!.scopeProjections![event.nodeId] = {
+              ...projection,
+              position: updated.position,
+            };
         });
         break;
       }
@@ -472,7 +516,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         graphs: Object.fromEntries(
           Object.entries(cloned.graphs).map(([id, graph]) => [
             id,
-            { ...graph, nodes: { ...graph.nodes }, connections: [...graph.connections] },
+            {
+              ...graph,
+              nodes: { ...graph.nodes },
+              scopeProjections: { ...(graph.scopeProjections ?? {}) },
+              connections: [...graph.connections],
+            },
           ]),
         ),
       };

@@ -31,30 +31,32 @@ const fixture = {
   },
   graphs: {
     demo: {
-      id: "demo",
-      name: "Demo",
-      nodes: {
-        tick: node("tick", "util", "Tick", 40, 40),
-        match: node(
-          "match",
-          "CustomTypes",
-          "MatchEnum",
-          260,
-          100,
-          {},
-          { value: { _type: "result", _tag: "Found", value: "inline scope works" } },
-        ),
-        print: node("print", "util", "Print", 580, 150),
-      },
-      connections: [
-        {
-          id: "enter",
-          outNodeId: "tick",
-          outIo: { _tag: "Port", id: "exec" },
-          inNodeId: "match",
-          inIoId: "exec",
+      canvas: {
+        id: "demo",
+        name: "Demo",
+        nodes: {
+          tick: node("tick", "util", "Tick", 40, 40),
+          match: node(
+            "match",
+            "CustomTypes",
+            "MatchEnum",
+            260,
+            100,
+            {},
+            { value: { _type: "result", _tag: "Found", value: "inline scope works" } },
+          ),
+          print: node("print", "util", "Print", 580, 150),
         },
-      ],
+        connections: [
+          {
+            id: "enter",
+            outNodeId: "tick",
+            outIo: { _tag: "Port", id: "exec" },
+            inNodeId: "match",
+            inIoId: "exec",
+          },
+        ],
+      },
     },
   },
 };
@@ -75,7 +77,7 @@ const connect = async (page, source, target) => {
 const waitConnections = (page, count) =>
   page.waitForFunction(
     ({ key, count }) =>
-      JSON.parse(localStorage.getItem(key)).project.graphs.demo.connections.length === count,
+      JSON.parse(localStorage.getItem(key)).project.graphs.demo.canvas.connections.length === count,
     { key, count },
   );
 
@@ -125,7 +127,7 @@ export async function inlineScopes(context) {
         .evaluate((element) => getComputedStyle(element).borderLeftWidth),
       "1px",
     );
-    assert.equal(Object.keys((await saved(page)).graphs.demo.nodes).length, 3);
+    assert.equal(Object.keys((await saved(page)).graphs.demo.canvas.nodes).length, 3);
     await connect(page, exec(), pin(page, "print", "input", "exec"));
     await waitConnections(page, 2);
     await connect(page, value(), pin(page, "print", "input", "in"));
@@ -135,9 +137,9 @@ export async function inlineScopes(context) {
         predicate: (message) => message.text().includes("inline scope works"),
       });
     const project = await saved(page);
-    assert.deepEqual(project.graphs.demo.nodes.match.splitScopeOutputs, [scope]);
+    assert.deepEqual(project.graphs.demo.canvas.nodes.match.splitScopeOutputs, [scope]);
     assert.deepEqual(
-      project.graphs.demo.connections
+      project.graphs.demo.canvas.connections
         .filter((wire) => wire.outNodeId === "match")
         .map((wire) => wire.outIo),
       [
@@ -255,7 +257,7 @@ export async function inlineScopes(context) {
     await page.keyboard.press("Escape");
     await page.reload();
     await value().waitFor();
-    assert.equal(Object.keys((await saved(page)).graphs.demo.nodes).length, 3);
+    assert.equal(Object.keys((await saved(page)).graphs.demo.canvas.nodes).length, 3);
     await value().dblclick();
     await waitConnections(page, 2);
     await exec().dblclick();
@@ -265,11 +267,11 @@ export async function inlineScopes(context) {
     await bundled().waitFor();
     await page.waitForFunction(
       (key) =>
-        JSON.parse(localStorage.getItem(key)).project.graphs.demo.nodes.match.splitScopeOutputs
-          .length === 0,
+        JSON.parse(localStorage.getItem(key)).project.graphs.demo.canvas.nodes.match
+          .splitScopeOutputs.length === 0,
       key,
     );
-    assert.deepEqual((await saved(page)).graphs.demo.nodes.match.splitScopeOutputs, []);
+    assert.deepEqual((await saved(page)).graphs.demo.canvas.nodes.match.splitScopeOutputs, []);
     assert.deepEqual(errors, []);
   } catch (error) {
     console.error(await page.locator("body").innerText(), errors, logs.slice(-12));
@@ -315,14 +317,12 @@ export async function singleSchemaDrop(context) {
   await page.keyboard.up("Shift");
   await waitConnections(page, 2);
   const project = await saved(page);
-  const nodes = Object.values(project.graphs.demo.nodes);
-  assert.equal(nodes.length, 4);
-  const inserted = nodes.find(
-    (node) => node.schema.package === "Scopes" && node.schema.schema === "BreakScope",
-  );
-  assert(inserted, "Dropping a scope should insert the sole compatible Break Scope schema");
+  const nodes = Object.values(project.graphs.demo.canvas.nodes);
+  assert.equal(nodes.length, 3);
+  const inserted = Object.values(project.graphs.demo.canvas.scopeProjections ?? {})[0];
+  assert(inserted, "Dropping a scope should insert a scope projection");
   assert(
-    project.graphs.demo.connections.some(
+    project.graphs.demo.canvas.connections.some(
       (wire) =>
         wire.outNodeId === "match" &&
         wire.outIo._tag === "Port" &&

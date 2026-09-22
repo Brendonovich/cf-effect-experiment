@@ -50,7 +50,7 @@ renaming a member intentionally exposes old pins for repair. Old per-type schema
   defaulting to `None` (keep the original); `Some(value)` replaces that field immutably. For an
   optional field, `Some(None)` clears it and `Some(Some(value))` sets it. Pin collapsing is separate.
 - Construct each tagged variant; match chooses a scope branch carrying its typed payload.
-  Split it inline to expose fields and execution, or connect it to Break Scope. Empty variants use
+  Split it inline to expose fields and execution, or create a Break Scope projection. Empty variants use
   ordinary exec outputs. See [Scope ports](./SCOPES.md).
 - Parse and stringify JSON through current project codecs, retaining nominal markers.
 - List operations accept custom and nested container types through wildcard connections.

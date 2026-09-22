@@ -1,0 +1,78 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
+  "references": [
+    { "path": "../../packages/workflow-runtime-cloudflare" },
+    { "path": "../../packages/modules/elevenlabs" },
+    { "path": "../../packages/modules/github" },
+    { "path": "../../packages/modules/json" },
+    { "path": "../../packages/modules/list" },
+    { "path": "../../packages/modules/logic" },
+    { "path": "../../packages/modules/math" },
+    { "path": "../../packages/modules/openai" },
+    { "path": "../../packages/modules/string" },
+    {
+      "path": "../../packages/cloud-credentials"
+    },
+    {
+      "path": "../../packages/cloud-api"
+    },
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/module"
+    },
+    {
+      "path": "../../packages/persistence"
+    },
+    {
+      "path": "../../packages/persistence-sqlite"
+    },
+    {
+      "path": "../../packages/planetscale-logical-db"
+    },
+    {
+      "path": "../../packages/editor"
+    },
+    {
+      "path": "../../packages/execution"
+    },
+    {
+      "path": "../../packages/http-ingress"
+    },
+    {
+      "path": "../../packages/project-host"
+    },
+    {
+      "path": "../../packages/workflow-runtime"
+    },
+    {
+      "path": "../../packages/modules/twitch"
+    },
+    {
+      "path": "../../packages/modules/kofi"
+    },
+    {
+      "path": "../../packages/modules/http-client"
+    },
+    {
+      "path": "../../packages/modules/utilities"
+    },
+    {
+      "path": "../../packages/modules/websocket-client"
+    },
+    {
+      "path": "../../packages/modules/websocket-server"
+    }
+  ]
+}

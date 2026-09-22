@@ -11,6 +11,7 @@
     "build": "tsgo --build",
     "typecheck": "tsgo --build",
     "test": "vitest",
+    "test:infra": "pnpm --dir test-app test:infra",
     "clean": "rm -rf dist"
   },
   "dependencies": {

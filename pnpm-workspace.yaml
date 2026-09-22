@@ -1,12 +1,13 @@
 packages:
   - "packages/*"
+  - "packages/workflow-runtime*/test-app"
   - "packages/modules/*"
   - "apps/*"
-  - "apps/cloudflare/frontend"
+  - "apps/cloud/frontend"
   - "apps/server/client"
 allowBuilds:
-  "@swc/core": set this to true or false
-  cbor-extract: set this to true or false
+  "@swc/core": true
+  cbor-extract: true
   esbuild: true
   msgpackr-extract: true
   sharp: false

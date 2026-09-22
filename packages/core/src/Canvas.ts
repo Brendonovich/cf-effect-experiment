@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 
 import * as Connection from "./Connection.ts";
 import { Node } from "./Node.ts";
+import { Collection as ScopeProjections } from "./Scopes.ts";
 
 export const CanvasId = Schema.String.pipe(Schema.brand("CanvasId"));
 export type CanvasId = typeof CanvasId.Type;
@@ -10,6 +11,7 @@ export const Model = Schema.Struct({
   id: CanvasId,
   name: Schema.String,
   nodes: Schema.Record(Schema.String, Node.Model),
+  scopeProjections: Schema.optional(ScopeProjections),
   connections: Schema.Array(Connection.Model),
 });
 export type Model = typeof Model.Type;
@@ -17,6 +19,7 @@ export type Model = typeof Model.Type;
 export const CreateInput = Schema.Struct({
   name: Schema.optional(Schema.String),
   nodes: Schema.optional(Schema.Record(Schema.String, Node.Model)),
+  scopeProjections: Schema.optional(ScopeProjections),
   connections: Schema.optional(Schema.Array(Connection.Model)),
 });
 export type CreateInput = typeof CreateInput.Type;
@@ -25,6 +28,7 @@ export const empty = (id: string): Model => ({
   id: CanvasId.make(id),
   name: id,
   nodes: {},
+  scopeProjections: {},
   connections: [],
 });
 

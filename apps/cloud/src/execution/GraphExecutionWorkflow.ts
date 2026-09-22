@@ -1,0 +1,263 @@
+import type { EventTraceContext } from "@macrograph/cloud-api";
+import type * as Executor from "@macrograph/execution/Executor";
+import type { ExecutionStep } from "@macrograph/workflow-runtime";
+
+import { Project } from "@macrograph/core";
+import { GraphExecution } from "@macrograph/workflow-runtime";
+import * as CloudflareRuntime from "@macrograph/workflow-runtime-cloudflare/Alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import { eq } from "drizzle-orm";
+import { Cause, Effect, Schema, Tracer } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+
+import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
+
+import * as Database from "../database/Database.ts";
+import {
+  type ProjectEventSource,
+  type ProjectExecutionRecord,
+  projectEvents,
+  projectExecutionNodes,
+  projectExecutions,
+} from "../database/DatabaseSchema.ts";
+import { serviceSpanAnnotations } from "../Observability.ts";
+import { DeploymentObjectsBucket } from "../Storage.ts";
+import * as ExecutorModules from "./ExecutorModules.ts";
+import * as WorkflowRuntime from "./WorkflowRuntime.ts";
+
+const ExecutionNodeRecordId = Schema.String.pipe(Schema.brand("ExecutionNodeRecordId"));
+
+export interface GraphExecutionWorkflowInput {
+  readonly executionId: string;
+  readonly projectId: string;
+  readonly projectEventId: string;
+  readonly source: ProjectEventSource;
+  readonly ingressEventId?: string;
+  readonly deploymentId: string;
+  readonly r2Key: DeploymentObjectKey;
+  readonly moduleId: string;
+  readonly eventType: string;
+  readonly providerEventId?: string;
+  readonly event: string;
+  readonly eventTraceContext?: EventTraceContext;
+  readonly traceContext?: {
+    readonly traceId: string;
+    readonly spanId: string;
+    readonly sampled: boolean;
+  };
+}
+
+export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExecutionWorkflow>()(
+  "GraphExecutionWorkflow",
+  Effect.gen(function* () {
+    const deploymentObjectsResource = yield* DeploymentObjectsBucket;
+    const database = yield* Database.Service;
+    const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
+
+    const updateExecution = (
+      executionId: string,
+      values: {
+        readonly status: "running" | "complete" | "errored";
+        readonly startedAt?: string;
+        readonly completedAt?: string;
+        readonly error?: string;
+      },
+    ) =>
+      database
+        .update(projectExecutions)
+        .set(values)
+        .where(eq(projectExecutions.id, executionId))
+        .pipe(Effect.asVoid);
+
+    const updateNodeExecution = (
+      executionId: string,
+      stepName: ExecutionStep.NodeStepName,
+      key: Executor.NodeExecutionKey,
+      values: {
+        readonly status: "running" | "complete" | "errored";
+        readonly startedAt: string;
+        readonly completedAt?: string | null;
+        readonly error?: string | null;
+      },
+    ) =>
+      Effect.gen(function* () {
+        const id = ExecutionNodeRecordId.make(`${executionId}:${stepName}`);
+        yield* database
+          .insert(projectExecutionNodes)
+          .values({
+            id,
+            executionId,
+            stepName,
+            graphId: key.graphId,
+            eventNodeId: key.eventNodeId,
+            nodeId: key.nodeId,
+            kind: key.kind,
+            status: values.status,
+            startedAt: values.startedAt,
+            completedAt: values.completedAt ?? null,
+            error: values.error ?? null,
+          })
+          .onConflictDoUpdate({
+            target: projectExecutionNodes.id,
+            set: {
+              status: values.status,
+              startedAt: values.startedAt,
+              completedAt: values.completedAt ?? null,
+              error: values.error ?? null,
+            },
+          });
+      });
+
+    return Effect.fnUntraced(function* (input: GraphExecutionWorkflowInput) {
+      return yield* Effect.gen(function* () {
+        const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+        yield* Cloudflare.Workflows.task(
+          "runtime-execution-v1/queued",
+          Effect.gen(function* () {
+            const receivedAt = new Date().toISOString();
+            const execution: ProjectExecutionRecord = {
+              id: input.executionId,
+              projectId: input.projectId,
+              projectEventId: input.projectEventId,
+              deploymentId: input.deploymentId,
+              status: "queued",
+              receivedAt,
+              startedAt: null,
+              completedAt: null,
+              error: null,
+            };
+            yield* database.transaction((transaction) =>
+              Effect.gen(function* () {
+                yield* transaction
+                  .insert(projectEvents)
+                  .values({
+                    id: input.projectEventId,
+                    projectId: input.projectId,
+                    source: input.source,
+                    ingressEventId: input.ingressEventId ?? null,
+                    moduleId: input.moduleId,
+                    eventType: input.eventType,
+                    providerEventId: input.providerEventId ?? null,
+                    eventPayload: input.event,
+                    traceId: span.traceId,
+                    traceContext: input.eventTraceContext ?? {
+                      traceId: span.traceId,
+                      spanId: input.traceContext?.spanId ?? span.spanId,
+                      sampled: span.sampled,
+                      startedAt: receivedAt,
+                    },
+                    receivedAt,
+                  })
+                  .onConflictDoNothing();
+                yield* transaction
+                  .insert(projectExecutions)
+                  .values(execution)
+                  .onConflictDoNothing();
+              }),
+            );
+          }).pipe(Effect.orDie),
+        );
+        yield* Cloudflare.Workflows.task(
+          "runtime-execution-v1/running",
+          updateExecution(input.executionId, {
+            status: "running",
+            startedAt: new Date().toISOString(),
+          }).pipe(Effect.orDie),
+        );
+        const project = yield* Cloudflare.Workflows.task(
+          `runtime-project-v1/${input.projectId}/${input.deploymentId}`,
+          Effect.gen(function* () {
+            const object = yield* deploymentObjects.get(input.r2Key);
+            if (object === null)
+              return yield* Effect.die(`Project deployment ${input.r2Key} not found`);
+            const json = yield* object.text();
+            const value = yield* Effect.try({
+              try: () => JSON.parse(json),
+              catch: (cause) => cause,
+            });
+            return yield* Schema.decodeUnknownEffect(Project.Model)(value);
+          }).pipe(Effect.orDie),
+        );
+        const event = yield* Effect.try({
+          try: () => JSON.parse(input.event),
+          catch: (cause) => cause,
+        }).pipe(Effect.orDie);
+        const executionEnvironment = yield* CloudflareRuntime.makeExecutionEnvironment({
+          onNodeState: (key, name, state) =>
+            updateNodeExecution(input.executionId, name, key, state).pipe(Effect.orDie),
+          decorateNode: (key, name, nodeEffect) =>
+            nodeEffect.pipe(
+              Effect.withSpan("GraphExecutionWorkflow.executeNode", {
+                annotations: serviceSpanAnnotations("macrograph-execution-workflow"),
+                attributes: {
+                  "macrograph.project.id": input.projectId,
+                  "macrograph.execution.id": input.executionId,
+                  "macrograph.graph.id": key.graphId,
+                  "macrograph.event_node.id": key.eventNodeId,
+                  "macrograph.node.id": key.nodeId,
+                  "macrograph.node.kind": key.kind,
+                  "macrograph.execution.path": key.executionPath,
+                },
+              }),
+              Effect.tap(() =>
+                Effect.log(
+                  `Completed runtime workflow step ${name} project ${input.projectId} deployment ${input.deploymentId} execution ${input.executionId}`,
+                ),
+              ),
+            ),
+        });
+        const engineClient = yield* WorkflowRuntime.make(project).pipe(
+          Effect.provide(FetchHttpClient.layer),
+        );
+        yield* GraphExecution.run(
+          project,
+          { projectId: input.projectId, moduleId: input.moduleId, event },
+          {
+            executionEnvironment,
+            modules: ExecutorModules.registry,
+            engineClient,
+          },
+        ).pipe(Effect.orDie);
+        yield* Cloudflare.Workflows.task(
+          "runtime-execution-v1/complete",
+          updateExecution(input.executionId, {
+            status: "complete",
+            completedAt: new Date().toISOString(),
+          }).pipe(Effect.orDie),
+        );
+        return {
+          completed: true,
+          executionId: input.executionId,
+          projectId: input.projectId,
+          deploymentId: input.deploymentId,
+        };
+      }).pipe(
+        Effect.catchCause((cause) =>
+          updateExecution(input.executionId, {
+            status: "errored",
+            completedAt: new Date().toISOString(),
+            error: String(Cause.squash(cause)),
+          }).pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
+        ),
+        Effect.withSpan("GraphExecutionWorkflow.execute", {
+          kind: "consumer",
+          ...(input.traceContext === undefined
+            ? {}
+            : { parent: Tracer.externalSpan(input.traceContext) }),
+          annotations: serviceSpanAnnotations("macrograph-execution-workflow"),
+          attributes: {
+            "macrograph.project.id": input.projectId,
+            "macrograph.project.event.id": input.projectEventId,
+            "macrograph.execution.id": input.executionId,
+            "macrograph.deployment.id": input.deploymentId,
+            "macrograph.event.source": input.source,
+            "macrograph.event.type": input.eventType,
+            ...(input.ingressEventId === undefined
+              ? {}
+              : { "macrograph.ingress.event.id": input.ingressEventId }),
+          },
+        }),
+      );
+    });
+  }),
+) {}

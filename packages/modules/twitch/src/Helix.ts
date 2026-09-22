@@ -22,6 +22,8 @@ export const DEFAULT_CLIENT_ID = "ldbp0fkq9yalf2lzsi146i0cip8y59";
 
 export class HelixError extends S.TaggedError<HelixError>()("HelixError", {
   reason: S.String,
+  // A transient failure is only safe to retry when the calling operation is repeatable.
+  transient: S.optional(S.Boolean),
   status: S.optional(S.Number),
   rateLimit: S.optional(S.Number),
   rateLimitRemaining: S.optional(S.Number),
@@ -56,6 +58,12 @@ export const fromHttpClientError = Effect.fnUntraced(function* (
   const rateLimitRemaining = headerNumber(response?.headers["ratelimit-remaining"]);
   const rateLimitReset = headerNumber(response?.headers["ratelimit-reset"]);
   return yield* new HelixError({
+    transient:
+      error.reason._tag === "TransportError" ||
+      (error.reason._tag === "StatusCodeError" &&
+        (response?.status === 408 ||
+          response?.status === 429 ||
+          (response !== undefined && response.status >= 500 && response.status < 600))),
     reason:
       message ??
       (response?.status === 401

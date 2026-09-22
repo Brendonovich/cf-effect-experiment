@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
@@ -146,10 +146,54 @@ describe("Twitch Helix errors", () => {
         ),
       );
       assert.strictEqual(error.reason, "Twitch request could not be completed");
+      assert.isTrue(error.transient);
       assert.isUndefined(error.status);
       assert.isUndefined(error.rateLimit);
       assert.isUndefined(error.rateLimitRemaining);
       assert.isUndefined(error.rateLimitReset);
+    }),
+  );
+
+  it.effect(
+    "classifies transient HTTP failures and preserves the classification in the RPC schema",
+    () =>
+      Effect.gen(function* () {
+        const request = HttpClientRequest.get("https://api.twitch.tv/helix/users");
+        for (const status of [400, 401, 403, 404, 408, 409, 422, 429, 500, 502, 503, 504, 599]) {
+          const response = HttpClientResponse.fromWeb(
+            request,
+            new Response(JSON.stringify({ message: "request failed" }), { status }),
+          );
+          const error = yield* Effect.flip(
+            Helix.fromHttpClientError(
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.StatusCodeError({ request, response }),
+              }),
+            ),
+          );
+          assert.strictEqual(error.transient, status === 408 || status === 429 || status >= 500);
+          const encoded = yield* Schema.encodeEffect(Helix.HelixError)(error);
+          const decoded = yield* Schema.decodeUnknownEffect(Helix.HelixError)(encoded);
+          assert.strictEqual(decoded.transient, error.transient);
+        }
+      }),
+  );
+
+  it.effect("does not classify request encoding or response decoding failures as transient", () =>
+    Effect.gen(function* () {
+      const request = HttpClientRequest.get("https://api.twitch.tv/helix/users");
+      const response = HttpClientResponse.fromWeb(request, new Response("invalid JSON"));
+      for (const reason of [
+        new HttpClientError.EncodeError({ request }),
+        new HttpClientError.InvalidUrlError({ request }),
+        new HttpClientError.DecodeError({ request, response }),
+        new HttpClientError.EmptyBodyError({ request, response }),
+      ]) {
+        const error = yield* Effect.flip(
+          Helix.fromHttpClientError(new HttpClientError.HttpClientError({ reason })),
+        );
+        assert.isFalse(error.transient, reason._tag);
+      }
     }),
   );
 

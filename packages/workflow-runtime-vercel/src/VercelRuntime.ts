@@ -42,8 +42,11 @@ export interface NodeStepOptions<E = never> {
 export const runWorkflow = async (
   input: ExecutionInput,
   options: WorkflowOptions,
-): Promise<ExecutionResult> =>
-  Effect.runPromise(
+): Promise<ExecutionResult> => {
+  // Workflow SDK serializes a step call's receiver as well as its arguments.
+  // Calling options.executeNode would capture the non-serializable registry.
+  const { executeNode } = options;
+  return Effect.runPromise(
     GraphExecution.run(
       input.project,
       { projectId: input.projectId, moduleId: input.moduleId, event: input.event },
@@ -55,7 +58,7 @@ export const runWorkflow = async (
             Schema.decodeUnknownEffect(NodeExecution.Request)(request).pipe(
               Effect.flatMap((request) =>
                 Effect.tryPromise({
-                  try: () => options.executeNode({ project: input.project, request }),
+                  try: () => executeNode({ project: input.project, request }),
                   catch: (cause) => cause,
                 }),
               ),
@@ -66,6 +69,7 @@ export const runWorkflow = async (
       },
     ).pipe(Effect.orDie, Effect.as({ executionId: input.executionId, projectId: input.projectId })),
   );
+};
 
 export const runNodeStep = async <E = never>(
   input: NodeStepInput,

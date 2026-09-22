@@ -4,11 +4,7 @@ import { Schema } from "effect";
 import { createRoot } from "solid-js";
 import { describe, expect, it } from "vitest";
 
-import {
-  compatibleSchemaPorts,
-  portsCompatible,
-  visiblePorts,
-} from "../../src/editor/graph/connectionAuthoring";
+import { portsCompatible, visiblePorts } from "../../src/editor/graph/connectionAuthoring";
 import {
   graphConnections,
   graphNodeInputs,
@@ -35,23 +31,19 @@ const project = Schema.decodeUnknownSync(Project.Model)({
         id: "graph",
         name: "Graph",
         connections: [],
-        nodes: Object.fromEntries(
-          [
-            ["source", { package: "test", schema: "source" }],
-            ["break", { package: Scopes.packageId, schema: "BreakScope" }],
-          ].map(([id, schema]) => [
-            id,
-            {
-              id,
-              name: id,
-              schema,
-              properties: {},
-              inputDefaults: {},
-              foldPins: false,
-              position: { x: 0, y: 0 },
-            },
-          ]),
-        ),
+        nodes: {
+          source: {
+            id: "source",
+            name: "source",
+            schema: { package: "test", schema: "source" },
+            properties: {},
+            inputDefaults: {},
+            foldPins: false,
+            position: { x: 0, y: 0 },
+          },
+          break: Scopes.projectionNode({ id: NodeId.make("break"), position: { x: 0, y: 0 } }),
+        },
+        scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
       },
     },
   },
@@ -160,9 +152,6 @@ describe("scope authoring", () => {
         scope: [{ ...field, type: DataType.Int }],
       }),
     ).toBe(false);
-    expect(
-      compatibleSchemaPorts(Scopes.packageModel.schemas[0]!, { direction: "output", port: output }),
-    ).toEqual([input]);
   });
 
   it("updates inferred fields after remote connect, source IO change, disconnect, and source deletion", () =>
