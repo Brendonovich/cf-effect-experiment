@@ -60,10 +60,7 @@ export const getCanvas = (
   project: Model,
   canvasId: string,
 ): Effect.Effect<Canvas.Model, Canvas.NotFoundError> => {
-  const canvas =
-    project.graphs[canvasId]?.canvas ??
-    project.functions[canvasId]?.canvas ??
-    project.queues[canvasId]?.canvas;
+  const canvas = project.graphs[canvasId]?.canvas ?? project.functions[canvasId]?.canvas;
   if (canvas) return Effect.succeed(canvas);
   return Effect.fail(new Canvas.NotFoundError({ id: canvasId }));
 };
@@ -71,7 +68,6 @@ export const getCanvas = (
 export const canvases = (project: Model): Readonly<Record<string, Canvas.Model>> => ({
   ...Object.fromEntries(Object.entries(project.graphs).map(([id, graph]) => [id, graph.canvas])),
   ...Object.fromEntries(Object.entries(project.functions).map(([id, fn]) => [id, fn.canvas])),
-  ...Object.fromEntries(Object.entries(project.queues).map(([id, queue]) => [id, queue.canvas])),
 });
 
 export const replaceCanvas = (project: Model, canvas: Canvas.Model): Model => {
@@ -86,12 +82,6 @@ export const replaceCanvas = (project: Model, canvas: Canvas.Model): Model => {
     return {
       ...project,
       functions: { ...project.functions, [canvas.id]: { ...fn, canvas } },
-    };
-  const queue = project.queues[canvas.id];
-  if (queue !== undefined)
-    return {
-      ...project,
-      queues: { ...project.queues, [canvas.id]: { ...queue, canvas } },
     };
   return project;
 };

@@ -28,12 +28,6 @@ const FunctionMetadata = Schema.Union([
     outputPosition: GraphFunction.Model.fields.outputPosition,
   }),
 ]);
-const QueueMetadata = Schema.Struct({
-  arguments: Schema.Array(Queue.Field),
-  returns: Schema.Array(Queue.Field),
-  inputPosition: Queue.Model.fields.inputPosition,
-  outputPosition: Queue.Model.fields.outputPosition,
-});
 
 const ProjectMeta = Schema.Struct({
   name: Schema.String,
@@ -41,9 +35,7 @@ const ProjectMeta = Schema.Struct({
   constants: Schema.optional(ResourceConstant.Collection),
   types: Schema.optional(TypeDefinition.Collection),
   functions: Schema.optional(Schema.Record(Schema.String, FunctionMetadata)),
-  queues: Schema.Record(Schema.String, QueueMetadata).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed({})),
-  ),
+  queues: Queue.Collection,
 });
 
 export const layer = (dir: string) =>
@@ -60,6 +52,7 @@ export const layer = (dir: string) =>
       const lock = yield* Semaphore.make(1);
 
       const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
+        yield* Queue.validateProject(project).pipe(PersistenceError.refail);
         yield* fs.makeDirectory(graphsDir, { recursive: true }).pipe(PersistenceError.refail);
 
         yield* fs
@@ -70,17 +63,7 @@ export const layer = (dir: string) =>
                 name: project.name,
                 engines: project.engines,
                 constants: project.constants,
-                queues: Object.fromEntries(
-                  Object.entries(project.queues).map(([id, queue]) => [
-                    id,
-                    {
-                      arguments: queue.arguments,
-                      returns: queue.returns,
-                      inputPosition: queue.inputPosition,
-                      outputPosition: queue.outputPosition,
-                    },
-                  ]),
-                ),
+                queues: project.queues,
                 types: project.types,
                 functions: Object.fromEntries(
                   Object.entries(project.functions).map(([id, fn]) => [
@@ -118,7 +101,6 @@ export const layer = (dir: string) =>
 
         const graphs: Record<string, Graph.Model> = {};
         const functions: Record<string, GraphFunction.Model> = {};
-        const queues: Record<string, Queue.Model> = {};
         const graphsExist = yield* fs.exists(graphsDir).pipe(PersistenceError.refail);
         if (graphsExist) {
           const graphFiles = yield* fs.readDirectory(graphsDir).pipe(PersistenceError.refail);
@@ -132,8 +114,8 @@ export const layer = (dir: string) =>
               JSON.parse(content),
             ).pipe(PersistenceError.refail);
             const metadata = meta.functions?.[graphId];
-            const queueMetadata = meta.queues[graphId];
-            if (metadata !== undefined)
+            if (metadata === undefined) graphs[graphId] = { canvas };
+            else
               functions[graphId] = {
                 canvas,
                 arguments: "arguments" in metadata ? metadata.arguments : metadata.inputs,
@@ -141,21 +123,21 @@ export const layer = (dir: string) =>
                 inputPosition: metadata.inputPosition,
                 outputPosition: metadata.outputPosition,
               };
-            else if (queueMetadata !== undefined) queues[graphId] = { canvas, ...queueMetadata };
-            else graphs[graphId] = { canvas };
           }
         }
 
-        return {
+        const project: Project.Model = {
           // id: ProjectId.make(meta.id),
           name: meta.name,
           graphs,
           functions,
           engines: meta.engines ?? {},
           constants: meta.constants ?? {},
-          queues,
+          queues: meta.queues,
           types: meta.types ?? {},
         };
+        yield* Queue.validateProject(project).pipe(PersistenceError.refail);
+        return project;
       }, lock.withPermit);
 
       const loadGraph = Effect.fnUntraced(function* (graphId: string) {

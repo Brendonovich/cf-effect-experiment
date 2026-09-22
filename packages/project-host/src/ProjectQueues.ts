@@ -1,4 +1,4 @@
-import { Project } from "@macrograph/core";
+import { Function as GraphFunction, Project, Queue } from "@macrograph/core";
 import { Executor, Queues } from "@macrograph/execution";
 import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
@@ -14,14 +14,18 @@ export const make = Effect.fnUntraced(function* (
       const queueLineage = yield* Queues.Lineage;
       const project = yield* executor.project;
       const queue = project.queues[queueId];
+      if (queue === undefined) return yield* new Queue.NotFoundError({ id: queueId });
+      const fn = project.functions[queue.functionId];
+      if (fn === undefined)
+        return yield* new GraphFunction.NotFoundError({ canvasId: queue.functionId });
       const decoded = { ...inputs };
-      for (const field of queue?.arguments ?? []) {
+      for (const field of fn.arguments) {
         if (Object.hasOwn(inputs, field.id))
           decoded[field.id] = yield* Schema.decodeUnknownEffect(
             DataType.JsonValueSchema(field.type, project.types),
           )(inputs[field.id]);
       }
-      return yield* executor.invokeQueue(queueId, decoded, { queueLineage });
+      return yield* executor.invokeFunction(queue.functionId, decoded, { queueLineage });
     }),
   );
   executor = yield* Executor.make(initialProject, {
@@ -30,8 +34,12 @@ export const make = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         const project = yield* executor.project;
         const queue = project.queues[invocation.queueId];
+        if (queue === undefined) return yield* new Queue.NotFoundError({ id: invocation.queueId });
+        const fn = project.functions[queue.functionId];
+        if (fn === undefined)
+          return yield* new GraphFunction.NotFoundError({ canvasId: queue.functionId });
         const captured: Record<string, unknown> = { ...invocation.inputs };
-        for (const field of queue?.arguments ?? []) {
+        for (const field of fn.arguments) {
           if (Object.hasOwn(invocation.inputs, field.id))
             captured[field.id] = yield* Schema.encodeUnknownEffect(
               DataType.JsonValueSchema(field.type, project.types),

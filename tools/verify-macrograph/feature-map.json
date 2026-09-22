@@ -26,9 +26,9 @@
       "status": "covered",
       "verification": "function-queues",
       "userJourney": [
+        "Create function",
         "Open Queues tab",
-        "Create queue canvas",
-        "Add signature argument",
+        "Create queue referencing function",
         "Pause queue",
         "Resume queue"
       ],

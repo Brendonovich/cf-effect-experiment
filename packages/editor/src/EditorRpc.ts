@@ -141,57 +141,30 @@ class CreateGraph extends Rpc.make("CreateGraph", {
 }) {}
 
 class CreateQueue extends Rpc.make("CreateQueue", {
-  payload: { name: Schema.String },
+  payload: { name: Schema.String, functionId: Schema.String },
   success: EditorEvent.QueueUpdated,
-  error: PersistenceError,
+  error: Schema.Union([PersistenceError, Project.NotFoundError, GraphFunction.NotFoundError]),
 }) {}
 class RenameQueue extends Rpc.make("RenameQueue", {
   payload: { queueId: Schema.String, name: Schema.String },
   success: EditorEvent.QueueUpdated,
   error: Schema.Union([PersistenceError, Project.NotFoundError, Queue.NotFoundError]),
 }) {}
+class SetQueueFunction extends Rpc.make("SetQueueFunction", {
+  payload: { queueId: Schema.String, functionId: Schema.String },
+  success: EditorEvent.QueueUpdated,
+  error: Schema.Union([
+    PersistenceError,
+    Project.NotFoundError,
+    Queue.NotFoundError,
+    GraphFunction.NotFoundError,
+    Queue.RecursiveEnqueueError,
+  ]),
+}) {}
 class DeleteQueue extends Rpc.make("DeleteQueue", {
   payload: { queueId: Schema.String },
   success: EditorEvent.QueueDeleted,
   error: Schema.Union([PersistenceError, Project.NotFoundError, Queue.NotFoundError]),
-}) {}
-const queueFieldErrors = Schema.Union([
-  PersistenceError,
-  Project.NotFoundError,
-  Queue.NotFoundError,
-]);
-class AddQueueField extends Rpc.make("AddQueueField", {
-  payload: { queueId: Schema.String, direction: Schema.Literals(["input", "output"]) },
-  success: EditorEvent.QueueUpdated,
-  error: queueFieldErrors,
-}) {}
-class UpdateQueueField extends Rpc.make("UpdateQueueField", {
-  payload: {
-    queueId: Schema.String,
-    direction: Schema.Literals(["input", "output"]),
-    field: Queue.Field,
-  },
-  success: EditorEvent.QueueUpdated,
-  error: queueFieldErrors,
-}) {}
-class ReorderQueueField extends Rpc.make("ReorderQueueField", {
-  payload: {
-    queueId: Schema.String,
-    direction: Schema.Literals(["input", "output"]),
-    fieldId: Schema.String,
-    targetFieldId: Schema.String,
-  },
-  success: EditorEvent.QueueUpdated,
-  error: queueFieldErrors,
-}) {}
-class DeleteQueueField extends Rpc.make("DeleteQueueField", {
-  payload: {
-    queueId: Schema.String,
-    direction: Schema.Literals(["input", "output"]),
-    fieldId: Schema.String,
-  },
-  success: EditorEvent.QueueUpdated,
-  error: queueFieldErrors,
 }) {}
 const queueErrors = Schema.Union([Queue.NotFoundError, Queue.OperationError]);
 class QueueStateStream extends Rpc.make("QueueStateStream", {
@@ -656,11 +629,8 @@ export const EditorRpcs = RpcGroup.make(
   CreateGraph,
   CreateQueue,
   RenameQueue,
+  SetQueueFunction,
   DeleteQueue,
-  AddQueueField,
-  UpdateQueueField,
-  ReorderQueueField,
-  DeleteQueueField,
   QueueStateStream,
   SetQueuePaused,
   AdvanceQueue,
@@ -730,16 +700,10 @@ export const handlerLayer = EditorRpcs.toLayer(
       PreviewTypeDefinition: ({ change }) => editor.typeDefinition.preview(change),
       ConfirmTypeDefinition: (payload) => editor.typeDefinition.confirm(payload),
       CreateGraph: (payload) => editor.graph.create(payload.graph),
-      CreateQueue: ({ name }) => editor.queue.create(name),
+      CreateQueue: ({ name, functionId }) => editor.queue.create(name, functionId),
       RenameQueue: ({ queueId, name }) => editor.queue.rename(queueId, name),
+      SetQueueFunction: ({ queueId, functionId }) => editor.queue.setFunction(queueId, functionId),
       DeleteQueue: ({ queueId }) => editor.queue.delete(queueId),
-      AddQueueField: ({ queueId, direction }) => editor.queue.addField(queueId, direction),
-      UpdateQueueField: ({ queueId, direction, field }) =>
-        editor.queue.updateField(queueId, direction, field),
-      ReorderQueueField: ({ queueId, direction, fieldId, targetFieldId }) =>
-        editor.queue.reorderField(queueId, direction, fieldId, targetFieldId),
-      DeleteQueueField: ({ queueId, direction, fieldId }) =>
-        editor.queue.deleteField(queueId, direction, fieldId),
       QueueStateStream: () => queues.changes,
       SetQueuePaused: ({ queueId, paused }) => queues.pause(queueId, paused),
       AdvanceQueue: ({ queueId }) => queues.advance(queueId),

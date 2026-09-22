@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "186b236d-2d10-417d-86c2-646a97f74c5c",
+  "id": "8bb799bb-b9e5-4a76-aa76-f14cba3e6c59",
   "prevIds": ["1693e174-d2b9-4ae0-a15e-f3a7d6678cc1", "d3845b81-2089-4bbd-8df7-b983077fd871"],
   "ddl": [
     {
@@ -26,10 +26,6 @@
     },
     {
       "name": "project_meta",
-      "entityType": "tables"
-    },
-    {
-      "name": "queues",
       "entityType": "tables"
     },
     {
@@ -324,53 +320,13 @@
     },
     {
       "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "canvas_id",
-      "entityType": "columns",
-      "table": "queues"
-    },
-    {
-      "type": "text",
       "notNull": true,
       "autoincrement": false,
-      "default": null,
+      "default": "'{}'",
       "generated": null,
-      "name": "arguments",
+      "name": "queues",
       "entityType": "columns",
-      "table": "queues"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "returns",
-      "entityType": "columns",
-      "table": "queues"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "input_position",
-      "entityType": "columns",
-      "table": "queues"
-    },
-    {
-      "type": "text",
-      "notNull": true,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "output_position",
-      "entityType": "columns",
-      "table": "queues"
+      "table": "project_meta"
     },
     {
       "columns": ["canvas_id"],
@@ -393,17 +349,6 @@
       "name": "fk_graphs_canvas_id_canvases_id_fk",
       "entityType": "fks",
       "table": "graphs"
-    },
-    {
-      "columns": ["canvas_id"],
-      "tableTo": "canvases",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "fk_queues_canvas_id_canvases_id_fk",
-      "entityType": "fks",
-      "table": "queues"
     },
     {
       "columns": ["id"],
@@ -438,13 +383,6 @@
       "nameExplicit": false,
       "name": "nodes_pk",
       "table": "nodes",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["canvas_id"],
-      "nameExplicit": false,
-      "name": "queues_pk",
-      "table": "queues",
       "entityType": "pks"
     }
   ],

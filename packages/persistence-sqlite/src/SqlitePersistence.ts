@@ -28,6 +28,7 @@ export const layer = Layer.effect(Persistence.Service)(
       Effect.sync(() => impl(db)).pipe(PersistenceError.refail);
 
     const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
+      yield* Queue.validateProject(project).pipe(PersistenceError.refail);
       yield* exec((db) => {
         db.transaction((tx) => {
           tx.delete(schema.projectMeta).run();
@@ -36,6 +37,7 @@ export const layer = Layer.effect(Persistence.Service)(
               name: project.name,
               engines: project.engines,
               constants: project.constants,
+              queues: project.queues,
               types: project.types,
             })
             .run();
@@ -44,7 +46,6 @@ export const layer = Layer.effect(Persistence.Service)(
           tx.delete(schema.nodes).run();
           tx.delete(schema.graphs).run();
           tx.delete(schema.functions).run();
-          tx.delete(schema.queues).run();
           tx.delete(schema.canvases).run();
 
           for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
@@ -92,17 +93,6 @@ export const layer = Layer.effect(Persistence.Service)(
                 returns: fn.returns,
                 inputPosition: fn.inputPosition,
                 outputPosition: fn.outputPosition,
-              })
-              .run();
-          }
-          for (const queue of Object.values(project.queues)) {
-            tx.insert(schema.queues)
-              .values({
-                canvasId: queue.canvas.id,
-                arguments: queue.arguments,
-                returns: queue.returns,
-                inputPosition: queue.inputPosition,
-                outputPosition: queue.outputPosition,
               })
               .run();
           }
@@ -166,7 +156,6 @@ export const layer = Layer.effect(Persistence.Service)(
         const nodeRows = db.select().from(schema.nodes).all();
         const connectionRows = db.select().from(schema.connections).all();
         const functionRows = db.select().from(schema.functions).all();
-        const queueRows = db.select().from(schema.queues).all();
 
         const nodesByGraph = new Map<string, Array<typeof schema.nodes.$inferSelect>>();
         for (const nodeRow of nodeRows) {
@@ -193,49 +182,34 @@ export const layer = Layer.effect(Persistence.Service)(
 
         const graphs: Record<string, Graph.Model> = {};
         const functions: Record<string, GraphFunction.Model> = {};
-        const queues: Record<string, Queue.Model> = {};
         const functionRowsByCanvas = new Map(functionRows.map((row) => [row.canvasId, row]));
-        const queueRowsByCanvas = new Map(queueRows.map((row) => [row.canvasId, row]));
         const graphCanvasIds = new Set(graphRows.map((row) => row.canvasId));
         for (const canvasRow of canvasRows) {
           const functionRow = functionRowsByCanvas.get(canvasRow.id);
-          const queueRow = queueRowsByCanvas.get(canvasRow.id);
           const isGraph = graphCanvasIds.has(canvasRow.id);
-          if (
-            Number(isGraph) + Number(functionRow !== undefined) + Number(queueRow !== undefined) !==
-            1
-          )
+          if (isGraph === (functionRow !== undefined))
             throw new Error(
-              `Canvas ${canvasRow.id} must have exactly one graph, function, or queue subtype`,
+              `Canvas ${canvasRow.id} must have exactly one graph or function subtype`,
             );
           const canvas = canvases[canvasRow.id];
           if (canvas === undefined) throw new Error(`Canvas ${canvasRow.id} is missing`);
-          if (isGraph) {
+          if (functionRow === undefined) {
             graphs[canvasRow.id] = { canvas };
             continue;
           }
-          if (functionRow !== undefined)
-            functions[functionRow.canvasId] = {
-              canvas,
-              arguments: functionRow.arguments.map((field) => ({
-                ...field,
-                id: IoId.make(field.id),
-              })),
-              returns: functionRow.returns.map((field) => ({
-                ...field,
-                id: IoId.make(field.id),
-              })),
-              inputPosition: functionRow.inputPosition,
-              outputPosition: functionRow.outputPosition,
-            };
-          else if (queueRow !== undefined)
-            queues[queueRow.canvasId] = {
-              canvas,
-              arguments: queueRow.arguments.map((field) => ({ ...field, id: IoId.make(field.id) })),
-              returns: queueRow.returns.map((field) => ({ ...field, id: IoId.make(field.id) })),
-              inputPosition: queueRow.inputPosition,
-              outputPosition: queueRow.outputPosition,
-            };
+          functions[functionRow.canvasId] = {
+            canvas,
+            arguments: functionRow.arguments.map((field) => ({
+              ...field,
+              id: IoId.make(field.id),
+            })),
+            returns: functionRow.returns.map((field) => ({
+              ...field,
+              id: IoId.make(field.id),
+            })),
+            inputPosition: functionRow.inputPosition,
+            outputPosition: functionRow.outputPosition,
+          };
         }
 
         return {
@@ -244,7 +218,7 @@ export const layer = Layer.effect(Persistence.Service)(
           functions,
           engines: meta.engines,
           constants: meta.constants,
-          queues,
+          queues: meta.queues,
           types: meta.types,
         };
       });
@@ -253,7 +227,7 @@ export const layer = Layer.effect(Persistence.Service)(
         return yield* new Project.NotFoundError({});
       }
 
-      return yield* Schema.decodeUnknownEffect(Project.Model)({
+      const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         name: result.name,
         graphs: result.graphs,
         functions: result.functions,
@@ -262,6 +236,8 @@ export const layer = Layer.effect(Persistence.Service)(
         queues: result.queues,
         types: result.types,
       }).pipe(PersistenceError.refail);
+      yield* Queue.validateProject(project).pipe(PersistenceError.refail);
+      return project;
     });
 
     const loadGraph = Effect.fnUntraced(function* (graphId: string) {

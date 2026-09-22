@@ -1,15 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
-import { CanvasId, Queue } from "@macrograph/core";
+import { Queue } from "@macrograph/core";
 import { Deferred, Effect, Exit, Fiber, Stream } from "effect";
 
 import { Queues } from "../src/index.ts";
 
 const definition = (id: string): Queue.Model => ({
-  canvas: { id: CanvasId.make(id), name: id, nodes: {}, connections: [] },
-  arguments: [],
-  returns: [],
-  inputPosition: { x: 0, y: 0 },
-  outputPosition: { x: 400, y: 0 },
+  id: Queue.QueueId.make(id),
+  name: id,
+  functionId: `${id}-function`,
 });
 const definitions = { first: definition("first"), second: definition("second") };
 const waitFor = (queues: Queues.Service, predicate: (state: Queues.State) => boolean) =>

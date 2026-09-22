@@ -1,4 +1,4 @@
-import { Canvas, Connection, Graph, Node, Project } from "@macrograph/core";
+import { Canvas, Connection, Graph, Node, Project, Queue } from "@macrograph/core";
 import { Cause, Context, Data, Effect, Layer, Option, Ref, Schema } from "effect";
 
 export class PersistenceError extends Schema.TaggedError<PersistenceError>()("PersistenceError", {
@@ -76,10 +76,7 @@ export const applyMutation = (
       return Option.some({ ...project, graphs, functions });
     },
     SaveNode: ({ graphId, node }) => {
-      const graph =
-        project.graphs[graphId]?.canvas ??
-        project.functions[graphId]?.canvas ??
-        project.queues[graphId]?.canvas;
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       return Option.some(
         Project.replaceCanvas(project, {
@@ -89,19 +86,13 @@ export const applyMutation = (
       );
     },
     DeleteNode: ({ graphId, nodeId }) => {
-      const graph =
-        project.graphs[graphId]?.canvas ??
-        project.functions[graphId]?.canvas ??
-        project.queues[graphId]?.canvas;
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       const { [nodeId]: _, ...nodes } = graph.nodes;
       return Option.some(Project.replaceCanvas(project, { ...graph, nodes }));
     },
     SaveConnection: ({ graphId, connection }) => {
-      const graph =
-        project.graphs[graphId]?.canvas ??
-        project.functions[graphId]?.canvas ??
-        project.queues[graphId]?.canvas;
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       const existing = graph.connections.some((c) => c.id === connection.id);
       const connections = existing
@@ -110,10 +101,7 @@ export const applyMutation = (
       return Option.some(Project.replaceCanvas(project, { ...graph, connections }));
     },
     DeleteConnection: ({ graphId, connectionId }) => {
-      const graph =
-        project.graphs[graphId]?.canvas ??
-        project.functions[graphId]?.canvas ??
-        project.queues[graphId]?.canvas;
+      const graph = project.graphs[graphId]?.canvas ?? project.functions[graphId]?.canvas;
       if (!graph) return Option.none();
       return Option.some(
         Project.replaceCanvas(project, {
@@ -290,11 +278,18 @@ export const layerMemory = Layer.effect(Service)(
     const cache = yield* Ref.make<Option.Option<Project.Model>>(Option.none());
 
     return Service.of({
-      saveProject: (project) => Ref.set(cache, Option.some(project)),
+      saveProject: (project) =>
+        Queue.validateProject(project).pipe(
+          PersistenceError.refail,
+          Effect.andThen(Ref.set(cache, Option.some(project))),
+        ),
       loadProject: () =>
         Effect.gen(function* () {
           const cached = yield* Ref.get(cache);
-          if (Option.isSome(cached)) return cached.value;
+          if (Option.isSome(cached)) {
+            yield* Queue.validateProject(cached.value).pipe(PersistenceError.refail);
+            return cached.value;
+          }
           return yield* new Project.NotFoundError();
         }),
 
@@ -303,9 +298,7 @@ export const layerMemory = Layer.effect(Service)(
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
             const graph =
-              cached.value.graphs[graphId]?.canvas ??
-              cached.value.functions[graphId]?.canvas ??
-              cached.value.queues[graphId]?.canvas;
+              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
             if (graph) return graph;
           }
           return yield* new Graph.NotFoundError({ id: graphId });
@@ -316,9 +309,7 @@ export const layerMemory = Layer.effect(Service)(
           const cached = yield* Ref.get(cache);
           if (Option.isSome(cached)) {
             const canvas =
-              cached.value.graphs[graphId]?.canvas ??
-              cached.value.functions[graphId]?.canvas ??
-              cached.value.queues[graphId]?.canvas;
+              cached.value.graphs[graphId]?.canvas ?? cached.value.functions[graphId]?.canvas;
             const node = canvas?.nodes[nodeId];
             if (node) return node;
           }

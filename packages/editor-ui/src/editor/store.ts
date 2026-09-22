@@ -142,42 +142,27 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
       case "QueueUpdated":
         setStore((store) => {
           const project = store.project!;
-          const id = event.queue.canvas.id;
-          project.queues[id] = event.queue;
-          const boundaries = Queue.boundaryNodes(event.queue);
-          project.graphs[id] = {
-            ...event.queue.canvas,
-            scopeProjections: { ...(event.queue.canvas.scopeProjections ?? {}) },
-            nodes: {
-              ...event.queue.canvas.nodes,
-              ...Object.fromEntries(boundaries.map((node) => [node.id, node])),
-            },
-            connections: [...event.queue.canvas.connections],
-          };
-          store.nodeIO[id] = {
-            ...store.nodeIO[id],
-            [Queue.InputBoundaryNodeId]: Queue.boundaryIO(event.queue, Queue.InputBoundaryNodeId)!,
-            [Queue.OutputBoundaryNodeId]: Queue.boundaryIO(
-              event.queue,
-              Queue.OutputBoundaryNodeId,
-            )!,
-          };
+          project.queues[event.queue.id] = event.queue;
           for (const [graphId, canvas] of Object.entries(project.graphs))
             for (const node of Object.values(canvas.nodes))
-              if (Queue.isEnqueue(node) && node.properties.queue === id)
-                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(event.queue);
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queue.id)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  event.queue,
+                  project.functions,
+                );
         });
         break;
       case "QueueDeleted":
         setStore((store) => {
           const project = store.project!;
           delete project.queues[event.queueId];
-          delete project.graphs[event.queueId];
-          delete store.nodeIO[event.queueId];
           for (const [graphId, canvas] of Object.entries(project.graphs))
             for (const node of Object.values(canvas.nodes))
               if (Queue.isEnqueue(node) && node.properties.queue === event.queueId)
-                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(undefined);
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  undefined,
+                  project.functions,
+                );
         });
         break;
       case "TypeDefinitionsUpdated":
@@ -297,6 +282,16 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             for (const node of Object.values(caller.nodes))
               if (GraphFunction.isCall(node) && node.properties.function === event.fn.canvas.id)
                 (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(event.fn);
+              else if (Queue.isEnqueue(node)) {
+                const queueId = node.properties.queue;
+                const queue =
+                  typeof queueId === "string" ? store.project.queues[queueId] : undefined;
+                if (queue?.functionId === event.fn.canvas.id)
+                  (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                    queue,
+                    store.project.functions,
+                  );
+              }
         });
         break;
       case "GraphNameChanged": {

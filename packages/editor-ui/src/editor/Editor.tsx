@@ -5,7 +5,7 @@ import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
-import { Function as GraphFunction, OutputRef, Queue, TypeDefinition } from "@macrograph/core";
+import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Errored, For, Show } from "solid-js";
 
@@ -463,8 +463,7 @@ function EditorContent(
         id: tab.id,
         title: controller.editor.store.project?.graphs[tab.graphId]?.name ?? tab.graphId,
         icon:
-          controller.editor.store.project?.functions[tab.graphId] === undefined &&
-          controller.editor.store.project?.queues[tab.graphId] === undefined ? undefined : (
+          controller.editor.store.project?.functions[tab.graphId] === undefined ? undefined : (
             <FunctionTabIcon />
           ),
       };
@@ -637,8 +636,9 @@ function EditorContent(
                       search={controller.catalog.navSearch()}
                       canEdit={controller.connection.canEdit()}
                       error={controller.commands.queueError()}
-                      onOpen={controller.layout.setSelectedGraphId}
+                      functions={Object.values(controller.editor.store.project?.functions ?? {})}
                       onRename={controller.commands.renameQueue}
+                      onSetFunction={controller.commands.setQueueFunction}
                       onDelete={controller.commands.deleteQueue}
                       onPause={controller.commands.pauseQueue}
                       onAdvance={controller.commands.advanceQueue}
@@ -867,10 +867,7 @@ function EditorContent(
                                     positioning={
                                       active() && controller.commands.isNodePositioning(node().id)
                                     }
-                                    allowInputDefaults={
-                                      !GraphFunction.isBoundaryNodeId(node().id) &&
-                                      !Queue.isBoundaryNodeId(node().id)
-                                    }
+                                    allowInputDefaults={!GraphFunction.isBoundaryNodeId(node().id)}
                                     presenceColor={
                                       remotePresence().find((entry) =>
                                         entry.selectedNodeIds.includes(node().id),
@@ -914,11 +911,7 @@ function EditorContent(
                                       });
                                     }}
                                     onContextMenu={(event, nodeId) => {
-                                      if (
-                                        GraphFunction.isBoundaryNodeId(nodeId) ||
-                                        Queue.isBoundaryNodeId(nodeId)
-                                      )
-                                        return;
+                                      if (GraphFunction.isBoundaryNodeId(nodeId)) return;
                                       canvas.selectNode(nodeId, false);
                                       canvas.setNodeContextMenu({
                                         nodeId,
@@ -1210,8 +1203,7 @@ function EditorContent(
                 fn={
                   controller.editor.store.project?.functions[
                     controller.layout.selectedGraphId() ?? ""
-                  ] ??
-                  controller.editor.store.project?.queues[controller.layout.selectedGraphId() ?? ""]
+                  ]
                 }
                 functions={Object.values(controller.editor.store.project?.functions ?? {})}
                 canEdit={controller.connection.canEdit()}
