@@ -1,8 +1,8 @@
 import type { EventTraceContext } from "@macrograph/cloud-api";
-import type * as Executor from "@macrograph/execution/Executor";
 import type { ExecutionStep } from "@macrograph/workflow-runtime";
 
 import { Project } from "@macrograph/core";
+import * as Executor from "@macrograph/execution/Executor";
 import { GraphExecution } from "@macrograph/workflow-runtime";
 import * as CloudflareRuntime from "@macrograph/workflow-runtime-cloudflare/Alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -20,9 +20,11 @@ import {
   projectExecutionNodes,
   projectExecutions,
 } from "../database/DatabaseSchema.ts";
+import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
+import * as FunctionQueueTransport from "./FunctionQueueTransport.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
 const ExecutionNodeRecordId = Schema.String.pipe(Schema.brand("ExecutionNodeRecordId"));
@@ -51,6 +53,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
   "GraphExecutionWorkflow",
   Effect.gen(function* () {
     const deploymentObjectsResource = yield* DeploymentObjectsBucket;
+    const queueProjects = yield* ProjectIngressDO;
     const database = yield* Database.Service;
     const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
 
@@ -209,6 +212,12 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
         const engineClient = yield* WorkflowRuntime.make(project).pipe(
           Effect.provide(FetchHttpClient.layer),
         );
+        const enqueueFunction = yield* FunctionQueueTransport.make(
+          queueProjects,
+          input,
+          input.executionId,
+          project,
+        );
         yield* GraphExecution.run(
           project,
           { projectId: input.projectId, moduleId: input.moduleId, event },
@@ -216,6 +225,19 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
             executionEnvironment,
             modules: ExecutorModules.registry,
             engineClient,
+            queueInvocation: (invocation) =>
+              enqueueFunction({
+                queueId: invocation.queueId,
+                functionId: invocation.functionId,
+                values: invocation.inputs,
+                queueLineage: invocation.queueLineage,
+                executionPath: invocation.key.executionPath,
+              }).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new Executor.NodeExecutionError({ nodeId: invocation.key.nodeId, cause }),
+                ),
+              ),
           },
         ).pipe(Effect.orDie);
         yield* Cloudflare.Workflows.task(

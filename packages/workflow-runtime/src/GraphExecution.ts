@@ -15,6 +15,7 @@ export interface Options {
   readonly executionEnvironment: Executor.ExecutionEnvironment;
   readonly modules: ModuleRegistry;
   readonly engineClient?: NonNullable<Executor.MakeOptions["engineClient"]>;
+  readonly queueInvocation?: NonNullable<Executor.MakeOptions["queueInvocation"]>;
 }
 
 export const run = Effect.fnUntraced(function* (
@@ -27,6 +28,7 @@ export const run = Effect.fnUntraced(function* (
     executionEnvironment: options.executionEnvironment,
     modules: options.modules,
     ...(options.engineClient === undefined ? {} : { engineClient: options.engineClient }),
+    ...(options.queueInvocation === undefined ? {} : { queueInvocation: options.queueInvocation }),
   });
   yield* options.modules.handle(executor, input.moduleId, input.event);
 });

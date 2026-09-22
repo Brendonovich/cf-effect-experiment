@@ -1,3 +1,4 @@
+import { Queue } from "@macrograph/core";
 import * as Cloudflare from "alchemy/Cloudflare";
 
 import type * as CloudWorkerOperations from "./CloudWorkerOperations.ts";

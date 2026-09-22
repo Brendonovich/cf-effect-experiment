@@ -13,6 +13,7 @@ import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
 import {
 	DatabaseHyperdrive,
 	DeploymentObjectsBucket,
+	FunctionWorkQueue,
 	LegacyLogicalDatabase,
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
@@ -44,6 +45,7 @@ export default Alchemy.Stack(
 		);
 		yield* DatabaseHyperdrive;
 		yield* DeploymentObjectsBucket;
+		yield* FunctionWorkQueue;
 		const legacyDatabase = !ctx.dev ? yield* LegacyLogicalDatabase : undefined;
 
 		const frontendBuild = !ctx.dev

@@ -97,3 +97,5 @@ export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
 );
 
 export const DeploymentObjectsBucket = Cloudflare.R2.Bucket("RevisionSnapshots");
+
+export const FunctionWorkQueue = Cloudflare.Queues.Queue("FunctionWorkQueue");

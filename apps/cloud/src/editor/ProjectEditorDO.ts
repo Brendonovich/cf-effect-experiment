@@ -11,6 +11,7 @@ import {
   EditorServer,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
 import GitHubModule from "@macrograph/module-github";
@@ -48,6 +49,7 @@ import { requestOrigin } from "../api/HttpOrigin.ts";
 import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
+import * as CloudQueueRuntime from "./CloudQueueRuntime.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
 
@@ -433,6 +435,25 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         EditorRpc.connectionMiddlewareLayer,
         MountModules,
       ).pipe(
+        Layer.provide(
+          Layer.succeed(
+            QueueRuntime.Service,
+            CloudQueueRuntime.make(() => activeProjectId, {
+              queueSnapshot: (projectId) =>
+                ingress.queueSnapshot(projectId).pipe(Effect.provide(runtimeContext)),
+              queuePause: (projectId, queueId, paused) =>
+                ingress.queuePause(projectId, queueId, paused).pipe(Effect.provide(runtimeContext)),
+              queueAdvance: (projectId, queueId) =>
+                ingress.queueAdvance(projectId, queueId).pipe(Effect.provide(runtimeContext)),
+              queueRemove: (projectId, queueId, itemId) =>
+                ingress
+                  .queueRemove(projectId, queueId, itemId)
+                  .pipe(Effect.provide(runtimeContext)),
+              queueClear: (projectId, queueId) =>
+                ingress.queueClear(projectId, queueId).pipe(Effect.provide(runtimeContext)),
+            }),
+          ),
+        ),
         Layer.provide(Layer.succeed(Engine.Credentials, credentials)),
         Layer.provide(
           Layer.succeed(
