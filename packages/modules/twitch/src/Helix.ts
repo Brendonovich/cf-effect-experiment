@@ -1,4 +1,4 @@
-import { Data, Option, Ref } from "effect";
+import { Clock, Data, Option, Ref, Semaphore } from "effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import * as S from "effect/Schema";
@@ -350,8 +350,90 @@ export const makeClient = (
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
     const tokenRef = yield* Ref.make(token);
+    const now = yield* Clock.currentTimeMillis;
+    const rateLimit = yield* Ref.make({
+      limit: 800,
+      remaining: 800,
+      resetAt: now + 60_000,
+    });
+    const rateLimitLock = yield* Semaphore.make(1);
 
-    const authenticated = httpClient.pipe(
+    const reserveRateLimit = Effect.gen(function* () {
+      while (true) {
+        const currentTime = yield* Clock.currentTimeMillis;
+        const current = yield* Ref.get(rateLimit);
+        if (currentTime >= current.resetAt) {
+          yield* Ref.set(rateLimit, {
+            limit: current.limit,
+            remaining: current.limit - 1,
+            resetAt: currentTime + 60_000,
+          });
+          return;
+        }
+        if (current.remaining > 0) {
+          yield* Ref.update(rateLimit, (state) => ({
+            ...state,
+            remaining: state.remaining - 1,
+          }));
+          return;
+        }
+        yield* Effect.sleep(current.resetAt - currentTime);
+      }
+    }).pipe(rateLimitLock.withPermit);
+
+    const updateRateLimit = Effect.fnUntraced(function* (
+      response: HttpClientResponse.HttpClientResponse,
+    ) {
+      const limit = headerNumber(response.headers["ratelimit-limit"]);
+      const remaining = headerNumber(response.headers["ratelimit-remaining"]);
+      const reset = headerNumber(response.headers["ratelimit-reset"]);
+      if (
+        limit === undefined &&
+        remaining === undefined &&
+        reset === undefined &&
+        response.status !== 429
+      )
+        return;
+
+      const currentTime = yield* Clock.currentTimeMillis;
+      yield* Ref.update(rateLimit, (current) => {
+        const nextLimit = limit !== undefined && limit > 0 ? limit : current.limit;
+        return {
+          limit: nextLimit,
+          remaining:
+            response.status === 429
+              ? 0
+              : remaining === undefined
+                ? current.remaining
+                : Math.min(current.remaining, Math.max(0, remaining)),
+          resetAt:
+            reset !== undefined && reset > 0
+              ? reset * 1_000
+              : response.status === 429
+                ? currentTime + 1_000
+                : current.resetAt,
+        };
+      });
+    });
+
+    const rateLimited = HttpClient.transform(httpClient, (requestEffect, request) => {
+      if (!request.url.startsWith("https://api.twitch.tv/helix/")) return requestEffect;
+
+      const run = (): Effect.Effect<
+        HttpClientResponse.HttpClientResponse,
+        HttpClientError.HttpClientError
+      > =>
+        reserveRateLimit.pipe(
+          Effect.andThen(requestEffect),
+          Effect.tap(updateRateLimit),
+          Effect.flatMap((response) =>
+            response.status === 429 ? Effect.suspend(run) : Effect.succeed(response),
+          ),
+        );
+      return run();
+    });
+
+    const authenticated = rateLimited.pipe(
       HttpClient.mapRequest((req) => ({
         ...req,
         headers: Headers.fromInput(
