@@ -48,6 +48,31 @@ import { Packages } from "./Packages.ts";
 const ResourceKey = Schema.String.pipe(Schema.brand("ResourceKey"));
 type ResourceKey = typeof ResourceKey.Type;
 
+const TypePreviewToken = Schema.Struct({
+  version: Schema.Literal(1),
+  change: TypeDefinition.Change,
+  expires: Schema.Number,
+  projectState: Schema.String,
+  packagesState: Schema.String,
+});
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+const encodeBase64Url = (value: Uint8Array): string => {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+};
+
+const decodeBase64Url = (value: string): Uint8Array<ArrayBuffer> => {
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+  const decoded = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) decoded[index] = binary.charCodeAt(index);
+  return decoded;
+};
+
 type GraphUpdateOptions = {
   readonly graphID: string;
   readonly name: string;
@@ -435,15 +460,48 @@ export const layer = Layer.effect(Service)(
       Effect.orDie,
     );
     yield* packages.setTypeDefinitions(initialProject?.types ?? {});
-    const previews = new Map<
-      string,
-      {
-        readonly state: string;
-        readonly change: TypeDefinition.Change;
-        readonly expires: number;
-        readonly packages: string;
-      }
-    >();
+    const previewSigningKey = yield* Effect.promise(() =>
+      crypto.subtle.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]),
+    );
+    const signPreviewValue = (value: string) =>
+      Effect.promise(() =>
+        crypto.subtle.sign("HMAC", previewSigningKey, textEncoder.encode(value)),
+      ).pipe(Effect.map((signature) => encodeBase64Url(new Uint8Array(signature))));
+    const makePreviewToken = Effect.fnUntraced(function* (
+      change: TypeDefinition.Change,
+      project: Project.Model,
+    ) {
+      const payload = JSON.stringify({
+        version: 1,
+        change,
+        expires: (yield* Clock.currentTimeMillis) + 300_000,
+        projectState: yield* signPreviewValue(`project\0${projectState(project)}`),
+        packagesState: yield* signPreviewValue(
+          `packages\0${projectState(yield* packages.getPackages())}`,
+        ),
+      } satisfies typeof TypePreviewToken.Type);
+      return `${encodeBase64Url(textEncoder.encode(payload))}.${yield* signPreviewValue(payload)}`;
+    });
+    const readPreviewToken = (token: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const segments = token.split(".");
+          if (segments.length !== 2) throw new Error("Malformed preview token");
+          const payloadBytes = decodeBase64Url(segments[0]!);
+          const payload = textDecoder.decode(payloadBytes);
+          const valid = await crypto.subtle.verify(
+            "HMAC",
+            previewSigningKey,
+            decodeBase64Url(segments[1]!),
+            textEncoder.encode(payload),
+          );
+          if (!valid) throw new Error("Invalid preview token signature");
+          return Schema.decodeUnknownSync(TypePreviewToken, { onExcessProperty: "error" })(
+            JSON.parse(payload),
+          );
+        },
+        catch: () => new TypeDefinition.StalePreviewError(),
+      });
     const clipboardSession = crypto.randomUUID();
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
@@ -766,19 +824,8 @@ export const layer = Layer.effect(Service)(
         for (const [nodeId, entries] of [...reasons].sort(([a], [b]) => a.localeCompare(b)))
           nodes.push({ graphId, nodeId, reasons: [...entries].sort() });
       }
-      const now = yield* Clock.currentTimeMillis;
-      for (const [token, preview] of previews) if (preview.expires <= now) previews.delete(token);
-      while (previews.size >= 128) previews.delete(previews.keys().next().value!);
-      const token = crypto.randomUUID();
-      // Clone the proposal so in-process callers cannot alter an already reviewed change.
-      previews.set(token, {
-        state: projectState(project),
-        change: structuredClone(change),
-        expires: now + 300_000,
-        packages: projectState(yield* packages.getPackages()),
-      });
       return {
-        token,
+        token: yield* makePreviewToken(change, project),
         change,
         affectedTypes: definitionsChanged ? affectedTypes.filter((typeId) => typeId !== id) : [],
         nodes,
@@ -790,14 +837,13 @@ export const layer = Layer.effect(Service)(
     }: {
       readonly token: string;
     }) {
-      const preview = previews.get(token);
-      if (preview === undefined) return yield* new TypeDefinition.StalePreviewError();
-      previews.delete(token);
+      const preview = yield* readPreviewToken(token);
       const project = yield* persistence.loadProject();
       if (
         preview.expires <= (yield* Clock.currentTimeMillis) ||
-        preview.state !== projectState(project) ||
-        preview.packages !== projectState(yield* packages.getPackages())
+        preview.projectState !== (yield* signPreviewValue(`project\0${projectState(project)}`)) ||
+        preview.packagesState !==
+          (yield* signPreviewValue(`packages\0${projectState(yield* packages.getPackages())}`))
       )
         return yield* new TypeDefinition.StalePreviewError();
       const types = yield* proposedTypes(project, preview.change);
