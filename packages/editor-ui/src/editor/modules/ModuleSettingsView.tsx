@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 
 import {
   BuiltinAuthoring,
+  Clipboard,
   Function as GraphFunction,
   Node,
   NodeId,
@@ -306,6 +307,8 @@ function ReferenceView(props: {
   const [wildcardValues, setWildcardValues] = createSignal<
     Readonly<Record<string, Readonly<Record<string, DataType.Any>>>>
   >({});
+  const [previewSelected, setPreviewSelected] = createSignal(false);
+  let previewElement: HTMLDivElement | undefined;
   const normalizedSearch = createMemo(() => search().trim().toLocaleLowerCase());
   const matchesSearch = (name: string, description?: string) => {
     const query = normalizedSearch();
@@ -436,6 +439,26 @@ function ReferenceView(props: {
       position: { x: 0, y: 0 },
     };
   });
+  const copyPreview = (event: ClipboardEvent) => {
+    const node = previewNode();
+    const schema = selectedSchema();
+    if (!previewSelected() || node === undefined || schema === undefined) return;
+    const io = previewIO();
+    const text = JSON.stringify({
+      format: "macrograph/nodes",
+      version: 1,
+      nodes: [node],
+      connections: [],
+      externalConnections: [],
+      nodeIO: io === undefined ? {} : { [node.id]: io },
+      nodeSchemas: {
+        [node.id]: { moduleName: props.package.name, schemaName: schema.name },
+      },
+    } satisfies Clipboard.Fragment);
+    if (event.clipboardData === null) return;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", text);
+  };
   const previewHeight = createMemo(() => {
     const io = previewIO();
     return io === undefined ? 0 : graphNodeHeight(graphNodeInputs(io), graphNodeOutputs(io));
@@ -552,8 +575,11 @@ function ReferenceView(props: {
               </header>
               <div sx={styles.nodeConfiguration}>
                 <div
+                  ref={previewElement}
                   sx={styles.preview}
                   style={{ height: `${previewHeight()}px`, width: `${previewWidth()}px` }}
+                  tabindex={-1}
+                  onCopy={copyPreview}
                 >
                   <Show when={previewNode()}>
                     {(node) => (
@@ -565,7 +591,11 @@ function ReferenceView(props: {
                         allowInputDefaults={false}
                         connectedInputIds={new Set()}
                         connectedOutputIds={new Set()}
-                        onSelect={() => undefined}
+                        selected={previewSelected()}
+                        onSelect={() => {
+                          setPreviewSelected(true);
+                          previewElement?.focus();
+                        }}
                         onDragStart={() => undefined}
                         onPortPointerDown={() => undefined}
                         onDisconnect={() => undefined}

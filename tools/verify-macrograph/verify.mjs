@@ -201,6 +201,7 @@ async function openBrowser(url) {
     reducedMotion: "reduce",
     acceptDownloads: true,
   });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
   const page = context.pages()[0] ?? (await context.newPage());
   page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
@@ -309,7 +310,22 @@ async function moduleReference(page) {
   await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
   await page.reload();
   await page.getByRole("heading", { name: "Concat Strings", exact: true }).waitFor();
-  await page.locator('[data-graph-node-id="module-reference-preview"]').waitFor();
+  const referencePreview = page.locator('[data-graph-node-id="module-reference-preview"]');
+  await referencePreview.waitFor();
+  await referencePreview.locator('[data-node-header="module-reference-preview"]').click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+C" : "Control+C");
+  const clipboard = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  const copiedReferenceNode = clipboard?.nodes?.[0];
+  check(
+    "selected module reference node copies as a pasteable fragment",
+    clipboard?.format === "macrograph/nodes" &&
+      clipboard?.version === 1 &&
+      clipboard?.nodes?.length === 1 &&
+      copiedReferenceNode?.name === "Concat Strings" &&
+      copiedReferenceNode?.schema?.schema === "ConcatStrings"
+      ? "passed"
+      : "failed",
+  );
   const persistedReferenceTab = await page
     .getByRole("tab", { name: "Reference", exact: true })
     .getAttribute("aria-selected");

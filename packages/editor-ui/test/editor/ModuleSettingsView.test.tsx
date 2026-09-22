@@ -12,7 +12,7 @@ import { DataType } from "@macrograph/module/DataType";
 import { render } from "@solidjs/web";
 import { Result } from "effect";
 import { createSignal, flush } from "solid-js";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { ModuleSettingsView } from "../../src/editor/modules/ModuleSettingsView";
 
@@ -202,6 +202,21 @@ it("disables unavailable engine settings and selects the exposed node reference"
       (row) => row.textContent === "Result",
     ),
   ).toBe(true);
+
+  document
+    .querySelector<HTMLElement>('[data-node-header="module-reference-preview"]')!
+    .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  flush();
+  const setData = vi.fn();
+  const copy = new Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(copy, "clipboardData", { value: { setData } });
+  document.activeElement!.dispatchEvent(copy);
+  expect(copy.defaultPrevented).toBe(true);
+  expect(setData).toHaveBeenCalledOnce();
+  const fragment = JSON.parse(setData.mock.calls[0]![1]) as {
+    nodes: Array<{ properties: Record<string, unknown> }>;
+  };
+  expect(fragment.nodes[0]?.properties).toEqual({ count: 2, function: "notify" });
 
   const account = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Account",
