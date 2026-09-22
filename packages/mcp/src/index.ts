@@ -1,6 +1,8 @@
 import { Cause, Context, Effect, Layer, Sink, Stream } from "effect";
 import { McpProtocol, McpSchema, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 
+export { ProjectToolkit } from "./ProjectToolkit.ts";
+
 export interface ServerOptions {
   readonly name: string;
   readonly version: string;
