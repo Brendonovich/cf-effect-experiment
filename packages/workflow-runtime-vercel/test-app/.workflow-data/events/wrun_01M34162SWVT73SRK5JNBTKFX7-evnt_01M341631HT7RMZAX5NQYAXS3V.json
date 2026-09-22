@@ -1,0 +1,16 @@
+{
+  "eventType": "step_created",
+  "specVersion": 3,
+  "correlationId": "step_01M34162WS6128TJZDK2J1QPF0",
+  "eventData": {
+    "stepName": "step//@macrograph/workflow-runtime-vercel@0.0.1//executeNode",
+    "workflowName": "workflow//@macrograph/workflow-runtime-vercel@0.0.1//executeGraph",
+    "input": {
+      "__type": "Uint8Array",
+      "data": "ZGV2bFt7ImFyZ3MiOjEsImNsb3N1cmVWYXJzIjozLCJ0aGlzVmFsIjotMSwiX193b3JrZmxvd1Vuc2VyaWFsaXphYmxlU3RlcElucHV0Ijo0fSxbMl0sIltpbnB1dCB1bmF2YWlsYWJsZTogc3RlcCBhcmd1bWVudCBzZXJpYWxpemF0aW9uIGZhaWxlZF0iLFtdLHRydWVd"
+    }
+  },
+  "runId": "wrun_01M34162SWVT73SRK5JNBTKFX7",
+  "eventId": "evnt_01M341631HT7RMZAX5NQYAXS3V",
+  "createdAt": "2026-09-22T07:44:46.641Z"
+}

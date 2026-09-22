@@ -13,8 +13,9 @@ import {
 } from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
 import * as stylex from "@stylexjs/stylex";
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Result } from "effect";
-import { For, Loading, Show, createMemo, createSignal } from "solid-js";
+import { For, Loading, Show, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { PackageViewState } from "../workspace/workspace";
 
@@ -419,7 +420,6 @@ function ReferenceView(props: {
         })) ?? port.scope,
     });
     return {
-      ...preview,
       dataInputs: preview.dataInputs.map(resolveDataPort),
       dataOutputs: preview.dataOutputs.map(resolveDataPort),
       executionInputs: preview.executionInputs.map(resolveExecutionPort),
@@ -748,6 +748,10 @@ export function ModuleSettingsView(props: {
   view: PackageViewState;
   onViewChange: (view: PackageViewState) => void;
 }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { networkMode: "always" } },
+  });
+  onCleanup(() => queryClient.clear());
   const hasEngineSettings = createMemo(
     () =>
       props.settings !== undefined &&
@@ -809,12 +813,14 @@ export function ModuleSettingsView(props: {
                         </div>
                       }
                     >
-                      <ConnectedModuleSettings
-                        settings={settings()}
-                        state={props.state}
-                        endpoints={props.data.endpoints}
-                        onChanged={props.onChanged}
-                      />
+                      <QueryClientProvider client={queryClient}>
+                        <ConnectedModuleSettings
+                          settings={settings()}
+                          state={props.state}
+                          endpoints={props.data.endpoints}
+                          onChanged={props.onChanged}
+                        />
+                      </QueryClientProvider>
                     </Show>
                   )}
                 </Show>

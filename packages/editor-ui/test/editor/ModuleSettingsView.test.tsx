@@ -2,6 +2,7 @@
 import {
   BuiltinAuthoring,
   CanvasId,
+  Clipboard,
   IoId,
   PackageId,
   SchemaId,
@@ -10,7 +11,8 @@ import {
 } from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
 import { render } from "@solidjs/web";
-import { Result } from "effect";
+import { useMutation } from "@tanstack/solid-query";
+import { Effect, Result } from "effect";
 import { createSignal, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -92,6 +94,46 @@ let dispose = () => {};
 afterEach(() => {
   dispose();
   document.body.replaceChildren();
+});
+
+it("provides a query client to engine settings and runs their mutations", async () => {
+  const onChanged = vi.fn(() => Promise.resolve());
+  const Settings = () => {
+    const mutation = useMutation(() => ({
+      networkMode: "always" as const,
+      mutationFn: onChanged,
+    }));
+    return (
+      <button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        {mutation.isSuccess ? "Saved" : "Save settings"}
+      </button>
+    );
+  };
+
+  dispose = render(
+    () => (
+      <ModuleSettingsView
+        package={pkg}
+        settings={{ load: () => Effect.void, render: () => <Settings /> }}
+        view={{ selectedView: "engine", selectedReferenceKey: null }}
+        onViewChange={() => {}}
+        data={{ endpoints: [], capabilities: new Set() }}
+        state={() => undefined}
+        onChanged={onChanged}
+      />
+    ),
+    document.body,
+  );
+  flush();
+  const save = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Save settings",
+  )!;
+  save.click();
+  await vi.waitFor(() => {
+    flush();
+    expect(save.textContent).toBe("Saved");
+  });
+  expect(onChanged).toHaveBeenCalledOnce();
 });
 
 it("disables unavailable engine settings and selects the exposed node reference", () => {
@@ -213,9 +255,7 @@ it("disables unavailable engine settings and selects the exposed node reference"
   document.activeElement!.dispatchEvent(copy);
   expect(copy.defaultPrevented).toBe(true);
   expect(setData).toHaveBeenCalledOnce();
-  const fragment = JSON.parse(setData.mock.calls[0]![1]) as {
-    nodes: Array<{ properties: Record<string, unknown> }>;
-  };
+  const fragment = Effect.runSync(Clipboard.decode(setData.mock.calls[0]![1]));
   expect(fragment.nodes[0]?.properties).toEqual({ count: 2, function: "notify" });
 
   const account = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -225,4 +265,63 @@ it("disables unavailable engine settings and selects the exposed node reference"
   flush();
   expect(view().selectedReferenceKey).toBe("resource:account");
   expect(account.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("copies resource-node references in the strict clipboard format accepted by paste", () => {
+  const lightPackage: Package.Model = {
+    id: PackageId.make("lifx"),
+    name: "LIFX",
+    resources: [{ id: "LIFXLight", name: "Light" }],
+    schemas: [
+      {
+        id: SchemaId.make("SetLightPower"),
+        internal: false,
+        name: "Set Light Power",
+        type: "exec",
+        properties: [{ id: "light", name: "Light", resource: "LIFXLight", optional: false }],
+        dataInputs: [
+          { id: IoId.make("power"), name: "On", type: DataType.Bool, defaultValue: true },
+          { id: IoId.make("duration"), name: "Duration (ms)", type: DataType.Int, defaultValue: 0 },
+        ],
+        dataOutputs: [],
+        executionInputs: [{ id: IoId.make("exec") }],
+        executionOutputs: [{ id: IoId.make("exec") }],
+      },
+    ],
+  };
+  dispose = render(
+    () => (
+      <ModuleSettingsView
+        package={lightPackage}
+        view={{ selectedView: "reference", selectedReferenceKey: "node:SetLightPower" }}
+        onViewChange={() => {}}
+        data={{ endpoints: [], capabilities: new Set() }}
+        state={() => undefined}
+        onChanged={() => Promise.resolve()}
+      />
+    ),
+    document.body,
+  );
+  flush();
+  document
+    .querySelector<HTMLElement>('[data-node-header="module-reference-preview"]')!
+    .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  flush();
+  const setData = vi.fn();
+  const copy = new Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(copy, "clipboardData", { value: { setData } });
+  document.activeElement!.dispatchEvent(copy);
+
+  expect(copy.defaultPrevented).toBe(true);
+  expect(setData).toHaveBeenCalledOnce();
+  const fragment = Effect.runSync(Clipboard.decode(setData.mock.calls[0]![1]));
+  const node = fragment.nodes[0]!;
+  expect(node.schema).toEqual({ package: "lifx", schema: "SetLightPower" });
+  expect(node.properties).toEqual({ light: null });
+  expect(fragment.nodeIO?.[node.id]).toEqual({
+    dataInputs: lightPackage.schemas[0]!.dataInputs,
+    dataOutputs: [],
+    executionInputs: [{ id: "exec" }],
+    executionOutputs: [{ id: "exec" }],
+  });
 });
