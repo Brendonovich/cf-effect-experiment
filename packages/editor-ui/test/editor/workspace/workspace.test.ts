@@ -66,6 +66,17 @@ describe("workspace reducer", () => {
     expect(selectedTab(parseWorkspaceState(JSON.stringify(state))!)?.type).toBe("types");
   });
 
+  it("opens queues as a unique, persistent workspace tab", () => {
+    let state = createWorkspaceState({ type: "graph", graphId: "main" });
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "queues" } });
+    state = workspaceReducer(state, { type: "open-tab", tab: { type: "queues" } });
+    expect(state.panes[state.focusedPaneId]?.tabs.map((tab) => tab.type)).toEqual([
+      "graph",
+      "queues",
+    ]);
+    expect(selectedTab(parseWorkspaceState(JSON.stringify(state))!)?.type).toBe("queues");
+  });
+
   it("creates an empty workspace when no initial tab is provided", () => {
     const state = createWorkspaceState();
     expect(state.panes[state.focusedPaneId]).toMatchObject({ tabs: [], selectedTabId: null });
@@ -407,11 +418,14 @@ describe("workspace storage", () => {
     expect(parseWorkspaceState(values.get(key) ?? null)).toEqual(state);
   });
 
-  it("moves the former types sidebar selection back to graphs", () => {
+  it("moves former workspace-only sidebar selections back to graphs", () => {
     const state = createWorkspaceState({ type: "graph", graphId: "main" });
     expect(parseWorkspaceState(JSON.stringify({ ...state, navSection: "types" }))?.navSection).toBe(
       "graphs",
     );
+    expect(
+      parseWorkspaceState(JSON.stringify({ ...state, navSection: "queues" }))?.navSection,
+    ).toBe("graphs");
   });
 
   it("migrates the former constants tab and preserves the functions tab", () => {

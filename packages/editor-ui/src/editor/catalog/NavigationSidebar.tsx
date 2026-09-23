@@ -1,5 +1,4 @@
 import type { Canvas, Package, Project } from "@macrograph/core";
-import type { JSX } from "@solidjs/web";
 
 import { ResourceConstant } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
@@ -36,7 +35,7 @@ const styles = stylex.create({
   },
   tabGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     height: "100%",
     width: "100%",
   },
@@ -323,7 +322,7 @@ const styles = stylex.create({
   constantValueAppearance: { fontSize: 12 },
 });
 
-export type NavigationSection = "graphs" | "packages" | "functions" | "queues";
+export type NavigationSection = "graphs" | "packages" | "functions";
 
 export function NavigationSidebar(props: {
   section: NavigationSection;
@@ -339,8 +338,6 @@ export function NavigationSidebar(props: {
   onClose: () => void;
   onCreateGraph: () => void;
   onCreateFunction?: () => void;
-  onCreateQueue?: () => void;
-  queuesPanel?: JSX.Element;
   onSelectGraph: (id: string) => void;
   canEditGraphs: boolean;
   onRenameGraph: (id: string, name: string) => void;
@@ -534,7 +531,7 @@ export function NavigationSidebar(props: {
           <div style={{ "flex-shrink": "0" }}>
             <div sx={styles.topTabs}>
               <div sx={styles.tabGrid}>
-                <For each={["graphs", "functions", "packages", "queues"] as const}>
+                <For each={["graphs", "functions", "packages"] as const}>
                   {(section) => (
                     <button
                       type="button"
@@ -550,9 +547,7 @@ export function NavigationSidebar(props: {
                         ? "Graphs"
                         : section === "packages"
                           ? "Modules"
-                          : section === "queues"
-                            ? "Queues"
-                            : "Functions"}
+                          : "Functions"}
                     </button>
                   )}
                 </For>
@@ -568,9 +563,7 @@ export function NavigationSidebar(props: {
                       ? "Search graphs"
                       : props.section === "packages"
                         ? "Search modules"
-                        : props.section === "queues"
-                          ? "Search queues"
-                          : "Search functions"
+                        : "Search functions"
                   }
                   value={props.search}
                   onInput={(event) => props.onSearchChange(event.currentTarget.value)}
@@ -599,22 +592,9 @@ export function NavigationSidebar(props: {
                   <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
                 </button>
               </Show>
-              <Show when={props.section === "queues"}>
-                <button
-                  type="button"
-                  sx={[styles.focus, styles.newButton]}
-                  aria-label="New queue"
-                  title="New queue"
-                  disabled={!props.canEditGraphs}
-                  onClick={() => props.onCreateQueue?.()}
-                >
-                  <IconBiPlus aria-hidden="true" {...stylex.attrs(styles.plusIcon)} />
-                </button>
-              </Show>
             </div>
           </div>
           <div sx={styles.scroll}>
-            <Show when={props.section === "queues"}>{props.queuesPanel}</Show>
             <Show when={props.section === "graphs" || props.section === "functions"}>
               <For
                 each={props.graphs.filter(([, graph]) =>

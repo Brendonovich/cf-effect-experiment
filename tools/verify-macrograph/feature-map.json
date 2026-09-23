@@ -27,7 +27,7 @@
       "verification": "function-queues",
       "userJourney": [
         "Create function",
-        "Open Queues tab",
+        "Open Queues workspace pane",
         "Create queue referencing function",
         "Pause queue",
         "Resume queue"
