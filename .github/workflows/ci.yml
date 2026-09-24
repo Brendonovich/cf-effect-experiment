@@ -62,7 +62,7 @@ jobs:
       - name: Test verification diagnostics
         run: pnpm verify:test
 
-  playground:
+  e2e:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -93,7 +93,7 @@ jobs:
 
   validate:
     if: always() && (github.event_name != 'pull_request' || github.event.action != 'closed')
-    needs: [quality, unit-tests, playground]
+    needs: [quality, unit-tests, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Check validation results
