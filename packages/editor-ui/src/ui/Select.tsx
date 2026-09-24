@@ -182,7 +182,6 @@ export function Select(props: {
 }) {
   let root: HTMLSpanElement | undefined;
   let trigger: HTMLButtonElement | undefined;
-  let touchSelectionAt = 0;
   const searchable = () => props.searchable ?? props.options.length > 10;
   const disabled = createMemo(() => !!props.disabled || props.options.length === 0);
   const [search, setSearch] = createSignal("");
@@ -252,16 +251,13 @@ export function Select(props: {
     if (props.value !== "") return props.missingLabel ?? props.placeholder;
     return props.placeholder;
   };
-  const selectOption = (option: SelectOption) => {
-    props.onChange(option.id);
-    close();
-    trigger?.focus();
-  };
   const selectHighlighted = () => {
     if (menuState.mode === "closed") return;
     const option = options()[menuState.context.highlightedIndex];
     if (option === undefined) return;
-    selectOption(option);
+    props.onChange(option.id);
+    close();
+    trigger?.focus();
   };
   const position = () => {
     const bounds = trigger?.getBoundingClientRect();
@@ -471,17 +467,10 @@ export function Select(props: {
                       menuState.context.highlightedIndex === index() ? styles.highlighted : null,
                     ]}
                     onPointerEnter={() => highlight(index())}
-                    onPointerUp={(event) => {
-                      if (event.pointerType !== "touch") return;
-                      // Mobile Safari can cancel the synthesized click when selecting rerenders
-                      // the inspector. Commit on pointer-up so touch selection is not lost.
-                      event.preventDefault();
-                      touchSelectionAt = Date.now();
-                      selectOption(option);
-                    }}
                     onClick={() => {
-                      if (Date.now() - touchSelectionAt < 500) return;
-                      selectOption(option);
+                      props.onChange(option.id);
+                      close();
+                      trigger?.focus();
                     }}
                   >
                     {option.name}
