@@ -197,7 +197,7 @@ async function openBrowser(url) {
     headless: process.env.MACROGRAPH_VERIFY_HEADED !== "1",
     viewport:
       mode === "function-queues" ? { width: 390, height: 844 } : { width: 1440, height: 960 },
-    hasTouch: mode === "function-queues",
+    hasTouch: mode === "function-queues" || mode === "all",
     isMobile: mode === "function-queues",
     locale: "en-US",
     timezoneId: "UTC",
@@ -282,6 +282,7 @@ async function functionNavigation(page) {
 }
 
 async function functionQueues(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
   await waitForAppShell(page);
 
   await page.getByRole("button", { name: "Browse", exact: true }).tap();
@@ -320,7 +321,7 @@ async function functionQueues(page) {
   await page.getByRole("button", { name: "New Queue", exact: true }).waitFor();
 
   await page.getByRole("button", { name: "Select function", exact: true }).tap();
-  await page.getByRole("option", { name: "New Function", exact: true }).tap();
+  await page.getByRole("option", { name: "New Function", exact: true }).first().tap();
   await page
     .getByRole("complementary")
     .getByRole("button", { name: "New Function", exact: true })
@@ -330,6 +331,7 @@ async function functionQueues(page) {
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
   check("mobile Add to Queue selects a generic queue and per-item function", "passed");
+  if (mode === "all") await page.setViewportSize({ width: 1440, height: 960 });
 }
 
 async function moduleReference(page) {
@@ -603,9 +605,9 @@ async function main() {
     const page = await openBrowser(url);
     if (mode === "smoke" || mode === "all") await smoke(page);
     if (mode === "function-navigation" || mode === "all") await functionNavigation(page);
-    if (mode === "function-queues" || mode === "all") await functionQueues(page);
     if (mode === "module-reference" || mode === "all") await moduleReference(page);
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
+    if (mode === "function-queues" || mode === "all") await functionQueues(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
     const unexpectedHttpErrors = manifest.browser.httpErrors.filter(
       (response) => response.ignored !== true,
