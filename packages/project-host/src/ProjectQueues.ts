@@ -1,4 +1,4 @@
-import { Function as GraphFunction, Project, Queue } from "@macrograph/core";
+import { Function as GraphFunction, Project } from "@macrograph/core";
 import { Executor, Queues } from "@macrograph/execution";
 import { DataType } from "@macrograph/module/DataType";
 import { Effect, Schema } from "effect";
@@ -9,15 +9,12 @@ export const make = Effect.fnUntraced(function* (
   options?: Executor.MakeOptions,
 ) {
   let executor: Executor.Service;
-  const queues = yield* Queues.make(initialProject.queues, (queueId, inputs) =>
+  const queues = yield* Queues.make(initialProject.queues, (functionId, inputs) =>
     Effect.gen(function* () {
       const queueLineage = yield* Queues.Lineage;
       const project = yield* executor.project;
-      const queue = project.queues[queueId];
-      if (queue === undefined) return yield* new Queue.NotFoundError({ id: queueId });
-      const fn = project.functions[queue.functionId];
-      if (fn === undefined)
-        return yield* new GraphFunction.NotFoundError({ canvasId: queue.functionId });
+      const fn = project.functions[functionId];
+      if (fn === undefined) return yield* new GraphFunction.NotFoundError({ canvasId: functionId });
       const decoded = { ...inputs };
       for (const field of fn.arguments) {
         if (Object.hasOwn(inputs, field.id))
@@ -25,7 +22,7 @@ export const make = Effect.fnUntraced(function* (
             DataType.JsonValueSchema(field.type, project.types),
           )(inputs[field.id]);
       }
-      return yield* executor.invokeFunction(queue.functionId, decoded, { queueLineage });
+      return yield* executor.invokeFunction(functionId, decoded, { queueLineage });
     }),
   );
   executor = yield* Executor.make(initialProject, {
@@ -33,11 +30,9 @@ export const make = Effect.fnUntraced(function* (
     queueInvocation: (invocation) =>
       Effect.gen(function* () {
         const project = yield* executor.project;
-        const queue = project.queues[invocation.queueId];
-        if (queue === undefined) return yield* new Queue.NotFoundError({ id: invocation.queueId });
-        const fn = project.functions[queue.functionId];
+        const fn = project.functions[invocation.functionId];
         if (fn === undefined)
-          return yield* new GraphFunction.NotFoundError({ canvasId: queue.functionId });
+          return yield* new GraphFunction.NotFoundError({ canvasId: invocation.functionId });
         const captured: Record<string, unknown> = { ...invocation.inputs };
         for (const field of fn.arguments) {
           if (Object.hasOwn(invocation.inputs, field.id))
@@ -45,7 +40,7 @@ export const make = Effect.fnUntraced(function* (
               DataType.JsonValueSchema(field.type, project.types),
             )(invocation.inputs[field.id]);
         }
-        return yield* queues.enqueue(invocation.queueId, captured);
+        return yield* queues.enqueue(invocation.queueId, invocation.functionId, captured);
       }).pipe(
         Effect.provideService(Queues.Lineage, invocation.queueLineage),
         Effect.mapError(

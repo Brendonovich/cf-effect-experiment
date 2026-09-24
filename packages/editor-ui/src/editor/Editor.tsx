@@ -512,7 +512,6 @@ function EditorContent(
             functions={Object.values(controller.editor.store.project?.functions ?? {})}
             onCreate={controller.commands.createQueue}
             onRename={controller.commands.renameQueue}
-            onSetFunction={controller.commands.setQueueFunction}
             onDelete={controller.commands.deleteQueue}
             onPause={controller.commands.pauseQueue}
             onAdvance={controller.commands.advanceQueue}

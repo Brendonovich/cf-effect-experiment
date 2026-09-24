@@ -26,9 +26,8 @@
       "status": "covered",
       "verification": "function-queues",
       "userJourney": [
-        "Create function",
         "Open Queues workspace pane",
-        "Create queue referencing function",
+        "Create generic queue without a function assignment",
         "Pause queue",
         "Resume queue"
       ],

@@ -71,7 +71,6 @@ export function QueuesPanel(props: {
   functions: ReadonlyArray<GraphFunction.Model>;
   onCreate: () => void;
   onRename: (id: string, name: string) => void;
-  onSetFunction: (id: string, functionId: string) => void;
   onDelete: (id: string) => void;
   onPause: (id: string, paused: boolean) => void;
   onAdvance: (id: string) => void;
@@ -90,12 +89,7 @@ export function QueuesPanel(props: {
         <div sx={styles.search}>
           <SearchInput value={search()} placeholder="Search queues" onChange={setSearch} />
         </div>
-        <button
-          type="button"
-          sx={styles.button}
-          disabled={!props.canEdit || props.functions.length === 0}
-          onClick={props.onCreate}
-        >
+        <button type="button" sx={styles.button} disabled={!props.canEdit} onClick={props.onCreate}>
           New queue
         </button>
       </div>
@@ -114,7 +108,7 @@ export function QueuesPanel(props: {
           fallback={
             <p sx={styles.description}>
               {search().trim() === ""
-                ? "No queues found. Create a function, then create a queue."
+                ? "No queues found. Create a queue to start scheduling function calls."
                 : "No queues match your search."}
             </p>
           }
@@ -141,16 +135,6 @@ export function QueuesPanel(props: {
                     ? "Runtime unavailable"
                     : `${state()?.paused ? "Paused" : "Active"} / ${state()?.running.length ?? 0} running / ${state()?.waiting.length ?? 0} waiting`}
                 </div>
-                <select
-                  aria-label={`Queue function ${queue.name}`}
-                  value={queue.functionId}
-                  disabled={!props.canEdit}
-                  onChange={(event) => props.onSetFunction(queue.id, event.currentTarget.value)}
-                >
-                  <For each={props.functions}>
-                    {(fn) => <option value={fn.canvas.id}>{fn.canvas.name}</option>}
-                  </For>
-                </select>
                 <div sx={styles.actions}>
                   <button
                     sx={styles.button}
@@ -187,7 +171,11 @@ export function QueuesPanel(props: {
                   <For each={items()}>
                     {(item) => (
                       <li sx={styles.item}>
-                        <span sx={styles.label}>{item.status}</span>
+                        <span sx={styles.label}>
+                          {item.status}:{" "}
+                          {props.functions.find((fn) => fn.canvas.id === item.functionId)?.canvas
+                            .name ?? `Missing function (${item.functionId})`}
+                        </span>
                         <button
                           sx={styles.button}
                           aria-label={`Remove ${item.status} item`}

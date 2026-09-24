@@ -181,6 +181,7 @@ export interface QueueInvocation {
   readonly key: NodeExecutionKey;
   readonly inputs: Readonly<Record<string, unknown>>;
   readonly queueId: string;
+  readonly functionId: string;
   readonly queueLineage: ReadonlyArray<string>;
 }
 
@@ -636,9 +637,9 @@ export const make = Effect.fnUntraced(function* (
         return syntheticSchema("call", "Execute Function", "exec", io, () => Effect.void);
       }
       if (Queue.isEnqueue(node)) {
-        const target = node.properties.queue;
-        const queue = typeof target === "string" ? currentProject.queues[target] : undefined;
-        const io = registeredIO(Queue.enqueueIO(queue, currentProject.functions));
+        const target = node.properties.function;
+        const fn = typeof target === "string" ? currentProject.functions[target] : undefined;
+        const io = registeredIO(Queue.enqueueIO(fn));
         return syntheticSchema("enqueue", "Add to Queue", "exec", io, () => Effect.void);
       }
       const owner = currentProject.functions[invocation?.canvasId ?? ""];
@@ -1193,23 +1194,30 @@ export const make = Effect.fnUntraced(function* (
         const runEffect = Effect.gen(function* () {
           const outputs: Array<NodeOutput> = [];
           if (Queue.isEnqueue(node)) {
-            const selected = node.properties.queue;
-            const queueId = typeof selected === "string" ? selected : "";
-            const queue = currentProject.queues[queueId];
-            if (queue === undefined || currentProject.functions[queue.functionId] === undefined)
+            const selectedQueue = node.properties.queue;
+            const queueId = typeof selectedQueue === "string" ? selectedQueue : "";
+            if (currentProject.queues[queueId] === undefined)
               return yield* new GraphFunction.InvocationError({
-                canvasId: queue?.functionId ?? "",
-                reason: "Add to Queue must select a queue with an existing function",
+                canvasId: "",
+                reason: "Add to Queue must select an existing queue",
+              });
+            const selectedFunction = node.properties.function;
+            const functionId = typeof selectedFunction === "string" ? selectedFunction : "";
+            if (currentProject.functions[functionId] === undefined)
+              return yield* new GraphFunction.InvocationError({
+                canvasId: functionId,
+                reason: "Add to Queue must select an existing function",
               });
             if (options?.queueInvocation === undefined)
               return yield* new GraphFunction.InvocationError({
-                canvasId: queue.functionId,
+                canvasId: functionId,
                 reason: "Queue invocation is not hosted",
               });
             const result = yield* options.queueInvocation({
               key,
               inputs: Object.fromEntries(inputs),
               queueId,
+              functionId,
               queueLineage: invocation?.options?.queueLineage ?? [],
             });
             for (const output of nodeIO.dataOutputs)

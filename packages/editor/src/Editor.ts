@@ -250,28 +250,13 @@ export interface Interface {
   readonly queue: {
     readonly create: (
       name: string,
-      functionId: string,
-    ) => Effect.Effect<
-      EditorEvent.QueueUpdated,
-      PersistenceError | Project.NotFoundError | GraphFunction.NotFoundError
-    >;
+    ) => Effect.Effect<EditorEvent.QueueUpdated, PersistenceError | Project.NotFoundError>;
     readonly rename: (
       id: string,
       name: string,
     ) => Effect.Effect<
       EditorEvent.QueueUpdated,
       PersistenceError | Project.NotFoundError | Queue.NotFoundError
-    >;
-    readonly setFunction: (
-      id: string,
-      functionId: string,
-    ) => Effect.Effect<
-      EditorEvent.QueueUpdated,
-      | PersistenceError
-      | Project.NotFoundError
-      | Queue.NotFoundError
-      | GraphFunction.NotFoundError
-      | Queue.RecursiveEnqueueError
     >;
     readonly delete: (
       id: string,
@@ -530,9 +515,10 @@ export const layer = Layer.effect(Service)(
         : Queue.isEnqueue(node)
           ? persistence.loadProject().pipe(
               Effect.map((project) => {
-                const target = node.properties.queue;
-                const queue = typeof target === "string" ? project.queues[target] : undefined;
-                return Queue.enqueueIO(queue, project.functions);
+                const target = node.properties.function;
+                return Queue.enqueueIO(
+                  typeof target === "string" ? project.functions[target] : undefined,
+                );
               }),
             )
           : resolveIOProperties(node.schema, node.properties).pipe(
@@ -545,11 +531,17 @@ export const layer = Layer.effect(Service)(
     ) {
       if (!Queue.isEnqueue(node)) return;
       const queueId = node.properties.queue;
+      const functionId = node.properties.function;
       const project = yield* persistence.loadProject();
-      if (typeof queueId !== "string" || project.queues[queueId] === undefined)
+      if (typeof queueId === "string" && project.queues[queueId] === undefined)
         return yield* new Package.InvalidPropertyError({
           property: "queue",
           reason: "Selected queue does not exist",
+        });
+      if (typeof functionId === "string" && project.functions[functionId] === undefined)
+        return yield* new Package.InvalidPropertyError({
+          property: "function",
+          reason: "Selected function does not exist",
         });
     });
     const validateQueueDependencies = (
@@ -567,10 +559,7 @@ export const layer = Layer.effect(Service)(
           (error) =>
             new Package.InvalidPropertyError({
               property: "queue",
-              reason:
-                error._tag === "QueueRecursiveEnqueueError"
-                  ? `Queue dependency cycle from ${error.queueId} to ${error.targetQueueId}`
-                  : "Queue or function reference does not exist",
+              reason: `Queue dependency cycle from ${error.queueId} to ${error.targetQueueId}`,
             }),
         ),
       );
@@ -2108,15 +2097,9 @@ export const layer = Layer.effect(Service)(
       });
     }, lock.withPermit);
 
-    const queueCreate = Effect.fn("Editor.queue.create")(function* (
-      name: string,
-      functionId: string,
-    ) {
-      const project = yield* persistence.loadProject();
-      if (project.functions[functionId] === undefined)
-        return yield* new GraphFunction.NotFoundError({ canvasId: functionId });
+    const queueCreate = Effect.fn("Editor.queue.create")(function* (name: string) {
       const id = Queue.QueueId.make(crypto.randomUUID());
-      return yield* events.publish({ _tag: "QueueUpdated", queue: { id, name, functionId } });
+      return yield* events.publish({ _tag: "QueueUpdated", queue: { id, name } });
     }, lock.withPermit);
     const getQueue = Effect.fnUntraced(function* (id: string) {
       const queue = (yield* persistence.loadProject()).queues[id];
@@ -2126,22 +2109,6 @@ export const layer = Layer.effect(Service)(
     const queueRename = Effect.fn("Editor.queue.rename")(function* (id: string, name: string) {
       const queue = yield* getQueue(id);
       return yield* events.publish({ _tag: "QueueUpdated", queue: { ...queue, name } });
-    }, lock.withPermit);
-    const queueSetFunction = Effect.fn("Editor.queue.setFunction")(function* (
-      id: string,
-      functionId: string,
-    ) {
-      const project = yield* persistence.loadProject();
-      const queue = project.queues[id];
-      if (queue === undefined) return yield* new Queue.NotFoundError({ id });
-      if (project.functions[functionId] === undefined)
-        return yield* new GraphFunction.NotFoundError({ canvasId: functionId });
-      const updated = { ...queue, functionId };
-      yield* Queue.validateProject({
-        queues: { ...project.queues, [id]: updated },
-        functions: project.functions,
-      });
-      return yield* events.publish({ _tag: "QueueUpdated", queue: updated });
     }, lock.withPermit);
     const queueDelete = Effect.fn("Editor.queue.delete")(function* (id: string) {
       yield* getQueue(id);
@@ -2494,7 +2461,6 @@ export const layer = Layer.effect(Service)(
       queue: {
         create: queueCreate,
         rename: queueRename,
-        setFunction: queueSetFunction,
         delete: queueDelete,
       },
       graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },

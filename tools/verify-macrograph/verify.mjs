@@ -280,17 +280,10 @@ async function functionNavigation(page) {
 
 async function functionQueues(page) {
   await waitForAppShell(page);
-  await page.getByRole("button", { name: "Functions", exact: true }).click();
-  await page.getByRole("button", { name: "New function", exact: true }).click();
-  await page.getByRole("button", { name: "New Function", exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Queues", exact: true }).click();
   await page.getByRole("button", { name: "New queue", exact: true }).click();
   const queue = page.getByRole("region", { name: "New Queue", exact: true });
   await queue.waitFor();
-  const functionSelect = queue.getByRole("combobox", { name: "Queue function New Queue" });
-  await functionSelect.waitFor();
-  if ((await functionSelect.locator("option:checked").textContent()) !== "New Function")
-    throw new Error("New queue did not reference the created function");
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
   await queue.getByRole("button", { name: "Pause", exact: true }).click();
   await queue.getByText(/Paused \/ 0 running \/ 0 waiting/).waitFor();
@@ -299,7 +292,7 @@ async function functionQueues(page) {
   const path = join(outputDirectory, "function-queues.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
-  check("queue function selection and live pause controls are visible", "passed");
+  check("generic queue creation and live pause controls are visible", "passed");
 }
 
 async function moduleReference(page) {

@@ -35,7 +35,7 @@ describe("QueueRuntime", () => {
       const state: Queue.State = {
         queueId: "work",
         paused: true,
-        waiting: [{ id: "item" }],
+        waiting: [{ id: "item", functionId: "function" }],
         running: [],
       };
       yield* mount.set({

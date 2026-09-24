@@ -65,21 +65,13 @@ export function createEditorCommands(
     queueMutation.mutate(() => operation().then(() => undefined));
   const createQueue = () => {
     const c = client();
-    const fn = Object.values(editor.store.project?.functions ?? {})[0];
-    if (c && canEdit() && fn !== undefined)
-      queueAction(() =>
-        runPromise(applyMutation(c.CreateQueue({ name: "New Queue", functionId: fn.canvas.id }))),
-      );
+    if (c && canEdit())
+      queueAction(() => runPromise(applyMutation(c.CreateQueue({ name: "New Queue" }))));
   };
   const renameQueue = (queueId: string, name: string) => {
     const c = client();
     if (c && canEdit())
       queueAction(() => runPromise(applyMutation(c.RenameQueue({ queueId, name }))));
-  };
-  const setQueueFunction = (queueId: string, functionId: string) => {
-    const c = client();
-    if (c && canEdit())
-      queueAction(() => runPromise(applyMutation(c.SetQueueFunction({ queueId, functionId }))));
   };
   const deleteQueue = (queueId: string) => {
     const c = client();
@@ -708,7 +700,6 @@ export function createEditorCommands(
     queueError: createMemo(() => queueMutation.error?.message ?? null),
     createQueue,
     renameQueue,
-    setQueueFunction,
     deleteQueue,
     pauseQueue,
     advanceQueue,

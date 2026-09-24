@@ -48,7 +48,7 @@ const identity = (id: string, type: DataType.Any = DataType.DateTime): GraphFunc
 });
 
 describe("ProjectQueues", () => {
-  it.effect("resolves the queue's current function when dispatching", () =>
+  it.effect("dispatches mixed queued functions with their own data schemas", () =>
     Effect.gen(function* () {
       const echo = identity("echo");
       const text = identity("text", DataType.String);
@@ -56,26 +56,30 @@ describe("ProjectQueues", () => {
         ...Project.empty(),
         functions: { echo, text },
         queues: {
-          work: { id: Queue.QueueId.make("work"), name: "Work", functionId: "echo" },
+          work: { id: Queue.QueueId.make("work"), name: "Work" },
         },
       };
       const runtime = yield* ProjectQueues.make(project);
       const value = DateTime.makeUnsafe("2026-08-31T12:00:00Z");
       yield* runtime.queues.pause("work", true);
-      const pending = yield* runtime.queues
-        .enqueue("work", { value: DateTime.formatIso(value) })
+      const pendingDate = yield* runtime.queues
+        .enqueue("work", "echo", { value: DateTime.formatIso(value) })
+        .pipe(Effect.forkChild);
+      const pendingText = yield* runtime.queues
+        .enqueue("work", "text", { value: "hello" })
         .pipe(Effect.forkChild);
       yield* runtime.queues.changes.pipe(
-        Stream.filter((states) => states[0]?.waiting.length === 1),
+        Stream.filter((states) => states[0]?.waiting.length === 2),
         Stream.runHead,
       );
-      yield* runtime.executor.loadProject({
-        ...project,
-        queues: { work: { ...project.queues.work!, functionId: "text" } },
-      });
+      assert.deepStrictEqual(
+        (yield* runtime.queues.snapshot)[0]?.waiting.map((item) => item.functionId),
+        ["echo", "text"],
+      );
+      yield* runtime.executor.loadProject(project);
       yield* runtime.queues.pause("work", false);
-      const returned = (yield* Fiber.join(pending)).result;
-      assert.strictEqual(returned, DateTime.formatIso(value));
+      assert.deepStrictEqual((yield* Fiber.join(pendingDate)).result, value);
+      assert.strictEqual((yield* Fiber.join(pendingText)).result, "hello");
       yield* runtime.executor.loadProject({ ...project, queues: {} });
       assert.deepStrictEqual(yield* runtime.queues.snapshot, []);
     }).pipe(Effect.scoped),
