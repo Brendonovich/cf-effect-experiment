@@ -74,10 +74,7 @@ const styles = stylex.create({
   },
   kindTab: {
     alignSelf: "stretch",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: "transparent",
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
     color: colors.gray10,
@@ -86,20 +83,15 @@ const styles = stylex.create({
     fontWeight: 500,
     outline: "none",
     ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   activeKind: { borderBottomColor: colors.focus, color: colors.gray12 },
   inactiveKind: { borderBottomColor: "transparent" },
   iconButton: {
     alignItems: "center",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
-    },
+    backgroundColor: "transparent",
     borderRadius: 2,
-    color: {
-      default: colors.gray10,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
-    },
+    color: colors.gray10,
     display: "flex",
     flexShrink: 0,
     height: 24,
@@ -108,6 +100,7 @@ const styles = stylex.create({
     outline: "none",
     width: 24,
     ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5, color: colors.gray12 } },
   },
   icon: { height: 15, width: 15 },
   editor: {
@@ -164,10 +157,7 @@ const styles = stylex.create({
     overflowY: "auto",
   },
   typeName: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: "transparent",
     fontSize: 12,
     minWidth: 0,
     overflow: "hidden",
@@ -177,6 +167,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     width: "100%",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   selectedType: { backgroundColor: colors.gray4, boxShadow: `inset -2px 0 0 ${colors.focus}` },
   empty: {

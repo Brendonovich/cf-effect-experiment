@@ -201,12 +201,10 @@ const styles = stylex.create({
   retry: {
     marginTop: 12,
     borderRadius: 5,
-    backgroundColor: {
-      default: colors.gray3,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: colors.gray3,
     padding: "7px 10px",
     fontSize: 12,
     color: colors.gray12,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
 });

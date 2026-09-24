@@ -26,14 +26,11 @@ const styles = stylex.create({
     outline: "none",
     textAlign: "left",
     width: "100%",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": {
-        default: null,
-        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
-      },
-    },
+    backgroundColor: "transparent",
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": {
+      ":hover": { backgroundColor: "color-mix(in srgb, var(--gray-12) 5%, transparent)" },
+    },
   },
   typeBar: { flexShrink: 0, height: "100%", width: 4 },
   event: { backgroundColor: "#b91c1c" },
@@ -105,16 +102,13 @@ const styles = stylex.create({
     borderLeftColor: colors.gray5,
     borderLeftStyle: "solid",
     borderLeftWidth: 1,
-    backgroundColor: {
-      default: "transparent",
+    backgroundColor: "transparent",
+    color: colors.gray11,
+    "@media (hover: hover)": {
       ":hover": {
-        default: null,
-        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+        backgroundColor: "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+        color: colors.gray12,
       },
-    },
-    color: {
-      default: colors.gray11,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
     },
   },
 });

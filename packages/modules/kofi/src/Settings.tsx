@@ -26,10 +26,7 @@ const styles = stylex.create({
     outline: "none",
   },
   nameButton: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
-    },
+    backgroundColor: "transparent",
     border: 0,
     borderRadius: 4,
     color: colors.gray12,
@@ -43,6 +40,7 @@ const styles = stylex.create({
     transitionProperty: "background-color",
     whiteSpace: "nowrap",
     width: "100%",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray3 } },
   },
   nameInput: {
     backgroundColor: colors.gray1,
@@ -57,11 +55,7 @@ const styles = stylex.create({
   },
   remove: {
     alignSelf: "center",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.red3 },
-      ":disabled": colors.red3,
-    },
+    backgroundColor: { default: "transparent", ":disabled": colors.red3 },
     border: 0,
     borderRadius: 4,
     color: { default: colors.red10, ":disabled": colors.red9 },
@@ -72,15 +66,13 @@ const styles = stylex.create({
     height: 28,
     padding: "4px 8px",
     transitionProperty: "background-color",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.red3 } },
   },
   copyWrap: { minWidth: 0, position: "relative" },
   copyButton: {
     backgroundColor: "transparent",
     border: 0,
-    color: {
-      default: colors.gray11,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
-    },
+    color: colors.gray11,
     display: "block",
     fontFamily: "monospace",
     fontSize: 12,
@@ -89,6 +81,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     width: "100%",
+    "@media (hover: hover)": { ":hover": { color: colors.gray12 } },
   },
   tooltip: {
     backgroundColor: colors.gray1,
@@ -138,11 +131,7 @@ const styles = stylex.create({
   token: { flex: 1, fontFamily: { default: "monospace", "::placeholder": "sans-serif" } },
   addButton: {
     alignSelf: "flex-end",
-    backgroundColor: {
-      default: colors.gray12,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
-      ":disabled": colors.gray10,
-    },
+    backgroundColor: { default: colors.gray12, ":disabled": colors.gray10 },
     border: 0,
     borderRadius: 4,
     color: colors.gray1,
@@ -151,6 +140,7 @@ const styles = stylex.create({
     height: 28,
     padding: "4px 8px",
     transitionProperty: "background-color",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray11 } },
   },
   status: { color: colors.gray11, fontSize: 12, fontStyle: "italic" },
   invalid: { color: colors.red10, fontSize: 12 },

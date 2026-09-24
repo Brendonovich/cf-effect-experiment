@@ -84,19 +84,15 @@ const styles = stylex.create({
     fontSize: 12,
     fontWeight: 500,
     textTransform: "capitalize",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
-    },
+    backgroundColor: "transparent",
     cursor: "pointer",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray3 } },
   },
   navActive: { borderBottomColor: colors.focus, color: colors.gray12 },
   navIdle: {
     borderBottomColor: "transparent",
-    color: {
-      default: colors.gray10,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
-    },
+    color: colors.gray10,
+    "@media (hover: hover)": { ":hover": { color: colors.gray12 } },
   },
   controls: {
     alignItems: "center",
@@ -110,12 +106,10 @@ const styles = stylex.create({
     minWidth: 0,
   },
   reset: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.red3 },
-    },
+    backgroundColor: "transparent",
     borderColor: `color-mix(in srgb, ${colors.red9} 60%, transparent)`,
     color: colors.red10,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.red3 } },
   },
   status: { flexShrink: 0, fontSize: 12, paddingBlock: 8, paddingInline: 12 },
   errorStatus: { backgroundColor: colors.red4, color: colors.red11 },

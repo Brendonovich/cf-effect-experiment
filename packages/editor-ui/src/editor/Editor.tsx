@@ -92,15 +92,13 @@ const styles = stylex.create({
     paddingInline: 8,
   },
   shortcutsButton: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray6 },
-    },
+    backgroundColor: "transparent",
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
     minHeight: { default: 44, "@media (min-width: 768px)": 24 },
     paddingInline: 12,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray6 } },
   },
   typesButton: { marginRight: "auto" },
   editor: {
@@ -342,13 +340,11 @@ const styles = stylex.create({
     width: "100%",
     border: 0,
     borderRadius: 4,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": "rgb(255 255 255 / 0.1)" },
-    },
+    backgroundColor: "transparent",
     padding: 4,
     textAlign: "left",
     color: "inherit",
+    "@media (hover: hover)": { ":hover": { backgroundColor: "rgb(255 255 255 / 0.1)" } },
   },
 });
 

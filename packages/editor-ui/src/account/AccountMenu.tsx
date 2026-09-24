@@ -141,13 +141,8 @@ const styles = stylex.create({
     padding: "6px 8px",
     fontSize: 12,
     fontWeight: 500,
-    color: {
-      default: colors.gray11,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
-    },
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
-    },
+    color: colors.gray11,
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { color: colors.gray12, backgroundColor: colors.gray3 } },
   },
 });

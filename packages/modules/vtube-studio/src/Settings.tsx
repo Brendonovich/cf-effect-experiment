@@ -42,11 +42,7 @@ const styles = stylex.create({
     fontSize: 12,
   },
   button: {
-    backgroundColor: {
-      default: colors.gray12,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
-      ":disabled": colors.gray6,
-    },
+    backgroundColor: { default: colors.gray12, ":disabled": colors.gray6 },
     border: 0,
     borderRadius: 2,
     color: colors.gray1,
@@ -54,6 +50,7 @@ const styles = stylex.create({
     fontWeight: 600,
     height: 32,
     paddingInline: 12,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray11 } },
   },
   muted: { color: colors.gray11, fontSize: 12, margin: 0 },
   status: { color: colors.gray12, fontSize: 12 },

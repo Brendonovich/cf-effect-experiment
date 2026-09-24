@@ -280,23 +280,21 @@ tester.run("stylex-require-hover-media", stylexRequireHoverMedia, {
   valid: [
     {
       code: `import * as stylex from "@stylexjs/stylex";
-        stylex.create({ button: { color: { default: "black", ":hover": {
-          default: null, "@media (hover: hover)": "red"
-        } } } })`,
+        stylex.create({ button: { color: "black", "@media (hover: hover)": {
+          ":hover": { color: "red" }
+        } } })`,
     },
     {
       code: `import * as sx from "@stylexjs/stylex";
-        sx.create({ icon: { opacity: { default: 0,
-          [sx.when.ancestor(":hover", marker)]: {
-            default: null, "@media (hover: hover)": 1
-          }
+        sx.create({ icon: { opacity: 0, "@media (hover: hover)": {
+          [sx.when.ancestor(":hover", marker)]: { opacity: 1 }
         } } })`,
     },
     {
       code: `import { create as createStyles, when as conditions } from "@stylexjs/stylex";
-        createStyles({ icon: { opacity: { [conditions.ancestor(":hover")]: {
-          "@media (hover: hover)": 1
-        } } } })`,
+        createStyles({ icon: { "@media (hover: hover)": {
+          [conditions.ancestor(":hover")]: { opacity: 1 }
+        } } })`,
     },
     {
       code: `import * as stylex from "@stylexjs/stylex";
@@ -313,6 +311,13 @@ tester.run("stylex-require-hover-media", stylexRequireHoverMedia, {
     },
   ],
   invalid: [
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: { ":hover": {
+          default: null, "@media (hover: hover)": "red"
+        } } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
     {
       code: `import * as stylex from "@stylexjs/stylex";
         stylex.create({ button: { color: { ":hover": "red" } } })`,

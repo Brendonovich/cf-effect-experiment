@@ -269,25 +269,20 @@ const styles = stylex.create({
   newProject: {
     flexShrink: 0,
     borderRadius: 6,
-    backgroundColor: {
-      default: colors.gray12,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
-    },
+    backgroundColor: colors.gray12,
     padding: "8px 12px",
     fontSize: 12,
     fontWeight: 600,
     color: colors.gray1,
     transition: "150ms",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray11 } },
   },
   project: {
     display: "flex",
     minWidth: 0,
     alignItems: "center",
     gap: 12,
-    backgroundColor: {
-      default: colors.gray1,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray2 },
-    },
+    backgroundColor: colors.gray1,
     paddingBlock: 16,
     paddingInline: { default: 16, [sm]: 20 },
     textAlign: "left",
@@ -296,6 +291,7 @@ const styles = stylex.create({
       default: "auto",
       ":last-child:nth-child(odd)": { default: "auto", [sm]: "span 2 / span 2" },
     },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray2 } },
   },
   projectInitial: {
     display: "grid",
@@ -304,16 +300,16 @@ const styles = stylex.create({
     flexShrink: 0,
     placeItems: "center",
     borderRadius: 6,
-    backgroundColor: {
-      default: colors.gray3,
-      [stylex.when.ancestor(":hover")]: { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: colors.gray3,
     fontFamily: "monospace",
     fontSize: 10,
     fontWeight: 600,
     color: colors.gray11,
     boxShadow: `inset 0 0 0 1px ${colors.gray6}`,
     transition: "150ms",
+    "@media (hover: hover)": {
+      [stylex.when.ancestor(":hover")]: { backgroundColor: colors.gray4 },
+    },
   },
   projectName: {
     display: "block",
@@ -324,17 +320,11 @@ const styles = stylex.create({
     color: colors.gray12,
   },
   arrow: {
-    color: {
-      default: colors.gray8,
-      [stylex.when.ancestor(":hover")]: { default: null, "@media (hover: hover)": colors.gray11 },
-    },
-    transform: {
-      default: "none",
-      [stylex.when.ancestor(":hover")]: {
-        default: null,
-        "@media (hover: hover)": "translateX(2px)",
-      },
-    },
+    color: colors.gray8,
+    transform: "none",
     transition: "150ms",
+    "@media (hover: hover)": {
+      [stylex.when.ancestor(":hover")]: { color: colors.gray11, transform: "translateX(2px)" },
+    },
   },
 });

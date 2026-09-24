@@ -107,16 +107,14 @@ const styles = stylex.create({
     "::placeholder": { color: colors.gray11 },
   },
   searchClear: {
-    color: {
-      default: colors.gray9,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
-    },
+    color: colors.gray9,
     display: "grid",
     flexShrink: 0,
     height: 20,
     marginRight: 6,
     placeItems: "center",
     width: 20,
+    "@media (hover: hover)": { ":hover": { color: colors.gray11 } },
   },
   searchClearIcon: { height: 12, width: 12 },
   options: {
@@ -150,10 +148,8 @@ const styles = stylex.create({
     paddingInline: 4,
     textAlign: "left",
     width: "100%",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": "#2563eb" },
-    },
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { backgroundColor: "#2563eb" } },
   },
   highlighted: { backgroundColor: "#2563eb" },
 });

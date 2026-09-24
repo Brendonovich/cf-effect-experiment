@@ -538,10 +538,8 @@ const styles = stylex.create({
     border: `1px solid ${colors.gray6}`,
     paddingInline: 10,
     color: colors.gray12,
-    backgroundColor: {
-      default: colors.gray2,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: colors.gray2,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   pickerValue: { fontSize: 12 },
   pickerChevron: { width: 14, height: 14, flexShrink: 0, color: colors.gray10 },
@@ -565,10 +563,8 @@ const styles = stylex.create({
     borderRadius: 5,
     padding: "8px 9px",
     textAlign: "left",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   popoverOptionSelected: { backgroundColor: colors.gray4 },
   popoverOptionDate: { marginTop: 4, fontSize: 10, color: colors.gray11 },
@@ -620,17 +616,13 @@ const styles = stylex.create({
     fontSize: 12,
   },
   graphSelected: {
-    backgroundColor: {
-      default: colors.gray4,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
-    },
+    backgroundColor: colors.gray4,
     boxShadow: `inset 2px 0 0 ${colors.focus}`,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
   graphIdle: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   graphContent: { display: "flex", minHeight: 0, minWidth: 0, flex: 1, flexDirection: "column" },
   executions: {
@@ -657,10 +649,8 @@ const styles = stylex.create({
   },
   refresh: {
     fontSize: 10,
-    color: {
-      default: colors.gray11,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
-    },
+    color: colors.gray11,
+    "@media (hover: hover)": { ":hover": { color: colors.gray12 } },
   },
   loadingBottom: { paddingBottom: 8 },
   executionsLoading: {
@@ -686,10 +676,8 @@ const styles = stylex.create({
     padding: "6px 8px",
     textAlign: "left",
     fontSize: 10,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray2 },
-    },
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray2 } },
   },
   status: {
     width: "fit-content",

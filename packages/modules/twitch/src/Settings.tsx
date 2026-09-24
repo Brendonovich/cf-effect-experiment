@@ -59,13 +59,11 @@ const styles = stylex.create({
     textAlign: "left",
   },
   chevronBox: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
-    },
+    backgroundColor: "transparent",
     borderRadius: 4,
     padding: 2,
     transitionProperty: "background-color",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray3 } },
   },
   chevron: { height: 10, transitionProperty: "transform", width: 10 },
   collapsed: { transform: "rotate(-90deg)" },
@@ -92,10 +90,7 @@ const styles = stylex.create({
     gridRowStart: 2,
   },
   connect: {
-    backgroundColor: {
-      default: colors.gray3,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
-    },
+    backgroundColor: colors.gray3,
     border: `1px solid ${colors.gray6}`,
     borderRadius: 2,
     color: colors.gray12,
@@ -105,6 +100,7 @@ const styles = stylex.create({
     opacity: { default: 1, ":disabled": 0.5 },
     padding: "4px 8px",
     transitionProperty: "background-color",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   subscriptions: { gridColumn: "2 / span 2", gridRowStart: 3, marginTop: 6 },
   subscription: {

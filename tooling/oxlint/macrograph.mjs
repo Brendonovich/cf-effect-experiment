@@ -602,12 +602,18 @@ export const stylexRequireHoverMedia = {
         isWhen(call.callee.object)
       );
     };
-    const hasHoverMedia = (value) =>
-      value.type === "ObjectExpression" &&
-      value.properties.some(
-        (property) =>
-          property.type === "Property" && staticSpecifier(property.key) === "@media (hover: hover)",
-      );
+    const isWithinHoverMedia = (property) => {
+      let candidate = property.parent;
+      while (candidate != null) {
+        if (
+          candidate.type === "Property" &&
+          staticSpecifier(candidate.key) === "@media (hover: hover)"
+        )
+          return true;
+        candidate = candidate.parent;
+      }
+      return false;
+    };
     return {
       ImportDeclaration(node) {
         if (staticSpecifier(node.source) !== "@stylexjs/stylex") return;
@@ -623,7 +629,7 @@ export const stylexRequireHoverMedia = {
           if (
             candidate.type === "Property" &&
             isHoverCondition(candidate) &&
-            !hasHoverMedia(candidate.value)
+            !isWithinHoverMedia(candidate)
           )
             context.report({ node: candidate.key, messageId: "hoverMedia" });
           return false;

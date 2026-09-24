@@ -24,15 +24,13 @@ const styles = stylex.create({
     resize: "vertical",
   },
   button: {
-    backgroundColor: {
-      default: colors.gray4,
-      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
-    },
+    backgroundColor: colors.gray4,
     border: 0,
     borderRadius: 4,
     color: colors.gray12,
     padding: "6px 10px",
     opacity: { default: 1, ":disabled": 0.5 },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
   focus: { outline: { default: "none", ":focus-visible": `2px solid ${colors.focus}` } },
   note: { color: colors.gray11, margin: 0, overflowWrap: "anywhere" },
