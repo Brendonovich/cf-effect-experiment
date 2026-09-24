@@ -31,11 +31,11 @@ const styles = stylex.create({
     outline: "none",
     paddingInline: 4,
     textAlign: "left",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
-    },
+    backgroundColor: "transparent",
     boxShadow: { default: "none", ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": {
+      ":hover": { backgroundColor: "color-mix(in srgb, var(--gray-12) 5%, transparent)" },
+    },
   },
   input: {
     backgroundColor: colors.gray2,
@@ -49,9 +49,9 @@ const styles = stylex.create({
   sectionTitle: { flex: 1 },
   iconButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: "transparent",
     borderRadius: 3,
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: colors.gray10,
     display: "flex",
     flexShrink: 0,
     height: 22,
@@ -59,6 +59,7 @@ const styles = stylex.create({
     outline: "none",
     width: 22,
     ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5, color: colors.gray12 } },
   },
   smallIcon: { height: 14, width: 14 },
   fieldList: { display: "flex", flexDirection: "column", gap: 4 },
@@ -98,8 +99,9 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     width: "100%",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: "transparent",
     ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   fieldNameInput: {
     backgroundColor: colors.gray1,
@@ -107,10 +109,9 @@ const styles = stylex.create({
   },
   typePicker: { gridColumn: "2 / 4", minWidth: 0 },
   deleteButton: {
-    visibility: {
-      default: "hidden",
-      [stylex.when.ancestor(":hover", functionFieldMarker)]: "visible",
-      ":focus": "visible",
+    visibility: { default: "hidden", ":focus": "visible" },
+    "@media (hover: hover)": {
+      [stylex.when.ancestor(":hover", functionFieldMarker)]: { visibility: "visible" },
     },
   },
 });

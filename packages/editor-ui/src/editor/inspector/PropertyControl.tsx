@@ -21,9 +21,9 @@ const styles = stylex.create({
     fontSize: 10,
     fontWeight: 400,
     paddingInline: 4,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 10%, transparent)",
+    backgroundColor: "transparent",
+    "@media (hover: hover)": {
+      ":hover": { backgroundColor: "color-mix(in srgb, var(--gray-12) 10%, transparent)" },
     },
   },
   description: { color: colors.gray10, fontSize: 10, lineHeight: "12px" },
