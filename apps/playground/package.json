@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run --environment node",
@@ -33,6 +34,7 @@
     "@macrograph/project-host": "workspace:*",
     "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
+    "alchemy": "2.0.0-beta.72",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.9"
   },
