@@ -2,7 +2,7 @@ name: Deploy Playground
 
 on:
   push:
-    branches: [feat/function-queues]
+    branches: [deploy/playground]
   workflow_dispatch:
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
           VITE_MACROGRAPH_CREDENTIALS_BASE_URL: https://macrograph-playground.pages.dev/__macrograph_credentials
 
       - name: Create Pages project
-        working-directory: apps/cloudflare
+        working-directory: apps/cloud
         run: |
           if ! pnpm exec wrangler pages project list | grep -q 'macrograph-playground'; then
             pnpm exec wrangler pages project create macrograph-playground \
@@ -45,7 +45,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy playground
-        working-directory: apps/cloudflare
+        working-directory: apps/cloud
         run: pnpm exec wrangler pages deploy ../playground/dist --project-name macrograph-playground --branch deploy/playground
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
