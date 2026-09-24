@@ -83,7 +83,13 @@ const styles = stylex.create({
   tabName: { alignItems: "center", display: "flex", gap: 4 },
   selectedName: { color: colors.gray12 },
   unselectedName: {
-    color: { default: colors.gray10, [stylex.when.ancestor(":hover", tabMarker)]: colors.gray12 },
+    color: {
+      default: colors.gray10,
+      [stylex.when.ancestor(":hover", tabMarker)]: {
+        default: null,
+        "@media (hover: hover)": colors.gray12,
+      },
+    },
   },
   description: { color: colors.gray10, fontSize: 10, fontWeight: 400, marginLeft: 4 },
   closeArea: {
@@ -92,7 +98,10 @@ const styles = stylex.create({
     display: "flex",
     opacity: {
       default: 0,
-      [stylex.when.ancestor(":hover", tabMarker)]: 1,
+      [stylex.when.ancestor(":hover", tabMarker)]: {
+        default: null,
+        "@media (hover: hover)": 1,
+      },
       ":focus-within": 1,
       "@media (pointer: coarse)": 1,
     },
@@ -258,18 +267,12 @@ export function TabLayout(props: {
                     onDragStart={(event) =>
                       event.dataTransfer?.setData("application/x-macrograph-tab", tab.id)
                     }
-                    onPointerDown={(event) => {
-                      if (event.pointerType === "mouse" && event.button === 0)
-                        props.onSelect(tab.id);
-                    }}
                   >
                     <button
                       type="button"
                       sx={[styles.focus, styles.tabButton]}
                       aria-current={selected() ? "page" : undefined}
-                      onClick={(event) => {
-                        if (event.detail === 0) props.onSelect(tab.id);
-                      }}
+                      onClick={() => props.onSelect(tab.id)}
                     >
                       <span
                         sx={tab.description === "Module" ? styles.baselineTabText : styles.contents}
