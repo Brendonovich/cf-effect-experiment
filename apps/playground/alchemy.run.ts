@@ -12,14 +12,13 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const site = yield* Cloudflare.Website.Vite("Playground", {
+    const site = yield* Cloudflare.Website.StaticSite("Playground", {
+      command: "VITE_MACROGRAPH_CREDENTIALS_BASE_URL=/__macrograph_credentials pnpm run build",
+      outdir: "dist",
       main: "src/preview-worker.ts",
       assets: {
         notFoundHandling: "single-page-application",
         runWorkerFirst: ["/__macrograph_credentials", "/__macrograph_credentials/*"],
-      },
-      env: {
-        VITE_MACROGRAPH_CREDENTIALS_BASE_URL: "/__macrograph_credentials",
       },
     });
 
