@@ -556,7 +556,10 @@ const styles = stylex.create({
     borderRadius: 6,
     paddingInline: 8,
     fontWeight: 500,
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
   },
   smallInitial: {
     display: "grid",
@@ -611,7 +614,10 @@ const styles = stylex.create({
     borderRadius: 6,
     padding: 8,
     textAlign: "left",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
   },
   menuInitial: {
     display: "grid",
@@ -636,7 +642,12 @@ const styles = stylex.create({
   menuMeta: { display: "block", fontSize: 10, textTransform: "capitalize", color: colors.gray10 },
   check: { width: 16, height: 16, flexShrink: 0, color: "#60a5fa" },
   menuFooter: { borderTop: `1px solid ${colors.gray5}`, padding: 4 },
-  newItem: { color: { default: colors.gray11, ":hover": colors.gray12 } },
+  newItem: {
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
+  },
   addIconBox: {
     display: "grid",
     width: 28,
@@ -682,12 +693,18 @@ const styles = stylex.create({
     fontSize: 12,
     fontWeight: 500,
     textTransform: "capitalize",
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
   },
   navActive: { borderBottomColor: colors.focus, color: colors.gray12 },
   navIdle: {
     borderBottomColor: "transparent",
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
   account: {
     position: "relative",

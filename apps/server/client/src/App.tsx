@@ -75,13 +75,19 @@ const styles = stylex.create({
     fontSize: 12,
     fontWeight: 500,
     textTransform: "capitalize",
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
     cursor: "pointer",
   },
   navActive: { borderBottomColor: colors.focus, color: colors.gray12 },
   navIdle: {
     borderBottomColor: "transparent",
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
   account: {
     alignItems: "center",

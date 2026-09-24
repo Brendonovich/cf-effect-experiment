@@ -16,10 +16,18 @@ const styles = stylex.create({
   },
   row: { display: "flex", alignItems: "center", minWidth: 0 },
   selected: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     boxShadow: `inset -2px 0 0 ${colors.focus}`,
   },
-  unselected: { backgroundColor: { default: "transparent", ":hover": colors.gray4 } },
+  unselected: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
+  },
   name: {
     flex: 1,
     minWidth: 0,
@@ -91,7 +99,7 @@ const styles = stylex.create({
     textAlign: "left",
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.gray5,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
       ":focus-visible": colors.gray5,
     },
     outline: "none",
@@ -102,7 +110,7 @@ const styles = stylex.create({
     color: colors.red11,
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.red3,
+      ":hover": { default: null, "@media (hover: hover)": colors.red3 },
       ":focus-visible": colors.red3,
     },
   },

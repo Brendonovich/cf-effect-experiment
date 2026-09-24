@@ -156,7 +156,10 @@ export const styles = stylex.create({
     flexShrink: 0,
     marginRight: 6,
     placeItems: "center",
-    color: { default: colors.gray9, ":hover": colors.gray11 },
+    color: {
+      default: colors.gray9,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+    },
   },
   searchClearIcon: { width: 12, height: 12 },
   panelTitle: { fontSize: 14, fontWeight: 600 },
@@ -189,7 +192,10 @@ export const styles = stylex.create({
     borderRightColor: colors.focus,
     borderRightWidth: 2,
     borderRadius: 0,
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
   },
   selectedSidebarAccent: {
     borderColor: "transparent",
@@ -199,13 +205,19 @@ export const styles = stylex.create({
     transition: "none",
   },
   ingressSidebarSelectedHover: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     marginBottom: 0,
   },
   ingressSidebarUnselected: {
     borderColor: "transparent",
     borderRadius: 0,
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     marginBottom: 0,
     transition: "none",
   },
@@ -214,7 +226,10 @@ export const styles = stylex.create({
     borderColor: "transparent",
     borderRightWidth: 2,
     borderRadius: 0,
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
   },
   betweenStart: {
     display: "flex",
@@ -293,8 +308,14 @@ export const styles = stylex.create({
     padding: "4px 8px",
     fontSize: 10,
     fontWeight: 500,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
-    backgroundColor: { default: "transparent", ":hover": colors.gray2 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray2 },
+    },
   },
   error: {
     margin: 8,
@@ -515,8 +536,14 @@ export const styles = stylex.create({
     cursor: "pointer",
     textAlign: "left",
     fontWeight: 500,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
-    textDecoration: { default: "none", ":hover": "underline" },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
+    textDecoration: {
+      default: "none",
+      ":hover": { default: null, "@media (hover: hover)": "underline" },
+    },
   },
   traceIcon: { width: 13, height: 13 },
   payload: { minWidth: 0 },
@@ -539,11 +566,17 @@ export const styles = stylex.create({
     placeItems: "center",
     borderRadius: 4,
     border: `1px solid ${colors.gray5}`,
-    color: { default: colors.gray10, ":hover": colors.gray12 },
-    backgroundColor: { default: colors.gray2, ":hover": colors.gray3 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
+    backgroundColor: {
+      default: colors.gray2,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
     opacity: {
       default: 0.72,
-      [stylex.when.ancestor(":hover")]: 1,
+      [stylex.when.ancestor(":hover")]: { default: null, "@media (hover: hover)": 1 },
       ":focus-visible": 1,
     },
   },

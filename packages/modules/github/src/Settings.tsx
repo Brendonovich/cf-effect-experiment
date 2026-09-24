@@ -34,7 +34,10 @@ const styles = stylex.create({
     padding: "6px 8px",
   },
   button: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     border: 0,
     borderRadius: 4,
     color: colors.gray12,

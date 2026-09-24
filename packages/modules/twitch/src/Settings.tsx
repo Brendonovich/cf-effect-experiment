@@ -59,7 +59,10 @@ const styles = stylex.create({
     textAlign: "left",
   },
   chevronBox: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
     borderRadius: 4,
     padding: 2,
     transitionProperty: "background-color",
@@ -89,7 +92,10 @@ const styles = stylex.create({
     gridRowStart: 2,
   },
   connect: {
-    backgroundColor: { default: colors.gray3, ":hover": colors.gray4 },
+    backgroundColor: {
+      default: colors.gray3,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     border: `1px solid ${colors.gray6}`,
     borderRadius: 2,
     color: colors.gray12,

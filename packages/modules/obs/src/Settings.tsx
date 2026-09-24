@@ -67,7 +67,10 @@ const styles = stylex.create({
   },
   mono: { fontFamily: "monospace", fontSize: 12 },
   primaryButton: {
-    backgroundColor: { default: colors.gray12, ":hover": colors.gray11 },
+    backgroundColor: {
+      default: colors.gray12,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+    },
     border: 0,
     borderRadius: 2,
     color: colors.gray1,
@@ -89,7 +92,10 @@ const styles = stylex.create({
   muted: { color: colors.gray11 },
   error: { color: colors.red10 },
   actionButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     border: 0,
     borderRadius: 2,
     color: colors.gray11,
@@ -97,7 +103,10 @@ const styles = stylex.create({
     padding: "4px 8px",
   },
   removeButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.red3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.red3 },
+    },
     border: 0,
     borderRadius: 2,
     color: colors.red10,

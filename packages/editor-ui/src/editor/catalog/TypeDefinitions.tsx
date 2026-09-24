@@ -74,7 +74,10 @@ const styles = stylex.create({
   },
   kindTab: {
     alignSelf: "stretch",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
     color: colors.gray10,
@@ -88,9 +91,15 @@ const styles = stylex.create({
   inactiveKind: { borderBottomColor: "transparent" },
   iconButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     borderRadius: 2,
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     display: "flex",
     flexShrink: 0,
     height: 24,
@@ -155,7 +164,10 @@ const styles = stylex.create({
     overflowY: "auto",
   },
   typeName: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     fontSize: 12,
     minWidth: 0,
     overflow: "hidden",

@@ -23,7 +23,10 @@ const styles = stylex.create({
     paddingInline: 4,
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 10%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 10%, transparent)",
+      },
     },
   },
   description: { color: colors.gray10, fontSize: 10, lineHeight: "12px" },

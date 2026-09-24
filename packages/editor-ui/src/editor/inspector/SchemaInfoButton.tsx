@@ -28,7 +28,10 @@ const styles = stylex.create({
     width: "100%",
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
@@ -104,9 +107,15 @@ const styles = stylex.create({
     borderLeftWidth: 1,
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
 });
 

@@ -45,31 +45,49 @@ const styles = stylex.create({
   small: { fontSize: 12, fontWeight: 500, height: 24, paddingInline: 8 },
   medium: { fontSize: 12, fontWeight: 600, height: 32, paddingInline: 12 },
   primary: {
-    backgroundColor: { default: colors.gray12, ":hover": colors.gray11 },
+    backgroundColor: {
+      default: colors.gray12,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+    },
     color: colors.gray1,
   },
   secondary: {
-    backgroundColor: { default: colors.gray3, ":hover": colors.gray4 },
+    backgroundColor: {
+      default: colors.gray3,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     color: colors.gray12,
   },
   ghost: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
     boxShadow: "none",
     color: colors.gray12,
   },
   text: {
     backgroundColor: "transparent",
     boxShadow: "none",
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
   icon: {
     aspectRatio: "1",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     boxShadow: {
       default: "none",
       ":focus-visible": `inset 0 0 0 1px ${colors.focus}`,
     },
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     paddingInline: 0,
   },
 });

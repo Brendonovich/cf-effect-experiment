@@ -33,7 +33,10 @@ const styles = stylex.create({
     textAlign: "left",
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
     boxShadow: { default: "none", ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
@@ -49,9 +52,15 @@ const styles = stylex.create({
   sectionTitle: { flex: 1 },
   iconButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     borderRadius: 3,
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     display: "flex",
     flexShrink: 0,
     height: 22,
@@ -98,7 +107,10 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     width: "100%",
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     ":focus-visible": { boxShadow: `inset 0 0 0 1px ${colors.focus}` },
   },
   fieldNameInput: {
@@ -109,7 +121,10 @@ const styles = stylex.create({
   deleteButton: {
     visibility: {
       default: "hidden",
-      [stylex.when.ancestor(":hover", functionFieldMarker)]: "visible",
+      [stylex.when.ancestor(":hover", functionFieldMarker)]: {
+        default: null,
+        "@media (hover: hover)": "visible",
+      },
       ":focus": "visible",
     },
   },

@@ -47,7 +47,10 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     color: "white",
-    fill: { default: "transparent", ":hover": "currentColor" },
+    fill: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": "currentColor" },
+    },
   },
   executionPinFilled: { fill: "currentColor" },
   highlightedExecutionPin: { filter: "drop-shadow(0 0 3px rgb(255 255 255 / 0.6))" },
@@ -203,7 +206,10 @@ const styles = stylex.create({
     justifyContent: "center",
     border: 0,
     borderRadius: 4,
-    backgroundColor: { default: "transparent", ":hover": "rgb(255 255 255 / 0.3)" },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": "rgb(255 255 255 / 0.3)" },
+    },
     paddingInline: 4,
   },
   expandIcon: { width: 16, height: 16, flexShrink: 0 },

@@ -21,7 +21,10 @@ const styles = stylex.create({
   text: { color: "var(--gray-11)", fontSize: 12, margin: 0 },
   error: { color: "var(--red-10)", fontSize: 12, margin: 0 },
   button: {
-    backgroundColor: { default: "var(--gray-4)", ":hover": "var(--gray-5)" },
+    backgroundColor: {
+      default: "var(--gray-4)",
+      ":hover": { default: null, "@media (hover: hover)": "var(--gray-5)" },
+    },
     border: 0,
     borderRadius: 2,
     color: "var(--gray-12)",

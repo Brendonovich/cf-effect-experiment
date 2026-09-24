@@ -58,7 +58,10 @@ const styles = stylex.create({
     textAlign: "left",
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
     boxShadow: { default: "none", ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },

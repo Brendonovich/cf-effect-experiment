@@ -92,7 +92,10 @@ const styles = stylex.create({
     paddingInline: 8,
   },
   shortcutsButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray6 },
+    },
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
@@ -341,7 +344,7 @@ const styles = stylex.create({
     borderRadius: 4,
     backgroundColor: {
       default: "transparent",
-      ":hover": "rgb(255 255 255 / 0.1)",
+      ":hover": { default: null, "@media (hover: hover)": "rgb(255 255 255 / 0.1)" },
     },
     padding: 4,
     textAlign: "left",

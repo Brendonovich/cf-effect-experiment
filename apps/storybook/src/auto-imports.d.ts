@@ -6,17 +6,18 @@
 // biome-ignore lint: disable
 export {}
 declare global {
-  const IconBiPlus: typeof import("~icons/bi/plus.jsx").default;
-  const IconBiX: typeof import("~icons/bi/x.jsx").default;
-  const IconMdiDotsHorizontal: typeof import("~icons/mdi/dots-horizontal.jsx").default;
-  const IconPhSquareSplitHorizontal: typeof import("~icons/ph/square-split-horizontal.jsx").default;
-  const IconTablerArrowsDiagonal: typeof import("~icons/tabler/arrows-diagonal.jsx").default;
-  const IconTablerArrowsDiagonalMinimize2: typeof import("~icons/tabler/arrows-diagonal-minimize2.jsx").default;
-  const IconTablerCopy: typeof import("~icons/tabler/copy.jsx").default;
-  const IconTablerFunction: typeof import("~icons/tabler/function.jsx").default;
-  const IconTablerSearch: typeof import("~icons/tabler/search.jsx").default;
-  const IconTablerSettings: typeof import("~icons/tabler/settings.jsx").default;
-  const IconTablerStar: typeof import("~icons/tabler/star.jsx").default;
-  const IconTablerStarFilled: typeof import("~icons/tabler/star-filled.jsx").default;
-  const IconTablerTrash: typeof import("~icons/tabler/trash.jsx").default;
+  const IconBiPlus: typeof import('~icons/bi/plus.jsx').default
+  const IconBiX: typeof import('~icons/bi/x.jsx').default
+  const IconMdiDotsHorizontal: typeof import('~icons/mdi/dots-horizontal.jsx').default
+  const IconPhSquareSplitHorizontal: typeof import('~icons/ph/square-split-horizontal.jsx').default
+  const IconTablerArrowsDiagonal: typeof import('~icons/tabler/arrows-diagonal.jsx').default
+  const IconTablerArrowsDiagonalMinimize2: typeof import('~icons/tabler/arrows-diagonal-minimize2.jsx').default
+  const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
+  const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
+  const IconTablerPackage: typeof import('~icons/tabler/package.jsx').default
+  const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
+  const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
+  const IconTablerStar: typeof import("~icons/tabler/star.jsx").default
+  const IconTablerStarFilled: typeof import("~icons/tabler/star-filled.jsx").default
+  const IconTablerTrash: typeof import('~icons/tabler/trash.jsx').default
 }

@@ -118,9 +118,15 @@ const styles = stylex.create({
   unselectedBackground: { backgroundColor: colors.gray3 },
   iconButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray6 },
+    },
     borderRadius: 2,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     display: "flex",
     height: 20,
     justifyContent: "center",

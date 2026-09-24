@@ -468,7 +468,10 @@ const styles = stylex.create({
   accessOption: {
     borderWidth: 0,
     borderRadius: 5,
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     padding: "8px 10px",
     textAlign: "center",
     fontSize: 12,
@@ -488,7 +491,10 @@ const styles = stylex.create({
     alignItems: "center",
     gap: 12,
     padding: "10px 12px",
-    backgroundColor: { default: "transparent", ":hover": colors.gray2 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray2 },
+    },
     borderTopColor: colors.gray5,
     borderTopStyle: "solid",
     borderTopWidth: { default: 1, ":first-child": 0 },
@@ -544,7 +550,10 @@ const styles = stylex.create({
     padding: 0,
     fontSize: 10,
     fontWeight: 500,
-    color: { default: colors.gray9, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray9,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     opacity: { default: 1, ":disabled": 0.5 },
   },
@@ -570,7 +579,10 @@ const styles = stylex.create({
   deleteButton: {
     flexShrink: 0,
     borderRadius: 6,
-    backgroundColor: { default: colors.red9, ":hover": colors.red10 },
+    backgroundColor: {
+      default: colors.red9,
+      ":hover": { default: null, "@media (hover: hover)": colors.red10 },
+    },
     padding: "8px 12px",
     fontSize: 12,
     fontWeight: 600,

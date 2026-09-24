@@ -42,7 +42,11 @@ const styles = stylex.create({
     fontSize: 12,
   },
   button: {
-    backgroundColor: { default: colors.gray12, ":hover": colors.gray11, ":disabled": colors.gray6 },
+    backgroundColor: {
+      default: colors.gray12,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+      ":disabled": colors.gray6,
+    },
     border: 0,
     borderRadius: 2,
     color: colors.gray1,

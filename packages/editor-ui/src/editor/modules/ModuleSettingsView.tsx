@@ -57,7 +57,7 @@ const styles = stylex.create({
   tab: {
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
       ":disabled": "transparent",
     },
     borderBottomStyle: "solid",
@@ -73,7 +73,10 @@ const styles = stylex.create({
   activeTab: { borderBottomColor: colors.focus, color: colors.gray12 },
   inactiveTab: {
     borderBottomColor: "transparent",
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
   scroll: { flex: 1, minHeight: 0, overflow: "hidden" },
   engineScroll: { height: "100%", overflowY: "auto" },
@@ -164,12 +167,18 @@ const styles = stylex.create({
     paddingInline: 8,
   },
   selectedReferenceItem: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     boxShadow: `inset -2px 0 0 ${colors.focus}`,
     color: colors.gray12,
   },
   unselectedReferenceItem: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
   },
   referenceDetail: { minHeight: 0, overflowY: "auto", padding: 20 },
   detailContent: { display: "flex", flexDirection: "column", gap: 20, maxWidth: 760 },

@@ -8,10 +8,16 @@ import { Button } from "./Button";
 const styles = stylex.create({
   button: {
     alignSelf: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray6 },
+    },
     borderRadius: 4,
     borderWidth: 0,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     height: 20,
     marginBlock: "auto",
     marginInline: 6,

@@ -93,7 +93,10 @@ const styles = stylex.create({
   },
   packageToggle: {
     alignItems: "center",
-    backgroundColor: { default: colors.gray3, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray3,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     color: colors.gray11,
     display: "flex",
     fontSize: 12,
@@ -116,7 +119,7 @@ const styles = stylex.create({
     alignItems: "center",
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.gray5,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
       ":focus-visible": colors.gray5,
     },
     borderRadius: 4,

@@ -26,7 +26,10 @@ const styles = stylex.create({
     outline: "none",
   },
   nameButton: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray3 },
+    },
     border: 0,
     borderRadius: 4,
     color: colors.gray12,
@@ -54,7 +57,11 @@ const styles = stylex.create({
   },
   remove: {
     alignSelf: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.red3, ":disabled": colors.red3 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.red3 },
+      ":disabled": colors.red3,
+    },
     border: 0,
     borderRadius: 4,
     color: { default: colors.red10, ":disabled": colors.red9 },
@@ -70,7 +77,10 @@ const styles = stylex.create({
   copyButton: {
     backgroundColor: "transparent",
     border: 0,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     display: "block",
     fontFamily: "monospace",
     fontSize: 12,
@@ -130,7 +140,7 @@ const styles = stylex.create({
     alignSelf: "flex-end",
     backgroundColor: {
       default: colors.gray12,
-      ":hover": colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
       ":disabled": colors.gray10,
     },
     border: 0,

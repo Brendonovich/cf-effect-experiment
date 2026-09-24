@@ -63,7 +63,10 @@ const styles = stylex.create({
     border: 0,
     borderRadius: 2,
     outline: "none",
-    backgroundColor: { default: "transparent", ":hover": "#2563eb" },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": "#2563eb" },
+    },
     paddingBlock: 2,
     paddingInline: 4,
     color: "inherit",

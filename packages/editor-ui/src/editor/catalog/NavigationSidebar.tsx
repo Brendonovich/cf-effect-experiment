@@ -41,7 +41,10 @@ const styles = stylex.create({
     width: "100%",
   },
   tab: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
     fontSize: 11,
@@ -52,7 +55,10 @@ const styles = stylex.create({
   activeTab: { borderBottomColor: colors.focus, color: colors.gray12 },
   inactiveTab: {
     borderBottomColor: "transparent",
-    color: { default: colors.gray10, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray10,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
   },
   toolbar: {
     alignItems: "stretch",
@@ -89,9 +95,15 @@ const styles = stylex.create({
   },
   newButton: {
     alignItems: "center",
-    backgroundColor: { default: "transparent", ":hover": colors.gray6 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray6 },
+    },
     borderRadius: 4,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
+    color: {
+      default: colors.gray11,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray12 },
+    },
     display: "flex",
     flexShrink: 0,
     height: 20,
@@ -159,7 +171,7 @@ const styles = stylex.create({
     width: "100%",
     backgroundColor: {
       default: "transparent",
-      ":hover": colors.gray5,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
       ":focus-visible": colors.gray5,
     },
   },
@@ -185,7 +197,10 @@ const styles = stylex.create({
   splitLine: {
     backgroundColor: {
       default: colors.gray5,
-      [stylex.when.ancestor(":hover", splitMarker)]: colors.focus,
+      [stylex.when.ancestor(":hover", splitMarker)]: {
+        default: null,
+        "@media (hover: hover)": colors.focus,
+      },
       [stylex.when.ancestor(":focus-visible", splitMarker)]: colors.focus,
     },
     height: 1,
@@ -209,10 +224,18 @@ const styles = stylex.create({
     width: "100%",
   },
   selected: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: {
+      default: colors.gray4,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
     boxShadow: `inset -2px 0 0 ${colors.focus}`,
   },
-  unselected: { backgroundColor: { default: "transparent", ":hover": colors.gray4 } },
+  unselected: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray4 },
+    },
+  },
   packages: { display: "flex", flexDirection: "column", minHeight: "100%" },
   constants: { paddingBottom: 8, paddingInline: 8 },
   column: { display: "flex", flexDirection: "column" },
@@ -264,7 +287,10 @@ const styles = stylex.create({
     height: 22,
     justifyContent: "center",
     width: 22,
-    backgroundColor: { default: "transparent", ":hover": colors.gray5 },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": colors.gray5 },
+    },
   },
   defaultAccent: { color: colors.focus },
   row: { alignItems: "center", display: "flex", gap: 4 },
@@ -282,7 +308,10 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
   },
   nameInput: {
@@ -310,13 +339,19 @@ const styles = stylex.create({
     justifyContent: "center",
     visibility: {
       default: "hidden",
-      [stylex.when.ancestor(":hover", resourceMarker)]: "visible",
+      [stylex.when.ancestor(":hover", resourceMarker)]: {
+        default: null,
+        "@media (hover: hover)": "visible",
+      },
       ":focus": "visible",
     },
     width: 22,
     backgroundColor: {
       default: "transparent",
-      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      ":hover": {
+        default: null,
+        "@media (hover: hover)": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+      },
     },
   },
   trash: { height: 14, width: 14 },

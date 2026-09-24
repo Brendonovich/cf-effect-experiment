@@ -107,7 +107,10 @@ const styles = stylex.create({
     "::placeholder": { color: colors.gray11 },
   },
   searchClear: {
-    color: { default: colors.gray9, ":hover": colors.gray11 },
+    color: {
+      default: colors.gray9,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+    },
     display: "grid",
     flexShrink: 0,
     height: 20,
@@ -147,7 +150,10 @@ const styles = stylex.create({
     paddingInline: 4,
     textAlign: "left",
     width: "100%",
-    backgroundColor: { default: "transparent", ":hover": "#2563eb" },
+    backgroundColor: {
+      default: "transparent",
+      ":hover": { default: null, "@media (hover: hover)": "#2563eb" },
+    },
   },
   highlighted: { backgroundColor: "#2563eb" },
 });

@@ -116,7 +116,10 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 6,
-    backgroundColor: { default: colors.gray12, ":hover": colors.gray11 },
+    backgroundColor: {
+      default: colors.gray12,
+      ":hover": { default: null, "@media (hover: hover)": colors.gray11 },
+    },
     paddingInline: 20,
     fontSize: 14,
     fontWeight: 600,
