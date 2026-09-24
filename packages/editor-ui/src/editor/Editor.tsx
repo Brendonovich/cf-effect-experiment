@@ -96,7 +96,7 @@ const styles = stylex.create({
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
-    minHeight: { default: 44, "@media (min-width: 768px)": 24 },
+    minHeight: 24,
     paddingInline: 12,
   },
   typesButton: { marginRight: "auto" },
