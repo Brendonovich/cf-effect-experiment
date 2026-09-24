@@ -210,7 +210,8 @@ async function openBrowser(url) {
     reducedMotion: "reduce",
     acceptDownloads: true,
   });
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
+  if (browserName === "chromium")
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
   const page = context.pages()[0] ?? (await context.newPage());
   page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
