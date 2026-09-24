@@ -13,6 +13,9 @@ import { isUnexpectedConsoleProblem } from "./diagnostics.mjs";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, "../..");
 const mode = process.argv[2] ?? "all";
+const browserName = process.env.MACROGRAPH_VERIFY_BROWSER ?? "chromium";
+if (browserName !== "chromium" && browserName !== "webkit")
+  throw new Error(`Unsupported browser ${browserName}`);
 const supportedModes = new Set([
   "doctor",
   "smoke",
@@ -40,6 +43,7 @@ const manifest = {
     node: process.version,
     platform: process.platform,
     architecture: process.arch,
+    browser: browserName,
     isolatedBrowserProfile: true,
   },
   checks: [],
@@ -76,7 +80,8 @@ async function saveManifest() {
 
 async function loadPlaywright() {
   try {
-    return await import("playwright");
+    const playwright = await import("playwright");
+    return browserName === "webkit" ? playwright.webkit : playwright.chromium;
   } catch (error) {
     throw new Error(
       `Playwright is unavailable. Add playwright as a root devDependency and run pnpm exec playwright install chromium. (${error instanceof Error ? error.message : String(error)})`,
@@ -106,9 +111,9 @@ async function doctor() {
       error instanceof Error ? error.message : String(error),
     );
   }
-  let chromium;
+  let browser;
   try {
-    ({ chromium } = await loadPlaywright());
+    browser = await loadPlaywright();
     check("Playwright package available", "passed");
   } catch (error) {
     check(
@@ -117,7 +122,7 @@ async function doctor() {
       error instanceof Error ? error.message : String(error),
     );
   }
-  const executable = chromium.executablePath();
+  const executable = browser.executablePath();
   try {
     await access(executable);
     check("Playwright Chromium installed", "passed", executable);
@@ -191,9 +196,9 @@ async function startApp() {
 }
 
 async function openBrowser(url) {
-  const { chromium } = await loadPlaywright();
+  const browser = await loadPlaywright();
   profileDirectory = await mkdtemp(join(tmpdir(), "macrograph-verify-profile-"));
-  context = await chromium.launchPersistentContext(profileDirectory, {
+  context = await browser.launchPersistentContext(profileDirectory, {
     headless: process.env.MACROGRAPH_VERIFY_HEADED !== "1",
     viewport:
       mode === "function-queues" ? { width: 390, height: 844 } : { width: 1440, height: 960 },
