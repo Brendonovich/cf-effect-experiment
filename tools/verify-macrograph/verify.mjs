@@ -195,7 +195,10 @@ async function openBrowser(url) {
   profileDirectory = await mkdtemp(join(tmpdir(), "macrograph-verify-profile-"));
   context = await chromium.launchPersistentContext(profileDirectory, {
     headless: process.env.MACROGRAPH_VERIFY_HEADED !== "1",
-    viewport: { width: 1440, height: 960 },
+    viewport:
+      mode === "function-queues" ? { width: 390, height: 844 } : { width: 1440, height: 960 },
+    hasTouch: mode === "function-queues",
+    isMobile: mode === "function-queues",
     locale: "en-US",
     timezoneId: "UTC",
     colorScheme: "dark",
@@ -280,19 +283,53 @@ async function functionNavigation(page) {
 
 async function functionQueues(page) {
   await waitForAppShell(page);
+
+  await page.getByRole("button", { name: "Browse", exact: true }).tap();
+  await page.getByRole("button", { name: "Functions", exact: true }).tap();
+  await page.getByRole("button", { name: "New function", exact: true }).tap();
+  await page.getByRole("button", { name: "New Function", exact: true }).first().waitFor();
+  await page.getByRole("button", { name: "Browse", exact: true }).waitFor();
+
   await page.getByRole("button", { name: "Queues", exact: true }).click();
-  await page.getByRole("button", { name: "New queue", exact: true }).click();
+  await page.getByRole("button", { name: "New queue", exact: true }).tap();
   const queue = page.getByRole("region", { name: "New Queue", exact: true });
   await queue.waitFor();
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
-  await queue.getByRole("button", { name: "Pause", exact: true }).click();
+  await queue.getByRole("button", { name: "Pause", exact: true }).tap();
   await queue.getByText(/Paused \/ 0 running \/ 0 waiting/).waitFor();
-  await queue.getByRole("button", { name: "Resume", exact: true }).click();
+  await queue.getByRole("button", { name: "Resume", exact: true }).tap();
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
+  const queuePagePath = join(outputDirectory, "function-queues-page.png");
+  await page.screenshot({ path: queuePagePath, fullPage: true });
+  await evidence(queuePagePath, "screenshot");
+
+  await page.getByRole("button", { name: "Browse", exact: true }).tap();
+  await page.getByRole("button", { name: "Graphs", exact: true }).tap();
+  await page.getByRole("button", { name: "New graph", exact: true }).tap();
+  await page.getByRole("button", { name: "Browse", exact: true }).waitFor();
+  const canvas = page.locator("[data-active-graph-canvas]");
+  await canvas.click({ button: "right", position: { x: 180, y: 360 } });
+  const nodeMenu = page.getByRole("dialog", { name: "Create node", exact: true });
+  await nodeMenu.getByRole("textbox", { name: "Search nodes", exact: true }).fill("Add to Queue");
+  await nodeMenu.getByRole("button", { name: "Add to Queue", exact: true }).tap();
+  await page.getByText("Add to Queue", { exact: true }).first().tap();
+  await page.getByRole("button", { name: "Inspect", exact: true }).tap();
+
+  await page.getByRole("button", { name: "Select queue", exact: true }).tap();
+  await page.getByRole("option", { name: "New Queue", exact: true }).tap();
+  await page.getByRole("button", { name: "New Queue", exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "Select function", exact: true }).tap();
+  await page.getByRole("option", { name: "New Function", exact: true }).tap();
+  await page
+    .getByRole("complementary")
+    .getByRole("button", { name: "New Function", exact: true })
+    .waitFor();
+
   const path = join(outputDirectory, "function-queues.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
-  check("generic queue creation and live pause controls are visible", "passed");
+  check("mobile Add to Queue selects a generic queue and per-item function", "passed");
 }
 
 async function moduleReference(page) {

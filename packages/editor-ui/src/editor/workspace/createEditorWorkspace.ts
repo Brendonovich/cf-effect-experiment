@@ -195,6 +195,7 @@ export function createEditorWorkspace(
         type: "open-tab",
         tab: { type: "graph", graphId: id },
       });
+      if (isMobile()) mobilePanelActions.close();
       queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
     } else setSelectedGraphIdRaw(null);
   };
@@ -274,6 +275,7 @@ export function createEditorWorkspace(
       type: "open-tab",
       tab: { type: "package", packageId },
     });
+    if (isMobile()) mobilePanelActions.close();
     queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
   };
   const openShortcuts = () => {
