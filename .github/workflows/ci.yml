@@ -88,6 +88,11 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     strategy:
       fail-fast: false
       matrix:
@@ -113,8 +118,6 @@ jobs:
             apps/playground/package.json
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: ${{ matrix.name }}
         run: pnpm ${{ matrix.command }}
         env:
