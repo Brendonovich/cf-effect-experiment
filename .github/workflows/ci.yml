@@ -123,6 +123,11 @@ jobs:
           key: playwright-apt-ubuntu-24.04-${{ runner.arch }}-${{ matrix.browser }}-1.63.0
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: Finalize Playwright system dependency cache
+        run: |
+          sudo rm -f /var/cache/apt/archives/lock
+          sudo rm -rf /var/cache/apt/archives/partial
+          sudo chmod -R a+rX /var/cache/apt/archives
       - name: ${{ matrix.name }}
         run: pnpm ${{ matrix.command }}
         env:
