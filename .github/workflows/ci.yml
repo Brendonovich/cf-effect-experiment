@@ -16,9 +16,33 @@ concurrency:
 
 jobs:
   quality:
+    name: quality (${{ matrix.task }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: static-analysis
+            cache: ""
+            cache-files: pnpm-lock.yaml
+            install: pnpm install --frozen-lockfile
+            command: pnpm exec tsgo -b && pnpm exec vp lint --quiet && node --test tooling/oxlint/macrograph.test.mjs
+          - task: storybook
+            cache: pnpm
+            cache-files: |
+              pnpm-lock.yaml
+              apps/storybook/package.json
+            install: pnpm install --frozen-lockfile --filter '@macrograph/storybook...'
+            command: pnpm --filter @macrograph/storybook build
+          - task: server-integration
+            cache: pnpm
+            cache-files: |
+              pnpm-lock.yaml
+              apps/server/package.json
+            install: pnpm install --frozen-lockfile --filter '@macrograph/server...'
+            command: pnpm --filter @macrograph/server test:integration
     steps:
       - uses: actions/checkout@v6
         with:
@@ -27,15 +51,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: pnpm
+          cache: ${{ matrix.cache }}
+          cache-dependency-path: ${{ matrix.cache-files }}
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Typecheck and lint
-        run: pnpm typecheck && pnpm lint
-      - name: Build Storybook
-        run: pnpm storybook:build
-      - name: Test server production build
-        run: pnpm test:integration
+        run: ${{ matrix.install }}
+      - name: Run ${{ matrix.task }}
+        run: ${{ matrix.command }}
 
   unit-tests:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
@@ -63,6 +84,7 @@ jobs:
         run: pnpm verify:test
 
   e2e:
+    name: e2e (${{ matrix.browser }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
