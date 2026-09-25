@@ -11,8 +11,7 @@ export const AppCredentialsLayer = Layer.effect(AppCredentials)(
 export const appCredentialsLayerFromEnvironment = (
   environment: Readonly<Record<string, unknown>>,
 ) =>
-  Layer.effect(
-    AppCredentials,
+  Layer.effect(AppCredentials)(
     Effect.gen(function* () {
       const appId = environment.GITHUB_APP_ID;
       const privateKey = environment.GITHUB_APP_PRIVATE_KEY;
