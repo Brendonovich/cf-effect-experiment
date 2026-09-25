@@ -195,6 +195,7 @@ export function createEditorWorkspace(
         type: "open-tab",
         tab: { type: "graph", graphId: id },
       });
+      if (isMobile()) mobilePanelActions.close();
       queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
     } else setSelectedGraphIdRaw(null);
   };
@@ -274,6 +275,7 @@ export function createEditorWorkspace(
       type: "open-tab",
       tab: { type: "package", packageId },
     });
+    if (isMobile()) mobilePanelActions.close();
     queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
   };
   const openShortcuts = () => {
@@ -282,6 +284,10 @@ export function createEditorWorkspace(
   };
   const openTypes = () => {
     dispatchWorkspace({ type: "open-tab", tab: { type: "types" } });
+    queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
+  };
+  const openQueues = () => {
+    dispatchWorkspace({ type: "open-tab", tab: { type: "queues" } });
     queueMicrotask(() => activateWorkspacePane(workspace().focusedPaneId));
   };
   const onProjectSnapshot = (project: Parameters<EditorStore["setProject"]>[0]) => {
@@ -295,7 +301,8 @@ export function createEditorWorkspace(
       currentTab?.type !== "package" &&
       currentTab?.type !== "settings" &&
       currentTab?.type !== "shortcuts" &&
-      currentTab?.type !== "types"
+      currentTab?.type !== "types" &&
+      currentTab?.type !== "queues"
     ) {
       dispatchWorkspace({
         type: "open-tab",
@@ -374,6 +381,7 @@ export function createEditorWorkspace(
     openPackage,
     openShortcuts,
     openTypes,
+    openQueues,
     selectedPaneId,
     graphs,
     selectedGraph,

@@ -67,6 +67,24 @@ describe("JsonPersistence", () => {
     }),
   );
 
+  it.effect("drops the incompatible function-bound queue format", () =>
+    Effect.gen(function* () {
+      const legacy = yield* Schema.decodeUnknownEffect(Project.Model)({
+        ...Project.empty(),
+        queues: {
+          work: { id: "work", name: "Work", functionId: "worker" },
+        },
+      });
+      expect(legacy.queues).toEqual({});
+
+      const current = yield* Schema.decodeUnknownEffect(Project.Model)({
+        ...Project.empty(),
+        queues: { work: { id: "work", name: "Work" } },
+      });
+      expect(current.queues.work).toEqual({ id: "work", name: "Work" });
+    }),
+  );
+
   it.effect("decodes nodes written before input defaults and folding were introduced", () =>
     Effect.gen(function* () {
       const node = yield* Schema.decodeUnknownEffect(Node.Model)({

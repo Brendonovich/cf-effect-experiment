@@ -477,6 +477,7 @@ function EditorContent(
       };
     if (tab.type === "shortcuts") return { id: tab.id, title: "Shortcuts" };
     if (tab.type === "types") return { id: tab.id, title: "Types" };
+    if (tab.type === "queues") return { id: tab.id, title: "Queues" };
     return {
       id: tab.id,
       title: "Settings",
@@ -500,6 +501,22 @@ function EditorContent(
             canEdit={controller.connection.canEdit()}
             onPreview={controller.commands.previewTypeDefinition}
             onConfirm={controller.commands.confirmTypeDefinition}
+          />
+        </Show>
+        <Show when={tab().type === "queues"}>
+          <QueuesPanel
+            queues={controller.editor.store.project?.queues ?? {}}
+            states={controller.connection.queueStates()}
+            canEdit={controller.connection.canEdit()}
+            error={controller.commands.queueError()}
+            functions={Object.values(controller.editor.store.project?.functions ?? {})}
+            onCreate={controller.commands.createQueue}
+            onRename={controller.commands.renameQueue}
+            onDelete={controller.commands.deleteQueue}
+            onPause={controller.commands.pauseQueue}
+            onAdvance={controller.commands.advanceQueue}
+            onClear={controller.commands.clearQueue}
+            onRemove={controller.commands.removeQueueItem}
           />
         </Show>
         <Show when={packageTab()} fallback={null}>
@@ -628,24 +645,6 @@ function EditorContent(
                   onClose={() => controller.layout.setNavSection(null)}
                   onCreateGraph={controller.commands.createGraph}
                   onCreateFunction={controller.commands.createFunction}
-                  onCreateQueue={controller.commands.createQueue}
-                  queuesPanel={
-                    <QueuesPanel
-                      queues={controller.editor.store.project?.queues ?? {}}
-                      states={controller.connection.queueStates()}
-                      search={controller.catalog.navSearch()}
-                      canEdit={controller.connection.canEdit()}
-                      error={controller.commands.queueError()}
-                      functions={Object.values(controller.editor.store.project?.functions ?? {})}
-                      onRename={controller.commands.renameQueue}
-                      onSetFunction={controller.commands.setQueueFunction}
-                      onDelete={controller.commands.deleteQueue}
-                      onPause={controller.commands.pauseQueue}
-                      onAdvance={controller.commands.advanceQueue}
-                      onClear={controller.commands.clearQueue}
-                      onRemove={controller.commands.removeQueueItem}
-                    />
-                  }
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}
@@ -1227,6 +1226,13 @@ function EditorContent(
             </Sidebar>
           </div>
           <footer sx={styles.footer}>
+            <button
+              type="button"
+              sx={[styles.focusRing, styles.shortcutsButton]}
+              onClick={controller.layout.openQueues}
+            >
+              Queues
+            </button>
             <button
               type="button"
               sx={[styles.focusRing, styles.shortcutsButton, styles.typesButton]}

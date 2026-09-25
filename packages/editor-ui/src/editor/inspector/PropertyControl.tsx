@@ -71,7 +71,7 @@ export function PropertyControl(props: {
   };
 
   return (
-    <label sx={styles.field}>
+    <div sx={styles.field}>
       <span sx={styles.label}>
         {props.property.name}
         <Show when={props.property.optional}>
@@ -116,6 +116,7 @@ export function PropertyControl(props: {
       >
         <input
           sx={styles.input}
+          aria-label={props.property.name}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onChange={() => props.onSet(draft())}
@@ -129,6 +130,7 @@ export function PropertyControl(props: {
       >
         <input
           sx={styles.input}
+          aria-label={props.property.name}
           type="number"
           step={"type" in props.property && props.property.type._tag === "Int" ? "1" : "any"}
           value={draft()}
@@ -139,11 +141,12 @@ export function PropertyControl(props: {
       <Show when={"type" in props.property && props.property.type._tag === "Bool"}>
         <input
           sx={styles.checkbox}
+          aria-label={props.property.name}
           type="checkbox"
           checked={props.value === true}
           onChange={(event) => props.onSet(event.currentTarget.checked)}
         />
       </Show>
-    </label>
+    </div>
   );
 }

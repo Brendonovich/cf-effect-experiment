@@ -106,7 +106,6 @@ export const persistenceContract = <E>(
               work: {
                 id: Queue.QueueId.make("work"),
                 name: "Work",
-                functionId: functionCanvas.id,
               },
             },
           };

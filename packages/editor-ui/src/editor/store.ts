@@ -141,28 +141,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     switch (event._tag) {
       case "QueueUpdated":
         setStore((store) => {
-          const project = store.project!;
-          project.queues[event.queue.id] = event.queue;
-          for (const [graphId, canvas] of Object.entries(project.graphs))
-            for (const node of Object.values(canvas.nodes))
-              if (Queue.isEnqueue(node) && node.properties.queue === event.queue.id)
-                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
-                  event.queue,
-                  project.functions,
-                );
+          store.project!.queues[event.queue.id] = event.queue;
         });
         break;
       case "QueueDeleted":
         setStore((store) => {
-          const project = store.project!;
-          delete project.queues[event.queueId];
-          for (const [graphId, canvas] of Object.entries(project.graphs))
-            for (const node of Object.values(canvas.nodes))
-              if (Queue.isEnqueue(node) && node.properties.queue === event.queueId)
-                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
-                  undefined,
-                  project.functions,
-                );
+          delete store.project!.queues[event.queueId];
         });
         break;
       case "TypeDefinitionsUpdated":
@@ -236,6 +220,8 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
               for (const node of Object.values(graph.nodes))
                 if (GraphFunction.isCall(node) && node.properties.function === event.graphId)
                   (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(undefined);
+                else if (Queue.isEnqueue(node) && node.properties.function === event.graphId)
+                  (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(undefined);
           }
         });
         break;
@@ -282,16 +268,8 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             for (const node of Object.values(caller.nodes))
               if (GraphFunction.isCall(node) && node.properties.function === event.fn.canvas.id)
                 (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(event.fn);
-              else if (Queue.isEnqueue(node)) {
-                const queueId = node.properties.queue;
-                const queue =
-                  typeof queueId === "string" ? store.project.queues[queueId] : undefined;
-                if (queue?.functionId === event.fn.canvas.id)
-                  (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
-                    queue,
-                    store.project.functions,
-                  );
-              }
+              else if (Queue.isEnqueue(node) && node.properties.function === event.fn.canvas.id)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(event.fn);
         });
         break;
       case "GraphNameChanged": {

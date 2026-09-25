@@ -1,6 +1,6 @@
 export const workspaceVersion = 3 as const;
 export type PaneDirection = "horizontal" | "vertical";
-export type NavSection = "graphs" | "packages" | "functions" | "queues" | null;
+export type NavSection = "graphs" | "packages" | "functions" | null;
 
 export interface GraphViewState {
   readonly origin: { readonly x: number; readonly y: number };
@@ -31,7 +31,7 @@ export type PackageTab = {
 export type WorkspaceTab =
   | GraphTab
   | PackageTab
-  | { readonly id: string; readonly type: "settings" | "shortcuts" | "types" };
+  | { readonly id: string; readonly type: "settings" | "shortcuts" | "types" | "queues" };
 
 export interface PaneState {
   readonly id: string;
@@ -62,7 +62,7 @@ export interface WorkspaceState {
 export type TabInput =
   | { readonly type: "graph"; readonly graphId: string }
   | { readonly type: "package"; readonly packageId: string }
-  | { readonly type: "settings" | "shortcuts" | "types" };
+  | { readonly type: "settings" | "shortcuts" | "types" | "queues" };
 
 export type WorkspaceAction =
   | { readonly type: "focus-pane"; readonly paneId: string }
@@ -131,6 +131,7 @@ const makeTab = (input: TabInput, tabId = id("tab")): WorkspaceTab => {
     case "settings":
     case "shortcuts":
     case "types":
+    case "queues":
       return { id: tabId, type: input.type };
   }
 };
@@ -144,6 +145,7 @@ const tabKey = (tab: WorkspaceTab | TabInput) => {
     case "settings":
     case "shortcuts":
     case "types":
+    case "queues":
       return tab.type;
   }
 };
@@ -417,7 +419,12 @@ const validTab = (value: unknown): value is WorkspaceTab => {
   if (value.type === "graph") return typeof value.graphId === "string" && validView(value.view);
   if (value.type === "package")
     return typeof value.packageId === "string" && validPackageView(value.view);
-  return value.type === "settings" || value.type === "shortcuts" || value.type === "types";
+  return (
+    value.type === "settings" ||
+    value.type === "shortcuts" ||
+    value.type === "types" ||
+    value.type === "queues"
+  );
 };
 const validTree = (
   value: unknown,
@@ -579,7 +586,9 @@ export const parseWorkspaceState = (value: string | null): WorkspaceState | unde
     return {
       ...state,
       navSection:
-        parsed.navSection === "types" || parsed.navSection === "constants"
+        parsed.navSection === "types" ||
+        parsed.navSection === "constants" ||
+        parsed.navSection === "queues"
           ? "graphs"
           : state.navSection,
       panes: Object.fromEntries(

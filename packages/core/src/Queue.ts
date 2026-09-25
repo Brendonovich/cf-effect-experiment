@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schema, SchemaGetter } from "effect";
 
 import type { Model as NodeModel } from "./Node.ts";
 import type { Model as PackageModel } from "./Package.ts";
@@ -8,12 +8,34 @@ import { PackageId, SchemaId } from "./SchemaRef.ts";
 
 export const QueueId = Schema.String.pipe(Schema.brand("QueueId"));
 export type QueueId = typeof QueueId.Type;
-export const Model = Schema.Struct({ id: QueueId, name: Schema.String, functionId: Schema.String });
+export const Model = Schema.Struct({ id: QueueId, name: Schema.String });
 export type Model = typeof Model.Type;
-export const Collection = Schema.Record(Schema.String, Model).pipe(
+const CurrentCollection = Schema.Record(Schema.String, Model);
+const StoredCollection = Schema.Record(
+  Schema.String,
+  Schema.Struct({
+    id: QueueId,
+    name: Schema.String,
+    functionId: Schema.optional(Schema.String),
+  }),
+);
+export const Collection = StoredCollection.pipe(
+  Schema.decodeTo(CurrentCollection, {
+    decode: SchemaGetter.transform((queues) =>
+      Object.values(queues).some((queue) => queue.functionId !== undefined) ? {} : queues,
+    ),
+    encode: SchemaGetter.transform((queues) =>
+      Object.fromEntries(
+        Object.entries(queues).map(([id, queue]) => [
+          id,
+          { id: QueueId.make(queue.id), name: queue.name },
+        ]),
+      ),
+    ),
+  }),
   Schema.withDecodingDefaultKey(Effect.succeed({})),
 );
-export const Item = Schema.Struct({ id: Schema.String });
+export const Item = Schema.Struct({ id: Schema.String, functionId: Schema.String });
 export const State = Schema.Struct({
   queueId: Schema.String,
   paused: Schema.Boolean,
@@ -26,10 +48,7 @@ export const packageId = PackageId.make("macrograph-queues");
 export const EnqueueSchemaId = SchemaId.make("add");
 export const isEnqueue = (node: Pick<NodeModel, "schema">): boolean =>
   node.schema.package === packageId && node.schema.schema === EnqueueSchemaId;
-export const enqueueIO = (
-  queue: Model | undefined,
-  functions: Readonly<Record<string, GraphFunction.Model>>,
-) => GraphFunction.callIO(queue === undefined ? undefined : functions[queue.functionId]);
+export const enqueueIO = (fn: GraphFunction.Model | undefined) => GraphFunction.callIO(fn);
 export const packageModel: PackageModel = {
   id: packageId,
   name: "Queues",
@@ -39,7 +58,10 @@ export const packageModel: PackageModel = {
       id: EnqueueSchemaId,
       name: "Add to Queue",
       type: "exec",
-      properties: [{ id: "queue", name: "Queue", type: { _tag: "String" }, optional: true }],
+      properties: [
+        { id: "queue", name: "Queue", type: { _tag: "String" }, optional: true },
+        { id: "function", name: "Function", function: true, optional: true },
+      ],
       ...GraphFunction.callIO(undefined),
     },
   ],
@@ -61,35 +83,42 @@ type ProjectQueues = {
   readonly functions: Readonly<Record<string, GraphFunction.Model>>;
 };
 
-const targets = (queue: Model, project: ProjectQueues): ReadonlyArray<string> => {
-  const fn = project.functions[queue.functionId];
-  return fn === undefined
-    ? []
-    : Object.values(fn.canvas.nodes).flatMap((node) => {
-        const target = node.properties.queue;
-        return isEnqueue(node) && typeof target === "string" ? [target] : [];
-      });
-};
-
 export const validateProject = (
   project: ProjectQueues,
-): Effect.Effect<void, GraphFunction.NotFoundError | NotFoundError | RecursiveEnqueueError> =>
+): Effect.Effect<void, RecursiveEnqueueError> =>
   Effect.gen(function* () {
-    for (const queue of Object.values(project.queues)) {
-      if (project.functions[queue.functionId] === undefined)
-        return yield* new GraphFunction.NotFoundError({ canvasId: queue.functionId });
-      for (const target of targets(queue, project))
-        if (project.queues[target] === undefined) return yield* new NotFoundError({ id: target });
-    }
+    const functionsByQueue = new Map<string, Set<string>>();
+    for (const fn of Object.values(project.functions))
+      for (const node of Object.values(fn.canvas.nodes)) {
+        if (!isEnqueue(node)) continue;
+        const queueId = node.properties.queue;
+        const functionId = node.properties.function;
+        if (
+          typeof queueId !== "string" ||
+          typeof functionId !== "string" ||
+          project.queues[queueId] === undefined ||
+          project.functions[functionId] === undefined
+        )
+          continue;
+        const functions = functionsByQueue.get(queueId) ?? new Set<string>();
+        functions.add(functionId);
+        functionsByQueue.set(queueId, functions);
+      }
+    const targets = (queueId: string): ReadonlyArray<string> =>
+      Array.from(functionsByQueue.get(queueId) ?? []).flatMap((functionId) =>
+        Object.values(project.functions[functionId]?.canvas.nodes ?? {}).flatMap((node) => {
+          const target = node.properties.queue;
+          return isEnqueue(node) && typeof target === "string" ? [target] : [];
+        }),
+      );
     const visit = (
       origin: string,
       current: string,
       visited: ReadonlySet<string>,
     ): RecursiveEnqueueError | undefined => {
       if (visited.has(current)) return undefined;
-      const queue = project.queues[current];
-      if (queue === undefined) return undefined;
-      for (const target of targets(queue, project)) {
+      if (project.queues[current] === undefined) return undefined;
+      for (const target of targets(current)) {
         if (target === origin)
           return new RecursiveEnqueueError({ queueId: origin, targetQueueId: target });
         const error = visit(origin, target, new Set([...visited, current]));

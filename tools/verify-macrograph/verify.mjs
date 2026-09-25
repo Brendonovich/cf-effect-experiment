@@ -13,6 +13,9 @@ import { isUnexpectedConsoleProblem } from "./diagnostics.mjs";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, "../..");
 const mode = process.argv[2] ?? "all";
+const browserName = process.env.MACROGRAPH_VERIFY_BROWSER ?? "chromium";
+if (browserName !== "chromium" && browserName !== "webkit")
+  throw new Error(`Unsupported browser ${browserName}`);
 const supportedModes = new Set([
   "doctor",
   "smoke",
@@ -40,6 +43,7 @@ const manifest = {
     node: process.version,
     platform: process.platform,
     architecture: process.arch,
+    browser: browserName,
     isolatedBrowserProfile: true,
   },
   checks: [],
@@ -76,7 +80,8 @@ async function saveManifest() {
 
 async function loadPlaywright() {
   try {
-    return await import("playwright");
+    const playwright = await import("playwright");
+    return browserName === "webkit" ? playwright.webkit : playwright.chromium;
   } catch (error) {
     throw new Error(
       `Playwright is unavailable. Add playwright as a root devDependency and run pnpm exec playwright install chromium. (${error instanceof Error ? error.message : String(error)})`,
@@ -106,9 +111,9 @@ async function doctor() {
       error instanceof Error ? error.message : String(error),
     );
   }
-  let chromium;
+  let browser;
   try {
-    ({ chromium } = await loadPlaywright());
+    browser = await loadPlaywright();
     check("Playwright package available", "passed");
   } catch (error) {
     check(
@@ -117,7 +122,7 @@ async function doctor() {
       error instanceof Error ? error.message : String(error),
     );
   }
-  const executable = chromium.executablePath();
+  const executable = browser.executablePath();
   try {
     await access(executable);
     check("Playwright Chromium installed", "passed", executable);
@@ -191,18 +196,22 @@ async function startApp() {
 }
 
 async function openBrowser(url) {
-  const { chromium } = await loadPlaywright();
+  const browser = await loadPlaywright();
   profileDirectory = await mkdtemp(join(tmpdir(), "macrograph-verify-profile-"));
-  context = await chromium.launchPersistentContext(profileDirectory, {
+  context = await browser.launchPersistentContext(profileDirectory, {
     headless: process.env.MACROGRAPH_VERIFY_HEADED !== "1",
-    viewport: { width: 1440, height: 960 },
+    viewport:
+      mode === "function-queues" ? { width: 390, height: 844 } : { width: 1440, height: 960 },
+    hasTouch: mode === "function-queues" || mode === "all",
+    isMobile: mode === "function-queues",
     locale: "en-US",
     timezoneId: "UTC",
     colorScheme: "dark",
     reducedMotion: "reduce",
     acceptDownloads: true,
   });
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
+  if (browserName === "chromium")
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
   const page = context.pages()[0] ?? (await context.newPage());
   page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
@@ -279,27 +288,56 @@ async function functionNavigation(page) {
 }
 
 async function functionQueues(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
   await waitForAppShell(page);
-  await page.getByRole("button", { name: "Functions", exact: true }).click();
-  await page.getByRole("button", { name: "New function", exact: true }).click();
+
+  await page.getByRole("button", { name: "Browse", exact: true }).tap();
+  await page.getByRole("button", { name: "Functions", exact: true }).tap();
+  await page.getByRole("button", { name: "New function", exact: true }).tap();
   await page.getByRole("button", { name: "New Function", exact: true }).first().waitFor();
+  await page.getByRole("button", { name: "Browse", exact: true }).waitFor();
+
   await page.getByRole("button", { name: "Queues", exact: true }).click();
-  await page.getByRole("button", { name: "New queue", exact: true }).click();
+  await page.getByRole("button", { name: "New queue", exact: true }).tap();
   const queue = page.getByRole("region", { name: "New Queue", exact: true });
   await queue.waitFor();
-  const functionSelect = queue.getByRole("combobox", { name: "Queue function New Queue" });
-  await functionSelect.waitFor();
-  if ((await functionSelect.locator("option:checked").textContent()) !== "New Function")
-    throw new Error("New queue did not reference the created function");
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
-  await queue.getByRole("button", { name: "Pause", exact: true }).click();
+  await queue.getByRole("button", { name: "Pause", exact: true }).tap();
   await queue.getByText(/Paused \/ 0 running \/ 0 waiting/).waitFor();
-  await queue.getByRole("button", { name: "Resume", exact: true }).click();
+  await queue.getByRole("button", { name: "Resume", exact: true }).tap();
   await queue.getByText(/Active \/ 0 running \/ 0 waiting/).waitFor();
+  const queuePagePath = join(outputDirectory, "function-queues-page.png");
+  await page.screenshot({ path: queuePagePath, fullPage: true });
+  await evidence(queuePagePath, "screenshot");
+
+  await page.getByRole("button", { name: "Browse", exact: true }).tap();
+  await page.getByRole("button", { name: "Graphs", exact: true }).tap();
+  await page.getByRole("button", { name: "New graph", exact: true }).tap();
+  await page.getByRole("button", { name: "Browse", exact: true }).waitFor();
+  const canvas = page.locator("[data-active-graph-canvas]");
+  await canvas.click({ button: "right", position: { x: 180, y: 360 } });
+  const nodeMenu = page.getByRole("dialog", { name: "Create node", exact: true });
+  await nodeMenu.getByRole("textbox", { name: "Search nodes", exact: true }).fill("Add to Queue");
+  await nodeMenu.getByRole("button", { name: "Add to Queue", exact: true }).tap();
+  await page.getByText("Add to Queue", { exact: true }).first().tap();
+  await page.getByRole("button", { name: "Inspect", exact: true }).tap();
+
+  await page.getByRole("button", { name: "Select queue", exact: true }).tap();
+  await page.getByRole("option", { name: "New Queue", exact: true }).tap();
+  await page.getByRole("button", { name: "New Queue", exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "Select function", exact: true }).tap();
+  await page.getByRole("option", { name: "New Function", exact: true }).first().tap();
+  await page
+    .getByRole("complementary")
+    .getByRole("button", { name: "New Function", exact: true })
+    .waitFor();
+
   const path = join(outputDirectory, "function-queues.png");
   await page.screenshot({ path, fullPage: true });
   await evidence(path, "screenshot");
-  check("queue function selection and live pause controls are visible", "passed");
+  check("mobile Add to Queue selects a generic queue and per-item function", "passed");
+  if (mode === "all") await page.setViewportSize({ width: 1440, height: 960 });
 }
 
 async function moduleReference(page) {
@@ -573,9 +611,9 @@ async function main() {
     const page = await openBrowser(url);
     if (mode === "smoke" || mode === "all") await smoke(page);
     if (mode === "function-navigation" || mode === "all") await functionNavigation(page);
-    if (mode === "function-queues" || mode === "all") await functionQueues(page);
     if (mode === "module-reference" || mode === "all") await moduleReference(page);
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
+    if (mode === "function-queues" || mode === "all") await functionQueues(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
     const unexpectedHttpErrors = manifest.browser.httpErrors.filter(
       (response) => response.ignored !== true,
