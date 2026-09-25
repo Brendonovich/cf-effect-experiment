@@ -44,6 +44,7 @@ describe("editor presence lifecycle", () => {
       GetPackages: () => Effect.succeed([]),
       GetIngressEndpoints: () => Effect.succeed([]),
       GetModuleSettingsCapabilities: () => Effect.succeed([]),
+      QueueStateStream: () => Stream.never,
       ProjectEventsStream: () =>
         Stream.succeed({
           _tag: "ProjectSnapshot" as const,
@@ -54,6 +55,7 @@ describe("editor presence lifecycle", () => {
       | "GetPackages"
       | "GetIngressEndpoints"
       | "GetModuleSettingsCapabilities"
+      | "QueueStateStream"
       | "ProjectEventsStream"
       | "PresenceStream"
     >;
@@ -100,6 +102,7 @@ describe("editor presence lifecycle", () => {
       GetPackages: () => Effect.succeed([]),
       GetIngressEndpoints: () => Effect.succeed([]),
       GetModuleSettingsCapabilities: () => Effect.succeed([]),
+      QueueStateStream: () => Stream.never,
       ProjectEventsStream: () => Stream.never,
       PresenceStream: () =>
         Stream.succeed({
@@ -136,6 +139,7 @@ describe("editor presence lifecycle", () => {
       | "GetPackages"
       | "GetIngressEndpoints"
       | "GetModuleSettingsCapabilities"
+      | "QueueStateStream"
       | "ProjectEventsStream"
       | "PresenceStream"
     >;

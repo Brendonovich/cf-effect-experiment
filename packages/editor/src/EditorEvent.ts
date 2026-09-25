@@ -7,6 +7,7 @@ import {
   Node,
   NodeIO,
   ResourceConstant,
+  Queue,
   Scopes,
 } from "@macrograph/core";
 import { DataType } from "@macrograph/module/DataType";
@@ -233,7 +234,14 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 });
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
+export const QueueUpdated = Schema.TaggedStruct("QueueUpdated", { actor, queue: Queue.Model });
+export type QueueUpdated = typeof QueueUpdated.Type;
+export const QueueDeleted = Schema.TaggedStruct("QueueDeleted", { actor, queueId: Schema.String });
+export type QueueDeleted = typeof QueueDeleted.Type;
+
 export type Persistent =
+  | QueueUpdated
+  | QueueDeleted
   | TypeDefinitionsUpdated
   | FragmentPasted
   | FragmentDeleted

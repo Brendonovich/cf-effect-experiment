@@ -15,6 +15,7 @@ import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
 import { NavigationSidebar } from "./catalog/NavigationSidebar";
+import { QueuesPanel } from "./catalog/QueuesPanel";
 import { TypeDefinitions } from "./catalog/TypeDefinitions";
 import { ClipboardMissingSchemas } from "./ClipboardMissingSchemas";
 import { ClipboardRebind } from "./ClipboardRebind";
@@ -95,7 +96,7 @@ const styles = stylex.create({
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
-    minHeight: { default: 44, "@media (min-width: 768px)": 24 },
+    minHeight: 24,
     paddingInline: 12,
   },
   typesButton: { marginRight: "auto" },
@@ -627,6 +628,24 @@ function EditorContent(
                   onClose={() => controller.layout.setNavSection(null)}
                   onCreateGraph={controller.commands.createGraph}
                   onCreateFunction={controller.commands.createFunction}
+                  onCreateQueue={controller.commands.createQueue}
+                  queuesPanel={
+                    <QueuesPanel
+                      queues={controller.editor.store.project?.queues ?? {}}
+                      states={controller.connection.queueStates()}
+                      search={controller.catalog.navSearch()}
+                      canEdit={controller.connection.canEdit()}
+                      error={controller.commands.queueError()}
+                      functions={Object.values(controller.editor.store.project?.functions ?? {})}
+                      onRename={controller.commands.renameQueue}
+                      onSetFunction={controller.commands.setQueueFunction}
+                      onDelete={controller.commands.deleteQueue}
+                      onPause={controller.commands.pauseQueue}
+                      onAdvance={controller.commands.advanceQueue}
+                      onClear={controller.commands.clearQueue}
+                      onRemove={controller.commands.removeQueueItem}
+                    />
+                  }
                   onSelectGraph={controller.layout.setSelectedGraphId}
                   canEditGraphs={controller.connection.canEdit()}
                   onRenameGraph={controller.commands.renameGraphById}
@@ -1163,6 +1182,7 @@ function EditorContent(
               onClose={() => controller.layout.setInspectorOpen(false)}
             >
               <Inspector
+                queues={controller.editor.store.project?.queues ?? {}}
                 authoring={controller.editor.authoring}
                 module={selectedModule()}
                 nodeDiagnostics={

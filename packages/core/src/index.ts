@@ -9,6 +9,8 @@ export { GraphId } from "./Graph.ts";
 export { SchemaRef, SchemaId, PackageId } from "./SchemaRef.ts";
 export * as Package from "./Package.ts";
 export * as Project from "./Project.ts";
+export * as Queue from "./Queue.ts";
+export { QueueId } from "./Queue.ts";
 export { ProjectId } from "./Project.ts";
 export * as RenderedGraph from "./RenderedGraph.ts";
 export * as RenderedProject from "./RenderedProject.ts";

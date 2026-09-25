@@ -1,0 +1,1 @@
+ALTER TABLE `project_meta` ADD `queues` text DEFAULT '{}' NOT NULL;

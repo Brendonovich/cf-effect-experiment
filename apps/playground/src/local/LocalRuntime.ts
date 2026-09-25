@@ -10,6 +10,7 @@ import {
   EditorRpc,
   Packages,
   Presence,
+  QueueRuntime,
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
@@ -49,6 +50,7 @@ export const makeLocalConnection = (
     Packages.defaultLayer,
     Presence.layer,
     RuntimeActivity.layer,
+    QueueRuntime.layer,
     credentials === undefined
       ? Engine.emptyCredentialsLayer
       : Layer.succeed(Engine.Credentials)(credentials.service),

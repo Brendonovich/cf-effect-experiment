@@ -84,6 +84,7 @@ it.effect("persists editor-backed storage and endpoints", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
       }),
     ),
   );

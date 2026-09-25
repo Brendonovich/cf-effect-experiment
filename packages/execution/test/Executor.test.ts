@@ -74,6 +74,7 @@ describe("Executor", () => {
       const actionNodeId = NodeId.make("resource-action");
       const project: Project.Model = {
         types: {},
+        queues: {},
         name: "Resources",
         functions: {},
         engines: {},
@@ -265,6 +266,7 @@ describe("Executor", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
         graphs: {
           [graphId]: {
             canvas: {
@@ -497,6 +499,7 @@ describe("Executor", () => {
         engines: {},
         constants: {},
         types: {},
+        queues: {},
         graphs: {
           [graphId]: {
             canvas: {

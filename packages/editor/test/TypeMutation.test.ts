@@ -134,6 +134,7 @@ const seed: Project.Model = {
   name: "Types",
   types: definitions,
   constants: {},
+  queues: {},
   engines: {},
   functions: {},
   graphs: {

@@ -1,4 +1,4 @@
-import type { ResourceConstant, OutputRef, IoId } from "@macrograph/core";
+import type { ResourceConstant, OutputRef, IoId, Queue } from "@macrograph/core";
 import type { DataType } from "@macrograph/module/DataType";
 import type { Schema } from "effect";
 
@@ -14,6 +14,10 @@ export const projectMeta = sqliteTable("project_meta", {
   constants: text("constants", { mode: "json" })
     .notNull()
     .$type<Record<string, ResourceConstant.Model>>()
+    .default({}),
+  queues: text("queues", { mode: "json" })
+    .notNull()
+    .$type<Record<string, Queue.Model>>()
     .default({}),
 });
 

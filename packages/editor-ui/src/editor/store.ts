@@ -8,6 +8,7 @@ import {
   Node,
   type NodeIO,
   Package,
+  Queue,
   ResourceConstant,
   Scopes,
 } from "@macrograph/core";
@@ -29,6 +30,7 @@ type MutableProject = {
   engines: Record<string, unknown>;
   constants: Record<string, ResourceConstant.Model>;
   types: Project.Model["types"];
+  queues: Record<string, Queue.Model>;
 };
 
 type MutableEditorStore = {
@@ -80,6 +82,7 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
                 functions: { ...current.project.functions },
                 engines: { ...current.project.engines },
                 constants: { ...current.project.constants },
+                queues: { ...current.project.queues },
               },
         packages: [...current.packages],
         // Event reducers edit declarations, never the previous inferred types.
@@ -136,6 +139,32 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     if (!store.project) return;
 
     switch (event._tag) {
+      case "QueueUpdated":
+        setStore((store) => {
+          const project = store.project!;
+          project.queues[event.queue.id] = event.queue;
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queue.id)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  event.queue,
+                  project.functions,
+                );
+        });
+        break;
+      case "QueueDeleted":
+        setStore((store) => {
+          const project = store.project!;
+          delete project.queues[event.queueId];
+          for (const [graphId, canvas] of Object.entries(project.graphs))
+            for (const node of Object.values(canvas.nodes))
+              if (Queue.isEnqueue(node) && node.properties.queue === event.queueId)
+                (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                  undefined,
+                  project.functions,
+                );
+        });
+        break;
       case "TypeDefinitionsUpdated":
         setStore((store) => {
           if (!store.project) return;
@@ -253,6 +282,16 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
             for (const node of Object.values(caller.nodes))
               if (GraphFunction.isCall(node) && node.properties.function === event.fn.canvas.id)
                 (store.nodeIO[graphId] ??= {})[node.id] = GraphFunction.callIO(event.fn);
+              else if (Queue.isEnqueue(node)) {
+                const queueId = node.properties.queue;
+                const queue =
+                  typeof queueId === "string" ? store.project.queues[queueId] : undefined;
+                if (queue?.functionId === event.fn.canvas.id)
+                  (store.nodeIO[graphId] ??= {})[node.id] = Queue.enqueueIO(
+                    queue,
+                    store.project.functions,
+                  );
+              }
         });
         break;
       case "GraphNameChanged": {

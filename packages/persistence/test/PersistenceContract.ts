@@ -9,6 +9,7 @@ import {
   OutputRef,
   PackageId,
   Project,
+  Queue,
   SchemaId,
 } from "@macrograph/core";
 import { Effect, Layer } from "effect";
@@ -35,6 +36,7 @@ const emptyProject = (): Project.Model => ({
   engines: {},
   constants: {},
   types: {},
+  queues: {},
 });
 
 export const persistenceContract = <E>(
@@ -100,6 +102,13 @@ export const persistenceContract = <E>(
               },
             },
             engines: { example: { enabled: true } },
+            queues: {
+              work: {
+                id: Queue.QueueId.make("work"),
+                name: "Work",
+                functionId: functionCanvas.id,
+              },
+            },
           };
 
           yield* persistence.saveProject(project);
