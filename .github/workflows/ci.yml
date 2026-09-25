@@ -107,12 +107,9 @@ jobs:
         run: test "$RESULTS" = "success,success,success"
 
   playground-preview:
-    needs: validate
     if: >-
-      always() &&
       github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.action == 'closed' || needs.validate.result == 'success')
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
