@@ -142,7 +142,10 @@ describe("Project ingress preview", () => {
           assert.strictEqual(subscriptions.size, 0);
         }).pipe(
           Effect.provideService(Cloudflare.DurableObjectState, state),
-          Effect.provideService(Cloudflare.WorkerEnvironment, {}),
+          Effect.provideService(Cloudflare.WorkerEnvironment, {
+            GITHUB_APP_ID: "test-app-id",
+            GITHUB_APP_PRIVATE_KEY: "test-private-key",
+          }),
           Effect.provide(
             ConfigProvider.layer(
               ConfigProvider.fromUnknown({
