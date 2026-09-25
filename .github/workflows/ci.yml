@@ -86,21 +86,22 @@ jobs:
   e2e:
     name: e2e (${{ matrix.browser }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --init --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     strategy:
       fail-fast: false
       matrix:
         include:
           - browser: chromium
-            os: ubuntu-24.04
             command: verify:playground
-            install-browser: pnpm exec playwright install --with-deps chromium
             name: Verify playground in Chromium
           - browser: webkit
-            os: macos-15
             command: verify:playground:function-queues
-            install-browser: pnpm exec playwright install webkit
             name: Verify mobile queue selection in WebKit
     steps:
       - uses: actions/checkout@v6
@@ -110,15 +111,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: pnpm
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            package.json
-            apps/playground/package.json
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
-      - name: Install Playwright browser
-        run: ${{ matrix.install-browser }}
       - name: ${{ matrix.name }}
         run: pnpm ${{ matrix.command }}
         env:
