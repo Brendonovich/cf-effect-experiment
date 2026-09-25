@@ -106,16 +106,6 @@ jobs:
           path: tools/verify-macrograph/artifacts/ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.browser }}/
           if-no-files-found: warn
 
-  validate:
-    if: always() && (github.event_name != 'pull_request' || github.event.action != 'closed')
-    needs: [quality, unit-tests, e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check validation results
-        env:
-          RESULTS: ${{ join(needs.*.result, ',') }}
-        run: test "$RESULTS" = "success,success,success"
-
   playground-preview:
     if: >-
       github.event_name == 'pull_request' &&
@@ -165,7 +155,7 @@ jobs:
         run: pnpm alchemy destroy --stage "$STAGE" --yes
 
   server-image:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -204,7 +194,7 @@ jobs:
           sbom: true
 
   deploy-production:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -253,7 +243,7 @@ jobs:
           STREAMLABS_CLIENT_SECRET: ${{ secrets.STREAMLABS_CLIENT_SECRET }}
 
   deploy-opencode-bot:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
