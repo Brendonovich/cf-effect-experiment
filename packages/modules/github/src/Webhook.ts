@@ -92,7 +92,15 @@ export const handler = WebhookIngress.implement(
         const deliveryId = header(request.headers, "x-github-delivery");
         const event = header(request.headers, "x-github-event");
         const signature = header(request.headers, "x-hub-signature-256");
-        if (deliveryId === undefined || event === undefined || signature === undefined)
+        const targetId = header(request.headers, "x-github-hook-installation-target-id");
+        const targetType = header(request.headers, "x-github-hook-installation-target-type");
+        if (
+          deliveryId === undefined ||
+          event === undefined ||
+          signature === undefined ||
+          targetType?.toLowerCase() !== "repository" ||
+          targetId !== request.endpoint.metadata.repositoryId
+        )
           return { status: 400 };
         const secret = yield* endpoints.secret(request.endpoint.id);
         const key = yield* Effect.tryPromise({
@@ -134,11 +142,12 @@ export const handler = WebhookIngress.implement(
         const installation = object.installation;
         const repository = object.repository;
         if (
-          typeof installation !== "object" ||
-          installation === null ||
-          !("id" in installation) ||
-          typeof installation.id !== "number" ||
-          String(installation.id) !== request.endpoint.metadata.installationId ||
+          (installation !== undefined &&
+            (typeof installation !== "object" ||
+              installation === null ||
+              !("id" in installation) ||
+              typeof installation.id !== "number" ||
+              String(installation.id) !== request.endpoint.metadata.installationId)) ||
           typeof repository !== "object" ||
           repository === null ||
           !("id" in repository) ||
