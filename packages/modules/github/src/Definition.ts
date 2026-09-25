@@ -4,6 +4,10 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 export const AccountId = Schema.String.pipe(Schema.brand("GitHubAccountId"));
 export type AccountId = typeof AccountId.Type;
+export const InstallationId = Schema.String.pipe(Schema.brand("GitHubInstallationId"));
+export type InstallationId = typeof InstallationId.Type;
+export const RepositoryId = Schema.String.pipe(Schema.brand("GitHubRepositoryId"));
+export type RepositoryId = typeof RepositoryId.Type;
 export const WebhookId = Schema.String.pipe(Schema.brand("GitHubWebhookId"));
 export type WebhookId = typeof WebhookId.Type;
 
@@ -62,10 +66,11 @@ export class WebhookDelivery extends Schema.TaggedClass<WebhookDelivery>()(
 const RepositoryWebhook = Schema.Struct({
   name: Schema.String,
   accountId: AccountId,
+  installationId: InstallationId,
+  repositoryId: RepositoryId,
   owner: Schema.String,
   repository: Schema.String,
   events: Schema.Array(WebhookEventName),
-  providerHookId: Schema.optional(Schema.Int),
 });
 
 export const RuntimeStorage = Schema.Struct({
@@ -82,6 +87,18 @@ export const WebhookSummary = Schema.Struct({
   id: WebhookId,
   ...RepositoryWebhook.fields,
   endpointUrl: Schema.optional(Schema.String),
+});
+export const InstallationSummary = Schema.Struct({
+  id: InstallationId,
+  accountId: Schema.String,
+  accountLogin: Schema.String,
+  accountType: Schema.String,
+});
+export const RepositorySummary = Schema.Struct({
+  id: RepositoryId,
+  name: Schema.String,
+  fullName: Schema.String,
+  owner: Schema.String,
 });
 export const ClientState = Schema.Struct({
   accounts: Schema.Array(AccountSummary),
@@ -102,10 +119,22 @@ export class RuntimeRpcs extends RpcGroup.make(
 ) {}
 
 export class ClientRpcs extends RpcGroup.make(
+  Rpc.make("GitHubListInstallations", {
+    payload: Schema.Struct({ accountId: AccountId }),
+    success: Schema.Array(InstallationSummary),
+    error: GitHubFailure,
+  }),
+  Rpc.make("GitHubListRepositories", {
+    payload: Schema.Struct({ accountId: AccountId, installationId: InstallationId }),
+    success: Schema.Array(RepositorySummary),
+    error: GitHubFailure,
+  }),
   Rpc.make("GitHubCreateWebhook", {
     payload: Schema.Struct({
       name: Schema.String,
       accountId: AccountId,
+      installationId: InstallationId,
+      repositoryId: RepositoryId,
       owner: Schema.String,
       repository: Schema.String,
       events: Schema.Array(WebhookEventName),

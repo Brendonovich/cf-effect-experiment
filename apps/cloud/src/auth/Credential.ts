@@ -125,6 +125,16 @@ export const make = Effect.gen(function* () {
           .cloudAuth(sessionId)
           .refetchCredentials()
           .pipe(Effect.catchCause(() => Effect.void));
+      const credentials = (yield* rowsFor(userId)).map((row) => {
+        const provider = providers.get(row.providerId);
+        return {
+          id: row.providerUserId,
+          provider: row.providerId,
+          ...(row.displayName === null ? {} : { displayName: row.displayName }),
+          ...(provider === undefined ? {} : { clientId: provider.clientId }),
+          token: { access: row.token.access_token },
+        };
+      });
       const owned = yield* database
         .select({ id: projects.id })
         .from(projects)
@@ -135,7 +145,7 @@ export const make = Effect.gen(function* () {
         (project) =>
           projectEditors
             .getByName(project.id)
-            .credentialsChanged()
+            .setCredentials(credentials)
             .pipe(Effect.catchCause(() => Effect.void)),
         { discard: true },
       );
@@ -165,8 +175,16 @@ export const make = Effect.gen(function* () {
   return {
     publicOrigin: requestOrigin,
     providers: Effect.succeed(providers.list),
-    list: CurrentUser.pipe(Effect.flatMap((user) => catalogFor(user.id))),
-    refetch: CurrentUser.pipe(Effect.flatMap((user) => catalogFor(user.id))),
+    list: CurrentUser.pipe(
+      Effect.flatMap((user) =>
+        catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id, user.sessionId))),
+      ),
+    ),
+    refetch: CurrentUser.pipe(
+      Effect.flatMap((user) =>
+        catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id, user.sessionId))),
+      ),
+    ),
     connect: (providerId: string, origin: string) =>
       CurrentUser.pipe(Effect.flatMap((user) => startConnection(user, providerId, origin))),
     complete: (providerId: string, code: string, encodedState: string) =>

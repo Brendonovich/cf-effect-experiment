@@ -21,6 +21,8 @@ export default Engine.withHttpIngress(deployment, {
           displayName: webhook.name,
           metadata: {
             webhookId: WebhookId.make(webhookId),
+            installationId: webhook.installationId,
+            repositoryId: webhook.repositoryId,
             owner: webhook.owner,
             repository: webhook.repository,
           },

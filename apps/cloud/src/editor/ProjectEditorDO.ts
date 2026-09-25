@@ -70,6 +70,7 @@ const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   ...HostedDeployments.map((deployment) => deployment.definition.ClientRpcs),
 ).middleware(EditorRpc.ConnectionMiddleware);
 const editorIdentityKey = "editor-identity";
+const editorCredentialsKey = "editor-credentials";
 
 /**
  * Owns each project's live editing workspace. The DO keeps collaborators'
@@ -140,6 +141,19 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       const credentialSubscribers = new Set<() => Effect.Effect<void>>();
       const credentialsChanged = () =>
         Effect.forEach(credentialSubscribers, (subscriber) => subscriber(), { discard: true });
+      let localCredentials = yield* durableState.storage
+        .get<ReadonlyArray<CredentialTransfer>>(editorCredentialsKey)
+        .pipe(Effect.provide(runtimeContext));
+      const setCredentials = (values: ReadonlyArray<CredentialTransfer>) =>
+        durableState.storage.put(editorCredentialsKey, values).pipe(
+          Effect.provide(runtimeContext),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              localCredentials = values;
+            }),
+          ),
+          Effect.andThen(credentialsChanged()),
+        );
       const receiveCredential = (credential: CredentialTransfer): Engine.Credential => ({
         id: credential.id,
         provider: credential.provider,
@@ -149,23 +163,34 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       });
       const credentials = {
         get: Effect.suspend(() =>
-          activeSessionId === undefined
-            ? Effect.succeed([])
-            : cloudAuths
-                .getByName(activeSessionId)
-                .getCredentials()
-                .pipe(Effect.map((values) => values.map(receiveCredential))),
+          localCredentials !== undefined
+            ? Effect.succeed(localCredentials.map(receiveCredential))
+            : activeSessionId === undefined
+              ? Effect.succeed([])
+              : cloudAuths
+                  .getByName(activeSessionId)
+                  .getCredentials()
+                  .pipe(Effect.map((values) => values.map(receiveCredential))),
         ),
         refresh: (provider: string, id: string) =>
-          activeSessionId === undefined
-            ? Effect.die("MacroGraph Cloud is not connected")
-            : cloudAuths
-                .getByName(activeSessionId)
-                .refreshCredential(provider, id)
-                .pipe(
-                  Effect.map(receiveCredential),
-                  Effect.tap(() => credentialsChanged()),
-                ),
+          localCredentials !== undefined
+            ? (() => {
+                const credential = localCredentials.find(
+                  (candidate) => candidate.provider === provider && candidate.id === id,
+                );
+                return credential === undefined
+                  ? Effect.die("Credential is unavailable")
+                  : Effect.succeed(receiveCredential(credential));
+              })()
+            : activeSessionId === undefined
+              ? Effect.die("MacroGraph Cloud is not connected")
+              : cloudAuths
+                  .getByName(activeSessionId)
+                  .refreshCredential(provider, id)
+                  .pipe(
+                    Effect.map(receiveCredential),
+                    Effect.tap(() => credentialsChanged()),
+                  ),
         subscribe: (callback: () => Effect.Effect<void>) =>
           Effect.gen(function* () {
             const scope = yield* Effect.scope;
@@ -674,6 +699,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         disconnectAll,
         disconnectUser,
         credentialsChanged,
+        setCredentials,
         getProject,
         getRenderedProject,
         listGraphs,

@@ -107,50 +107,6 @@ export const layer = GitHubEngine.toLayer((mg) =>
       );
     const api = yield* makeApi(getCredential);
     const raw = (accountId: AccountId, request: PreparedRequest) => api.execute(accountId, request);
-    const provision = Effect.fnUntraced(function* (
-      webhookId: WebhookId,
-      value: {
-        readonly accountId: AccountId;
-        readonly owner: string;
-        readonly repository: string;
-        readonly events: ReadonlyArray<WebhookEventName>;
-        readonly providerHookId?: number;
-      },
-    ) {
-      const endpoint = yield* webhookEndpoints.resolve(webhookId);
-      const body = {
-        active: true,
-        events: value.events,
-        config: {
-          url: endpoint.url,
-          content_type: "json",
-          secret: Redacted.value(endpoint.secret),
-          insecure_ssl: "0",
-        },
-      };
-      const request: PreparedRequest =
-        value.providerHookId === undefined
-          ? {
-              method: "POST",
-              path: `/repos/${encodeURIComponent(value.owner)}/${encodeURIComponent(value.repository)}/hooks`,
-              body,
-            }
-          : {
-              method: "PATCH",
-              path: `/repos/${encodeURIComponent(value.owner)}/${encodeURIComponent(value.repository)}/hooks/${value.providerHookId}`,
-              body,
-            };
-      const response = yield* raw(value.accountId, request);
-      if (value.providerHookId !== undefined) return value.providerHookId;
-      if (
-        typeof response.body !== "object" ||
-        response.body === null ||
-        !("id" in response.body) ||
-        typeof response.body.id !== "number"
-      )
-        return yield* new GitHubFailure({ reason: "GitHub returned an invalid webhook response" });
-      return response.body.id;
-    });
 
     yield* mg.credentials.subscribe(() =>
       Effect.all([mg.resource.refresh(GitHubAccount), mg.client.refresh], { discard: true }),
@@ -220,6 +176,9 @@ export const layer = GitHubEngine.toLayer((mg) =>
           });
         }),
         rpcs: ClientRpcs.toLayer({
+          GitHubListInstallations: ({ accountId }) => api.listInstallations(accountId),
+          GitHubListRepositories: ({ accountId, installationId }) =>
+            api.listRepositories(accountId, installationId),
           GitHubCreateWebhook: (input) =>
             Effect.gen(function* () {
               if (!webhookEndpoints.available)
@@ -230,6 +189,21 @@ export const layer = GitHubEngine.toLayer((mg) =>
               const events = normalizeEvents(input.events);
               if (events.length === 0)
                 return yield* new GitHubFailure({ reason: "Select at least one webhook event" });
+              const repositories = yield* api.listRepositories(
+                input.accountId,
+                input.installationId,
+              );
+              const selected = repositories.find(
+                (repository) => repository.id === input.repositoryId,
+              );
+              if (
+                selected === undefined ||
+                selected.owner !== input.owner ||
+                selected.name !== input.repository
+              )
+                return yield* new GitHubFailure({
+                  reason: "The selected repository is not available to this GitHub installation",
+                });
               const webhookId = WebhookId.make(crypto.randomUUID());
               const value = {
                 ...input,
@@ -238,18 +212,6 @@ export const layer = GitHubEngine.toLayer((mg) =>
               };
               yield* mg.storage.update((storage) => ({
                 webhooks: { ...storage.webhooks, [webhookId]: value },
-              }));
-              const providerHookId = yield* provision(webhookId, value).pipe(
-                Effect.tapError(() =>
-                  mg.storage.update((storage) => {
-                    const webhooks = { ...storage.webhooks };
-                    delete webhooks[webhookId];
-                    return { webhooks };
-                  }),
-                ),
-              );
-              yield* mg.storage.update((storage) => ({
-                webhooks: { ...storage.webhooks, [webhookId]: { ...value, providerHookId } },
               }));
               yield* Effect.all([mg.resource.refresh(GitHubWebhook), mg.client.refresh], {
                 discard: true,
@@ -266,15 +228,6 @@ export const layer = GitHubEngine.toLayer((mg) =>
               if (events.length === 0)
                 return yield* new GitHubFailure({ reason: "Select at least one webhook event" });
               const next = { ...current, name: name.trim() || current.name, events };
-              yield* provision(webhookId, {
-                accountId: next.accountId,
-                owner: next.owner,
-                repository: next.repository,
-                events: next.events,
-                ...(next.providerHookId === undefined
-                  ? {}
-                  : { providerHookId: next.providerHookId }),
-              });
               yield* mg.storage.update((value) => ({
                 webhooks: { ...value.webhooks, [webhookId]: next },
               }));
@@ -287,17 +240,6 @@ export const layer = GitHubEngine.toLayer((mg) =>
               const storage = yield* mg.storage.get;
               const current = storage.webhooks[webhookId];
               if (current === undefined) return;
-              if (current.providerHookId !== undefined) {
-                yield* raw(current.accountId, {
-                  method: "DELETE",
-                  path: `/repos/${encodeURIComponent(current.owner)}/${encodeURIComponent(current.repository)}/hooks/${current.providerHookId}`,
-                }).pipe(
-                  Effect.catchIf(
-                    (error) => error.status === 404,
-                    () => Effect.succeed({ status: 404, body: null }),
-                  ),
-                );
-              }
               yield* mg.storage.update((value) => {
                 const webhooks = { ...value.webhooks };
                 delete webhooks[webhookId];

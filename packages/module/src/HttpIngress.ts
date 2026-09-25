@@ -426,10 +426,14 @@ export class Registry extends Context.Service<Registry, RegistryService>()(
   "macrograph/Module/HttpIngress/Registry",
 ) {}
 
-export const makeRegistry = <RO, RI>(
+export function makeRegistry<RO1, RI1, RO2, RI2, RO3, RI3>(
+  lives: readonly [Live<RO1, RI1>, Live<RO2, RI2>, Live<RO3, RI3>],
+): Effect.Effect<RegistryService, InitializationError, RO1 | RI1 | RO2 | RI2 | RO3 | RI3>;
+export function makeRegistry<RO, RI>(
   lives: ReadonlyArray<Live<RO, RI>>,
-): Effect.Effect<RegistryService, InitializationError, RO | RI> =>
-  Effect.gen(function* () {
+): Effect.Effect<RegistryService, InitializationError, RO | RI>;
+export function makeRegistry<RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) {
+  return Effect.gen(function* () {
     const handlers = yield* Effect.forEach(lives, (live) => live.build);
     const byId = new Map(handlers.map((handler) => [handler.id, handler]));
     if (byId.size !== handlers.length) {
@@ -504,6 +508,7 @@ export const makeRegistry = <RO, RI>(
       },
     });
   });
+}
 
 export const layer = <RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) =>
   Layer.effect(Registry)(makeRegistry(lives));
