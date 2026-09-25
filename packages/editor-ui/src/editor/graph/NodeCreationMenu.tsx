@@ -175,7 +175,8 @@ export function NodeCreationMenu(props: {
             })),
         ),
       }))
-      .filter((pkg) => pkg.schemas.length > 0);
+      .filter((pkg) => pkg.schemas.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   };
 
   onSettled(() => {
