@@ -104,6 +104,8 @@ const request = async (
     headers: {
       "x-github-delivery": "delivery-1",
       "x-github-event": event,
+      "x-github-hook-installation-target-id": "20",
+      "x-github-hook-installation-target-type": "repository",
       "x-hub-signature-256": signature ?? (await sign(body)),
     },
     body,
@@ -161,6 +163,22 @@ describe("GitHub repository webhook", () => {
     }),
   );
 
+  it.effect("accepts repository-hook payloads without an installation object", () =>
+    Effect.gen(function* () {
+      const live = yield* webhookHandler.build.pipe(Effect.provide(dependencies));
+      const response = yield* live.handle(
+        yield* Effect.promise(() =>
+          request("push", undefined, {
+            ref: "refs/heads/main",
+            repository: { id: 20, full_name: "macrograph/macrograph" },
+            sender: { login: "octocat" },
+          }),
+        ),
+      );
+      assert.strictEqual(response.status, 202);
+    }),
+  );
+
   it.effect("rejects invalid signatures and accepts signed pings", () =>
     Effect.gen(function* () {
       const live = yield* webhookHandler.build.pipe(Effect.provide(dependencies));
@@ -198,6 +216,19 @@ describe("GitHub repository webhook", () => {
             }),
           ),
         )).status,
+        400,
+      );
+      const wrongTarget = yield* Effect.promise(() => request());
+      assert.strictEqual(
+        (
+          yield* live.handle({
+            ...wrongTarget,
+            headers: {
+              ...wrongTarget.headers,
+              "x-github-hook-installation-target-id": "21",
+            },
+          })
+        ).status,
         400,
       );
     }),
