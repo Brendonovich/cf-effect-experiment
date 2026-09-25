@@ -86,17 +86,21 @@ jobs:
   e2e:
     name: e2e (${{ matrix.browser }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
           - browser: chromium
+            os: ubuntu-24.04
             command: verify:playground
+            install-browser: pnpm exec playwright install --with-deps chromium
             name: Verify playground in Chromium
           - browser: webkit
+            os: macos-15
             command: verify:playground:function-queues
+            install-browser: pnpm exec playwright install webkit
             name: Verify mobile queue selection in WebKit
     steps:
       - uses: actions/checkout@v6
@@ -113,21 +117,8 @@ jobs:
             apps/playground/package.json
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
-      - name: Prepare Playwright system dependency cache
-        run: |
-          sudo chmod a+rwx /var/cache/apt/archives
-          echo 'Binary::apt-get::APT::Keep-Downloaded-Packages "true";' | sudo tee /etc/apt/apt.conf.d/01keep-debs
-      - uses: actions/cache@v5
-        with:
-          path: /var/cache/apt/archives
-          key: playwright-apt-ubuntu-24.04-${{ runner.arch }}-${{ matrix.browser }}-1.63.0
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
-      - name: Finalize Playwright system dependency cache
-        run: |
-          sudo rm -f /var/cache/apt/archives/lock
-          sudo rm -rf /var/cache/apt/archives/partial
-          sudo chmod -R a+rX /var/cache/apt/archives
+        run: ${{ matrix.install-browser }}
       - name: ${{ matrix.name }}
         run: pnpm ${{ matrix.command }}
         env:
