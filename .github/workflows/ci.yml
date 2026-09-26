@@ -16,9 +16,33 @@ concurrency:
 
 jobs:
   quality:
+    name: quality (${{ matrix.task }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: static-analysis
+            cache: ""
+            cache-files: pnpm-lock.yaml
+            install: pnpm install --frozen-lockfile
+            command: pnpm exec tsgo -b && pnpm exec vp lint --quiet && node --test tooling/oxlint/macrograph.test.mjs
+          - task: storybook
+            cache: pnpm
+            cache-files: |
+              pnpm-lock.yaml
+              apps/storybook/package.json
+            install: pnpm install --frozen-lockfile --filter '@macrograph/storybook...'
+            command: pnpm --filter @macrograph/storybook build
+          - task: server-integration
+            cache: pnpm
+            cache-files: |
+              pnpm-lock.yaml
+              apps/server/package.json
+            install: pnpm install --frozen-lockfile --filter '@macrograph/server...'
+            command: pnpm --filter @macrograph/server test:integration
     steps:
       - uses: actions/checkout@v6
         with:
@@ -27,15 +51,12 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: pnpm
+          cache: ${{ matrix.cache }}
+          cache-dependency-path: ${{ matrix.cache-files }}
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Typecheck and lint
-        run: pnpm typecheck && pnpm lint
-      - name: Build Storybook
-        run: pnpm storybook:build
-      - name: Test server production build
-        run: pnpm test:integration
+        run: ${{ matrix.install }}
+      - name: Run ${{ matrix.task }}
+        run: ${{ matrix.command }}
 
   unit-tests:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
@@ -63,9 +84,14 @@ jobs:
         run: pnpm verify:test
 
   e2e:
+    name: e2e (${{ matrix.browser }})
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ fromJSON(github.event_name == 'pull_request' && '["chromium"]' || '["chromium", "webkit"]') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,45 +100,32 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Verify playground in Chromium
-        run: pnpm verify:playground
+        run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+      - name: Verify playground in ${{ matrix.browser }}
+        run: |
+          if [[ "$MACROGRAPH_VERIFY_BROWSER" == "webkit" ]]; then
+            pnpm verify:playground:function-queues
+          else
+            pnpm verify:playground
+          fi
         env:
-          MACROGRAPH_VERIFY_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-chromium
-      - name: Verify mobile queue selection in WebKit
-        run: pnpm verify:playground:function-queues
-        env:
-          MACROGRAPH_VERIFY_BROWSER: webkit
-          MACROGRAPH_VERIFY_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-webkit
+          MACROGRAPH_VERIFY_BROWSER: ${{ matrix.browser }}
+          MACROGRAPH_VERIFY_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.browser }}
       - name: Upload playground verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macrograph-playground-verification-${{ github.run_id }}-${{ github.run_attempt }}
-          path: tools/verify-macrograph/artifacts/ci-${{ github.run_id }}-${{ github.run_attempt }}-*/
+          name: macrograph-playground-verification-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.browser }}
+          path: tools/verify-macrograph/artifacts/ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.browser }}/
           if-no-files-found: warn
 
-  validate:
-    if: always() && (github.event_name != 'pull_request' || github.event.action != 'closed')
-    needs: [quality, unit-tests, e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check validation results
-        env:
-          RESULTS: ${{ join(needs.*.result, ',') }}
-        run: test "$RESULTS" = "success,success,success"
-
   playground-preview:
-    needs: validate
     if: >-
-      always() &&
       github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      (github.event.action == 'closed' || needs.validate.result == 'success')
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -138,11 +151,14 @@ jobs:
         with:
           node-version: "24"
           cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            apps/playground/package.json
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter '@macrograph/playground...'
       - name: Validate preview stage
         run: '[[ "$STAGE" =~ ^pr-[0-9]+$ ]]'
       - name: Deploy playground preview
@@ -155,7 +171,7 @@ jobs:
         run: pnpm alchemy destroy --stage "$STAGE" --yes
 
   server-image:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -194,7 +210,7 @@ jobs:
           sbom: true
 
   deploy-production:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -243,7 +259,7 @@ jobs:
           STREAMLABS_CLIENT_SECRET: ${{ secrets.STREAMLABS_CLIENT_SECRET }}
 
   deploy-opencode-bot:
-    needs: validate
+    needs: [quality, unit-tests, e2e]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
