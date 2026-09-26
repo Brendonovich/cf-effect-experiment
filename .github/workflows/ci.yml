@@ -96,13 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - browser: chromium
-            command: verify:playground
-            name: Verify playground in Chromium
-          - browser: webkit
-            command: verify:playground:function-queues
-            name: Verify mobile queue selection in WebKit
+        browser: ${{ fromJSON(github.event_name == 'pull_request' && '["chromium"]' || '["chromium", "webkit"]') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -113,8 +107,13 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
-      - name: ${{ matrix.name }}
-        run: pnpm ${{ matrix.command }}
+      - name: Verify playground in ${{ matrix.browser }}
+        run: |
+          if [[ "$MACROGRAPH_VERIFY_BROWSER" == "webkit" ]]; then
+            pnpm verify:playground:function-queues
+          else
+            pnpm verify:playground
+          fi
         env:
           MACROGRAPH_VERIFY_BROWSER: ${{ matrix.browser }}
           MACROGRAPH_VERIFY_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.browser }}
