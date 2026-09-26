@@ -88,11 +88,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.action != 'closed'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
-      options: --init --ipc=host
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     strategy:
       fail-fast: false
       matrix:
@@ -107,6 +102,8 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --filter . --filter '@macrograph/playground...'
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Verify playground in ${{ matrix.browser }}
         run: |
           if [[ "$MACROGRAPH_VERIFY_BROWSER" == "webkit" ]]; then
