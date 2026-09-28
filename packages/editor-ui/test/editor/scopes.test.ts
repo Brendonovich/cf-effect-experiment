@@ -1,5 +1,5 @@
 import { Actor, ConnectionId, IoId, NodeId, Project, Scopes, OutputRef } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 import { createRoot } from "solid-js";
 import { describe, expect, it } from "vitest";
@@ -16,7 +16,7 @@ import {
 } from "../../src/editor/graph/graphPresentation";
 import { createEditorStore } from "../../src/editor/store";
 
-const field = { id: IoId.make("value"), name: "Value", type: DataType.String };
+const field = { id: IoId.make("value"), name: "Value", type: t.String };
 const io = {
   dataInputs: [],
   dataOutputs: [],
@@ -142,14 +142,14 @@ describe("scope authoring", () => {
     expect(portsCompatible(output, input)).toBe(true);
     expect(portsCompatible(input, output)).toBe(true);
     expect(portsCompatible(output, { id: "exec", kind: "execution" })).toBe(false);
-    expect(portsCompatible(output, { id: "value", kind: "data", type: DataType.String })).toBe(
+    expect(portsCompatible(output, { id: "value", kind: "data", type: t.String })).toBe(
       false,
     );
     expect(
       portsCompatible(output, {
         ...input,
         kind: "scope",
-        scope: [{ ...field, type: DataType.Int }],
+        scope: [{ ...field, type: t.Int }],
       }),
     ).toBe(false);
   });
@@ -180,7 +180,7 @@ describe("scope authoring", () => {
           (id) => editor.store.nodeIO.graph?.[id],
         ),
       ).toHaveLength(1);
-      const changedField = { ...field, type: DataType.Int };
+      const changedField = { ...field, type: t.Int };
       editor.applyEvent({
         _tag: "NodePropertyUpdated",
         actor: Actor.system,

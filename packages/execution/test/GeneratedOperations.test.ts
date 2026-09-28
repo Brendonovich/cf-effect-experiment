@@ -1,22 +1,22 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Package, Project, SchemaId } from "@macrograph/core";
-import { DataType, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
 
-const recordId = DataType.DefinitionId.make("record/id");
-const enumId = DataType.DefinitionId.make("result");
-const recordType = DataType.Custom(recordId);
-const definitions: DataType.Definitions = {
+const recordId = t.DefinitionId.make("record/id");
+const enumId = t.DefinitionId.make("result");
+const recordType = t.Custom(recordId);
+const definitions: t.Definitions = {
   [recordId]: {
     _tag: "Struct",
     id: recordId,
     name: "Record",
     fields: [
-      { name: "name", type: DataType.String },
-      { name: "dates", type: DataType.List(DataType.DateTime) },
-      { name: "next", type: DataType.Option(recordType) },
+      { name: "name", type: t.String },
+      { name: "dates", type: t.List(t.DateTime) },
+      { name: "next", type: t.Option(recordType) },
     ],
   },
   [enumId]: {
@@ -25,7 +25,7 @@ const definitions: DataType.Definitions = {
     name: "Result",
     variants: [
       { name: "Success", fields: [{ name: "item", type: recordType }] },
-      { name: "Failure", fields: [{ name: "message", type: DataType.String }] },
+      { name: "Failure", fields: [{ name: "message", type: t.String }] },
       { name: "Empty", fields: [] },
     ],
   },
@@ -49,7 +49,7 @@ const run = (
           type._tag !== "Wildcard"
             ? type
             : type.id === "Enum"
-              ? DataType.Custom(enumId)
+              ? t.Custom(enumId)
               : recordType,
         definitions,
       },
@@ -150,7 +150,7 @@ describe("generated custom operations", () => {
           {},
           definitions,
         )?.dataInputs[0]?.type,
-      ).toEqual(DataType.Wildcard("Struct"));
+      ).toEqual(t.Wildcard("Struct"));
     }),
   );
 
@@ -185,8 +185,8 @@ describe("generated custom operations", () => {
           expect(
             CustomTypes.nodeIO({ ...ref, schema: SchemaId.make(id) }, {}, registry),
           ).toBeUndefined();
-        const custom = DataType.Custom(enumId);
-        const referenced: DataType.Definitions = {
+        const custom = t.Custom(enumId);
+        const referenced: t.Definitions = {
           ...definitions,
           [recordId]: {
             _tag: "Struct",
@@ -209,7 +209,7 @@ describe("generated custom operations", () => {
         });
         const update = { ...ref, schema: SchemaId.make("UpdateStruct") };
         expect(CustomTypes.nodeIO(update, {}, ioOnly)?.dataInputs).toEqual([
-          { id: "value", type: DataType.Wildcard("Struct") },
+          { id: "value", type: t.Wildcard("Struct") },
         ]);
       }),
   );
@@ -381,7 +381,7 @@ describe("generated custom operations", () => {
             yield* context.schema.register({
               id: "enum-anchor",
               type: "pure",
-              io: (io) => ({ value: io.data.in("value", DataType.Custom(enumId)) }),
+              io: (io) => ({ value: io.data.in("value", t.Custom(enumId)) }),
               run: () => Effect.void,
             });
             yield* context.schema.register({
@@ -392,7 +392,7 @@ describe("generated custom operations", () => {
           }),
         });
         const original = value();
-        const stored = Schema.encodeUnknownSync(DataType.JsonValueSchema(recordType, definitions))(
+        const stored = Schema.encodeUnknownSync(t.JsonValueSchema(recordType, definitions))(
           original,
         );
         const project = yield* Schema.decodeUnknownEffect(Project.Model)({
@@ -488,14 +488,14 @@ describe("generated custom operations", () => {
 
   it.effect("executes Make Struct from an output-inferred type without properties", () =>
     Effect.gen(function* () {
-      const id = DataType.DefinitionId.make("made");
-      const type = DataType.Custom(id);
-      const types: DataType.Definitions = {
+      const id = t.DefinitionId.make("made");
+      const type = t.Custom(id);
+      const types: t.Definitions = {
         [id]: {
           _tag: "Struct",
           id,
           name: "Made",
-          fields: [{ name: "label", type: DataType.String }],
+          fields: [{ name: "label", type: t.String }],
         },
       };
       const captured: unknown[] = [];

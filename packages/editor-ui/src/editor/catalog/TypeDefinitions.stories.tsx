@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 import { TypeDefinition, type Project } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { createMemo, createSignal } from "solid-js";
 
 import { TypeDefinitions } from "./TypeDefinitions";
@@ -91,7 +91,7 @@ export const CreateFieldTypes: Story = {
       if (!element || element.disabled) throw new Error(`Expected enabled input: ${label}`);
       return element;
     };
-    const saved = (): DataType.Definitions =>
+    const saved = (): t.Definitions =>
       JSON.parse(canvasElement.querySelector("[data-saved-types]")?.textContent ?? "{}");
     for (const kind of ["struct", "enum"]) {
       if (kind === "enum") {
@@ -176,15 +176,15 @@ export const ImpactfulChanges: Story = {
       types: {
         person: {
           _tag: "Struct",
-          id: DataType.DefinitionId.make("person"),
+          id: t.DefinitionId.make("person"),
           name: "Person",
           fields: [],
         },
         team: {
           _tag: "Struct",
-          id: DataType.DefinitionId.make("team"),
+          id: t.DefinitionId.make("team"),
           name: "Team",
-          fields: [{ name: "person", type: DataType.Custom(DataType.DefinitionId.make("person")) }],
+          fields: [{ name: "person", type: t.Custom(t.DefinitionId.make("person")) }],
         },
       },
     },
@@ -198,7 +198,7 @@ export const ImpactfulChanges: Story = {
       if (!button || button.disabled) throw new Error(`Expected enabled button: ${name}`);
       button.click();
     };
-    const saved = (): DataType.Definitions =>
+    const saved = (): t.Definitions =>
       JSON.parse(canvasElement.querySelector("[data-saved-types]")?.textContent ?? "{}");
     click("Person");
     await frame();

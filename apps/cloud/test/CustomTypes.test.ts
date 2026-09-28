@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { CustomTypes, Project, RenderedProject } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
 import { Module } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
@@ -11,14 +11,14 @@ import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 describe("hosted custom types", () => {
   it.effect("retains deployment definitions and replays tagged match outputs as JSON", () =>
     Effect.gen(function* () {
-      const types: DataType.Definitions = {
+      const types: t.Definitions = {
         result: {
           _tag: "Enum",
-          id: DataType.DefinitionId.make("result"),
+          id: t.DefinitionId.make("result"),
           name: "Result",
           variants: [
             { name: "Empty", fields: [] },
-            { name: "Found", fields: [{ name: "items", type: DataType.List(DataType.Int) }] },
+            { name: "Found", fields: [{ name: "items", type: t.List(t.Int) }] },
           ],
         },
       };
@@ -102,7 +102,7 @@ describe("hosted custom types", () => {
             context.schema.register({
               id: "source",
               type: "pure",
-              io: (io) => ({ value: io.data.out("value", DataType.Custom("result")) }),
+              io: (io) => ({ value: io.data.out("value", t.Custom("result")) }),
               run: ({ io }) =>
                 Effect.sync(() => io.value({ _type: "result", _tag: "Found", items: [1, 2, 3] })),
             }),

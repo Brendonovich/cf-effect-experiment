@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import { DataPort, ExecutionPort } from "./IO.ts";
@@ -69,7 +69,7 @@ export const Model = Schema.Struct({
   resources: Schema.Array(ResourceDefinition).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
-  types: Schema.optional(DataType.Definitions),
+  types: Schema.optional(t.Definitions),
 });
 export type Model = typeof Model.Type;
 

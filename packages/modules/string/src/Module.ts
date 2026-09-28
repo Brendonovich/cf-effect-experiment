@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option } from "effect";
 
@@ -31,12 +31,12 @@ const StringModule = Module.make({
         description: "Performs a case-sensitive literal string comparison.",
         type: "pure",
         io: (io) => ({
-          input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-          second: io.data.in(second, DataType.String, {
+          input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+          second: io.data.in(second, t.String, {
             name: id === "StringIncludes" ? "Includes" : "Starts With",
             defaultValue: "",
           }),
-          output: io.data.out("bool", DataType.Bool),
+          output: io.data.out("bool", t.Bool),
         }),
         run: ({ io }) => Effect.sync(() => io.output(calculate(io.input, io.second))),
       });
@@ -52,10 +52,10 @@ const StringModule = Module.make({
           "Replaces literal text. Replacement text is literal, including dollar signs; the search is not a regex.",
         type: "pure",
         io: (io) => ({
-          input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-          find: io.data.in("find", DataType.String, { name: "Find", defaultValue: "" }),
-          replace: io.data.in("replace", DataType.String, { name: "Replace", defaultValue: "" }),
-          output: io.data.out("out", DataType.String),
+          input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+          find: io.data.in("find", t.String, { name: "Find", defaultValue: "" }),
+          replace: io.data.in("replace", t.String, { name: "Replace", defaultValue: "" }),
+          output: io.data.out("out", t.String),
         }),
         run: ({ io }) =>
           Effect.sync(() =>
@@ -73,8 +73,8 @@ const StringModule = Module.make({
       description: "Counts UTF-16 code units, matching JavaScript string length.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-        output: io.data.out("int", DataType.Int),
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        output: io.data.out("int", t.Int),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.length)),
     });
@@ -85,10 +85,10 @@ const StringModule = Module.make({
         "Extracts UTF-16 code units using clamped, end-exclusive substring indices. End 0 means the string's end; reversed bounds are swapped.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { defaultValue: "" }),
-        start: io.data.in("start", DataType.Int, { name: "Start", defaultValue: 0 }),
-        end: io.data.in("end", DataType.Int, { name: "End", defaultValue: 0 }),
-        output: io.data.out("output", DataType.String),
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        start: io.data.in("start", t.Int, { name: "Start", defaultValue: 0 }),
+        end: io.data.in("end", t.Int, { name: "End", defaultValue: 0 }),
+        output: io.data.out("output", t.String),
       }),
       run: ({ io }) =>
         Number.isSafeInteger(io.start) && Number.isSafeInteger(io.end)
@@ -109,8 +109,8 @@ const StringModule = Module.make({
         description: `${name}. Reverse String reverses Unicode code points, not grapheme clusters.`,
         type: "pure",
         io: (io) => ({
-          input: io.data.in("input", DataType.String, { defaultValue: "" }),
-          output: io.data.out("output", DataType.String),
+          input: io.data.in("input", t.String, { defaultValue: "" }),
+          output: io.data.out("output", t.String),
         }),
         run: ({ io }) => Effect.sync(() => io.output(calculate(io.input))),
       });
@@ -122,9 +122,9 @@ const StringModule = Module.make({
       type: "pure",
       io: (io) => ({
         inputs: ["one", "two", "three", "four", "five"].map((id) =>
-          io.data.in(id, DataType.String, { defaultValue: "" }),
+          io.data.in(id, t.String, { defaultValue: "" }),
         ),
-        output: io.data.out("output", DataType.String),
+        output: io.data.out("output", t.String),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.inputs.join(""))),
     });
@@ -134,13 +134,13 @@ const StringModule = Module.make({
       description:
         "Concatenates 0 to 1024 strings. Entries explicitly controls the pin count instead of legacy connection-driven pins.",
       type: "pure",
-      properties: { number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
+      properties: { number: { name: "Entries", type: t.Int, defaultValue: 1 } },
       io: (io, properties) => ({
         inputs: Array.from(
           { length: validEntries(properties.number) ? properties.number : 0 },
-          (_, index) => io.data.in(`value-${index}`, DataType.String, { defaultValue: "" }),
+          (_, index) => io.data.in(`value-${index}`, t.String, { defaultValue: "" }),
         ),
-        output: io.data.out("output", DataType.String),
+        output: io.data.out("output", t.String),
       }),
       run: ({ io, properties }) =>
         validEntries(properties.number)
@@ -148,9 +148,9 @@ const StringModule = Module.make({
           : Effect.fail(new RangeError("Entries must be an integer between 0 and 1024")),
     });
     for (const [id, name, type] of [
-      ["IntToString", "Int To String", DataType.Int],
-      ["FloatToString", "Float To String", DataType.Float],
-      ["BoolToString", "Bool To String", DataType.Bool],
+      ["IntToString", "Int To String", t.Int],
+      ["FloatToString", "Float To String", t.Float],
+      ["BoolToString", "Bool To String", t.Bool],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -159,10 +159,10 @@ const StringModule = Module.make({
         type: "pure",
         io: (io) => ({
           input: io.data.in("input", type, { defaultValue: type._tag === "Bool" ? false : 0 }),
-          output: io.data.out("string", DataType.String),
+          output: io.data.out("string", t.String),
         }),
         run: ({ io }) =>
-          DataType.isValue(type, io.input)
+          t.isValue(type, io.input)
             ? Effect.sync(() => io.output(String(io.input)))
             : Effect.fail(new TypeError("Input does not match the scalar conversion type")),
       });
@@ -173,9 +173,9 @@ const StringModule = Module.make({
       description: "Formats a safe integer using base 2 through 36.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("int", DataType.Int, { defaultValue: 0 }),
-        base: io.data.in("base", DataType.Int, { name: "Base", defaultValue: 10 }),
-        output: io.data.out("string", DataType.String),
+        input: io.data.in("int", t.Int, { defaultValue: 0 }),
+        base: io.data.in("base", t.Int, { name: "Base", defaultValue: 10 }),
+        output: io.data.out("string", t.String),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -189,8 +189,8 @@ const StringModule = Module.make({
         }),
     });
     for (const [id, name, type] of [
-      ["StringToInt", "String To Int", DataType.Int],
-      ["StringToFloat", "String To Float", DataType.Float],
+      ["StringToInt", "String To Int", t.Int],
+      ["StringToFloat", "String To Float", t.Float],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -199,8 +199,8 @@ const StringModule = Module.make({
           "Parses a complete decimal numeric literal (surrounding whitespace allowed). Empty, partial, nonfinite, or unsafe integer results return None. String To Int rounds down.",
         type: "pure",
         io: (io) => ({
-          input: io.data.in("string", DataType.String, { defaultValue: "" }),
-          output: io.data.out(type._tag === "Int" ? "int" : "float", DataType.Option(type)),
+          input: io.data.in("string", t.String, { defaultValue: "" }),
+          output: io.data.out(type._tag === "Int" ? "int" : "float", t.Option(type)),
         }),
         run: ({ io }) =>
           Effect.sync(() => {
@@ -224,9 +224,9 @@ const StringModule = Module.make({
         "Parses a complete signed integer in base 2 through 36, without radix prefixes. Invalid digits or unsafe results return None; invalid bases fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("string", DataType.String, { defaultValue: "" }),
-        base: io.data.in("base", DataType.Int, { name: "Base", defaultValue: 10 }),
-        output: io.data.out("int", DataType.Option(DataType.Int)),
+        input: io.data.in("string", t.String, { defaultValue: "" }),
+        base: io.data.in("base", t.Int, { name: "Base", defaultValue: 10 }),
+        output: io.data.out("int", t.Option(t.Int)),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -255,12 +255,12 @@ const StringModule = Module.make({
         "Splits a string using a literal separator. An empty separator splits UTF-16 code units.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-        separator: io.data.in("separator", DataType.String, {
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        separator: io.data.in("separator", t.String, {
           name: "Separator",
           defaultValue: "",
         }),
-        output: io.data.out("output", DataType.List(DataType.String)),
+        output: io.data.out("output", t.List(t.String)),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.split(io.separator))),
     });
@@ -271,8 +271,8 @@ const StringModule = Module.make({
         "Splits on runs of CR or LF, matching legacy behavior (consecutive line breaks collapse).",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { name: "String", defaultValue: "" }),
-        output: io.data.out("output", DataType.List(DataType.String)),
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        output: io.data.out("output", t.List(t.String)),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.split(/[\r\n]+/))),
     });
@@ -282,11 +282,11 @@ const StringModule = Module.make({
       description: "Joins a list of strings with LF line breaks.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.List(DataType.String), {
+        input: io.data.in("input", t.List(t.String), {
           name: "Lines",
           defaultValue: [],
         }),
-        output: io.data.out("output", DataType.String),
+        output: io.data.out("output", t.String),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.join("\n"))),
     });
@@ -297,9 +297,9 @@ const StringModule = Module.make({
         "Gets a zero-based whitespace-delimited word. Empty text and out-of-range indices return None; negative indices count from the end.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { defaultValue: "" }),
-        index: io.data.in("index", DataType.Int, { name: "N", defaultValue: 0 }),
-        output: io.data.out("output", DataType.Option(DataType.String)),
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        index: io.data.in("index", t.Int, { name: "N", defaultValue: 0 }),
+        output: io.data.out("output", t.Option(t.String)),
       }),
       run: ({ io }) =>
         Number.isSafeInteger(io.index)
@@ -317,18 +317,18 @@ const StringModule = Module.make({
       description:
         "Executes a JavaScript regex once, returning an optional full match and optional named groups. Invalid regex properties fail IO generation; unmatched groups return None.",
       properties: {
-        regex: { name: "Regex", type: DataType.String, defaultValue: "" },
-        flags: { name: "Flags", type: DataType.String, defaultValue: "" },
+        regex: { name: "Regex", type: t.String, defaultValue: "" },
+        flags: { name: "Flags", type: t.String, defaultValue: "" },
       },
       io: (io, properties) => {
         const regex = new RegExp(`(?:${properties.regex})|`, properties.flags);
         const names = Object.keys(regex.exec("")?.groups ?? {});
         return {
-          input: io.data.in("input", DataType.String, { defaultValue: "" }),
-          output: io.data.out("match", DataType.Option(DataType.String)),
+          input: io.data.in("input", t.String, { defaultValue: "" }),
+          output: io.data.out("match", t.Option(t.String)),
           groups: names.map((name) => ({
             name,
-            output: io.data.out(`group-${name}`, DataType.Option(DataType.String), { name }),
+            output: io.data.out(`group-${name}`, t.Option(t.String), { name }),
           })),
         };
       },
@@ -348,7 +348,7 @@ const StringModule = Module.make({
       name: "UUID",
       description:
         "Generates a cryptographically random UUID v4 on execution using Web Crypto. Requires a secure context in browsers.",
-      io: (io) => ({ output: io.data.out("uuid", DataType.String, { name: "UUID" }) }),
+      io: (io) => ({ output: io.data.out("uuid", t.String, { name: "UUID" }) }),
       run: ({ io }) =>
         Effect.try({
           try: () => io.output(globalThis.crypto.randomUUID()),
@@ -362,8 +362,8 @@ const StringModule = Module.make({
         "Parses a JavaScript date string to optional epoch milliseconds. Invalid dates return None; use ISO 8601 with an explicit timezone for portable results.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("timeIn", DataType.String, { name: "Time", defaultValue: "" }),
-        output: io.data.out("timeOut", DataType.Option(DataType.Int), { name: "Time (ms)" }),
+        input: io.data.in("timeIn", t.String, { name: "Time", defaultValue: "" }),
+        output: io.data.out("timeOut", t.Option(t.Int), { name: "Time (ms)" }),
       }),
       run: ({ io }) =>
         Effect.sync(() => {

@@ -12,7 +12,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { DataType, Engine, Module, Resource } from "@macrograph/module";
+import { t, Engine, Module, Resource } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
@@ -45,8 +45,8 @@ const makeFormatModule = (id: string) =>
         name: "Format String",
         type: "pure",
         properties: {
-          format: { name: "Format", type: DataType.String, defaultValue: "" },
-          kind: { name: "Integer inputs", type: DataType.String, optional: true },
+          format: { name: "Format", type: t.String, defaultValue: "" },
+          kind: { name: "Integer inputs", type: t.String, optional: true },
         },
         io: (io, properties) => {
           const format = typeof properties.format === "string" ? properties.format : "";
@@ -56,11 +56,11 @@ const makeFormatModule = (id: string) =>
           ).filter((name): name is string => name !== undefined);
           return {
             values: Array.from(new Set(names), (name) =>
-              io.data.in(name, properties.kind === "int" ? DataType.Int : DataType.String, {
+              io.data.in(name, properties.kind === "int" ? t.Int : t.String, {
                 name,
               }),
             ),
-            result: io.data.out("result", DataType.String),
+            result: io.data.out("result", t.String),
           };
         },
         run: () => Effect.void,
@@ -87,20 +87,20 @@ const SuggestionModule = Module.make({
       name: "Search",
       description: "Suggests values using the current node state.",
       properties: {
-        prefix: { name: "Prefix", type: DataType.String, defaultValue: "default" },
-        enabled: { name: "Enabled", type: DataType.Bool, optional: true },
+        prefix: { name: "Prefix", type: t.String, defaultValue: "default" },
+        enabled: { name: "Enabled", type: t.Bool, optional: true },
       },
       io: (io) => ({
-        query: io.data.in("query", DataType.String, {
+        query: io.data.in("query", t.String, {
           suggestions: ({ properties, inputDefaults }) =>
             Effect.succeed([
               `${properties.prefix}:${typeof inputDefaults.query === "string" ? inputDefaults.query : "empty"}`,
             ]),
         }),
-        broken: io.data.in("broken", DataType.String, {
+        broken: io.data.in("broken", t.String, {
           suggestions: () => Effect.die("resolver failed"),
         }),
-        throws: io.data.in("throws", DataType.String, {
+        throws: io.data.in("throws", t.String, {
           suggestions: () => {
             throw new Error("resolver threw");
           },
@@ -134,7 +134,7 @@ const ResourceModule = Module.make({
       name: "Action",
       properties: { account: { name: "Account", resource: AccountResource } },
       io: (io, properties) => ({
-        account: io.data.in(properties.account ?? "account", DataType.String, {
+        account: io.data.in(properties.account ?? "account", t.String, {
           suggestions: ({ properties, inputDefaults, engine }) => {
             const query = inputDefaults[properties.account];
             return engine.GetSuggestions({
@@ -167,12 +167,12 @@ const TestPackage = {
       type: "exec" as const,
       properties: [],
       dataInputs: [
-        { id: IoId.make("text"), type: DataType.String },
-        { id: IoId.make("count"), type: DataType.Int },
+        { id: IoId.make("text"), type: t.String },
+        { id: IoId.make("count"), type: t.Int },
       ],
       dataOutputs: [
-        { id: IoId.make("text"), type: DataType.String },
-        { id: IoId.make("count"), type: DataType.Int },
+        { id: IoId.make("text"), type: t.String },
+        { id: IoId.make("count"), type: t.Int },
       ],
       executionInputs: [{ id: IoId.make("exec") }],
       executionOutputs: [{ id: IoId.make("exec") }],
@@ -1111,7 +1111,7 @@ it.layer(TestLayer)((it) => {
         expect(propertyEvent._tag).toBe("NodePropertyUpdated");
         if (propertyEvent._tag !== "NodePropertyUpdated") return;
         expect(propertyEvent.deletedConnectionIds).toEqual([connection.connection.id]);
-        expect(propertyEvent.io.dataInputs[0]?.type).toEqual(DataType.Int);
+        expect(propertyEvent.io.dataInputs[0]?.type).toEqual(t.Int);
         expect((yield* editor.project.get()).graphs[graph.graph.id]?.canvas.connections).toEqual(
           [],
         );
@@ -1144,7 +1144,7 @@ it.layer(TestLayer)((it) => {
               name: "Replacement",
               type: "pure",
               properties: [],
-              dataInputs: [{ id: IoId.make("fixed"), type: DataType.Bool }],
+              dataInputs: [{ id: IoId.make("fixed"), type: t.Bool }],
               dataOutputs: [],
               executionInputs: [],
               executionOutputs: [],
@@ -1154,7 +1154,7 @@ it.layer(TestLayer)((it) => {
 
         expect(
           (yield* editor.project.snapshot()).nodeIO[graph.graph.id]?.[node.node.id]?.dataInputs,
-        ).toEqual([{ id: "fixed", type: DataType.Bool }]);
+        ).toEqual([{ id: "fixed", type: t.Bool }]);
       }),
     );
 
@@ -1500,24 +1500,24 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const packages = yield* Packages.Service;
-        const descriptors: ReadonlyArray<DataType.Any> = [
-          DataType.String,
-          DataType.Int,
-          DataType.Float,
-          DataType.Bool,
-          DataType.DateTime,
-          DataType.List(DataType.String),
-          DataType.Option(DataType.Int),
-          DataType.List(DataType.Option(DataType.List(DataType.String))),
+        const descriptors: ReadonlyArray<t.Any> = [
+          t.String,
+          t.Int,
+          t.Float,
+          t.Bool,
+          t.DateTime,
+          t.List(t.String),
+          t.Option(t.Int),
+          t.List(t.Option(t.List(t.String))),
         ];
-        const encoded = yield* Schema.encodeUnknownEffect(Schema.Array(DataType.Descriptor))(
+        const encoded = yield* Schema.encodeUnknownEffect(Schema.Array(t.Descriptor))(
           descriptors,
         );
         expect(encoded).toEqual(descriptors);
         expect(
-          yield* Schema.decodeUnknownEffect(Schema.Array(DataType.Descriptor))(encoded),
+          yield* Schema.decodeUnknownEffect(Schema.Array(t.Descriptor))(encoded),
         ).toEqual(descriptors);
-        const valueCodec = DataType.JsonValueSchema(DataType.List(DataType.Option(DataType.Int)));
+        const valueCodec = t.JsonValueSchema(t.List(t.Option(t.Int)));
         const encodedValue = yield* Schema.encodeUnknownEffect(valueCodec)([
           Option.some(1),
           Option.none(),
@@ -1556,9 +1556,9 @@ it.layer(TestLayer)((it) => {
                 description: "A test schema.",
                 io: (io) => ({
                   next: io.exec.out("next", { name: "Next" }),
-                  names: io.data.in("names", DataType.List(DataType.String), { name: "Names" }),
-                  optional: io.data.in("optional", DataType.Option(DataType.Int)),
-                  result: io.data.out("result", DataType.Option(DataType.String)),
+                  names: io.data.in("names", t.List(t.String), { name: "Names" }),
+                  optional: io.data.in("optional", t.Option(t.Int)),
+                  result: io.data.out("result", t.Option(t.String)),
                 }),
                 run: () => Effect.void,
               }),

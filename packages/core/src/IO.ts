@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 
 export const IoId = Schema.String.pipe(Schema.brand("IoId"));
@@ -7,7 +7,7 @@ export type IoId = typeof IoId.Type;
 export const ScopeField = Schema.Struct({
   id: IoId,
   name: Schema.optional(Schema.String),
-  type: DataType.Descriptor,
+  type: t.Descriptor,
 });
 export type ScopeField = typeof ScopeField.Type;
 
@@ -22,7 +22,7 @@ export type ExecutionPort = typeof ExecutionPort.Type;
 export const DataPort = Schema.Struct({
   id: IoId,
   name: Schema.optional(Schema.String),
-  type: DataType.Descriptor,
+  type: t.Descriptor,
   defaultValue: Schema.optional(Schema.Json),
   suggestions: Schema.optional(Schema.Boolean),
 });

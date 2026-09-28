@@ -1,13 +1,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project, OutputRef } from "@macrograph/core";
-import { DataType, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
 
 class Trigger extends Schema.TaggedClass<Trigger>()("InlineScopeTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
-const type = DataType.Option(DataType.List(DataType.DateTime));
+const type = t.Option(t.List(t.DateTime));
 const value = Option.some([DateTime.makeUnsafe("2026-09-05T12:00:00Z")]);
 const node = (id: string, schema = id) => ({
   id,

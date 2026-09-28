@@ -9,7 +9,7 @@ import {
   SchemaId,
   OutputRef,
 } from "@macrograph/core";
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
@@ -19,13 +19,13 @@ const TestLayer = Editor.defaultLayer.pipe(
   Layer.provideMerge(Packages.defaultLayer),
   Layer.provideMerge(Persistence.layerMemory),
 );
-const enumId = DataType.DefinitionId.make("result");
-const definition: Extract<DataType.Definition, { readonly _tag: "Enum" }> = {
+const enumId = t.DefinitionId.make("result");
+const definition: Extract<t.Definition, { readonly _tag: "Enum" }> = {
   _tag: "Enum",
   id: enumId,
   name: "Result",
   variants: [
-    { name: "Found", fields: [{ name: "value", type: DataType.String }] },
+    { name: "Found", fields: [{ name: "value", type: t.String }] },
     { name: "Empty", fields: [] },
   ],
 };
@@ -34,13 +34,13 @@ const sinkModule = Module.make({
   effect: Effect.fnUntraced(function* (context) {
     yield* context.schema.register({
       id: "sink",
-      io: (io) => ({ value: io.data.in("value", DataType.String) }),
+      io: (io) => ({ value: io.data.in("value", t.String) }),
       run: () => Effect.void,
     });
     yield* context.schema.register({
       id: "source",
       type: "pure",
-      io: (io) => ({ value: io.data.out("value", DataType.Custom(enumId)) }),
+      io: (io) => ({ value: io.data.out("value", t.Custom(enumId)) }),
       run: () => Effect.void,
     });
   }),
@@ -227,14 +227,14 @@ it.effect("infers scope projection pins on creation, type edits and disconnect",
   Effect.gen(function* () {
     const { editor, match, unpack, sink } = yield* setup;
     expect(unpack.io.dataOutputs).toEqual([
-      { id: 'field:"value"', name: "value", type: DataType.String },
+      { id: 'field:"value"', name: "value", type: t.String },
     ]);
     expect(match.io.dataOutputs).toEqual([]);
     expect(match.io.executionOutputs).toEqual([
       {
         id: 'variant:"Found"',
         name: "Found",
-        scope: [{ id: 'field:"value"', name: "value", type: DataType.String }],
+        scope: [{ id: 'field:"value"', name: "value", type: t.String }],
       },
       { id: 'variant:"Empty"', name: "Empty" },
     ]);
@@ -254,21 +254,21 @@ it.effect("infers scope projection pins on creation, type edits and disconnect",
     const scope = unpack;
     const snapshot = yield* editor.project.snapshot();
     expect(snapshot.nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual([
-      { id: 'field:"value"', name: "value", type: DataType.String },
+      { id: 'field:"value"', name: "value", type: t.String },
     ]);
     yield* connect(editor, unpack.node.id, 'field:"value"', sink.node.id, "value");
     const preview = yield* editor.typeDefinition.preview({
       _tag: "Upsert",
       definition: {
         ...definition,
-        variants: [{ name: "Found", fields: [{ name: "value", type: DataType.Int }] }],
+        variants: [{ name: "Found", fields: [{ name: "value", type: t.Int }] }],
       },
     });
     expect(preview.nodes.some((node) => node.nodeId === unpack.node.id)).toBe(true);
     yield* editor.typeDefinition.confirm({ token: preview.token });
     expect(
       (yield* editor.project.snapshot()).nodeIO.graph?.[unpack.node.id]?.dataOutputs[0]?.type,
-    ).toEqual(DataType.Int);
+    ).toEqual(t.Int);
     yield* editor.connection.delete({ graphID: "graph", connectionId: scope.connection.id });
     expect((yield* editor.project.snapshot()).nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual(
       [],
@@ -293,7 +293,7 @@ it.effect("persists scope projections separately from schema nodes", () =>
       position: { x: 120, y: 80 },
     });
     expect((yield* editor.project.snapshot()).nodeIO.graph?.[unpack.node.id]?.dataOutputs).toEqual([
-      { id: 'field:"value"', name: "value", type: DataType.String },
+      { id: 'field:"value"', name: "value", type: t.String },
     ]);
     const pasted = yield* editor.fragment.paste({
       graphID: "graph",
@@ -309,7 +309,7 @@ it.effect("persists scope projections separately from schema nodes", () =>
     expect(pasted.scopeProjections).toHaveLength(1);
     expect(pasted.connections).toHaveLength(graph.connections.length);
     expect(pasted.nodeIO[pasted.scopeProjections[0]!.id]?.dataOutputs).toEqual([
-      { id: 'field:"value"', name: "value", type: DataType.String },
+      { id: 'field:"value"', name: "value", type: t.String },
     ]);
   }).pipe(Effect.provide(TestLayer)),
 );

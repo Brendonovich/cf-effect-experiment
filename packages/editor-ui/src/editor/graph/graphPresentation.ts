@@ -1,7 +1,7 @@
 import type { Canvas, NodeIO } from "@macrograph/core";
 
 import { OutputRef } from "@macrograph/core";
-import { DataType as Types } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { scopesCompatible } from "@macrograph/module/Registration";
 
 import { visiblePorts, type PortDirection } from "./connectionAuthoring";
@@ -9,7 +9,7 @@ import { asOutputPort, type GraphPort } from "./GraphPort";
 export type { GraphPort } from "./GraphPort";
 
 type NodeIOFor = (nodeId: string) => NodeIO | undefined;
-type DataType = NodeIO["dataInputs"][number]["type"];
+type t = NodeIO["dataInputs"][number]["type"];
 type Position = { readonly x: number; readonly y: number };
 
 export const GRAPH_NODE_FIRST_IO_Y = 42;
@@ -111,7 +111,7 @@ export const retainedPorts = (
         kind: "data" as const,
         id,
         name: `Missing: ${id}`,
-        type: Types.String,
+        type: t.String,
         invalid: true,
       })),
   ];
@@ -337,7 +337,7 @@ export const graphConnections = (graph: Canvas.Model, ioForNode: NodeIOFor) => {
             ? "Execution/data pin mismatch"
             : from.port.kind === "data" &&
                 to.port.kind === "data" &&
-                !Types.equals(from.port.type, to.port.type)
+                !t.equals(from.port.type, to.port.type)
               ? "Nominal data types do not match"
               : undefined;
     if (invalid !== undefined) return [];
@@ -358,7 +358,7 @@ export const connectionPath = (from: Position, to: Position): string => {
   return `M ${from.x} ${from.y} C ${from.x + control} ${from.y}, ${to.x - control} ${to.y}, ${to.x} ${to.y}`;
 };
 
-export const wireColor = (type: DataType | undefined, scope = false): string => {
+export const wireColor = (type: t | undefined, scope = false): string => {
   if (scope) return "#c084fc";
   if (type === undefined) return "white";
   const primary = type._tag === "List" ? type.item : type._tag === "Option" ? type.inner : type;

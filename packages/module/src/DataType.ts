@@ -56,16 +56,16 @@ export interface Wildcard extends Type<unknown> {
 export type Any = String | Int | Float | Bool | DateTime | List | Option | Custom | Wildcard;
 export type Scalar = String | Int | Float | Bool;
 
-export type Value<DataType extends Type<unknown>> =
-  DataType extends List<infer Item>
+export type Value<Data extends Type<unknown>> =
+  Data extends List<infer Item>
     ? Any extends Item
       ? ReadonlyArray<unknown>
       : ReadonlyArray<Value<Item>>
-    : DataType extends Option<infer Inner>
+    : Data extends Option<infer Inner>
       ? Any extends Inner
         ? EffectOption.Option<unknown>
         : EffectOption.Option<Value<Inner>>
-      : DataType extends Type<infer Value>
+      : Data extends Type<infer Value>
         ? Value
         : never;
 
@@ -74,7 +74,7 @@ export const Int: Int = { _tag: "Int" };
 export const Float: Float = { _tag: "Float" };
 export const Bool: Bool = { _tag: "Bool" };
 export const DateTime: DateTime = { _tag: "DateTime" };
-export const Custom = (id: DefinitionId): Custom => ({ _tag: "Custom", id });
+export const Custom = (id: string): Custom => ({ _tag: "Custom", id });
 export const Wildcard = (id: string): Wildcard => ({ _tag: "Wildcard", id });
 export const List = <Item extends Any>(item: Item): List<Item> => ({ _tag: "List", item });
 export const Option = <Inner extends Any>(inner: Inner): Option<Inner> => ({
@@ -101,7 +101,9 @@ export const Descriptor: Schema.Codec<Any> = Schema.Union([
 ]);
 
 export const Field = Schema.Struct({ name: Schema.String, type: Descriptor });
+export type Field = typeof Field.Type;
 export const Variant = Schema.Struct({ name: Schema.String, fields: Schema.Array(Field) });
+export type Variant = typeof Variant.Type;
 export const Definition = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal("Struct"),
@@ -117,6 +119,41 @@ export const Definition = Schema.Union([
   }),
 ]);
 export type Definition = typeof Definition.Type;
+export type StructDefinition = Extract<Definition, { readonly _tag: "Struct" }>;
+export type EnumDefinition = Extract<Definition, { readonly _tag: "Enum" }>;
+export type Fields = Readonly<Record<string, Any>>;
+export type Variants = Readonly<Record<string, Fields>>;
+
+const isVariantList = (
+  variants: ReadonlyArray<string> | Variants,
+): variants is ReadonlyArray<string> => Array.isArray(variants);
+
+export const defineStruct = (id: string, name: string, fields: Fields): StructDefinition => ({
+  _tag: "Struct",
+  id: DefinitionId.make(id),
+  name,
+  fields: Object.entries(fields).map(([name, type]) => ({ name, type })),
+});
+
+export const defineEnum = (
+  id: string,
+  name: string,
+  variants: ReadonlyArray<string> | Variants,
+): EnumDefinition => ({
+  _tag: "Enum",
+  id: DefinitionId.make(id),
+  name,
+  variants: isVariantList(variants)
+    ? variants.map((name) => ({ name, fields: [] }))
+    : Object.entries(variants).map(([name, fields]) => ({
+        name,
+        fields: Object.entries(fields).map(([name, type]) => ({ name, type })),
+      })),
+});
+
+export const Struct = (definition: StructDefinition): Custom => Custom(definition.id);
+export const Enum = (definition: EnumDefinition): Custom => Custom(definition.id);
+
 export const Definitions = Schema.Record(Schema.String, Definition);
 export type Definitions = typeof Definitions.Type;
 
@@ -319,4 +356,4 @@ export const compatible = (left: Any, right: Any): boolean => {
 export const isValue = (type: Any, value: unknown, definitions: Definitions = {}): boolean =>
   Schema.is(finiteValue)(value) && Schema.is(valueSchema(type, definitions))(value);
 
-export * as DataType from "./DataType.ts";
+export * as t from "./DataType.ts";

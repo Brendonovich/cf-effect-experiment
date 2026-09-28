@@ -9,7 +9,7 @@ import {
   type Function as GraphFunction,
   type Package,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { render } from "@solidjs/web";
 import { useMutation } from "@tanstack/solid-query";
 import { Effect, Result } from "effect";
@@ -32,13 +32,13 @@ const pkg: Package.Model = {
         {
           id: "count",
           name: "Count",
-          type: DataType.Int,
+          type: t.Int,
           optional: false,
           defaultValue: 1,
         },
         { id: "function", name: "Function", function: true, optional: true },
       ],
-      dataInputs: [{ id: IoId.make("message"), name: "Message", type: DataType.Wildcard("Value") }],
+      dataInputs: [{ id: IoId.make("message"), name: "Message", type: t.Wildcard("Value") }],
       dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
@@ -61,7 +61,7 @@ const functions: ReadonlyArray<GraphFunction.Model> = [
   {
     canvas: { id: CanvasId.make("notify"), name: "Notify", nodes: {}, connections: [] },
     arguments: [],
-    returns: [{ id: IoId.make("result"), name: "Result", type: DataType.String }],
+    returns: [{ id: IoId.make("result"), name: "Result", type: t.String }],
     inputPosition: { x: 0, y: 0 },
     outputPosition: { x: 0, y: 0 },
   },
@@ -81,7 +81,7 @@ const authoring = BuiltinAuthoring.registry.with({
               (_, index) => ({
                 id: IoId.make(`item-${index + 1}`),
                 name: `Item ${index + 1}`,
-                type: DataType.String,
+                type: t.String,
               }),
             ),
           ],
@@ -149,7 +149,7 @@ it("disables unavailable engine settings and selects the exposed node reference"
         definitions={{
           person: {
             _tag: "Struct",
-            id: DataType.DefinitionId.make("person"),
+            id: t.DefinitionId.make("person"),
             name: "Person",
             fields: [],
           },
@@ -280,8 +280,8 @@ it("copies resource-node references in the strict clipboard format accepted by p
         type: "exec",
         properties: [{ id: "light", name: "Light", resource: "LIFXLight", optional: false }],
         dataInputs: [
-          { id: IoId.make("power"), name: "On", type: DataType.Bool, defaultValue: true },
-          { id: IoId.make("duration"), name: "Duration (ms)", type: DataType.Int, defaultValue: 0 },
+          { id: IoId.make("power"), name: "On", type: t.Bool, defaultValue: true },
+          { id: IoId.make("duration"), name: "Duration (ms)", type: t.Int, defaultValue: 0 },
         ],
         dataOutputs: [],
         executionInputs: [{ id: IoId.make("exec") }],

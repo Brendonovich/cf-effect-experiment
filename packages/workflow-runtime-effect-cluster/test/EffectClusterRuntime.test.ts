@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { DataType, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import { ExecutorModules } from "@macrograph/project-host";
 import { Array, Effect, Layer, Schema } from "effect";
 import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
@@ -23,7 +23,7 @@ const TestModule = Module.make({
       id: "trigger",
       type: "event",
       event: () => Effect.succeed(true),
-      io: (io) => ({ value: io.data.out("value", DataType.String) }),
+      io: (io) => ({ value: io.data.out("value", t.String) }),
       run: ({ event, io }) =>
         Effect.gen(function* () {
           if (event === undefined) return yield* Effect.die("Expected event payload");

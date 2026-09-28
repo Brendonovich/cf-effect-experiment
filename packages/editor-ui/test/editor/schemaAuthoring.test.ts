@@ -15,7 +15,7 @@ import {
   type NodeIO,
   type Package,
 } from "@macrograph/core";
-import { DataType as t } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Result } from "effect";
 import { createRoot } from "solid-js";
 import { describe, expect, it, vi } from "vitest";

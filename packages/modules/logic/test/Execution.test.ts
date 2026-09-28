@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { DataType, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
 import StringModule from "@macrograph/module-string";
 import { Array, Effect, Fiber, Layer, Option, Schema } from "effect";
@@ -66,8 +66,8 @@ describe("Logic execution", () => {
               type: "event",
               event: () => Effect.succeed(true),
               io: (io) => ({
-                list: io.data.out("list", DataType.List(DataType.String)),
-                option: io.data.out("option", DataType.Option(DataType.String)),
+                list: io.data.out("list", t.List(t.String)),
+                option: io.data.out("option", t.Option(t.String)),
               }),
               run: ({ io }) =>
                 Effect.sync(() => {
@@ -78,9 +78,9 @@ describe("Logic execution", () => {
             yield* context.schema.register({
               id: "Sink",
               io: (io) => ({
-                length: io.data.in("length", DataType.Int),
-                none: io.data.in("none", DataType.Bool),
-                lines: io.data.in("lines", DataType.String),
+                length: io.data.in("length", t.Int),
+                none: io.data.in("none", t.Bool),
+                lines: io.data.in("lines", t.String),
               }),
               run: ({ io }) =>
                 Effect.sync(() => {
@@ -160,7 +160,7 @@ describe("Logic execution", () => {
             });
             yield* context.schema.register({
               id: "Sink",
-              io: (io) => ({ input: io.data.in("input", DataType.String) }),
+              io: (io) => ({ input: io.data.in("input", t.String) }),
               run: ({ io }) =>
                 Effect.sync(() => {
                   messages.push(io.input);

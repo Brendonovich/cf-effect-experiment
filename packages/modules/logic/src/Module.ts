@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option } from "effect";
 
@@ -16,7 +16,7 @@ const LogicModule = Module.make({
       description: "Routes execution to exactly one boolean branch.",
       io: (io) => ({
         exec: io.exec.in("exec"),
-        condition: io.data.in("condition", DataType.Bool, {
+        condition: io.data.in("condition", t.Bool, {
           name: "Condition",
           defaultValue: false,
         }),
@@ -31,7 +31,7 @@ const LogicModule = Module.make({
       description:
         "Waits an interruptible, nonnegative whole number of milliseconds (at most 2147483647).",
       io: (io) => ({
-        delay: io.data.in("delay", DataType.Int, { name: "Wait in ms", defaultValue: 0 }),
+        delay: io.data.in("delay", t.Int, { name: "Wait in ms", defaultValue: 0 }),
       }),
       run: ({ io }) =>
         Number.isSafeInteger(io.delay) && io.delay >= 0 && io.delay <= 2147483647
@@ -51,9 +51,9 @@ const LogicModule = Module.make({
         description: `Boolean ${id} of two inputs.`,
         type: "pure",
         io: (io) => ({
-          one: io.data.in("one", DataType.Bool, { defaultValue: false }),
-          two: io.data.in("two", DataType.Bool, { defaultValue: false }),
-          value: io.data.out("value", DataType.Bool),
+          one: io.data.in("one", t.Bool, { defaultValue: false }),
+          two: io.data.in("two", t.Bool, { defaultValue: false }),
+          value: io.data.out("value", t.Bool),
         }),
         run: ({ io }) => Effect.sync(() => io.value(operation(io.one, io.two))),
       });
@@ -64,8 +64,8 @@ const LogicModule = Module.make({
       description: "Inverts a boolean input.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.Bool, { defaultValue: false }),
-        output: io.data.out("output", DataType.Bool),
+        input: io.data.in("input", t.Bool, { defaultValue: false }),
+        output: io.data.out("output", t.Bool),
       }),
       run: ({ io }) => Effect.sync(() => io.output(!io.input)),
     });
@@ -77,7 +77,7 @@ const LogicModule = Module.make({
       io: (io) => {
         const type = io.wildcard("T");
         return {
-          condition: io.data.in("condition", DataType.Bool, {
+          condition: io.data.in("condition", t.Bool, {
             name: "Condition",
             defaultValue: false,
           }),
@@ -94,7 +94,7 @@ const LogicModule = Module.make({
       type: "base",
       description:
         "Selects the first strictly equal case or Default. Keys must be between 0 and 1024. The comparison value and every case key require an input or explicit default.",
-      properties: { number: { name: "Keys", type: DataType.Int, defaultValue: 1 } },
+      properties: { number: { name: "Keys", type: t.Int, defaultValue: 1 } },
       io: (io, properties) => {
         const type = io.wildcard("T");
         return {
@@ -127,7 +127,7 @@ const LogicModule = Module.make({
       io: (io) => ({
         one: io.data.in("one", io.wildcard("T")),
         two: io.data.in("two", io.wildcard("T")),
-        equal: io.data.out("equal", DataType.Bool),
+        equal: io.data.out("equal", t.Bool),
       }),
       run: ({ io }) => Effect.sync(() => io.equal(io.one === io.two)),
     });
@@ -138,7 +138,7 @@ const LogicModule = Module.make({
       type: "pure",
       io: (io) => ({
         input: io.data.in("in", io.wildcard("T")),
-        output: io.data.out("out", DataType.Option(io.wildcard("T"))),
+        output: io.data.out("out", t.Option(io.wildcard("T"))),
       }),
       run: ({ io }) => Effect.sync(() => io.output(Option.some(io.input))),
     });
@@ -148,7 +148,7 @@ const LogicModule = Module.make({
       description: "Extracts a Some value of the inferred type; fails for None.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.Option(io.wildcard("T")), {
+        input: io.data.in("input", t.Option(io.wildcard("T")), {
           defaultValue: Option.none(),
         }),
         output: io.data.out("output", io.wildcard("T")),
@@ -166,7 +166,7 @@ const LogicModule = Module.make({
         "Extracts a Some value or returns the fallback of the same inferred type for None.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.Option(io.wildcard("T")), {
+        input: io.data.in("input", t.Option(io.wildcard("T")), {
           defaultValue: Option.none(),
         }),
         fallback: io.data.in("or", io.wildcard("T")),
@@ -184,10 +184,10 @@ const LogicModule = Module.make({
         description: `${name} for an option of the inferred type.`,
         type: "pure",
         io: (io) => ({
-          input: io.data.in("input", DataType.Option(io.wildcard("T")), {
+          input: io.data.in("input", t.Option(io.wildcard("T")), {
             defaultValue: Option.none(),
           }),
-          output: io.data.out("output", DataType.Bool),
+          output: io.data.out("output", t.Bool),
         }),
         run: ({ io }) => Effect.sync(() => io.output(predicate(io.input))),
       });

@@ -12,7 +12,7 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module";
+import { t } from "@macrograph/module";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { Effect, Layer, PubSub, Result, Schema } from "effect";
 
@@ -32,14 +32,14 @@ const pkg: Package.Model = {
         {
           id: "label",
           name: "Label",
-          type: DataType.String,
+          type: t.String,
           optional: false,
           defaultValue: "default",
         },
         { id: "account", name: "Account", resource: "account", optional: false },
       ],
-      dataInputs: [{ id: IoId.make("text"), type: DataType.String }],
-      dataOutputs: [{ id: IoId.make("text"), type: DataType.String }],
+      dataInputs: [{ id: IoId.make("text"), type: t.String }],
+      dataOutputs: [{ id: IoId.make("text"), type: t.String }],
       executionInputs: [{ id: IoId.make("exec") }],
       executionOutputs: [{ id: IoId.make("exec") }],
     },
@@ -210,7 +210,7 @@ it.layer(TestLayer)((it) => {
         const packages = yield* Packages.Service;
         const eventPackage = PackageId.make("project-events");
         const sourceIO = {
-          dataInputs: [{ id: IoId.make("field:old"), name: "Message", type: DataType.String }],
+          dataInputs: [{ id: IoId.make("field:old"), name: "Message", type: t.String }],
           dataOutputs: [],
           executionInputs: [{ id: IoId.make("exec") }],
           executionOutputs: [{ id: IoId.make("exec") }],
@@ -226,7 +226,7 @@ it.layer(TestLayer)((it) => {
               name: "Emit New",
               type: "exec",
               properties: [],
-              dataInputs: [{ id: IoId.make("field:new"), name: "Message", type: DataType.String }],
+              dataInputs: [{ id: IoId.make("field:new"), name: "Message", type: t.String }],
             },
           ],
         });

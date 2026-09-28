@@ -1,5 +1,5 @@
 import type { Canvas, Function as GraphFunction } from "@macrograph/core";
-import type { DataType } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 
 import * as stylex from "@stylexjs/stylex";
 import { createSignal, For, Show } from "solid-js";
@@ -120,7 +120,7 @@ type FieldLocation = { readonly direction: "input" | "output"; readonly id: stri
 export function FunctionInfo(props: {
   graph: Canvas.Model;
   fn: GraphFunction.Model;
-  definitions: DataType.Definitions;
+  definitions: t.Definitions;
   canEdit: boolean;
   editingName: boolean;
   onEditingNameChange: (editing: boolean) => void;

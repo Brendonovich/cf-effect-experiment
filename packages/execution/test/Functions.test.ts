@@ -8,7 +8,7 @@ import {
   OutputRef,
   Project,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module";
+import { t } from "@macrograph/module";
 import { Effect, Result } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -16,12 +16,12 @@ import { Executor } from "../src/index.ts";
 const argument: GraphFunction.Field = {
   id: IoId.make("value"),
   name: "Value",
-  type: DataType.String,
+  type: t.String,
 };
 const returned: GraphFunction.Field = {
   id: IoId.make("result"),
   name: "Result",
-  type: DataType.String,
+  type: t.String,
 };
 const connection = (outNodeId: string, outIo: string, inNodeId: string, inIoId: string) => ({
   id: ConnectionId.make(crypto.randomUUID()),

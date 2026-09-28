@@ -6,7 +6,7 @@ import {
   SchemaRef,
   type SchemaAuthoring,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Context, Effect, Layer, Ref, Result, Schema } from "effect";
 
 const SchemaRuntimeKey = Schema.String.pipe(Schema.brand("SchemaRuntimeKey"));
@@ -14,7 +14,7 @@ type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
 
 export type IOCalculator = (
   properties: Readonly<Record<string, unknown>>,
-  definitions: DataType.Definitions,
+  definitions: t.Definitions,
 ) => NodeIO;
 
 export interface SchemaRuntime {
@@ -31,7 +31,8 @@ export interface SchemaRuntime {
 export class Service extends Context.Service<
   Service,
   {
-    readonly setTypeDefinitions: (definitions: DataType.Definitions) => Effect.Effect<void>;
+    readonly setTypeDefinitions: (definitions: t.Definitions) => Effect.Effect<void>;
+    readonly getTypeDefinitions: (definitions?: t.Definitions) => Effect.Effect<t.Definitions>;
     readonly loadPackage: (
       pkg: Package.Model,
       runtimes?: ReadonlyMap<string, SchemaRuntime>,
@@ -43,7 +44,7 @@ export class Service extends Context.Service<
     readonly getNodeIO: (
       ref: SchemaRef,
       properties: Readonly<Record<string, unknown>>,
-      definitions?: DataType.Definitions,
+      definitions?: t.Definitions,
     ) => Effect.Effect<NodeIO, Package.SchemaNotFoundError>;
     readonly normalizeProperties: (
       ref: SchemaRef,
@@ -57,14 +58,14 @@ export class Service extends Context.Service<
       properties: Readonly<Record<string, unknown>>,
       input: string,
       value: unknown,
-      definitions?: DataType.Definitions,
+      definitions?: t.Definitions,
     ) => Effect.Effect<Schema.Json, Package.SchemaNotFoundError | Package.InvalidInputDefaultError>;
     readonly getSuggestions: (
       ref: SchemaRef,
       properties: Readonly<Record<string, unknown>>,
       inputDefaults: Readonly<Record<string, unknown>>,
       input: string,
-      definitions?: DataType.Definitions,
+      definitions?: t.Definitions,
     ) => Effect.Effect<
       ReadonlyArray<string>,
       Package.SchemaNotFoundError | Package.InvalidInputDefaultError
@@ -78,7 +79,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       const calculatorKey = (ref: SchemaRef) =>
         SchemaRuntimeKey.make(`${ref.package}\0${ref.schema}`);
       const state = yield* Ref.make<{
-        readonly definitions: DataType.Definitions;
+        readonly definitions: t.Definitions;
         readonly packages: Map<PackageId, Package.Model>;
         readonly runtimes: Map<SchemaRuntimeKey, SchemaRuntime>;
       }>({
@@ -88,11 +89,11 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       });
       const definitionsOf = (
         current: {
-          readonly definitions: DataType.Definitions;
+          readonly definitions: t.Definitions;
           readonly packages: Map<PackageId, Package.Model>;
         },
-        provided?: DataType.Definitions,
-      ): DataType.Definitions => ({
+        provided?: t.Definitions,
+      ): t.Definitions => ({
         ...(provided ?? current.definitions),
         ...Object.fromEntries(
           [...current.packages.values()].flatMap((pkg) => Object.entries(pkg.types ?? {})),
@@ -152,10 +153,13 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       });
 
       const setTypeDefinitions = Effect.fn("Packages.setTypeDefinitions")(function* (
-        definitions: DataType.Definitions,
+        definitions: t.Definitions,
       ) {
         yield* Ref.update(state, (current) => ({ ...current, definitions }));
       });
+
+      const getTypeDefinitions = (definitions?: t.Definitions) =>
+        Ref.get(state).pipe(Effect.map((current) => definitionsOf(current, definitions)));
 
       const getPackages = Effect.fn("Packages.getPackages")(function* () {
         return Array.from((yield* Ref.get(state)).packages.values());
@@ -176,7 +180,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       const getNodeIO = Effect.fn("Packages.getNodeIO")(function* (
         ref: SchemaRef,
         properties: Readonly<Record<string, unknown>>,
-        definitions?: DataType.Definitions,
+        definitions?: t.Definitions,
       ) {
         const current = yield* Ref.get(state);
         const schema = current.packages
@@ -243,7 +247,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
               normalized[definition.id] = value;
               continue;
             }
-            if (!DataType.isValue(definition.type, value)) {
+            if (!t.isValue(definition.type, value)) {
               return yield* new Package.InvalidPropertyError({
                 property: definition.id,
                 reason: `Expected ${definition.type._tag}`,
@@ -269,7 +273,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
               });
             continue;
           } else if (definition.defaultValue !== undefined) {
-            if (!DataType.isValue(definition.type, definition.defaultValue)) {
+            if (!t.isValue(definition.type, definition.defaultValue)) {
               return yield* new Package.InvalidPropertyError({
                 property: definition.id,
                 reason: `Schema default does not match ${definition.type._tag}`,
@@ -310,15 +314,15 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         properties: Readonly<Record<string, unknown>>,
         input: string,
         value: unknown,
-        providedDefinitions?: DataType.Definitions,
+        providedDefinitions?: t.Definitions,
       ) {
         const current = yield* Ref.get(state);
         const definitions = definitionsOf(current, providedDefinitions);
         const port = yield* getDataInput(ref, properties, input);
-        const codec = DataType.JsonValueSchema(port.type, definitions);
+        const codec = t.JsonValueSchema(port.type, definitions);
         const decoded = yield* Schema.decodeUnknownEffect(codec)(value).pipe(
           Effect.catchTag("SchemaError", () =>
-            Schema.decodeUnknownEffect(DataType.ValueSchema(port.type, definitions))(value),
+            Schema.decodeUnknownEffect(t.ValueSchema(port.type, definitions))(value),
           ),
           Effect.catchTag(
             "SchemaError",
@@ -356,7 +360,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         properties: Readonly<Record<string, unknown>>,
         inputDefaults: Readonly<Record<string, unknown>>,
         input: string,
-        providedDefinitions?: DataType.Definitions,
+        providedDefinitions?: t.Definitions,
       ) {
         const current = yield* Ref.get(state);
         const definitions = definitionsOf(current, providedDefinitions);
@@ -377,7 +381,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
             continue;
           }
           decodedDefaults[id] = yield* Schema.decodeUnknownEffect(
-            DataType.JsonValueSchema(inputs[0]!.type, definitions),
+            t.JsonValueSchema(inputs[0]!.type, definitions),
           )(value).pipe(
             Effect.catchTag(
               "SchemaError",
@@ -418,6 +422,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
 
       return Service.of({
         setTypeDefinitions,
+        getTypeDefinitions,
         loadPackage,
         getPackages,
         getSchema,

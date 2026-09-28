@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { DateTime, Effect, Option, Random, Result, Schema } from "effect";
 
 import ListModule from "../src/Module.ts";
@@ -15,27 +15,27 @@ const run = (
   registered: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>> = {},
   options: Readonly<Record<string, unknown>> = {},
-  definitions: DataType.Definitions = {},
+  definitions: t.Definitions = {},
 ) => {
   // Type bindings model a connected anchor, not a node property.
-  const { type: binding = DataType.String, ...properties } = options;
-  const inferred = Schema.decodeUnknownSync(DataType.Descriptor)(
+  const { type: binding = t.String, ...properties } = options;
+  const inferred = Schema.decodeUnknownSync(t.Descriptor)(
     typeof binding === "string" ? { _tag: binding } : binding,
   );
-  const resolve = (type: DataType.Any): DataType.Any =>
+  const resolve = (type: t.Any): t.Any =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
-        ? DataType.List(resolve(type.item))
+        ? t.List(resolve(type.item))
         : type._tag === "Option"
-          ? DataType.Option(resolve(type.inner))
+          ? t.Option(resolve(type.inner))
           : type;
   const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(resolve(ref.type), value, definitions), ref.id);
+        assert.isTrue(t.isValue(resolve(ref.type), value, definitions), ref.id);
         outputs.set(ref.id, value);
       },
       properties,
@@ -64,28 +64,28 @@ describe("List module", () => {
     () =>
       Effect.gen(function* () {
         const registered = yield* schemas;
-        const id = DataType.DefinitionId.make("item");
-        const custom = DataType.Custom(id);
-        const definitions: DataType.Definitions = {
+        const id = t.DefinitionId.make("item");
+        const custom = t.Custom(id);
+        const definitions: t.Definitions = {
           item: {
             _tag: "Struct",
             id,
             name: "Item",
-            fields: [{ name: "count", type: DataType.Int }],
+            fields: [{ name: "count", type: t.Int }],
           },
         };
         const item = Object.freeze({ _type: id, count: 1 });
         const cases = [
           { type: custom, a: item, b: { _type: id, count: 2 }, equal: { _type: id, count: 1 } },
-          { type: DataType.List(custom), a: [item], b: [], equal: [{ _type: id, count: 1 }] },
+          { type: t.List(custom), a: [item], b: [], equal: [{ _type: id, count: 1 }] },
           {
-            type: DataType.Option(DataType.List(custom)),
+            type: t.Option(t.List(custom)),
             a: Option.some([item]),
             b: Option.none(),
             equal: Option.some([{ _type: id, count: 1 }]),
           },
           {
-            type: DataType.DateTime,
+            type: t.DateTime,
             a: DateTime.makeUnsafe("2026-08-31T00:00:00Z"),
             b: DateTime.makeUnsafe("2026-09-01T00:00:00Z"),
             equal: DateTime.makeUnsafe("2026-08-31T00:00:00Z"),
@@ -109,7 +109,7 @@ describe("List module", () => {
                 !["value", "input"].includes(ref.id) &&
                 !ref.id.startsWith("value-")
               )
-                assert.deepStrictEqual(ref.type.item, DataType.Wildcard("Item"));
+                assert.deepStrictEqual(ref.type.item, t.Wildcard("Item"));
             }
           }
           assert.deepStrictEqual(
@@ -184,7 +184,7 @@ describe("List module", () => {
             for (const input of item.generateIO({}).dataInputs) {
               if (input.type._tag === "Wildcard") assert.isUndefined(input.defaultValue);
               else if (input.type._tag === "List") assert.deepStrictEqual(input.defaultValue, []);
-              else assert.isTrue(DataType.isValue(input.type, input.defaultValue));
+              else assert.isTrue(t.isValue(input.type, input.defaultValue));
             }
           }
           assert.deepStrictEqual(
@@ -258,9 +258,9 @@ describe("List module", () => {
           );
           for (const ref of [...io.dataInputs, ...io.dataOutputs]) {
             if (ref.type._tag === "List")
-              assert.deepStrictEqual(ref.type.item, DataType.Wildcard("Item"));
+              assert.deepStrictEqual(ref.type.item, t.Wildcard("Item"));
             if (ref.type._tag === "Option")
-              assert.deepStrictEqual(ref.type.inner, DataType.Wildcard("Item"));
+              assert.deepStrictEqual(ref.type.inner, t.Wildcard("Item"));
           }
         }
         const create = schema(registered, "ListCreate");

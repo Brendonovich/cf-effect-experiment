@@ -1,5 +1,5 @@
 import { Project } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
@@ -51,7 +51,7 @@ describe("local browser project persistence", () => {
             {
               name: "Found",
               fields: [
-                { name: "record", type: DataType.Custom(DataType.DefinitionId.make("deleted")) },
+                { name: "record", type: t.Custom(t.DefinitionId.make("deleted")) },
               ],
             },
           ],

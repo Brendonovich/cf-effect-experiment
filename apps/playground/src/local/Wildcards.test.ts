@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, Packages } from "@macrograph/editor";
 import { Executor } from "@macrograph/execution";
-import { DataType as t, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration } from "@macrograph/module";
 import JsonModule from "@macrograph/module-json";
 import ListModule from "@macrograph/module-list";
 import LogicModule from "@macrograph/module-logic";

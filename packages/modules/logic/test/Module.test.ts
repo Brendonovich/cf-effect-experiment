@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Fiber, Option, Ref, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -18,25 +18,25 @@ const run = (
   options: Readonly<Record<string, unknown>> = {},
 ) => {
   // Bind the wildcard as a graph connection would; never pass type/list as properties.
-  const { type: binding = DataType.String, list = false, ...properties } = options;
-  const item = Schema.decodeUnknownSync(DataType.Descriptor)(
+  const { type: binding = t.String, list = false, ...properties } = options;
+  const item = Schema.decodeUnknownSync(t.Descriptor)(
     typeof binding === "string" ? { _tag: binding } : binding,
   );
-  const inferred = list ? DataType.List(item) : item;
-  const resolve = (type: DataType.Any): DataType.Any =>
+  const inferred = list ? t.List(item) : item;
+  const resolve = (type: t.Any): t.Any =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
-        ? DataType.List(resolve(type.item))
+        ? t.List(resolve(type.item))
         : type._tag === "Option"
-          ? DataType.Option(resolve(type.inner))
+          ? t.Option(resolve(type.inner))
           : type;
   const outputs = new Map<string, unknown>();
   return registered
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(resolve(ref.type), value), ref.id);
+        assert.isTrue(t.isValue(resolve(ref.type), value), ref.id);
         outputs.set(ref.id, value);
       },
       properties,
@@ -98,7 +98,7 @@ describe("Logic module", () => {
               assert.deepStrictEqual(input.defaultValue, Option.none());
             else
               assert.isTrue(
-                DataType.isValue(input.type, input.defaultValue),
+                t.isValue(input.type, input.defaultValue),
                 `${item.id}.${input.id}`,
               );
           }
@@ -158,7 +158,7 @@ describe("Logic module", () => {
         );
         assert.strictEqual(io.dataOutputs[0]?.type._tag, "Wildcard");
       }
-      assert.deepStrictEqual(conditional.dataOutputs[0]?.type, DataType.Wildcard("T"));
+      assert.deepStrictEqual(conditional.dataOutputs[0]?.type, t.Wildcard("T"));
       for (const item of registered)
         assert.deepStrictEqual(
           item.properties.map((property) => property.id),
@@ -322,7 +322,7 @@ describe("Logic module", () => {
           const item = schema(registered, id);
           const properties = { type, list: true };
           const io = item.generateIO(properties);
-          assert.deepStrictEqual(io.dataInputs[0]?.type, DataType.Wildcard("T"));
+          assert.deepStrictEqual(io.dataInputs[0]?.type, t.Wildcard("T"));
           assert.deepStrictEqual(io.dataOutputs[0]?.type, io.dataInputs[0]?.type);
           assert.isUndefined(io.dataInputs[0]?.defaultValue);
           const output = (yield* run(item, { in: list }, properties)).outputs.get("out");

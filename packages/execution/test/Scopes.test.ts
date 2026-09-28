@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { DataType, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -9,7 +9,7 @@ class Trigger extends Schema.TaggedClass<Trigger>()("ScopeTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 const date = DateTime.makeUnsafe("2026-09-05T12:00:00Z");
 const payload = { value: Option.some([date]) };
-const fields = { value: DataType.Option(DataType.List(DataType.DateTime)) };
+const fields = { value: t.Option(t.List(t.DateTime)) };
 
 const node = (id: string, packageId: string, schema: string) => ({
   id,
@@ -62,7 +62,7 @@ const fixture = (captured: unknown[]) =>
       yield* context.schema.register({
         id: "wrongSink",
         type: "base",
-        io: (io) => ({ input: io.scope.in("payload", { value: DataType.String }) }),
+        io: (io) => ({ input: io.scope.in("payload", { value: t.String }) }),
         run: () => Effect.die("Invalid graph must not run"),
       });
     }),
@@ -159,7 +159,7 @@ describe("scope execution", () => {
             event: () => Effect.succeed(true),
             io: (io) => ({
               output: io.scope.out("payload", {
-                value: DataType.Custom(DataType.DefinitionId.make("missing")),
+                value: t.Custom(t.DefinitionId.make("missing")),
               }),
             }),
             run: () =>
@@ -315,12 +315,12 @@ describe("scope execution", () => {
     expect(
       Registration.scopesCompatible(
         [
-          { id: "a", type: DataType.String },
-          { id: "b", type: DataType.Int },
+          { id: "a", type: t.String },
+          { id: "b", type: t.Int },
         ],
         [
-          { id: "b", type: DataType.Int },
-          { id: "a", type: DataType.String, name: "Renamed" },
+          { id: "b", type: t.Int },
+          { id: "a", type: t.String, name: "Renamed" },
         ],
       ),
     ).toBe(true);

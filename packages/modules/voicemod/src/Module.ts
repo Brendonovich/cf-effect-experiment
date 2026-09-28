@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -16,7 +16,7 @@ export default Module.make({
       description:
         "Selects an available voice by ID or friendly name, querying the live voice list.",
       io: (io) => ({
-        voice: io.data.in("voice", DataType.String, {
+        voice: io.data.in("voice", t.String, {
           name: "Voice",
           defaultValue: "",
           suggestions: ({ engine }) =>
@@ -37,7 +37,7 @@ export default Module.make({
       description:
         "Queries the live voice changer state and toggles only when it differs from the requested state.",
       io: (io) => ({
-        state: io.data.in("state", DataType.Bool, { defaultValue: false }),
+        state: io.data.in("state", t.Bool, { defaultValue: false }),
       }),
       run: ({ io, engine }) => engine.SetVoiceChangerState({ state: io.state }),
     });
@@ -47,7 +47,7 @@ export default Module.make({
       description:
         "Queries the live hear-self state and toggles only when it differs from the requested state.",
       io: (io) => ({
-        state: io.data.in("state", DataType.Bool, { defaultValue: false }),
+        state: io.data.in("state", t.Bool, { defaultValue: false }),
       }),
       run: ({ io, engine }) => engine.SetHearSelfState({ state: io.state }),
     });

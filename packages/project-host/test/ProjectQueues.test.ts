@@ -8,7 +8,7 @@ import {
   Project,
   Queue,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module";
+import { t } from "@macrograph/module";
 import { DateTime, Effect, Fiber, Stream } from "effect";
 
 import { ProjectQueues } from "../src/index.ts";
@@ -21,7 +21,7 @@ const connection = (outNodeId: string, outIo: string, inNodeId: string, inIoId: 
   inIoId: IoId.make(inIoId),
 });
 
-const identity = (id: string, type: DataType.Any = DataType.DateTime): GraphFunction.Model => ({
+const identity = (id: string, type: t.Any = t.DateTime): GraphFunction.Model => ({
   canvas: {
     id: GraphId.make(id),
     name: id,
@@ -51,7 +51,7 @@ describe("ProjectQueues", () => {
   it.effect("dispatches mixed queued functions with their own data schemas", () =>
     Effect.gen(function* () {
       const echo = identity("echo");
-      const text = identity("text", DataType.String);
+      const text = identity("text", t.String);
       const project: Project.Model = {
         ...Project.empty(),
         functions: { echo, text },

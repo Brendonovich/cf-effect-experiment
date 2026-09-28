@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option } from "effect";
 
@@ -15,7 +15,7 @@ const module = Module.make({
       name: "Set Light State",
       properties,
       io: (io) => ({
-        state: io.data.in("state", DataType.Bool, { name: "On", defaultValue: true }),
+        state: io.data.in("state", t.Bool, { name: "On", defaultValue: true }),
       }),
       run: ({ io, properties, engine }) =>
         engine.IkeaSetLightState({
@@ -37,7 +37,7 @@ const module = Module.make({
         id,
         name,
         properties,
-        io: (io) => ({ value: io.data.in(field, DataType.Int, { name: label, defaultValue }) }),
+        io: (io) => ({ value: io.data.in(field, t.Int, { name: label, defaultValue }) }),
         run: ({ io, properties, engine }) =>
           engine.IkeaSetLightState({
             lightId: properties.light,
@@ -50,7 +50,7 @@ const module = Module.make({
       name: "Set Color",
       properties,
       io: (io) => ({
-        color: io.data.in("hexColor", DataType.String, {
+        color: io.data.in("hexColor", t.String, {
           name: "Hex Color",
           defaultValue: "ffffff",
         }),
@@ -66,7 +66,7 @@ const module = Module.make({
       name: "List Lights",
       description:
         "Queries the gateway for fresh light states. Returns a JSON array, not cached states.",
-      io: (io) => ({ lights: io.data.out("lights", DataType.String, { name: "Lights JSON" }) }),
+      io: (io) => ({ lights: io.data.out("lights", t.String, { name: "Lights JSON" }) }),
       run: ({ io, engine }) =>
         engine.IkeaListLights().pipe(Effect.map((lights) => io.lights(JSON.stringify(lights)))),
     });
@@ -75,14 +75,14 @@ const module = Module.make({
       name: "Get Light State",
       properties,
       io: (io) => ({
-        name: io.data.out("deviceName", DataType.String, { name: "Device Name" }),
-        reachable: io.data.out("reachable", DataType.Bool),
-        on: io.data.out("on", DataType.Bool),
-        brightness: io.data.out("brightness", DataType.Int, { name: "Brightness (0-254)" }),
-        colorTemp: io.data.out("colorTemp", DataType.Option(DataType.Int), {
+        name: io.data.out("deviceName", t.String, { name: "Device Name" }),
+        reachable: io.data.out("reachable", t.Bool),
+        on: io.data.out("on", t.Bool),
+        brightness: io.data.out("brightness", t.Int, { name: "Brightness (0-254)" }),
+        colorTemp: io.data.out("colorTemp", t.Option(t.Int), {
           name: "Temperature (Kelvin)",
         }),
-        hexColor: io.data.out("hexColor", DataType.Option(DataType.String), { name: "Hex Color" }),
+        hexColor: io.data.out("hexColor", t.Option(t.String), { name: "Hex Color" }),
       }),
       run: ({ io, properties, engine }) =>
         Effect.gen(function* () {

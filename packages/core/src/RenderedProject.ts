@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 
 import { Function as GraphFunction } from "./Function.ts";
@@ -13,7 +13,7 @@ export const Model = Schema.Struct({
   engines: Schema.Record(Schema.String, Schema.Json),
   constants: ResourceConstants,
   queues: Queues,
-  types: DataType.Definitions,
+  types: t.Definitions,
 });
 export type Model = typeof Model.Type;
 

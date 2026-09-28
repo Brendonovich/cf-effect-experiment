@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
@@ -29,9 +29,9 @@ const module = Module.make({
     yield* context.schema.register({
       id: "anchor",
       type: "pure",
-      properties: { integer: { name: "Integer", type: DataType.Bool, defaultValue: false } },
+      properties: { integer: { name: "Integer", type: t.Bool, defaultValue: false } },
       io: (io, properties) => ({
-        output: io.data.out("out", properties.integer ? DataType.Int : DataType.String),
+        output: io.data.out("out", properties.integer ? t.Int : t.String),
       }),
       run: () => Effect.void,
     });
@@ -78,9 +78,9 @@ it.effect(
         editor.project
           .rendered()
           .pipe(Effect.map((p) => p.graphs.graph!.nodes[id]!.io.dataOutputs[0]!.type));
-      expect(yield* type(b)).toEqual(DataType.String);
+      expect(yield* type(b)).toEqual(t.String);
       expect((yield* editor.project.snapshot()).nodeIO.graph![b]!.dataOutputs[0]!.type).toEqual(
-        DataType.Wildcard("T"),
+        t.Wildcard("T"),
       );
       yield* editor.node.setProperty({
         graphID: "graph",
@@ -88,7 +88,7 @@ it.effect(
         property: "integer",
         value: true,
       });
-      expect(yield* type(b)).toEqual(DataType.Int);
+      expect(yield* type(b)).toEqual(t.Int);
       yield* editor.connection.delete({ graphID: "graph", connectionId: anchor.connection.id });
       expect((yield* type(b))._tag).toBe("Wildcard");
     }).pipe(Effect.provide(TestLayer)),

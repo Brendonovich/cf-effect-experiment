@@ -7,7 +7,7 @@ import {
   OutputRef,
   Project,
 } from "@macrograph/core";
-import { DataType as t } from "@macrograph/module";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 import { createRoot } from "solid-js";
 import { expect, it } from "vitest";

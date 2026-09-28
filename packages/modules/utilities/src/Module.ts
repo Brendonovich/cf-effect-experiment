@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration.js";
@@ -80,10 +80,10 @@ const UtilitiesModule = Module.make({
       description:
         "Writes a string to the configured Effect logger at log (info), warn, or error severity.",
       properties: {
-        type: { name: "Type", type: DataType.String, defaultValue: "log" },
+        type: { name: "Type", type: t.String, defaultValue: "log" },
       },
       io: (io) => ({
-        value: io.data.in("in", DataType.String, { name: "Input", defaultValue: "" }),
+        value: io.data.in("in", t.String, { name: "Input", defaultValue: "" }),
       }),
       run: ({ io, properties }) => {
         switch (properties.type) {
@@ -104,9 +104,9 @@ const UtilitiesModule = Module.make({
       description: "Concatenates two strings without a separator.",
       type: "pure",
       io: (io) => ({
-        first: io.data.in("str1", DataType.String, { defaultValue: "" }),
-        second: io.data.in("str2", DataType.String, { defaultValue: "" }),
-        result: io.data.out("result", DataType.String),
+        first: io.data.in("str1", t.String, { defaultValue: "" }),
+        second: io.data.in("str2", t.String, { defaultValue: "" }),
+        result: io.data.out("result", t.String),
       }),
       run: ({ io }) => Effect.sync(() => io.result(io.first + io.second)),
     });
@@ -116,8 +116,8 @@ const UtilitiesModule = Module.make({
       description: "Converts an integer to its decimal string representation.",
       type: "pure",
       io: (io) => ({
-        value: io.data.in("int", DataType.Int, { defaultValue: 0 }),
-        result: io.data.out("str", DataType.String),
+        value: io.data.in("int", t.Int, { defaultValue: 0 }),
+        result: io.data.out("str", t.String),
       }),
       run: ({ io }) =>
         Number.isInteger(io.value)
@@ -134,7 +134,7 @@ const UtilitiesModule = Module.make({
         format: {
           name: "Format",
           description: "Template containing `{name}` placeholders.",
-          type: DataType.String,
+          type: t.String,
           defaultValue: "",
         },
       },
@@ -144,13 +144,13 @@ const UtilitiesModule = Module.make({
         const inputs = new Map(
           [...new Set(names)].map((name) => [
             name,
-            io.data.in(name, DataType.String, { name, defaultValue: "" }),
+            io.data.in(name, t.String, { name, defaultValue: "" }),
           ]),
         );
         return {
           blocks,
           inputs: [...inputs.entries()].map(([name, input]) => ({ name, input })),
-          result: io.data.out("result", DataType.String),
+          result: io.data.out("result", t.String),
         };
       },
       run: ({ io }) =>
@@ -172,12 +172,12 @@ const UtilitiesModule = Module.make({
         "Formats epoch milliseconds in UTC with English Day.js tokens, or formats a duration in milliseconds. Invalid timestamps and non-safe-integer inputs fail.",
       type: "pure",
       properties: {
-        string: { name: "Format", type: DataType.String, defaultValue: "" },
-        duration: { name: "Duration", type: DataType.Bool, defaultValue: false },
+        string: { name: "Format", type: t.String, defaultValue: "" },
+        duration: { name: "Duration", type: t.Bool, defaultValue: false },
       },
       io: (io) => ({
-        input: io.data.in("timeIn", DataType.Int, { defaultValue: 0 }),
-        output: io.data.out("timeOut", DataType.String),
+        input: io.data.in("timeIn", t.Int, { defaultValue: 0 }),
+        output: io.data.out("timeOut", t.String),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
@@ -214,7 +214,7 @@ const UtilitiesModule = Module.make({
         intervalSeconds: {
           name: "Interval (seconds)",
           description: "Runs every positive whole N seconds.",
-          type: DataType.Int,
+          type: t.Int,
           defaultValue: 1,
         },
       },
@@ -226,7 +226,7 @@ const UtilitiesModule = Module.make({
             event.tick % properties.intervalSeconds === 0,
         ),
       io: (io) => ({
-        tick: io.data.out("tick", DataType.Int),
+        tick: io.data.out("tick", t.Int),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { hexToColor } from "./Color.ts";
@@ -16,8 +16,8 @@ export default Module.make({
       name: "Set Light Power",
       properties,
       io: (io) => ({
-        power: io.data.in("power", DataType.Bool, { name: "On", defaultValue: true }),
-        duration: io.data.in("duration", DataType.Int, { name: "Duration (ms)", defaultValue: 0 }),
+        power: io.data.in("power", t.Bool, { name: "On", defaultValue: true }),
+        duration: io.data.in("duration", t.Int, { name: "Duration (ms)", defaultValue: 0 }),
       }),
       run: ({ io, properties, engine }) =>
         engine.LIFXSetPower({ deviceId: properties.light, power: io.power, duration: io.duration }),
@@ -27,20 +27,20 @@ export default Module.make({
       name: "Set Light Color",
       properties,
       io: (io) => ({
-        hue: io.data.in("hue", DataType.Float, { name: "Hue (0-360)", defaultValue: 0 }),
-        saturation: io.data.in("saturation", DataType.Float, {
+        hue: io.data.in("hue", t.Float, { name: "Hue (0-360)", defaultValue: 0 }),
+        saturation: io.data.in("saturation", t.Float, {
           name: "Saturation (0-100)",
           defaultValue: 0,
         }),
-        brightness: io.data.in("brightness", DataType.Float, {
+        brightness: io.data.in("brightness", t.Float, {
           name: "Brightness (0-100)",
           defaultValue: 100,
         }),
-        kelvin: io.data.in("kelvin", DataType.Int, {
+        kelvin: io.data.in("kelvin", t.Int, {
           name: "Kelvin (1500-9000)",
           defaultValue: 3500,
         }),
-        duration: io.data.in("duration", DataType.Int, { name: "Duration (ms)", defaultValue: 0 }),
+        duration: io.data.in("duration", t.Int, { name: "Duration (ms)", defaultValue: 0 }),
       }),
       run: ({ io, properties, engine }) =>
         engine.LIFXSetColor({
@@ -61,11 +61,11 @@ export default Module.make({
       description:
         "Reads the current color before setting brightness, preserving hue, saturation and kelvin.",
       io: (io) => ({
-        brightness: io.data.in("brightness", DataType.Float, {
+        brightness: io.data.in("brightness", t.Float, {
           name: "Brightness (0-100)",
           defaultValue: 100,
         }),
-        duration: io.data.in("duration", DataType.Int, { name: "Duration (ms)", defaultValue: 0 }),
+        duration: io.data.in("duration", t.Int, { name: "Duration (ms)", defaultValue: 0 }),
       }),
       run: ({ io, properties, engine }) =>
         engine.LIFXSetBrightness({
@@ -81,15 +81,15 @@ export default Module.make({
       description:
         "Sets white temperature and brightness with zero saturation; preserves the stored hue.",
       io: (io) => ({
-        kelvin: io.data.in("kelvin", DataType.Int, {
+        kelvin: io.data.in("kelvin", t.Int, {
           name: "Kelvin (1500-9000)",
           defaultValue: 3500,
         }),
-        brightness: io.data.in("brightness", DataType.Float, {
+        brightness: io.data.in("brightness", t.Float, {
           name: "Brightness (0-100)",
           defaultValue: 100,
         }),
-        duration: io.data.in("duration", DataType.Int, { name: "Duration (ms)", defaultValue: 0 }),
+        duration: io.data.in("duration", t.Int, { name: "Duration (ms)", defaultValue: 0 }),
       }),
       run: ({ io, properties, engine }) =>
         engine.LIFXSetKelvin({
@@ -104,13 +104,13 @@ export default Module.make({
       name: "Get Light State",
       properties,
       io: (io) => ({
-        label: io.data.out("label", DataType.String, { name: "Label" }),
-        power: io.data.out("power", DataType.Bool, { name: "Power" }),
-        hue: io.data.out("hue", DataType.Float, { name: "Hue (0-360)" }),
-        saturation: io.data.out("saturation", DataType.Float, { name: "Saturation (0-100)" }),
-        brightness: io.data.out("brightness", DataType.Float, { name: "Brightness (0-100)" }),
-        kelvin: io.data.out("kelvin", DataType.Int, { name: "Kelvin" }),
-        hex: io.data.out("hex", DataType.String, { name: "Hex Color" }),
+        label: io.data.out("label", t.String, { name: "Label" }),
+        power: io.data.out("power", t.Bool, { name: "Power" }),
+        hue: io.data.out("hue", t.Float, { name: "Hue (0-360)" }),
+        saturation: io.data.out("saturation", t.Float, { name: "Saturation (0-100)" }),
+        brightness: io.data.out("brightness", t.Float, { name: "Brightness (0-100)" }),
+        kelvin: io.data.out("kelvin", t.Int, { name: "Kelvin" }),
+        hex: io.data.out("hex", t.String, { name: "Hex Color" }),
       }),
       run: ({ io, properties, engine }) =>
         engine.LIFXGetState({ deviceId: properties.light }).pipe(
@@ -132,13 +132,13 @@ export default Module.make({
       id: "HexToColor",
       name: "Hex to Color",
       io: (io) => ({
-        hex: io.data.in("hex", DataType.String, { name: "Hex Color", defaultValue: "#ffffff" }),
-        hue: io.data.out("hue", DataType.Int, { name: "Hue (0-360)" }),
-        saturation: io.data.out("saturation", DataType.Int, { name: "Saturation (0-100)" }),
-        brightness: io.data.out("brightness", DataType.Int, { name: "Brightness (0-100)" }),
-        lifxHue: io.data.out("lifxHue", DataType.Int, { name: "LIFX Hue" }),
-        lifxSaturation: io.data.out("lifxSaturation", DataType.Int, { name: "LIFX Saturation" }),
-        lifxBrightness: io.data.out("lifxBrightness", DataType.Int, { name: "LIFX Brightness" }),
+        hex: io.data.in("hex", t.String, { name: "Hex Color", defaultValue: "#ffffff" }),
+        hue: io.data.out("hue", t.Int, { name: "Hue (0-360)" }),
+        saturation: io.data.out("saturation", t.Int, { name: "Saturation (0-100)" }),
+        brightness: io.data.out("brightness", t.Int, { name: "Brightness (0-100)" }),
+        lifxHue: io.data.out("lifxHue", t.Int, { name: "LIFX Hue" }),
+        lifxSaturation: io.data.out("lifxSaturation", t.Int, { name: "LIFX Saturation" }),
+        lifxBrightness: io.data.out("lifxBrightness", t.Int, { name: "LIFX Brightness" }),
       }),
       run: ({ io }) =>
         hexToColor(io.hex).pipe(

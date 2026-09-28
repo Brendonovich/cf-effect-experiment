@@ -1,4 +1,4 @@
-import type { DataType as Types } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 
 import { type Node, type NodeIO, type Package } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
@@ -211,18 +211,18 @@ const styles = stylex.create({
   invalidLabel: { color: colors.red11, fontSize: 10 },
 });
 
-type DataType = NodeIO["dataInputs"][number]["type"];
+type t = NodeIO["dataInputs"][number]["type"];
 
 export const formatDataType = typeLabel;
 
-const primaryDataType = (type: DataType): Exclude<DataType["_tag"], "List" | "Option"> =>
+const primaryDataType = (type: t): Exclude<t["_tag"], "List" | "Option"> =>
   type._tag === "List"
     ? primaryDataType(type.item)
     : type._tag === "Option"
       ? primaryDataType(type.inner)
       : type._tag;
 
-const dataPinStyle = (type: DataType) => {
+const dataPinStyle = (type: t) => {
   switch (primaryDataType(type)) {
     case "String":
       return styles.stringPin;
@@ -241,7 +241,7 @@ const dataPinStyle = (type: DataType) => {
   }
 };
 
-const formattedPortType = (port: GraphPort | undefined, definitions?: Types.Definitions) =>
+const formattedPortType = (port: GraphPort | undefined, definitions?: t.Definitions) =>
   port?.kind === "data"
     ? port.invalid
       ? "Missing input/output. Repair in the inspector."
@@ -252,7 +252,7 @@ interface GraphNodeProps {
   node: Node.Model;
   schema?: Package.SchemaModel | undefined;
   io?: NodeIO | undefined;
-  definitions?: Types.Definitions;
+  definitions?: t.Definitions;
   diagnostics?: readonly string[];
   selected?: boolean;
   dragging?: boolean;
@@ -314,7 +314,7 @@ const headerStyle = (type: Package.SchemaModel["type"] | undefined) => {
 const Pin: Component<{
   direction: "input" | "output";
   port: GraphPort;
-  definitions?: Types.Definitions;
+  definitions?: t.Definitions;
   nodeId: string;
   filled?: boolean;
   highlighted?: boolean;
@@ -409,7 +409,7 @@ const DataDefaultControl: Component<{
   moduleDefault?: () => unknown;
   suggestions: boolean;
   connected: boolean;
-  definitions?: Types.Definitions;
+  definitions?: t.Definitions;
   onSet: (value: unknown) => void;
   onClear: () => void;
   onGetSuggestions: () => Promise<ReadonlyArray<string>>;

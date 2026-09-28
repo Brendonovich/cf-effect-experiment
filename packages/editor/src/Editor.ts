@@ -25,7 +25,7 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import * as Registration from "@macrograph/module/Registration";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
@@ -502,7 +502,7 @@ export const layer = Layer.effect(Service)(
       }
       return properties;
     });
-    const getBaseNodeIO = (node: Node.Model, definitions?: DataType.Definitions) =>
+    const getBaseNodeIO = (node: Node.Model, definitions?: t.Definitions) =>
       GraphFunction.isCall(node)
         ? persistence.loadProject().pipe(
             Effect.map((project) => {
@@ -564,10 +564,7 @@ export const layer = Layer.effect(Service)(
         ),
       );
     };
-    const getNodeIO = Effect.fnUntraced(function* (
-      node: Node.Model,
-      definitions?: DataType.Definitions,
-    ) {
+    const getNodeIO = Effect.fnUntraced(function* (node: Node.Model, definitions?: t.Definitions) {
       if (Scopes.isProjectionNode(node)) {
         const project = yield* persistence.loadProject();
         const graph = Object.values(Project.canvases(project)).find(
@@ -597,7 +594,7 @@ export const layer = Layer.effect(Service)(
       graph: Canvas.Model,
       overrides: Readonly<Record<string, NodeIO>> = {},
       cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(),
-      definitions?: DataType.Definitions,
+      definitions?: t.Definitions,
     ): Effect.fn.Return<
       {
         cache: Wildcards.Cache;
@@ -606,11 +603,12 @@ export const layer = Layer.effect(Service)(
       },
       PersistenceError | Project.NotFoundError
     > {
+      const resolvedDefinitions = yield* packages.getTypeDefinitions(definitions);
       const declarations = new Map<string, NodeIO>();
       for (const node of Object.values(graph.nodes)) {
         const io =
           overrides[node.id] ??
-          (yield* getBaseNodeIO(node, definitions).pipe(
+          (yield* getBaseNodeIO(node, resolvedDefinitions).pipe(
             Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
           ));
         if (io !== undefined) declarations.set(node.id, io);
@@ -620,10 +618,7 @@ export const layer = Layer.effect(Service)(
           projection.id,
           Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
         );
-      const derive = CustomTypes.derivedIO(
-        graph,
-        definitions ?? (yield* persistence.loadProject()).types,
-      );
+      const derive = CustomTypes.derivedIO(graph, resolvedDefinitions);
       let result = cache.update(declarations, graph.connections, derive);
       if (Result.isSuccess(result)) {
         for (const [id, io] of declarations) {
@@ -645,12 +640,12 @@ export const layer = Layer.effect(Service)(
       defaults: Readonly<Record<string, Schema.Json>>,
     ) {
       const retained: Record<string, Schema.Json> = {};
-      const definitions = (yield* persistence.loadProject()).types;
+      const definitions = yield* packages.getTypeDefinitions();
       for (const input of Object.keys(defaults).sort()) {
         const ports = io.dataInputs.filter((port) => port.id === input);
         if (ports.length !== 1 || io.executionInputs.some((port) => port.id === input)) continue;
         const valid = yield* Schema.decodeUnknownEffect(
-          DataType.JsonValueSchema(ports[0]!.type, definitions),
+          t.JsonValueSchema(ports[0]!.type, definitions),
         )(defaults[input]).pipe(
           Effect.as(true),
           Effect.catchTag("SchemaError", () => Effect.succeed(false)),
@@ -709,7 +704,7 @@ export const layer = Layer.effect(Service)(
       const dataInput = dataInputs[0];
       return dataOutput === undefined || dataInput === undefined
         ? dataOutput === undefined && dataInput === undefined
-        : DataType.compatible(dataOutput.type, dataInput.type);
+        : t.compatible(dataOutput.type, dataInput.type);
     };
 
     const proposedTypes = Effect.fnUntraced(function* (
@@ -783,8 +778,18 @@ export const layer = Layer.effect(Service)(
             if (affected.has(ref)) add(node.id, `Default uses affected type ${ref}`);
           if (projectState(io) !== projectState(nextIO))
             add(node.id, "Generated inputs or outputs change");
-          const previous = new Set(TypeDefinition.nodeDiagnostics(node, io, project.types));
-          for (const reason of TypeDefinition.nodeDiagnostics(node, nextIO, types))
+          const previous = new Set(
+            TypeDefinition.nodeDiagnostics(
+              node,
+              io,
+              yield* packages.getTypeDefinitions(project.types),
+            ),
+          );
+          for (const reason of TypeDefinition.nodeDiagnostics(
+            node,
+            nextIO,
+            yield* packages.getTypeDefinitions(types),
+          ))
             if (!previous.has(reason) || reasons.has(node.id)) add(node.id, reason);
         }
         const fn = project.functions[graphId];
@@ -1023,7 +1028,7 @@ export const layer = Layer.effect(Service)(
       const field: GraphFunction.Field = {
         id,
         name: `${direction === "input" ? "Input" : "Output"} ${fields.length + 1}`,
-        type: DataType.String,
+        type: t.String,
       };
       return yield* events.publish({
         _tag: "FunctionUpdated",
@@ -1042,7 +1047,7 @@ export const layer = Layer.effect(Service)(
       if (previous === undefined)
         return yield* new GraphFunction.NotFoundError({ canvasId: graphId });
       const graph = yield* persistence.loadGraph(graphId);
-      const deletedConnectionIds = DataType.equals(previous.type, field.type)
+      const deletedConnectionIds = t.equals(previous.type, field.type)
         ? []
         : graph.connections
             .filter((connection) =>
@@ -1301,7 +1306,7 @@ export const layer = Layer.effect(Service)(
               const port = declaredIO.dataInputs.find((port) => port.id === input);
               // Wildcard defaults can only be checked after all pasted wires are known.
               inputDefaults[input] =
-                port !== undefined && DataType.hasWildcard(port.type)
+                port !== undefined && t.hasWildcard(port.type)
                   ? value
                   : yield* packages.validateInputDefault(source.schema, ioProperties, input, value);
             }
@@ -1470,11 +1475,11 @@ export const layer = Layer.effect(Service)(
           const resolved = pastedWildcards.resolveIO(node.id, nodeIO[node.id]!);
           for (const [input, value] of Object.entries(node.inputDefaults)) {
             const declared = nodeIO[node.id]!.dataInputs.find((port) => port.id === input);
-            if (declared === undefined || !DataType.hasWildcard(declared.type)) continue;
+            if (declared === undefined || !t.hasWildcard(declared.type)) continue;
             const port = resolved.dataInputs.find((port) => port.id === input)!;
             // Preserve a detached node's saved default for when it is reconnected.
-            if (DataType.hasWildcard(port.type)) continue;
-            yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(port.type, project.types))(
+            if (t.hasWildcard(port.type)) continue;
+            yield* Schema.decodeUnknownEffect(t.JsonValueSchema(port.type, project.types))(
               value,
             ).pipe(
               Effect.catchTag(
@@ -1724,13 +1729,12 @@ export const layer = Layer.effect(Service)(
         ...graph,
         nodes: { ...graph.nodes, [updated.id]: updated },
       });
-      const definitions = project.types;
+      const definitions = yield* packages.getTypeDefinitions(project.types);
       const oldIO = yield* getNodeIO(node);
       const preservesTypeData =
         node.schema.package === CustomTypes.packageId ||
         [...oldIO.dataInputs, ...oldIO.dataOutputs, ...io.dataInputs, ...io.dataOutputs].some(
-          (port) =>
-            TypeDefinition.references(port.type).length > 0 || DataType.hasWildcard(port.type),
+          (port) => TypeDefinition.references(port.type).length > 0 || t.hasWildcard(port.type),
         ) ||
         TypeDefinition.valueReferences(node.properties).length > 0 ||
         TypeDefinition.valueReferences(node.inputDefaults).length > 0 ||
@@ -1819,7 +1823,7 @@ export const layer = Layer.effect(Service)(
         ?.dataInputs.find((port) => port.id === options.input);
       if (
         declared !== undefined &&
-        DataType.hasWildcard(declared.type) &&
+        t.hasWildcard(declared.type) &&
         (resolved.dataInputs.filter((port) => port.id === options.input).length !== 1 ||
           resolved.executionInputs.some((port) => port.id === options.input))
       )
@@ -1829,19 +1833,15 @@ export const layer = Layer.effect(Service)(
         });
       const value =
         input !== undefined
-          ? yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
+          ? yield* Schema.decodeUnknownEffect(t.JsonValueSchema(input.type, definitions))(
               options.value,
               { onExcessProperty: "error" },
             ).pipe(
               Effect.catchTag("SchemaError", () =>
-                Schema.decodeUnknownEffect(DataType.ValueSchema(input.type, definitions))(
-                  options.value,
-                ),
+                Schema.decodeUnknownEffect(t.ValueSchema(input.type, definitions))(options.value),
               ),
               Effect.flatMap((value) =>
-                Schema.encodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
-                  value,
-                ),
+                Schema.encodeUnknownEffect(t.JsonValueSchema(input.type, definitions))(value),
               ),
               Effect.catchTag(
                 "SchemaError",
@@ -1956,7 +1956,7 @@ export const layer = Layer.effect(Service)(
       if (
         dataOutputs[0] !== undefined &&
         dataInputs[0] !== undefined &&
-        !DataType.compatible(dataOutputs[0].type, dataInputs[0].type)
+        !t.compatible(dataOutputs[0].type, dataInputs[0].type)
       )
         return yield* new Connection.InvalidError({ reason: "Data types are incompatible" });
       if (
@@ -2304,12 +2304,12 @@ export const layer = Layer.effect(Service)(
           Effect.orDie,
         );
         const encodeValue = (
-          type: DataType.Any,
+          type: t.Any,
           value: unknown,
-          definitions: DataType.Definitions,
+          definitions: t.Definitions,
         ): Schema.Json =>
           Schema.decodeUnknownSync(Schema.Json)(
-            Schema.encodeUnknownSync(DataType.JsonDefaultSchema(type, definitions))(value),
+            Schema.encodeUnknownSync(t.JsonDefaultSchema(type, definitions))(value),
           );
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
@@ -2386,7 +2386,7 @@ export const layer = Layer.effect(Service)(
                 declaresProperties: true,
                 getIO: (
                   properties: Readonly<Record<string, unknown>>,
-                  definitions: DataType.Definitions,
+                  definitions: t.Definitions,
                 ): NodeIO => {
                   const io = schema.generateIO(properties);
                   return {
@@ -2397,7 +2397,7 @@ export const layer = Layer.effect(Service)(
                         input.defaultValue === undefined
                           ? undefined
                           : Schema.encodeUnknownResult(
-                              DataType.JsonDefaultSchema(input.type, definitions),
+                              t.JsonDefaultSchema(input.type, definitions),
                             )(input.defaultValue);
                       return {
                         id: IoId.make(input.id),

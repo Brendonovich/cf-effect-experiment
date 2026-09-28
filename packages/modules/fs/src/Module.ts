@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -17,8 +17,8 @@ const FilesystemModule = Module.make({
         description:
           "Lists entry names in a folder on the runtime host, not the editor's computer.",
         io: (io) => ({
-          path: io.data.in("path", DataType.String, { name: "Folder Path" }),
-          entries: io.data.out(files ? "files" : "folders", DataType.List(DataType.String), {
+          path: io.data.in("path", t.String, { name: "Folder Path" }),
+          entries: io.data.out(files ? "files" : "folders", t.List(t.String), {
             name: files ? "Files" : "Folders",
           }),
         }),
@@ -35,8 +35,8 @@ const FilesystemModule = Module.make({
       description:
         "Reads a UTF-8 file on the runtime host. Invalid or unreadable files fail execution.",
       io: (io) => ({
-        file: io.data.in("file", DataType.String, { name: "File Location" }),
-        text: io.data.out("textOut", DataType.String, { name: "File Contents" }),
+        file: io.data.in("file", t.String, { name: "File Location" }),
+        text: io.data.out("textOut", t.String, { name: "File Contents" }),
       }),
       run: ({ io, engine }) =>
         engine.FilesystemReadText({ path: io.file }).pipe(
@@ -50,9 +50,9 @@ const FilesystemModule = Module.make({
       description:
         "Creates or overwrites a UTF-8 file on the runtime host. Requires MACROGRAPH_ENABLE_FILE_WRITES=true. Failures stop execution; parent directories are not created.",
       io: (io) => ({
-        file: io.data.in("file", DataType.String, { name: "File Location" }),
-        text: io.data.in("text", DataType.String, { name: "Text to Write", defaultValue: "" }),
-        success: io.data.out("success", DataType.Bool),
+        file: io.data.in("file", t.String, { name: "File Location" }),
+        text: io.data.in("text", t.String, { name: "Text to Write", defaultValue: "" }),
+        success: io.data.out("success", t.Bool),
       }),
       run: ({ io, engine }) =>
         engine

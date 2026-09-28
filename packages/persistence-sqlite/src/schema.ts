@@ -1,11 +1,11 @@
 import type { ResourceConstant, OutputRef, IoId, Queue } from "@macrograph/core";
-import type { DataType } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 import type { Schema } from "effect";
 
 import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const projectMeta = sqliteTable("project_meta", {
-  types: text("types", { mode: "json" }).notNull().$type<DataType.Definitions>().default({}),
+  types: text("types", { mode: "json" }).notNull().$type<t.Definitions>().default({}),
   name: text("name").notNull(),
   engines: text("engines", { mode: "json" })
     .notNull()
@@ -39,12 +39,12 @@ export const functions = sqliteTable("functions", {
   arguments: text("arguments", { mode: "json" })
     .notNull()
     .$type<
-      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Any }>
     >(),
   returns: text("returns", { mode: "json" })
     .notNull()
     .$type<
-      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: DataType.Any }>
+      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Any }>
     >(),
   inputPosition: text("input_position", { mode: "json" })
     .notNull()

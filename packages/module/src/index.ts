@@ -1,4 +1,4 @@
-export * as DataType from "./DataType.ts";
+export * as t from "./DataType.ts";
 export * as ClientSettings from "./ClientSettings.ts";
 export * as Credential from "./Credential.ts";
 export * as Engine from "./Engine.ts";

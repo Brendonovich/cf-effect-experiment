@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { StreamlabsEngine } from "./Definition.ts";
@@ -14,16 +14,16 @@ export default Module.make({
       type: "event",
       event: (event) => Effect.succeed(event.kind === "donation"),
       io: (io) => ({
-        name: io.data.out("name", DataType.String, { name: "Name" }),
-        amount: io.data.out("amount", DataType.Float, { name: "Amount" }),
-        formattedAmount: io.data.out("formattedAmount", DataType.String, {
+        name: io.data.out("name", t.String, { name: "Name" }),
+        amount: io.data.out("amount", t.Float, { name: "Amount" }),
+        formattedAmount: io.data.out("formattedAmount", t.String, {
           name: "Formatted Amount",
         }),
-        message: io.data.out("message", DataType.String, { name: "Message" }),
-        currency: io.data.out("currency", DataType.String, { name: "Currency" }),
-        from: io.data.out("from", DataType.String, { name: "From" }),
-        fromId: io.data.out("fromId", DataType.String),
-        payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+        message: io.data.out("message", t.String, { name: "Message" }),
+        currency: io.data.out("currency", t.String, { name: "Currency" }),
+        from: io.data.out("from", t.String, { name: "From" }),
+        fromId: io.data.out("fromId", t.String),
+        payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -44,13 +44,13 @@ export default Module.make({
       type: "event",
       event: (event) => Effect.succeed(event.kind === "subscription"),
       io: (io) => ({
-        name: io.data.out("name", DataType.String, { name: "Name" }),
-        months: io.data.out("months", DataType.Float, { name: "Months" }),
-        message: io.data.out("message", DataType.String, { name: "Message" }),
-        membershipLevelName: io.data.out("membershipLevelName", DataType.String, {
+        name: io.data.out("name", t.String, { name: "Name" }),
+        months: io.data.out("months", t.Float, { name: "Months" }),
+        message: io.data.out("message", t.String, { name: "Message" }),
+        membershipLevelName: io.data.out("membershipLevelName", t.String, {
           name: "Membership Level Name",
         }),
-        payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+        payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -68,12 +68,12 @@ export default Module.make({
       type: "event",
       event: (event) => Effect.succeed(event.kind === "superchat"),
       io: (io) => ({
-        name: io.data.out("name", DataType.String, { name: "Name" }),
-        currency: io.data.out("currency", DataType.String, { name: "Currency" }),
-        displayString: io.data.out("displayString", DataType.String, { name: "Display String" }),
-        amount: io.data.out("amount", DataType.String, { name: "Amount" }),
-        comment: io.data.out("comment", DataType.String, { name: "Comment" }),
-        payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+        name: io.data.out("name", t.String, { name: "Name" }),
+        currency: io.data.out("currency", t.String, { name: "Currency" }),
+        displayString: io.data.out("displayString", t.String, { name: "Display String" }),
+        amount: io.data.out("amount", t.String, { name: "Amount" }),
+        comment: io.data.out("comment", t.String, { name: "Comment" }),
+        payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -92,16 +92,16 @@ export default Module.make({
       type: "event",
       event: (event) => Effect.succeed(event.kind === "membershipGift"),
       io: (io) => ({
-        name: io.data.out("name", DataType.String, { name: "Name" }),
-        membershipLevelName: io.data.out("membershipLevelName", DataType.String, {
+        name: io.data.out("name", t.String, { name: "Name" }),
+        membershipLevelName: io.data.out("membershipLevelName", t.String, {
           name: "Membership Level Name",
         }),
-        membershipGiftId: io.data.out("membershipGiftId", DataType.String, {
+        membershipGiftId: io.data.out("membershipGiftId", t.String, {
           name: "Membership Gift ID",
         }),
-        channelUrl: io.data.out("channelUrl", DataType.String),
-        message: io.data.out("message", DataType.String),
-        payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+        channelUrl: io.data.out("channelUrl", t.String),
+        message: io.data.out("message", t.String),
+        payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -120,18 +120,18 @@ export default Module.make({
       type: "event",
       event: (event) => Effect.succeed(event.kind === "membershipGiftStart"),
       io: (io) => ({
-        name: io.data.out("name", DataType.String, { name: "Name" }),
-        giftMembershipsLevelName: io.data.out("giftMembershipsLevelName", DataType.String, {
+        name: io.data.out("name", t.String, { name: "Name" }),
+        giftMembershipsLevelName: io.data.out("giftMembershipsLevelName", t.String, {
           name: "Membership Level Name",
         }),
-        giftMembershipsCount: io.data.out("giftMembershipsCount", DataType.Int, {
+        giftMembershipsCount: io.data.out("giftMembershipsCount", t.Int, {
           name: "Membership Count",
         }),
-        membershipMessageId: io.data.out("membershipMessageId", DataType.String, {
+        membershipMessageId: io.data.out("membershipMessageId", t.String, {
           name: "Membership Gift ID",
         }),
-        channelUrl: io.data.out("channelUrl", DataType.String),
-        payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+        channelUrl: io.data.out("channelUrl", t.String),
+        payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

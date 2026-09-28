@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { DataType, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import { Array, Effect, Option, Ref, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -11,16 +11,16 @@ class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 describe("custom type execution", () => {
   it.effect("validates stored defaults, connected values, and driver JSON replay", () =>
     Effect.gen(function* () {
-      const id = DataType.DefinitionId.make("tree");
-      const type = DataType.Custom(id);
-      const definitions: DataType.Definitions = {
+      const id = t.DefinitionId.make("tree");
+      const type = t.Custom(id);
+      const definitions: t.Definitions = {
         tree: {
           _tag: "Struct",
           id,
           name: "Tree",
           fields: [
-            { name: "value", type: DataType.Int },
-            { name: "next", type: DataType.Option(type) },
+            { name: "value", type: t.Int },
+            { name: "next", type: t.Option(type) },
           ],
         },
       };
@@ -67,7 +67,7 @@ describe("custom type execution", () => {
               nodes: {
                 event: node("event", "event"),
                 sink: node("sink", "sink", {
-                  stored: Schema.encodeUnknownSync(DataType.JsonValueSchema(type, definitions))(
+                  stored: Schema.encodeUnknownSync(t.JsonValueSchema(type, definitions))(
                     value,
                   ),
                 }),

@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { TikTokEngine } from "./Definition.ts";
@@ -66,13 +66,13 @@ export default Module.make({
         type: "event",
         event: (event) => Effect.succeed(event.kind === kind),
         io: (io) => ({
-          user: io.data.out("user", DataType.String, { name: "User" }),
-          userId: io.data.out("userId", DataType.String, { name: "User ID" }),
-          nickname: io.data.out("nickname", DataType.String, { name: "Nickname" }),
-          payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
-          strings: strings.map((field) => ({ field, output: io.data.out(field, DataType.String) })),
-          numbers: numbers.map((field) => ({ field, output: io.data.out(field, DataType.Int) })),
-          booleans: booleans.map((field) => ({ field, output: io.data.out(field, DataType.Bool) })),
+          user: io.data.out("user", t.String, { name: "User" }),
+          userId: io.data.out("userId", t.String, { name: "User ID" }),
+          nickname: io.data.out("nickname", t.String, { name: "Nickname" }),
+          payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
+          strings: strings.map((field) => ({ field, output: io.data.out(field, t.String) })),
+          numbers: numbers.map((field) => ({ field, output: io.data.out(field, t.Int) })),
+          booleans: booleans.map((field) => ({ field, output: io.data.out(field, t.Bool) })),
         }),
         run: ({ event, io }) =>
           Effect.sync(() => {

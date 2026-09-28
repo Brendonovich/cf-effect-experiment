@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Equal, Option, Random } from "effect";
 
@@ -19,7 +19,7 @@ const ListModule = Module.make({
       description:
         "Creates a typed list from 0 to 1024 entries, including nested and custom values.",
       type: "pure",
-      properties: { number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
+      properties: { number: { name: "Entries", type: t.Int, defaultValue: 1 } },
       io: (io, properties) => {
         const type = io.wildcard("Item");
         return {
@@ -27,7 +27,7 @@ const ListModule = Module.make({
             { length: validCount(properties.number) ? properties.number : 0 },
             (_, index) => io.data.in(`value-${index}`, type),
           ),
-          output: io.data.out("out", DataType.List(type)),
+          output: io.data.out("out", t.List(type)),
         };
       },
       run: ({ io, properties }) =>
@@ -46,9 +46,9 @@ const ListModule = Module.make({
       io: (io) => {
         const type = io.wildcard("Item");
         return {
-          list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
+          list: io.data.in("list", t.List(type), { defaultValue: [] }),
           value: io.data.in("value", type),
-          output: io.data.out("outList", DataType.List(type)),
+          output: io.data.out("outList", t.List(type)),
         };
       },
       run: ({ io }) => Effect.sync(() => io.output([...io.list, io.value])),
@@ -64,10 +64,10 @@ const ListModule = Module.make({
         io: (io) => {
           const type = io.wildcard("Item");
           return {
-            list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
-            index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
+            list: io.data.in("list", t.List(type), { defaultValue: [] }),
+            index: io.data.in("index", t.Int, { defaultValue: 0 }),
             value: io.data.in("value", type),
-            output: io.data.out("outList", DataType.List(type)),
+            output: io.data.out("outList", t.List(type)),
           };
         },
         run: ({ io }) =>
@@ -94,10 +94,10 @@ const ListModule = Module.make({
       io: (io) => {
         const type = io.wildcard("Item");
         return {
-          list: io.data.in("list", DataType.List(type), { defaultValue: [] }),
-          index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
-          output: io.data.out("returnList", DataType.List(type)),
-          value: io.data.out("returnValue", DataType.Option(type)),
+          list: io.data.in("list", t.List(type), { defaultValue: [] }),
+          index: io.data.in("index", t.Int, { defaultValue: 0 }),
+          output: io.data.out("returnList", t.List(type)),
+          value: io.data.out("returnValue", t.Option(type)),
         };
       },
       run: ({ io }) =>
@@ -124,9 +124,9 @@ const ListModule = Module.make({
         "Gets an optional element. Negative indices count from the end; out-of-range indices return None.",
       type: "pure",
       io: (io) => ({
-        list: io.data.in("list", DataType.List(io.wildcard("Item")), { defaultValue: [] }),
-        index: io.data.in("index", DataType.Int, { defaultValue: 0 }),
-        output: io.data.out("return", DataType.Option(io.wildcard("Item")), {
+        list: io.data.in("list", t.List(io.wildcard("Item")), { defaultValue: [] }),
+        index: io.data.in("index", t.Int, { defaultValue: 0 }),
+        output: io.data.out("return", t.Option(io.wildcard("Item")), {
           name: "Value",
         }),
       }),
@@ -145,8 +145,8 @@ const ListModule = Module.make({
       description:
         "Samples an optional element from a typed list on execution using Effect Random. Empty lists return None without sampling.",
       io: (io) => ({
-        list: io.data.in("list", DataType.List(io.wildcard("Item")), { defaultValue: [] }),
-        output: io.data.out("return", DataType.Option(io.wildcard("Item")), {
+        list: io.data.in("list", t.List(io.wildcard("Item")), { defaultValue: [] }),
+        output: io.data.out("return", t.Option(io.wildcard("Item")), {
           name: "Value",
         }),
       }),
@@ -167,12 +167,12 @@ const ListModule = Module.make({
       description: "Joins strings with the provided separator.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.List(DataType.String), { defaultValue: [] }),
-        separator: io.data.in("separator", DataType.String, {
+        input: io.data.in("input", t.List(t.String), { defaultValue: [] }),
+        separator: io.data.in("separator", t.String, {
           name: "Separator",
           defaultValue: "",
         }),
-        output: io.data.out("output", DataType.String),
+        output: io.data.out("output", t.String),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.input.join(io.separator))),
     });
@@ -184,8 +184,8 @@ const ListModule = Module.make({
       type: "pure",
       io: (io) => ({
         input: io.data.in("input", io.wildcard("Item")),
-        list: io.data.in("list", DataType.List(io.wildcard("Item")), { defaultValue: [] }),
-        output: io.data.out("output", DataType.Bool),
+        list: io.data.in("list", t.List(io.wildcard("Item")), { defaultValue: [] }),
+        output: io.data.out("output", t.Bool),
       }),
       run: ({ io }) =>
         Effect.sync(() => io.output(io.list.some((value) => Equal.equals(value, io.input)))),
@@ -196,8 +196,8 @@ const ListModule = Module.make({
       description: "Counts elements in a typed list.",
       type: "pure",
       io: (io) => ({
-        list: io.data.in("list", DataType.List(io.wildcard("Item")), { defaultValue: [] }),
-        output: io.data.out("output", DataType.Int),
+        list: io.data.in("list", t.List(io.wildcard("Item")), { defaultValue: [] }),
+        output: io.data.out("output", t.Int),
       }),
       run: ({ io }) => Effect.sync(() => io.output(io.list.length)),
     });
@@ -208,10 +208,10 @@ const ListModule = Module.make({
         "Copies a slice using clamped, end-exclusive indices. Negative indices count from the end; end 0 means the list's end.",
       type: "pure",
       io: (io) => ({
-        list: io.data.in("list", DataType.List(io.wildcard("Item")), { defaultValue: [] }),
-        start: io.data.in("start", DataType.Int, { name: "Start", defaultValue: 0 }),
-        end: io.data.in("end", DataType.Int, { name: "End", defaultValue: 0 }),
-        output: io.data.out("output", DataType.List(io.wildcard("Item"))),
+        list: io.data.in("list", t.List(io.wildcard("Item")), { defaultValue: [] }),
+        start: io.data.in("start", t.Int, { name: "Start", defaultValue: 0 }),
+        end: io.data.in("end", t.Int, { name: "End", defaultValue: 0 }),
+        output: io.data.out("output", t.List(io.wildcard("Item"))),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {

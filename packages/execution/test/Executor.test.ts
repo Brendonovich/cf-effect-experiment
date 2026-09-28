@@ -9,7 +9,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { DataType, Engine, Module, Resource } from "@macrograph/module";
+import { t, Engine, Module, Resource } from "@macrograph/module";
 import { Array, Effect, Exit, Option, Ref, Schema, Tracer } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
 
@@ -206,8 +206,8 @@ describe("Executor", () => {
             type: "event",
             event: (event) => Effect.succeed(event._tag === "Ping"),
             io: (io) => ({
-              message: io.data.out("message", DataType.String),
-              optional: io.data.out("optional", DataType.Option(DataType.String)),
+              message: io.data.out("message", t.String),
+              optional: io.data.out("optional", t.Option(t.String)),
             }),
             run: ({ event, io }) =>
               Effect.sync(() => {
@@ -221,8 +221,8 @@ describe("Executor", () => {
             id: "uppercase",
             type: "pure",
             io: (io) => ({
-              value: io.data.in("value", DataType.String),
-              result: io.data.out("result", DataType.String),
+              value: io.data.in("value", t.String),
+              result: io.data.out("result", t.String),
             }),
             run: ({ io }) =>
               Ref.update(pureRuns, (count) => count + 1).pipe(
@@ -233,13 +233,13 @@ describe("Executor", () => {
             id: "record",
             type: "exec",
             io: (io) => ({
-              message: io.data.in("message", DataType.String),
-              upper: io.data.in("upper", DataType.String),
-              upperAgain: io.data.in("upperAgain", DataType.String),
-              suffix: io.data.in("suffix", DataType.String),
-              empty: io.data.in("empty", DataType.String, { defaultValue: "" }),
-              fallback: io.data.in("fallback", DataType.String, { defaultValue: "module" }),
-              optional: io.data.in("optional", DataType.Option(DataType.String), {
+              message: io.data.in("message", t.String),
+              upper: io.data.in("upper", t.String),
+              upperAgain: io.data.in("upperAgain", t.String),
+              suffix: io.data.in("suffix", t.String),
+              empty: io.data.in("empty", t.String, { defaultValue: "" }),
+              fallback: io.data.in("fallback", t.String, { defaultValue: "module" }),
+              optional: io.data.in("optional", t.Option(t.String), {
                 defaultValue: Option.none(),
               }),
             }),
@@ -466,7 +466,7 @@ describe("Executor", () => {
             io: (io, properties) => ({
               value: io.data.out(
                 typeof properties.output === "string" ? properties.output : "value",
-                DataType.String,
+                t.String,
               ),
             }),
             run: ({ event, io }) =>
@@ -479,7 +479,7 @@ describe("Executor", () => {
             io: (io, properties) => ({
               value: io.data.in(
                 typeof properties.input === "string" ? properties.input : "value",
-                DataType.String,
+                t.String,
               ),
             }),
             run: ({ io }) => Ref.update(values, (current) => [...current, io.value]),

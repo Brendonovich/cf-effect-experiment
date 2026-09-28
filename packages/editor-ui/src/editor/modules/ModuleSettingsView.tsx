@@ -11,7 +11,7 @@ import {
   type Package,
   type SchemaAuthoring,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Result } from "effect";
@@ -276,26 +276,26 @@ const propertyDefault = (property: Package.PropertyDefinition): PreviewValue => 
   return 0;
 };
 
-const collectWildcardIds = (type: DataType.Any, ids: Set<string>) => {
+const collectWildcardIds = (type: t.Any, ids: Set<string>) => {
   if (type._tag === "Wildcard") ids.add(type.id);
   if (type._tag === "List") collectWildcardIds(type.item, ids);
   if (type._tag === "Option") collectWildcardIds(type.inner, ids);
 };
 
 const resolveWildcards = (
-  type: DataType.Any,
-  values: Readonly<Record<string, DataType.Any>>,
-): DataType.Any => {
-  if (type._tag === "Wildcard") return values[type.id] ?? DataType.String;
-  if (type._tag === "List") return DataType.List(resolveWildcards(type.item, values));
-  if (type._tag === "Option") return DataType.Option(resolveWildcards(type.inner, values));
+  type: t.Any,
+  values: Readonly<Record<string, t.Any>>,
+): t.Any => {
+  if (type._tag === "Wildcard") return values[type.id] ?? t.String;
+  if (type._tag === "List") return t.List(resolveWildcards(type.item, values));
+  if (type._tag === "Option") return t.Option(resolveWildcards(type.inner, values));
   return type;
 };
 
 function ReferenceView(props: {
   package: Package.Model;
   schemas: ReadonlyArray<SchemaModel>;
-  definitions: DataType.Definitions;
+  definitions: t.Definitions;
   functions: ReadonlyArray<GraphFunction.Model>;
   authoring: SchemaAuthoring.Registry;
   selection: string | null;
@@ -306,7 +306,7 @@ function ReferenceView(props: {
     Readonly<Record<string, Readonly<Record<string, PreviewValue>>>>
   >({});
   const [wildcardValues, setWildcardValues] = createSignal<
-    Readonly<Record<string, Readonly<Record<string, DataType.Any>>>>
+    Readonly<Record<string, Readonly<Record<string, t.Any>>>>
   >({});
   const [previewSelected, setPreviewSelected] = createSignal(false);
   let previewElement: HTMLDivElement | undefined;
@@ -478,7 +478,7 @@ function ReferenceView(props: {
       delete nextSchema[propertyId];
       return { ...current, [schemaId]: nextSchema };
     });
-  const setWildcard = (schemaId: string, wildcardId: string, value: DataType.Any) =>
+  const setWildcard = (schemaId: string, wildcardId: string, value: t.Any) =>
     setWildcardValues((current) => ({
       ...current,
       [schemaId]: { ...current[schemaId], [wildcardId]: value },
@@ -620,7 +620,7 @@ function ReferenceView(props: {
                               <DataTypePicker
                                 label={`${wildcardId} wildcard type`}
                                 value={
-                                  wildcardValues()[schema().id]?.[wildcardId] ?? DataType.String
+                                  wildcardValues()[schema().id]?.[wildcardId] ?? t.String
                                 }
                                 definitions={props.definitions}
                                 onChange={(value) => setWildcard(schema().id, wildcardId, value)}
@@ -737,7 +737,7 @@ function ConnectedModuleSettings(props: {
 
 export function ModuleSettingsView(props: {
   package: Package.Model;
-  definitions?: DataType.Definitions;
+  definitions?: t.Definitions;
   functions?: ReadonlyArray<GraphFunction.Model>;
   authoring?: SchemaAuthoring.Registry;
   settings?: ClientSettings.Connected<JSX.Element> | undefined;

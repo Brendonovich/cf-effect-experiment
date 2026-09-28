@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -17,9 +17,9 @@ const module = Module.make({
       name: "Get Key Light State",
       properties,
       io: (io) => ({
-        on: io.data.out("on", DataType.Bool, { name: "On" }),
-        brightness: io.data.out("brightness", DataType.Int, { name: "Brightness (0-100)" }),
-        kelvin: io.data.out("kelvin", DataType.Int, { name: "Temperature (Kelvin)" }),
+        on: io.data.out("on", t.Bool, { name: "On" }),
+        brightness: io.data.out("brightness", t.Int, { name: "Brightness (0-100)" }),
+        kelvin: io.data.out("kelvin", t.Int, { name: "Temperature (Kelvin)" }),
       }),
       run: ({ io, properties, engine }) =>
         Effect.gen(function* () {
@@ -35,12 +35,12 @@ const module = Module.make({
       properties,
       description: "Sets power, brightness and temperature on all channels of the selected device.",
       io: (io) => ({
-        on: io.data.in("on", DataType.Bool, { name: "On", defaultValue: true }),
-        brightness: io.data.in("brightness", DataType.Int, {
+        on: io.data.in("on", t.Bool, { name: "On", defaultValue: true }),
+        brightness: io.data.in("brightness", t.Int, {
           name: "Brightness (0-100)",
           defaultValue: 50,
         }),
-        kelvin: io.data.in("temperature", DataType.Int, {
+        kelvin: io.data.in("temperature", t.Int, {
           name: "Temperature (Kelvin)",
           defaultValue: 4500,
         }),
@@ -60,7 +60,7 @@ const module = Module.make({
       id: "Toggle",
       name: "Toggle Key Light",
       properties,
-      io: (io) => ({ on: io.data.out("on", DataType.Bool, { name: "On" }) }),
+      io: (io) => ({ on: io.data.out("on", t.Bool, { name: "On" }) }),
       run: ({ io, properties, engine }) =>
         Effect.gen(function* () {
           const state = yield* engine.ElgatoKeyLightUpdateState({
@@ -83,11 +83,11 @@ const module = Module.make({
             ? "Clamps the result to 0-100."
             : "Adds a Kelvin delta and clamps the result to 2900-7000 K.",
         io: (io) => ({
-          delta: io.data.in("delta", DataType.Int, {
+          delta: io.data.in("delta", t.Int, {
             name: type === "temperature" ? "Delta (Kelvin)" : "Delta",
             defaultValue: 0,
           }),
-          value: io.data.out(type === "temperature" ? "kelvin" : "brightness", DataType.Int),
+          value: io.data.out(type === "temperature" ? "kelvin" : "brightness", t.Int),
         }),
         run: ({ io, properties, engine }) =>
           Effect.gen(function* () {
@@ -108,7 +108,7 @@ const module = Module.make({
         name,
         properties,
         description: "Changes only this field, preserving power and the other field.",
-        io: (io) => ({ value: io.data.in(field, DataType.Int, { defaultValue }) }),
+        io: (io) => ({ value: io.data.in(field, t.Int, { defaultValue }) }),
         run: ({ io, properties, engine }) =>
           engine
             .ElgatoKeyLightUpdateState({
@@ -124,7 +124,7 @@ const module = Module.make({
         "Brightness to Percent",
         "brightness",
         "percent",
-        DataType.Float,
+        t.Float,
         (value: number) => integer(value, 0, 100, "Brightness"),
         0,
       ],
@@ -133,11 +133,11 @@ const module = Module.make({
         "Kelvin to Mireds",
         "kelvin",
         "mireds",
-        DataType.Int,
+        t.Int,
         kelvinToMireds,
         4500,
       ],
-      ["MiredsToKelvin", "Mireds to Kelvin", "mireds", "kelvin", DataType.Int, miredsToKelvin, 222],
+      ["MiredsToKelvin", "Mireds to Kelvin", "mireds", "kelvin", t.Int, miredsToKelvin, 222],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -148,7 +148,7 @@ const module = Module.make({
             ? "Brightness is already a 0-100 percent value."
             : "Converts Key Light temperatures with rounding to the nearest integer.",
         io: (io) => ({
-          input: io.data.in(input, DataType.Int, { defaultValue }),
+          input: io.data.in(input, t.Int, { defaultValue }),
           output: io.data.out(output, outputType),
         }),
         run: ({ io }) =>

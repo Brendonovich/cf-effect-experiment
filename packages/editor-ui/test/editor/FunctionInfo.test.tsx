@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { CanvasId, IoId, type Function as GraphFunction } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { render } from "@solidjs/web";
 import { createSignal, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
@@ -24,7 +24,7 @@ it("uses click-to-edit field names and a hoverable trash action", async () => {
   const field: GraphFunction.Field = {
     id: IoId.make("name"),
     name: "Name",
-    type: DataType.String,
+    type: t.String,
   };
   const fn: GraphFunction.Model = {
     canvas: graph,
@@ -39,7 +39,7 @@ it("uses click-to-edit field names and a hoverable trash action", async () => {
   const addedField: GraphFunction.Field = {
     id: IoId.make("added"),
     name: "Input 2",
-    type: DataType.String,
+    type: t.String,
   };
 
   dispose = render(() => {

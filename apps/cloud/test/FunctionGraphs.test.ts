@@ -12,7 +12,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
@@ -25,7 +25,7 @@ describe("hosted function graphs", () => {
       const graphId = GraphId.make("cloud-event");
       const tickId = NodeId.make("tick");
       const callId = NodeId.make("call-function");
-      const value = { id: IoId.make("value"), name: "Value", type: DataType.String };
+      const value = { id: IoId.make("value"), name: "Value", type: t.String };
       const boundaryConnection = (outIo: string, inIoId: string) => ({
         id: ConnectionId.make(crypto.randomUUID()),
         outNodeId: GraphFunction.InputBoundaryNodeId,

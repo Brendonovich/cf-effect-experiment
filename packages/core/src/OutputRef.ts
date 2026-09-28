@@ -1,4 +1,4 @@
-import type { DataType } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 import type { ScopeField } from "@macrograph/module/Registration";
 
 import { Schema } from "effect";
@@ -37,7 +37,7 @@ interface ExecutionPort {
 interface DataPort {
   readonly id: string;
   readonly name?: string | undefined;
-  readonly type: DataType.Any;
+  readonly type: t.Any;
 }
 export interface IO {
   readonly dataOutputs: ReadonlyArray<DataPort>;
