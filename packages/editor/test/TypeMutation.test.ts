@@ -14,8 +14,8 @@ import {
   TypeDefinition,
 } from "@macrograph/core";
 import { Engine, Module } from "@macrograph/module";
-import ListModule from "@macrograph/module-list";
 import { t } from "@macrograph/module";
+import ListModule from "@macrograph/module-list";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -292,9 +292,7 @@ describe("type authoring preserve-invalid", () => {
         yield* persistence.saveNode("second", create);
         yield* persistence.saveNode("second", push);
         const snapshot = yield* editor.project.snapshot();
-        expect(snapshot.nodeIO.second![create.id]!.dataInputs[0]!.type).toEqual(
-          t.Wildcard("Item"),
-        );
+        expect(snapshot.nodeIO.second![create.id]!.dataInputs[0]!.type).toEqual(t.Wildcard("Item"));
         expect(snapshot.nodeIO.second![create.id]!.dataInputs[0]!.defaultValue).toBeUndefined();
         expect(
           snapshot.nodeIO.second![push.id]!.dataInputs.find((input) => input.id === "list")!
@@ -568,7 +566,7 @@ describe("type authoring preserve-invalid", () => {
         );
         expect(
           (yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs[0]!.type,
-        ).toEqual(t.Wildcard("Struct"));
+        ).toEqual(t.Custom(personId));
         const diagnostics = TypeDefinition.nodeDiagnostics(
           seedCanvases.second!.nodes.sink!,
           event.nodeIO.second!.sink!,

@@ -229,7 +229,7 @@ it.effect("infers Make Struct field inputs from its wildcard output without prop
   }).pipe(Effect.provide(TestLayer)),
 );
 
-it("commits derived groups only after a whole Break chain stabilizes and reuses unchanged groups", () => {
+it("reuses unchanged wildcard groups across Break chains", () => {
   const graph = {
     ...Canvas.empty("graph"),
     nodes: Object.fromEntries(
@@ -248,16 +248,15 @@ it("commits derived groups only after a whole Break chain stabilizes and reuses 
     ),
   };
   const cache = new Wildcards.Cache();
-  const declarations = new Map(
-    Object.values(graph.nodes).map((node) => [
-      node.id,
-      CustomTypes.nodeIO(node.schema, {}, definitions)!,
-    ]),
-  );
-  const derive = CustomTypes.derivedIO(graph, definitions);
-  expect(Result.isSuccess(cache.update(declarations, [], derive))).toBe(true);
+  const breakStructIO = {
+    dataInputs: [{ id: IoId.make("value"), type: CustomTypes.breakWildcard }],
+    dataOutputs: [],
+    executionInputs: [],
+    executionOutputs: [],
+  };
+  const declarations = new Map(Object.values(graph.nodes).map((node) => [node.id, breakStructIO]));
+  expect(Result.isSuccess(cache.update(declarations, []))).toBe(true);
   const first = cache.group("a");
-  cache.update(declarations, [], derive);
+  cache.update(declarations, []);
   expect(cache.group("a")).toBe(first);
-  expect(cache.derivedOutputs("a")).toEqual([]);
 });

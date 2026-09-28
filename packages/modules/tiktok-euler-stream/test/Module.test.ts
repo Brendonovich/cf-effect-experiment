@@ -5,8 +5,58 @@ import { Effect } from "effect";
 import { eventKinds } from "../src/Definition.ts";
 import deployment from "../src/Deployment.ts";
 import { decodeEvent } from "../src/Events.ts";
-import module, { catalog } from "../src/Module.ts";
+import module from "../src/Module.ts";
 import { samples } from "./Fixtures.ts";
+
+const catalog = [
+  ["chat", "Chat", "Chat", ["comment"], [], []],
+  [
+    "gift",
+    "Gift",
+    "Gift",
+    ["giftId", "giftName"],
+    ["diamonds", "repeatCount", "giftType"],
+    ["repeatEnd"],
+  ],
+  [
+    "giftStreak",
+    "GiftStreak",
+    "Gift Streak Update",
+    ["giftId", "giftName"],
+    ["diamonds", "repeatCount", "giftType"],
+    ["repeatEnd"],
+  ],
+  ["member", "Member", "Member Join", [], ["memberCount"], []],
+  ["follow", "Follow", "Follow", [], [], []],
+  ["share", "Share", "Share", [], [], []],
+  ["like", "Like", "Like", [], ["likeCount", "totalLikeCount"], []],
+  ["roomUser", "RoomUser", "Viewer Count", [], ["viewerCount"], []],
+  ["questionNew", "Question", "Question", ["question", "questionId"], [], []],
+  ["emote", "Emote", "Emote", ["emoteIdsJson"], [], []],
+  ["envelope", "Envelope", "Treasure Chest", ["envelopeId"], ["diamonds", "peopleCount"], []],
+  ["liveIntro", "LiveIntro", "Live Intro", ["description"], [], []],
+  ["linkMicBattle", "Battle", "Battle", ["battleId"], ["action"], []],
+  [
+    "linkMicArmies",
+    "BattlePoints",
+    "Battle Points",
+    ["battleId", "giftId"],
+    ["giftCount", "totalDiamondCount", "repeatCount"],
+    [],
+  ],
+  ["superFan", "SuperFan", "Super Fan", ["message"], [], []],
+  ["superFanJoin", "SuperFanJoin", "Super Fan Join", ["message"], [], []],
+  ["streamEnd", "StreamEnd", "Stream End", [], ["action"], []],
+  [
+    "goalUpdate",
+    "GoalUpdate",
+    "Goal Update",
+    ["description", "contributor"],
+    ["contributeCount", "contributeScore"],
+    [],
+  ],
+  ["roomMessage", "RoomMessage", "Room Message", ["message"], [], []],
+] as const;
 
 describe("TikTok catalog", () => {
   it.effect("registers 19 unique event schemas with working typed output mappings", () =>

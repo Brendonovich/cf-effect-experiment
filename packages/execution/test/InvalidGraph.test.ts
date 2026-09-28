@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { t, Engine, Module, Resource } from "@macrograph/module";
+import { t, Engine, Module, Registration, Resource } from "@macrograph/module";
 import { Array, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -101,7 +101,7 @@ describe("event graph preflight", () => {
             });
           }),
         });
-        const make = [...CustomTypes.schemas(definitions).values()].find(
+        const make = (yield* Registration.collect(CustomTypes.module.effect)).find(
           (schema) => schema.name === "Make Struct",
         )!;
         const base = {
@@ -292,9 +292,7 @@ describe("event graph preflight", () => {
             _tag: "Struct",
             id: unusedId,
             name: "Unused",
-            fields: [
-              { name: "missing", type: t.Custom(t.DefinitionId.make("missing")) },
-            ],
+            fields: [{ name: "missing", type: t.Custom(t.DefinitionId.make("missing")) }],
           },
         },
         graphs: {

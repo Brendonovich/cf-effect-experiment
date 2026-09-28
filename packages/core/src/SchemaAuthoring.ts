@@ -1,3 +1,5 @@
+import type * as Registration from "@macrograph/module/Registration";
+
 import { t } from "@macrograph/module";
 import { Result } from "effect";
 
@@ -33,6 +35,7 @@ export interface IOContext extends Context {
 
 /** Pure, browser-safe schema behavior. Execution/engine implementations stay server-side. */
 export interface Definition {
+  readonly runtime?: Registration.RegisteredSchema;
   readonly properties?: Readonly<Record<string, PropertySource>>;
   readonly generateIO?: (context: IOContext) => Result.Result<NodeIO, string>;
   readonly acceptsInput?: (
@@ -121,10 +124,59 @@ export class GraphResolver {
     const generate = (node: Node.Model, context: IOContext, fallback: NodeIO): NodeIO => {
       delete diagnostics[node.id];
       const behavior = this.registry.get(node.schema);
+      const generated = behavior?.runtime?.generateIO(context.properties, {
+        resolve: context.resolve,
+        definitions: context.definitions,
+      });
+      const runtimeIO: NodeIO | undefined =
+        generated === undefined
+          ? undefined
+          : {
+              dataInputs: generated.dataInputs.map((input) => ({
+                id: IoId.make(input.id),
+                type: input.type,
+                ...(input.name === undefined ? {} : { name: input.name }),
+                ...(input.defaultValue === undefined
+                  ? {}
+                  : { defaultValue: { _tag: "None" as const } }),
+              })),
+              dataOutputs: generated.dataOutputs.map((output) => ({
+                id: IoId.make(output.id),
+                type: output.type,
+                ...(output.name === undefined ? {} : { name: output.name }),
+              })),
+              executionInputs: generated.executionInputs.map((input) => ({
+                id: IoId.make(input.id),
+                ...(input.name === undefined ? {} : { name: input.name }),
+                ...(input.scope === undefined
+                  ? {}
+                  : {
+                      scope:
+                        input.scope === null
+                          ? null
+                          : input.scope.map((field) => ({
+                              ...field,
+                              id: IoId.make(field.id),
+                            })),
+                    }),
+              })),
+              executionOutputs: generated.executionOutputs.map((output) => ({
+                id: IoId.make(output.id),
+                ...(output.name === undefined ? {} : { name: output.name }),
+                ...(output.scope === undefined
+                  ? {}
+                  : {
+                      scope: output.scope.map((field) => ({
+                        ...field,
+                        id: IoId.make(field.id),
+                      })),
+                    }),
+              })),
+            };
       const result = behavior?.generateIO?.(context);
       const io =
         result === undefined
-          ? context.declared
+          ? (runtimeIO ?? context.declared)
           : Result.isSuccess(result)
             ? result.success
             : undefined;

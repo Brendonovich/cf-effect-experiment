@@ -17,6 +17,82 @@ import { describe, expect, it } from "vitest";
 import { createEditorStore, resourceValuesKey } from "../../src/editor/store";
 
 describe("editor store", () => {
+  it("resolves custom nodes from serialized module-owned type definitions", () => {
+    createRoot((dispose) => {
+      const editor = createEditorStore();
+      const payload = t.defineStruct("github/IssuesPayload", "Issues Payload", {
+        action: t.String,
+      });
+      const graph = {
+        ...Canvas.empty("graph"),
+        nodes: {
+          source: {
+            id: NodeId.make("source"),
+            name: "Issue Webhook",
+            schema: { package: PackageId.make("github"), schema: SchemaId.make("issues") },
+            position: { x: 0, y: 0 },
+            properties: {},
+            inputDefaults: {},
+            foldPins: false,
+          },
+          break: {
+            id: NodeId.make("break"),
+            name: "Break Struct",
+            schema: {
+              package: CustomTypes.packageId,
+              schema: SchemaId.make("BreakStruct"),
+            },
+            position: { x: 0, y: 0 },
+            properties: {},
+            inputDefaults: {},
+            foldPins: false,
+          },
+        },
+        connections: [
+          {
+            id: ConnectionId.make("payload"),
+            outNodeId: "source",
+            outIo: { _tag: "Port" as const, id: IoId.make("payload") },
+            inNodeId: "break",
+            inIoId: IoId.make("value"),
+          },
+        ],
+      };
+      editor.setProject(
+        { ...Project.empty(), graphs: { graph } },
+        {
+          graph: {
+            source: {
+              dataInputs: [],
+              dataOutputs: [{ id: IoId.make("payload"), type: t.Custom(payload.id) }],
+              executionInputs: [],
+              executionOutputs: [],
+            },
+            break: {
+              dataInputs: [{ id: IoId.make("value"), type: CustomTypes.breakWildcard }],
+              dataOutputs: [],
+              executionInputs: [],
+              executionOutputs: [],
+            },
+          },
+        },
+      );
+      editor.setPackages([
+        {
+          id: PackageId.make("github"),
+          name: "GitHub",
+          types: { [payload.id]: payload },
+          resources: [],
+          schemas: [],
+        },
+      ]);
+      expect(editor.store.nodeIO.graph?.break?.dataOutputs).toEqual([
+        { id: IoId.make('field:"action"'), name: "action", type: t.String },
+      ]);
+      dispose();
+    });
+  });
+
   it("updates definitions, generated catalog and current IO without discarding invalid graph data", () => {
     createRoot((dispose) => {
       const editor = createEditorStore();
@@ -63,7 +139,12 @@ describe("editor store", () => {
         deletedConnectionIds: { graph: ["wire"] },
       });
       expect(editor.store.project?.types).toEqual({});
-      expect(editor.store.nodeIO.graph?.node).toEqual(CustomTypes.nodeIO(node.schema, {}, {})!);
+      expect(editor.store.nodeIO.graph?.node).toEqual({
+        dataInputs: [],
+        dataOutputs: [{ id: IoId.make("value"), type: CustomTypes.makeWildcard }],
+        executionInputs: [],
+        executionOutputs: [],
+      });
       expect(editor.store.project?.graphs.graph?.nodes.node?.inputDefaults).toEqual({
         old: "kept",
       });

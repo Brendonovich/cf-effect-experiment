@@ -1,31 +1,24 @@
-import { t } from "@macrograph/module";
+import { Module, t } from "@macrograph/module";
 import * as Registration from "@macrograph/module/Registration";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
-import type { Canvas } from "./Canvas.ts";
 import type { Node } from "./Node.ts";
 import type * as Package from "./Package.ts";
 import type * as SchemaAuthoring from "./SchemaAuthoring.ts";
 
-import { IoId, type NodeIO } from "./IO.ts";
-import { PackageId, SchemaId, type SchemaRef } from "./SchemaRef.ts";
+import { IoId } from "./IO.ts";
+import { PackageId, SchemaId } from "./SchemaRef.ts";
 import { executionPort } from "./Scopes.ts";
 
 export const packageId = PackageId.make("CustomTypes");
 export const breakWildcard = t.Wildcard("Struct");
 export const makeWildcard = t.Wildcard("Struct");
-const wildcardFor = (operation: Operation) =>
-  operation.kind === "Struct"
-    ? t.Wildcard("Struct")
-    : operation.kind === "Enum"
-      ? t.Wildcard("Enum")
-      : t.Wildcard("Type");
 export const isBreakStruct = (node: Pick<Node.Model, "schema">) =>
   node.schema.package === packageId && node.schema.schema === "BreakStruct";
 export const isMakeStruct = (node: Pick<Node.Model, "schema">) =>
   node.schema.package === packageId && node.schema.schema === "MakeStruct";
 export const isOperationNode = (node: Pick<Node.Model, "schema">) =>
-  node.schema.package === packageId && operationFor(node.schema.schema) !== undefined;
+  node.schema.package === packageId && isOperationSchema(node.schema.schema);
 
 export class CodecError extends Schema.TaggedError<CodecError>()("CustomTypeCodecError", {
   typeId: Schema.String,
@@ -33,483 +26,529 @@ export class CodecError extends Schema.TaggedError<CodecError>()("CustomTypeCode
   cause: Schema.Unknown,
 }) {}
 
-/** Operation identities are fixed; Make/Break Struct infer their targets, others select them. */
-export const operations = [
-  { id: "MakeStruct", name: "Make Struct", kind: "Struct" },
-  { id: "BreakStruct", name: "Break Struct", kind: "Struct" },
-  { id: "UpdateStruct", name: "Update Struct", kind: "Struct" },
-  { id: "ConstructEnum", name: "Construct Enum", kind: "Enum" },
-  { id: "MatchEnum", name: "Match Enum", kind: "Enum" },
-  { id: "ParseJson", name: "Parse JSON", kind: undefined },
-  { id: "StringifyJson", name: "Stringify JSON", kind: undefined },
-] as const;
-type Operation = (typeof operations)[number];
+export const isOperationSchema = (id: string) =>
+  id === "MakeStruct" ||
+  id === "BreakStruct" ||
+  id === "UpdateStruct" ||
+  id === "ConstructEnum" ||
+  id === "MatchEnum" ||
+  id === "ParseJson" ||
+  id === "StringifyJson";
 
-export const operationFor = (id: string) => operations.find((operation) => operation.id === id);
 const fieldId = (name: string) => `field:${JSON.stringify(name)}`;
 const variantId = (name: string) => `variant:${JSON.stringify(name)}`;
-const emptyIO: Registration.RegisteredNodeIO = {
-  dataInputs: [],
-  dataOutputs: [],
-  executionInputs: [],
-  executionOutputs: [],
-};
-
 export const selectionError = (
   schema: string,
   properties: Readonly<Record<string, unknown>>,
   _definitions: t.Definitions,
 ): string | undefined => {
-  const operation = operationFor(schema);
-  if (operation === undefined) return;
-  if (operation.id === "ConstructEnum") {
-    if (typeof properties.variant !== "string" || properties.variant === "")
-      return "Select an enum variant";
-  }
+  if (
+    schema === "ConstructEnum" &&
+    (typeof properties.variant !== "string" || properties.variant === "")
+  )
+    return "Select an enum variant";
 };
 
-const inferenceError = (
-  operation: Operation,
-  type: t.Any,
-  definitions: t.Definitions,
-): string | undefined => {
-  if (type._tag === "Wildcard") return;
-  if (type._tag !== "Custom") return `${operation.name} requires an inferred custom type`;
-  const definition = definitions[type.id];
-  if (definition === undefined) return `Missing type ${type.id}`;
-  if (operation.kind !== undefined && definition._tag !== operation.kind)
-    return `${operation.name} requires an inferred ${operation.kind.toLowerCase()}`;
-};
-
-/** Resolves only the inferred definition. Codecs remain lazy until execution. */
-const resolve = (
-  operation: Operation,
-  properties: Readonly<Record<string, unknown>>,
-  definitions: t.Definitions,
-  inferred?: t.Any,
-): Registration.RegisteredNodeIO & { readonly run: Registration.RegisteredSchema["run"] } => {
-  const wildcard = wildcardFor(operation);
-  const valueInput = new Registration.DataInputRef("value", wildcard);
-  const valueOutput = new Registration.DataOutputRef(
-    "value",
-    wildcard,
-    operation.id === "ConstructEnum" && typeof properties.variant === "string"
-      ? properties.variant
-      : undefined,
-  );
-  const jsonInput = new Registration.DataInputRef("json", t.String, "JSON");
-  const jsonOutput = new Registration.DataOutputRef("json", t.String, "JSON");
-  const execInput = new Registration.ExecutionInputRef("exec");
-  const unresolved = (): Registration.RegisteredNodeIO & {
-    readonly run: Registration.RegisteredSchema["run"];
-  } => {
-    const run = () => Effect.void;
-    switch (operation.id) {
-      case "MakeStruct":
-      case "ConstructEnum":
-        return { ...emptyIO, dataOutputs: [valueOutput], run };
-      case "BreakStruct":
-      case "StringifyJson":
+export const module = Module.make({
+  id: "CustomTypes",
+  name: "Custom Types",
+  effect: Effect.fnUntraced(function* (context) {
+    yield* context.schema.register({
+      id: "MakeStruct",
+      name: "Make Struct",
+      description: "Infers a struct from its output and accepts its fields.",
+      type: "pure",
+      io: (io) => {
+        const wildcard = io.wildcard("Struct");
+        const resolved = wildcard.value;
+        const definition = resolved?._tag === "Custom" ? resolved.definition : undefined;
         return {
-          ...emptyIO,
-          dataInputs: [valueInput],
-          ...(operation.id === "StringifyJson" ? { dataOutputs: [jsonOutput] } : {}),
-          run,
+          resolved,
+          inputs:
+            definition?._tag === "Struct"
+              ? definition.fields.map((field) =>
+                  io.data.in(fieldId(field.name), field.type, { name: field.name }),
+                )
+              : [],
+          output: io.data.out("value", wildcard),
         };
-      case "UpdateStruct":
-        return { ...emptyIO, dataInputs: [valueInput], dataOutputs: [valueOutput], run };
-      case "MatchEnum":
-        return { ...emptyIO, dataInputs: [valueInput], executionInputs: [execInput], run };
-      case "ParseJson":
-        return { ...emptyIO, dataInputs: [jsonInput], dataOutputs: [valueOutput], run };
-    }
-    throw new Error("Unknown custom type operation");
-  };
-  const inferredType = inferred ?? wildcard;
-  if (inferredType._tag === "Wildcard") return unresolved();
-  const inferredError = inferenceError(operation, inferredType, definitions);
-  if (inferredError !== undefined) throw new Error(inferredError);
-  if (inferredType._tag !== "Custom") throw new Error(`${operation.name} requires a custom type`);
-  const definition = definitions[inferredType.id]!;
-  const id = definition.id;
-  const codecType = t.Custom(definition.id);
-  const codec = Schema.suspend(() => t.ValueSchema(codecType, definitions));
-  const jsonCodec = Schema.suspend(() => t.JsonValueSchema(codecType, definitions));
-  const input = valueInput;
-  const output = valueOutput;
-  const pure = (
-    dataInputs: ReadonlyArray<Registration.DataInputRef>,
-    dataOutputs: ReadonlyArray<Registration.DataOutputRef>,
-    run: Registration.RegisteredSchema["run"],
-  ) => ({ ...emptyIO, dataInputs, dataOutputs, run });
-
-  switch (operation.id) {
-    case "MakeStruct": {
-      if (definition._tag !== "Struct") throw new Error("Expected a Struct");
-      const inputs = definition.fields.map(
-        (field) => new Registration.DataInputRef(fieldId(field.name), field.type, field.name),
-      );
-      return pure(inputs, [output], (context) =>
+      },
+      run: ({ io, types }) =>
         Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition?._tag !== "Struct")
+            return yield* Effect.fail(new Error("Make Struct requires an inferred struct"));
+          const definition = io.resolved.definition;
           const value = {
             ...Object.fromEntries(
-              definition.fields.map((field, index) => [field.name, context.input(inputs[index]!)]),
+              definition.fields.map((field, index) => [field.name, io.inputs[index]]),
             ),
             _type: definition.id,
           };
-          context.output(output, yield* Schema.decodeUnknownEffect(codec)(value));
-        }),
-      );
-    }
-    case "BreakStruct": {
-      if (definition._tag !== "Struct") throw new Error("Expected a Struct");
-      const outputs = definition.fields.map(
-        (field) => new Registration.DataOutputRef(fieldId(field.name), field.type, field.name),
-      );
-      return pure([input], outputs, (context) =>
-        Effect.gen(function* () {
-          const value = yield* Schema.decodeUnknownEffect(codec)(context.input(input));
-          if (typeof value !== "object" || value === null) return;
-          const fields = new Map(Object.entries(value));
-          for (const [index, field] of definition.fields.entries())
-            context.output(outputs[index]!, fields.get(field.name));
-        }),
-      );
-    }
-    case "ConstructEnum": {
-      if (definition._tag !== "Enum") throw new Error("Expected an Enum");
-      const variant =
-        typeof properties.variant === "string"
-          ? definition.variants.find((variant) => variant.name === properties.variant)
-          : undefined;
-      if (variant === undefined) throw new Error("Select an enum variant");
-      const fields = variant.fields;
-      const inputs = fields.map(
-        (field) => new Registration.DataInputRef(fieldId(field.name), field.type, field.name),
-      );
-      return pure(inputs, [output], (context) =>
-        Effect.gen(function* () {
-          const value = {
-            ...Object.fromEntries(
-              fields.map((field, index) => [field.name, context.input(inputs[index]!)]),
-            ),
-            _type: id,
-            ...(variant === undefined ? {} : { _tag: variant.name }),
-          };
-          context.output(output, yield* Schema.decodeUnknownEffect(codec)(value));
-        }),
-      );
-    }
-    case "UpdateStruct": {
-      if (definition._tag !== "Struct") throw new Error("Expected a Struct");
-      const replacements = definition.fields.map(
-        (field) =>
-          new Registration.DataInputRef(
-            fieldId(field.name),
-            t.Option(field.type),
-            field.name,
-            Option.none(),
+          io.output(
+            yield* Schema.decodeUnknownEffect(
+              t.ValueSchema(t.Custom(definition.id, definition), types.definitions),
+            )(value),
+          );
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "MakeStruct",
+                cause,
+              }),
           ),
-      );
-      return pure([input, ...replacements], [output], (context) =>
+        ),
+    });
+
+    yield* context.schema.register({
+      id: "BreakStruct",
+      name: "Break Struct",
+      description: "Infers a struct from its input and exposes its fields.",
+      type: "pure",
+      io: (io) => {
+        const wildcard = io.wildcard("Struct");
+        const resolved = wildcard.value;
+        const definition = resolved?._tag === "Custom" ? resolved.definition : undefined;
+        return {
+          resolved,
+          input: io.data.in("value", wildcard),
+          outputs:
+            definition?._tag === "Struct"
+              ? definition.fields.map((field) =>
+                  io.data.out(fieldId(field.name), field.type, { name: field.name }),
+                )
+              : [],
+        };
+      },
+      run: ({ io, types }) =>
         Effect.gen(function* () {
-          const original = yield* Schema.decodeUnknownEffect(codec)(context.input(input));
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition?._tag !== "Struct")
+            return yield* Effect.fail(new Error("Break Struct requires an inferred struct"));
+          const definition = io.resolved.definition;
+          const value = yield* Schema.decodeUnknownEffect(
+            t.ValueSchema(t.Custom(definition.id, definition), types.definitions),
+          )(io.input);
+          if (typeof value !== "object" || value === null) return;
+          const fields = Object.fromEntries(Object.entries(value));
+          for (const [index, field] of definition.fields.entries())
+            io.outputs[index]?.(fields[field.name]);
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "BreakStruct",
+                cause,
+              }),
+          ),
+        ),
+    });
+
+    yield* context.schema.register({
+      id: "UpdateStruct",
+      name: "Update Struct",
+      description:
+        "Updates any subset of fields immutably. None keeps the original; Some replaces it.",
+      type: "pure",
+      io: (io) => {
+        const wildcard = io.wildcard("Struct");
+        const resolved = wildcard.value;
+        const definition = resolved?._tag === "Custom" ? resolved.definition : undefined;
+        return {
+          resolved,
+          input: io.data.in("value", wildcard),
+          replacements:
+            definition?._tag === "Struct"
+              ? definition.fields.map((field) =>
+                  io.data.in(fieldId(field.name), t.Option(field.type), {
+                    name: field.name,
+                    defaultValue: Option.none(),
+                  }),
+                )
+              : [],
+          output: io.data.out("value", wildcard),
+        };
+      },
+      run: ({ io, types }) =>
+        Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition?._tag !== "Struct")
+            return yield* Effect.fail(new Error("Update Struct requires an inferred struct"));
+          const definition = io.resolved.definition;
+          const codec = t.ValueSchema(t.Custom(definition.id, definition), types.definitions);
+          const original = yield* Schema.decodeUnknownEffect(codec)(io.input);
           if (typeof original !== "object" || original === null) return;
           const changes: Record<string, unknown> = {};
           for (const [index, field] of definition.fields.entries()) {
             const replacement = yield* Schema.decodeUnknownEffect(
-              Schema.Option(t.ValueSchema(field.type, definitions)),
-            )(context.input(replacements[index]!));
+              Schema.Option(t.ValueSchema(field.type, types.definitions)),
+            )(io.replacements[index]);
             if (Option.isSome(replacement)) changes[field.name] = replacement.value;
           }
-          context.output(
-            output,
-            yield* Schema.decodeUnknownEffect(codec)({ ...original, ...changes }),
+          io.output(
+            yield* Schema.decodeUnknownEffect(codec)({
+              ...Object.fromEntries(Object.entries(original)),
+              ...changes,
+            }),
           );
-        }),
-      );
-    }
-    case "MatchEnum": {
-      if (definition._tag !== "Enum") throw new Error("Expected an Enum");
-      const branches = definition.variants.map((variant) => ({
-        variant,
-        exec:
-          variant.fields.length === 0
-            ? new Registration.ExecutionOutputRef(variantId(variant.name), variant.name)
-            : new Registration.ScopeOutputRef(
-                variantId(variant.name),
-                variant.fields.map((field) => ({
-                  id: fieldId(field.name),
-                  name: field.name,
-                  type: field.type,
-                })),
-                variant.name,
-              ),
-      }));
-      return {
-        dataInputs: [input],
-        dataOutputs: [],
-        executionInputs: [new Registration.ExecutionInputRef("exec")],
-        executionOutputs: branches.map((branch) => branch.exec),
-        run: (context) =>
-          Effect.gen(function* () {
-            const value = yield* Schema.decodeUnknownEffect(codec)(context.input(input));
-            if (typeof value !== "object" || value === null || !("_tag" in value)) return;
-            const branch = branches.find((branch) => branch.variant.name === value._tag)!;
-            const fields = new Map(Object.entries(value));
-            return branch.exec.scope === undefined
-              ? branch.exec
-              : new Registration.ScopeExecution(
-                  branch.exec,
-                  Object.fromEntries(
-                    branch.variant.fields.map((field) => [
-                      fieldId(field.name),
-                      fields.get(field.name),
-                    ]),
-                  ),
-                );
-          }),
-      };
-    }
-    case "ParseJson": {
-      const json = new Registration.DataInputRef("json", t.String, "JSON");
-      return pure([json], [output], (context) =>
-        Effect.gen(function* () {
-          const text = yield* Schema.decodeUnknownEffect(Schema.String)(context.input(json));
-          const parsed: unknown = yield* Effect.try({
-            try: () => JSON.parse(text),
-            catch: (cause) => cause,
-          });
-          context.output(output, yield* Schema.decodeUnknownEffect(jsonCodec)(parsed));
-        }),
-      );
-    }
-    case "StringifyJson": {
-      const json = new Registration.DataOutputRef("json", t.String, "JSON");
-      return pure([input], [json], (context) =>
-        Effect.gen(function* () {
-          const encoded = yield* Schema.encodeUnknownEffect(jsonCodec)(context.input(input));
-          const text = yield* Effect.try({
-            try: () => JSON.stringify(encoded),
-            catch: (cause) => cause,
-          });
-          context.output(json, text);
-        }),
-      );
-    }
-  }
-  throw new Error("Unknown custom type operation");
-};
-
-const propertiesFor = (operation: Operation) =>
-  operation.id === "ConstructEnum"
-    ? [
-        {
-          id: "variant",
-          name: "Variant",
-          type: t.String,
-          optional: false,
-          defaultValue: "",
-        },
-      ]
-    : [];
-
-export const schemas = (
-  definitions: t.Definitions,
-): ReadonlyMap<string, Registration.RegisteredSchema> =>
-  new Map(
-    operations.map((operation) => [
-      operation.id,
-      {
-        id: operation.id,
-        name: operation.name,
-        description:
-          operation.id === "BreakStruct" || operation.id === "MakeStruct"
-            ? `Infers a struct from its ${operation.id === "MakeStruct" ? "output" : "input"} and ${
-                operation.id === "MakeStruct" ? "accepts" : "exposes"
-              } its fields.`
-            : operation.id === "UpdateStruct"
-              ? "Updates any subset of fields immutably. None keeps the original; Some replaces it."
-              : `${operation.name} using the type inferred from its wildcard.`,
-        type: operation.id === "MatchEnum" ? "base" : "pure",
-        replay: "unsafe",
-        properties: propertiesFor(operation),
-        ...(() => {
-          const { run: _, ...io } = resolve(operation, {}, definitions);
-          return io;
-        })(),
-        generateIO: (properties) => {
-          const { run: _, ...io } = resolve(operation, properties, definitions);
-          return io;
-        },
-        matches: () => Effect.succeed(false),
-        run: (context) =>
-          Effect.suspend(() =>
-            resolve(
-              operation,
-              context.properties,
-              definitions,
-              context.types?.resolve(wildcardFor(operation)),
-            ).run(context),
-          ).pipe(
-            Effect.catchCause(
-              (cause) =>
-                new CodecError({
-                  typeId: (() => {
-                    const type = context.types?.resolve(wildcardFor(operation));
-                    return type?._tag === "Custom" ? type.id : "";
-                  })(),
-                  operation: operation.id,
-                  cause,
-                }),
-            ),
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "UpdateStruct",
+                cause,
+              }),
           ),
-      },
-    ]),
-  );
+        ),
+    });
 
-const modelIO = (io: Registration.RegisteredNodeIO): NodeIO => ({
-  dataInputs: io.dataInputs.map((port) => ({
-    id: IoId.make(port.id),
-    type: port.type,
-    ...(port.name === undefined ? {} : { name: port.name }),
-    // Update fields are the only declared defaults. Do not resolve codecs while generating IO:
-    // dependent definitions may be missing, and the editor must still render repairable pins.
-    ...(port.defaultValue === undefined ? {} : { defaultValue: { _tag: "None" } }),
-  })),
-  dataOutputs: io.dataOutputs.map((port) => ({
-    id: IoId.make(port.id),
-    type: port.type,
-    ...(port.name === undefined ? {} : { name: port.name }),
-  })),
-  executionInputs: io.executionInputs.map(executionPort),
-  executionOutputs: io.executionOutputs.map(executionPort),
+    yield* context.schema.register({
+      id: "ConstructEnum",
+      name: "Construct Enum",
+      description: "Construct Enum using the type inferred from its wildcard.",
+      type: "pure",
+      properties: {
+        variant: { name: "Variant", type: t.String, defaultValue: "" },
+      },
+      io: (io, properties) => {
+        const wildcard = io.wildcard("Enum");
+        const resolved = wildcard.value;
+        const definition = resolved?._tag === "Custom" ? resolved.definition : undefined;
+        const variant =
+          definition?._tag === "Enum"
+            ? definition.variants.find((candidate) => candidate.name === properties.variant)
+            : undefined;
+        return {
+          resolved,
+          variant,
+          inputs:
+            variant?.fields.map((field) =>
+              io.data.in(fieldId(field.name), field.type, { name: field.name }),
+            ) ?? [],
+          output: io.data.out("value", wildcard, {
+            ...(properties.variant === "" ? {} : { name: properties.variant }),
+          }),
+        };
+      },
+      run: ({ io, types }) =>
+        Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (
+            io.resolved._tag !== "Custom" ||
+            io.resolved.definition?._tag !== "Enum" ||
+            io.variant === undefined
+          )
+            return yield* Effect.fail(new Error("Select an enum variant"));
+          const definition = io.resolved.definition;
+          const value = {
+            ...Object.fromEntries(
+              io.variant.fields.map((field, index) => [field.name, io.inputs[index]]),
+            ),
+            _type: definition.id,
+            _tag: io.variant.name,
+          };
+          io.output(
+            yield* Schema.decodeUnknownEffect(
+              t.ValueSchema(t.Custom(definition.id, definition), types.definitions),
+            )(value),
+          );
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "ConstructEnum",
+                cause,
+              }),
+          ),
+        ),
+    });
+
+    yield* context.schema.register({
+      id: "MatchEnum",
+      name: "Match Enum",
+      description: "Match Enum using the type inferred from its wildcard.",
+      type: "base",
+      io: (io) => {
+        const wildcard = io.wildcard("Enum");
+        const resolved = wildcard.value;
+        const definition = resolved?._tag === "Custom" ? resolved.definition : undefined;
+        return {
+          resolved,
+          input: io.data.in("value", wildcard),
+          exec: io.exec.in("exec"),
+          branches:
+            definition?._tag === "Enum"
+              ? definition.variants.map((variant) =>
+                  variant.fields.length === 0
+                    ? {
+                        kind: "exec" as const,
+                        variant,
+                        output: io.exec.out(variantId(variant.name), { name: variant.name }),
+                      }
+                    : {
+                        kind: "scope" as const,
+                        variant,
+                        output: new Registration.ScopeOutputRef(
+                          variantId(variant.name),
+                          variant.fields.map((field) => ({
+                            id: fieldId(field.name),
+                            name: field.name,
+                            type: field.type,
+                          })),
+                          variant.name,
+                        ),
+                      },
+                )
+              : [],
+        };
+      },
+      run: ({ io, types }) =>
+        Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition?._tag !== "Enum")
+            return yield* Effect.fail(new Error("Match Enum requires an inferred enum"));
+          const definition = io.resolved.definition;
+          const value = yield* Schema.decodeUnknownEffect(
+            t.ValueSchema(t.Custom(definition.id, definition), types.definitions),
+          )(io.input);
+          if (typeof value !== "object" || value === null || !("_tag" in value)) return;
+          const fields = Object.fromEntries(Object.entries(value));
+          const branch = io.branches.find((candidate) => candidate.variant.name === fields._tag);
+          if (branch === undefined) return;
+          if (branch.kind === "exec") return branch.output;
+          return branch.output(
+            Object.fromEntries(
+              branch.variant.fields.map((field) => [fieldId(field.name), fields[field.name]]),
+            ),
+          );
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "MatchEnum",
+                cause,
+              }),
+          ),
+        ),
+    });
+
+    yield* context.schema.register({
+      id: "ParseJson",
+      name: "Parse JSON",
+      description: "Parse JSON using the type inferred from its wildcard.",
+      type: "pure",
+      io: (io) => {
+        const wildcard = io.wildcard("Type");
+        return {
+          resolved: wildcard.value,
+          json: io.data.in("json", t.String, { name: "JSON" }),
+          output: io.data.out("value", wildcard),
+        };
+      },
+      run: ({ io, types }) =>
+        Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition === undefined)
+            return yield* Effect.fail(new Error("Parse JSON requires an inferred custom type"));
+          const parsed: unknown = yield* Effect.try({
+            try: () => JSON.parse(io.json),
+            catch: (cause) => cause,
+          });
+          io.output(
+            yield* Schema.decodeUnknownEffect(t.JsonValueSchema(io.resolved, types.definitions))(
+              parsed,
+            ),
+          );
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "ParseJson",
+                cause,
+              }),
+          ),
+        ),
+    });
+
+    yield* context.schema.register({
+      id: "StringifyJson",
+      name: "Stringify JSON",
+      description: "Stringify JSON using the type inferred from its wildcard.",
+      type: "pure",
+      io: (io) => {
+        const wildcard = io.wildcard("Type");
+        return {
+          resolved: wildcard.value,
+          input: io.data.in("value", wildcard),
+          json: io.data.out("json", t.String, { name: "JSON" }),
+        };
+      },
+      run: ({ io, types }) =>
+        Effect.gen(function* () {
+          if (io.resolved === undefined) return;
+          if (io.resolved._tag !== "Custom" || io.resolved.definition === undefined)
+            return yield* Effect.fail(new Error("Stringify JSON requires an inferred custom type"));
+          const encoded = yield* Schema.encodeUnknownEffect(
+            t.JsonValueSchema(io.resolved, types.definitions),
+          )(io.input);
+          io.json(
+            yield* Effect.try({
+              try: () => JSON.stringify(encoded),
+              catch: (cause) => cause,
+            }),
+          );
+        }).pipe(
+          Effect.catchCause(
+            (cause) =>
+              new CodecError({
+                typeId: io.resolved?._tag === "Custom" ? io.resolved.id : "",
+                operation: "StringifyJson",
+                cause,
+              }),
+          ),
+        ),
+    });
+  }),
 });
+
+const registeredSchemas = new Map(
+  Effect.runSync(Registration.collect(module.effect)).map((schema) => [schema.id, schema]),
+);
 
 export const packageModel: Package.Model = {
   id: packageId,
-  name: "Custom Types",
+  name: module.name ?? module.id,
+  types: module.types ?? {},
   resources: [],
-  schemas: Array.from(schemas({}).values(), (schema) => ({
+  schemas: [...registeredSchemas.values()].map((schema) => ({
     id: SchemaId.make(schema.id),
+    internal: schema.internal ?? false,
     name: schema.name,
-    type: schema.type,
     ...(schema.description === undefined ? {} : { description: schema.description }),
-    properties: propertiesFor(operationFor(schema.id)!),
-    ...modelIO(schema),
+    type: schema.type,
+    properties: schema.properties.map((property) =>
+      "resource" in property
+        ? {
+            id: property.id,
+            name: property.name,
+            ...(property.description === undefined ? {} : { description: property.description }),
+            resource: property.resource,
+            optional: false,
+          }
+        : {
+            id: property.id,
+            name: property.name,
+            ...(property.description === undefined ? {} : { description: property.description }),
+            type: property.type,
+            optional: property.optional,
+            ...(property.defaultValue === undefined
+              ? {}
+              : { defaultValue: Schema.decodeUnknownSync(Schema.Json)(property.defaultValue) }),
+          },
+    ),
+    dataInputs: schema.dataInputs.map((input) => ({
+      id: IoId.make(input.id),
+      type: input.type,
+      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(input.defaultValue === undefined
+        ? {}
+        : { defaultValue: Schema.decodeUnknownSync(Schema.Json)(input.defaultValue) }),
+      ...(input.suggestions === undefined ? {} : { suggestions: true }),
+    })),
+    dataOutputs: schema.dataOutputs.map((output) => ({
+      id: IoId.make(output.id),
+      type: output.type,
+      ...(output.name === undefined ? {} : { name: output.name }),
+    })),
+    executionInputs: schema.executionInputs.map(executionPort),
+    executionOutputs: schema.executionOutputs.map(executionPort),
   })),
 };
 
-export const nodeIO = (
-  ref: SchemaRef,
-  properties: Readonly<Record<string, unknown>>,
-  definitions: t.Definitions,
-): NodeIO | undefined => {
-  if (ref.package !== packageId) return undefined;
-  const operation = operationFor(ref.schema);
-  if (operation === undefined) return undefined;
-  return modelIO(resolve(operation, properties, definitions));
-};
-
-/** Registered once. All project-dependent work reads the supplied authoring context. */
-export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = Object.fromEntries(
-  operations.map((operation) => [
-    operation.id,
-    {
-      properties:
-        operation.id === "ConstructEnum"
-          ? {
-              variant: {
-                ariaLabel: "Enum variant",
-                placeholder: "Select a variant",
-                unavailableLabel: "Connect the output to infer an enum first",
-                options: ({ io, definitions }: SchemaAuthoring.Context) => {
-                  const type = io?.dataOutputs.find((output) => output.id === "value")?.type;
-                  const definition = type?._tag === "Custom" ? definitions[type.id] : undefined;
-                  return definition?._tag === "Enum"
-                    ? definition.variants.map((variant) => ({
-                        id: variant.name,
-                        name: variant.name,
-                      }))
-                    : [];
-                },
-              },
-            }
-          : {},
-      ...(["BreakStruct", "UpdateStruct", "MatchEnum", "StringifyJson"].includes(operation.id)
-        ? {
-            acceptsInput: (input, type, definitions) =>
-              input !== "value" ||
-              type._tag === "Wildcard" ||
-              (type._tag === "Custom" &&
-                (definitions === undefined ||
-                  operation.kind === undefined ||
-                  definitions[type.id]?._tag === operation.kind)),
-          }
-        : {}),
-      ...(["MakeStruct", "UpdateStruct", "ConstructEnum", "ParseJson"].includes(operation.id)
-        ? {
-            acceptsOutput: (output, type, definitions) =>
-              output !== "value" ||
-              type._tag === "Wildcard" ||
-              (type._tag === "Custom" &&
-                (definitions === undefined ||
-                  operation.kind === undefined ||
-                  definitions[type.id]?._tag === operation.kind)),
-          }
-        : {}),
-      generateIO: (context) => {
-        const type = context.resolve(wildcardFor(operation));
-        const error = inferenceError(operation, type, context.definitions);
-        if (error !== undefined) return Result.fail(error);
-        if (type._tag === "Wildcard")
-          return Result.succeed(
-            modelIO(resolve(operation, context.properties, context.definitions)),
-          );
-        if (operation.id === "ConstructEnum") {
-          const definition = type._tag === "Custom" ? context.definitions[type.id] : undefined;
-          if (
-            definition?._tag !== "Enum" ||
-            typeof context.properties.variant !== "string" ||
-            !definition.variants.some((variant) => variant.name === context.properties.variant)
-          )
-            return Result.succeed(
-              modelIO(resolve(operation, context.properties, context.definitions)),
-            );
-        }
-        return Result.succeed(
-          modelIO(resolve(operation, context.properties, context.definitions, type)),
-        );
-      },
-    } satisfies SchemaAuthoring.Definition,
-  ]),
-);
-
-/** Dynamic declarations derived from solved wildcard pins, never a persisted Type property. */
-export const derivedIO = (graph: Canvas.Model, definitions: t.Definitions) => ({
-  key: JSON.stringify([
-    definitions,
-    Object.values(graph.nodes)
-      .filter((node) => node.schema.package === packageId && operationFor(node.schema.schema))
-      .map((node) => node.id)
-      .sort(),
-  ]),
-  ports: (
-    nodeId: string,
-    resolve: (type: t.Any) => t.Any,
-  ): Result.Result<NodeIO | undefined, string> => {
-    const node = graph.nodes[nodeId];
-    const operation = node === undefined ? undefined : operationFor(node.schema.schema);
-    if (node?.schema.package !== packageId || operation === undefined)
-      return Result.succeed(undefined);
-    return authoring[operation.id]!.generateIO!({
-      properties: node.properties,
-      definitions,
-      resolve,
-      declared: modelIO(emptyIO),
-      inputScope: () => undefined,
-    });
+/** Editor-only compatibility and property presentation for the built-in module. */
+export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = {
+  MakeStruct: {
+    runtime: registeredSchemas.get("MakeStruct")!,
+    properties: {},
+    acceptsOutput: (output, type, definitions) =>
+      output !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Struct")),
   },
-});
+  BreakStruct: {
+    runtime: registeredSchemas.get("BreakStruct")!,
+    properties: {},
+    acceptsInput: (input, type, definitions) =>
+      input !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Struct")),
+  },
+  UpdateStruct: {
+    runtime: registeredSchemas.get("UpdateStruct")!,
+    properties: {},
+    acceptsInput: (input, type, definitions) =>
+      input !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Struct")),
+    acceptsOutput: (output, type, definitions) =>
+      output !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Struct")),
+  },
+  ConstructEnum: {
+    runtime: registeredSchemas.get("ConstructEnum")!,
+    properties: {
+      variant: {
+        ariaLabel: "Enum variant",
+        placeholder: "Select a variant",
+        unavailableLabel: "Connect the output to infer an enum first",
+        options: ({ io, definitions }: SchemaAuthoring.Context) => {
+          const type = io?.dataOutputs.find((output) => output.id === "value")?.type;
+          const definition = type?._tag === "Custom" ? definitions[type.id] : undefined;
+          return definition?._tag === "Enum"
+            ? definition.variants.map((variant) => ({ id: variant.name, name: variant.name }))
+            : [];
+        },
+      },
+    },
+    acceptsOutput: (output, type, definitions) =>
+      output !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Enum")),
+  },
+  MatchEnum: {
+    runtime: registeredSchemas.get("MatchEnum")!,
+    properties: {},
+    acceptsInput: (input, type, definitions) =>
+      input !== "value" ||
+      type._tag === "Wildcard" ||
+      (type._tag === "Custom" &&
+        (definitions === undefined || definitions[type.id]?._tag === "Enum")),
+  },
+  ParseJson: {
+    runtime: registeredSchemas.get("ParseJson")!,
+    properties: {},
+    acceptsOutput: (output, type, _definitions) =>
+      output !== "value" || type._tag === "Wildcard" || type._tag === "Custom",
+  },
+  StringifyJson: {
+    runtime: registeredSchemas.get("StringifyJson")!,
+    properties: {},
+    acceptsInput: (input, type, _definitions) =>
+      input !== "value" || type._tag === "Wildcard" || type._tag === "Custom",
+  },
+};
 
 export * as CustomTypes from "./CustomTypes.ts";

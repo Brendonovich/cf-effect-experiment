@@ -9,24 +9,32 @@ const StreamDeckModule = Module.make({
   name: "Stream Deck WebSocket",
   engine: StreamDeckEngine,
   effect: Effect.fnUntraced(function* (context) {
-    for (const [id, name, eventName] of [
-      ["KeyDown", "Stream Deck Key Down", "keyDown"],
-      ["KeyUp", "Stream Deck Key Up", "keyUp"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        type: "event",
-        properties: { server: { name: "Server", resource: StreamDeckServer } },
-        event: (event, { properties }) =>
-          Effect.succeed(event.serverId === properties.server && event.event === eventName),
-        io: (io) => ({ id: io.data.out("id", t.String, { name: "Key ID" }) }),
-        run: ({ event, io }) =>
-          Effect.sync(() => {
-            if (event) io.id(event.payload.settings.id);
-          }),
-      });
-    }
+    yield* context.schema.register({
+      id: "KeyDown",
+      name: "Stream Deck Key Down",
+      type: "event",
+      properties: { server: { name: "Server", resource: StreamDeckServer } },
+      event: (event, { properties }) =>
+        Effect.succeed(event.serverId === properties.server && event.event === "keyDown"),
+      io: (io) => ({ id: io.data.out("id", t.String, { name: "Key ID" }) }),
+      run: ({ event, io }) =>
+        Effect.sync(() => {
+          if (event) io.id(event.payload.settings.id);
+        }),
+    });
+    yield* context.schema.register({
+      id: "KeyUp",
+      name: "Stream Deck Key Up",
+      type: "event",
+      properties: { server: { name: "Server", resource: StreamDeckServer } },
+      event: (event, { properties }) =>
+        Effect.succeed(event.serverId === properties.server && event.event === "keyUp"),
+      io: (io) => ({ id: io.data.out("id", t.String, { name: "Key ID" }) }),
+      run: ({ event, io }) =>
+        Effect.sync(() => {
+          if (event) io.id(event.payload.settings.id);
+        }),
+    });
   }),
 });
 

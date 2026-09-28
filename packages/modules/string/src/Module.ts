@@ -1,7 +1,6 @@
 import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option } from "effect";
-
 const radix = Effect.fnUntraced(function* (base: number) {
   if (!Number.isInteger(base) || base < 2 || base > 36)
     return yield* Effect.fail(new RangeError("Base must be an integer between 2 and 36"));
@@ -10,63 +9,69 @@ const radix = Effect.fnUntraced(function* (base: number) {
 const validEntries = (number: number) =>
   Number.isSafeInteger(number) && number >= 0 && number <= 1024;
 const decimal = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
-
 const StringModule = Module.make({
   id: "string",
   name: "String",
   description: "Create, compare, format, and transform text.",
   effect: Effect.fnUntraced(function* (context) {
-    for (const [id, name, second, calculate] of [
-      ["StringIncludes", "String Includes", "needle", (a: string, b: string) => a.includes(b)],
-      [
-        "StringStartsWith",
-        "String Starts With",
-        "prefix",
-        (a: string, b: string) => a.startsWith(b),
-      ],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description: "Performs a case-sensitive literal string comparison.",
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
-          second: io.data.in(second, t.String, {
-            name: id === "StringIncludes" ? "Includes" : "Starts With",
-            defaultValue: "",
-          }),
-          output: io.data.out("bool", t.Bool),
+    yield* context.schema.register({
+      id: "StringIncludes",
+      name: "String Includes",
+      description: "Performs a case-sensitive literal string comparison.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        second: io.data.in("needle", t.String, {
+          name: "Includes",
+          defaultValue: "",
         }),
-        run: ({ io }) => Effect.sync(() => io.output(calculate(io.input, io.second))),
-      });
-    }
-    for (const [id, name, all] of [
-      ["StringReplaceAll", "String Replace All", true],
-      ["StringReplaceFirst", "String Replace First", false],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description:
-          "Replaces literal text. Replacement text is literal, including dollar signs; the search is not a regex.",
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
-          find: io.data.in("find", t.String, { name: "Find", defaultValue: "" }),
-          replace: io.data.in("replace", t.String, { name: "Replace", defaultValue: "" }),
-          output: io.data.out("out", t.String),
+        output: io.data.out("bool", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.includes(io.second))),
+    });
+    yield* context.schema.register({
+      id: "StringStartsWith",
+      name: "String Starts With",
+      description: "Performs a case-sensitive literal string comparison.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        second: io.data.in("prefix", t.String, {
+          name: "Starts With",
+          defaultValue: "",
         }),
-        run: ({ io }) =>
-          Effect.sync(() =>
-            io.output(
-              all
-                ? io.input.replaceAll(io.find, () => io.replace)
-                : io.input.replace(io.find, () => io.replace),
-            ),
-          ),
-      });
-    }
+        output: io.data.out("bool", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.startsWith(io.second))),
+    });
+    yield* context.schema.register({
+      id: "StringReplaceAll",
+      name: "String Replace All",
+      description:
+        "Replaces literal text. Replacement text is literal, including dollar signs; the search is not a regex.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        find: io.data.in("find", t.String, { name: "Find", defaultValue: "" }),
+        replace: io.data.in("replace", t.String, { name: "Replace", defaultValue: "" }),
+        output: io.data.out("out", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.replaceAll(io.find, () => io.replace))),
+    });
+    yield* context.schema.register({
+      id: "StringReplaceFirst",
+      name: "String Replace First",
+      description:
+        "Replaces literal text. Replacement text is literal, including dollar signs; the search is not a regex.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { name: "String", defaultValue: "" }),
+        find: io.data.in("find", t.String, { name: "Find", defaultValue: "" }),
+        replace: io.data.in("replace", t.String, { name: "Replace", defaultValue: "" }),
+        output: io.data.out("out", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.replace(io.find, () => io.replace))),
+    });
     yield* context.schema.register({
       id: "StringLength",
       name: "String Length",
@@ -97,36 +102,68 @@ const StringModule = Module.make({
             )
           : Effect.fail(new RangeError("Substring indices must be safe integers")),
     });
-    for (const [id, name, calculate] of [
-      ["StringToUppercase", "String To Uppercase", (value: string) => value.toUpperCase()],
-      ["StringToLowercase", "String To Lowercase", (value: string) => value.toLowerCase()],
-      ["ReverseString", "Reverse String", (value: string) => [...value].reverse().join("")],
-      ["MakeString", "Make String", (value: string) => value],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description: `${name}. Reverse String reverses Unicode code points, not grapheme clusters.`,
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("input", t.String, { defaultValue: "" }),
-          output: io.data.out("output", t.String),
-        }),
-        run: ({ io }) => Effect.sync(() => io.output(calculate(io.input))),
-      });
-    }
+    yield* context.schema.register({
+      id: "StringToUppercase",
+      name: "String To Uppercase",
+      description:
+        "String To Uppercase. Reverse String reverses Unicode code points, not grapheme clusters.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        output: io.data.out("output", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.toUpperCase())),
+    });
+    yield* context.schema.register({
+      id: "StringToLowercase",
+      name: "String To Lowercase",
+      description:
+        "String To Lowercase. Reverse String reverses Unicode code points, not grapheme clusters.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        output: io.data.out("output", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input.toLowerCase())),
+    });
+    yield* context.schema.register({
+      id: "ReverseString",
+      name: "Reverse String",
+      description:
+        "Reverse String. Reverse String reverses Unicode code points, not grapheme clusters.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        output: io.data.out("output", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output([...io.input].reverse().join(""))),
+    });
+    yield* context.schema.register({
+      id: "MakeString",
+      name: "Make String",
+      description:
+        "Make String. Reverse String reverses Unicode code points, not grapheme clusters.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.String, { defaultValue: "" }),
+        output: io.data.out("output", t.String),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(io.input)),
+    });
     yield* context.schema.register({
       id: "AppendString",
       name: "Append String",
       description: "Concatenates five strings without a separator.",
       type: "pure",
       io: (io) => ({
-        inputs: ["one", "two", "three", "four", "five"].map((id) =>
-          io.data.in(id, t.String, { defaultValue: "" }),
-        ),
+        one: io.data.in("one", t.String, { defaultValue: "" }),
+        two: io.data.in("two", t.String, { defaultValue: "" }),
+        three: io.data.in("three", t.String, { defaultValue: "" }),
+        four: io.data.in("four", t.String, { defaultValue: "" }),
+        five: io.data.in("five", t.String, { defaultValue: "" }),
         output: io.data.out("output", t.String),
       }),
-      run: ({ io }) => Effect.sync(() => io.output(io.inputs.join(""))),
+      run: ({ io }) => Effect.sync(() => io.output(io.one + io.two + io.three + io.four + io.five)),
     });
     yield* context.schema.register({
       id: "CreateString",
@@ -147,26 +184,48 @@ const StringModule = Module.make({
           ? Effect.sync(() => io.output(io.inputs.join("")))
           : Effect.fail(new RangeError("Entries must be an integer between 0 and 1024")),
     });
-    for (const [id, name, type] of [
-      ["IntToString", "Int To String", t.Int],
-      ["FloatToString", "Float To String", t.Float],
-      ["BoolToString", "Bool To String", t.Bool],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description: "Converts a scalar value to its string representation.",
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("input", type, { defaultValue: type._tag === "Bool" ? false : 0 }),
-          output: io.data.out("string", t.String),
-        }),
-        run: ({ io }) =>
-          t.isValue(type, io.input)
-            ? Effect.sync(() => io.output(String(io.input)))
-            : Effect.fail(new TypeError("Input does not match the scalar conversion type")),
-      });
-    }
+    yield* context.schema.register({
+      id: "IntToString",
+      name: "Int To String",
+      description: "Converts a scalar value to its string representation.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.Int, { defaultValue: 0 }),
+        output: io.data.out("string", t.String),
+      }),
+      run: ({ io }) =>
+        t.isValue(t.Int, io.input)
+          ? Effect.sync(() => io.output(String(io.input)))
+          : Effect.fail(new TypeError("Input does not match the scalar conversion type")),
+    });
+    yield* context.schema.register({
+      id: "FloatToString",
+      name: "Float To String",
+      description: "Converts a scalar value to its string representation.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.Float, { defaultValue: 0 }),
+        output: io.data.out("string", t.String),
+      }),
+      run: ({ io }) =>
+        t.isValue(t.Float, io.input)
+          ? Effect.sync(() => io.output(String(io.input)))
+          : Effect.fail(new TypeError("Input does not match the scalar conversion type")),
+    });
+    yield* context.schema.register({
+      id: "BoolToString",
+      name: "Bool To String",
+      description: "Converts a scalar value to its string representation.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.Bool, { defaultValue: false }),
+        output: io.data.out("string", t.String),
+      }),
+      run: ({ io }) =>
+        t.isValue(t.Bool, io.input)
+          ? Effect.sync(() => io.output(String(io.input)))
+          : Effect.fail(new TypeError("Input does not match the scalar conversion type")),
+    });
     yield* context.schema.register({
       id: "IntToStringBase",
       name: "Int To String (Specify Base)",
@@ -188,35 +247,50 @@ const StringModule = Module.make({
           });
         }),
     });
-    for (const [id, name, type] of [
-      ["StringToInt", "String To Int", t.Int],
-      ["StringToFloat", "String To Float", t.Float],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description:
-          "Parses a complete decimal numeric literal (surrounding whitespace allowed). Empty, partial, nonfinite, or unsafe integer results return None. String To Int rounds down.",
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("string", t.String, { defaultValue: "" }),
-          output: io.data.out(type._tag === "Int" ? "int" : "float", t.Option(type)),
+    yield* context.schema.register({
+      id: "StringToInt",
+      name: "String To Int",
+      description:
+        "Parses a complete decimal numeric literal (surrounding whitespace allowed). Empty, partial, nonfinite, or unsafe integer results return None. String To Int rounds down.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("string", t.String, { defaultValue: "" }),
+        output: io.data.out("int", t.Option(t.Int)),
+      }),
+      run: ({ io }) =>
+        Effect.sync(() => {
+          const text = io.input.trim();
+          const parsed = Number(text);
+          const value = Math.floor(parsed);
+          io.output(
+            decimal.test(text) && Number.isFinite(value) && Number.isSafeInteger(value)
+              ? Option.some(value)
+              : Option.none(),
+          );
         }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            const text = io.input.trim();
-            const parsed = Number(text);
-            const value = type._tag === "Int" ? Math.floor(parsed) : parsed;
-            io.output(
-              decimal.test(text) &&
-                Number.isFinite(value) &&
-                (type._tag !== "Int" || Number.isSafeInteger(value))
-                ? Option.some(value)
-                : Option.none(),
-            );
-          }),
-      });
-    }
+    });
+    yield* context.schema.register({
+      id: "StringToFloat",
+      name: "String To Float",
+      description:
+        "Parses a complete decimal numeric literal (surrounding whitespace allowed). Empty, partial, nonfinite, or unsafe integer results return None. String To Int rounds down.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("string", t.String, { defaultValue: "" }),
+        output: io.data.out("float", t.Option(t.Float)),
+      }),
+      run: ({ io }) =>
+        Effect.sync(() => {
+          const text = io.input.trim();
+          const parsed = Number(text);
+          const value = parsed;
+          io.output(
+            decimal.test(text) && Number.isFinite(value) && true
+              ? Option.some(value)
+              : Option.none(),
+          );
+        }),
+    });
     yield* context.schema.register({
       id: "StringToIntBase",
       name: "String To Int (Specify Base)",
@@ -373,5 +447,4 @@ const StringModule = Module.make({
     });
   }),
 });
-
 export default StringModule;

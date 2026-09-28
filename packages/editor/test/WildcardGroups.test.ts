@@ -19,6 +19,17 @@ const wire = (id: string, from: string, to: string): Connection.Model => ({
 });
 
 describe("non-reactive wildcard connection groups", () => {
+  it("rejects primitive values for constrained custom-type wildcards", () => {
+    const result = new Wildcards.Cache().update(
+      new Map([
+        ["source", io(t.String)],
+        ["target", io(t.Wildcard("Struct"))],
+      ]),
+      [wire("wire", "source", "target")],
+    );
+    expect(Result.isFailure(result)).toBe(true);
+  });
+
   it("incremental updates agree with a fresh crawl across mixed topology and IO edits", () => {
     const cache = new Wildcards.Cache();
     const declarations = new Map<string, Wildcards.IO>();

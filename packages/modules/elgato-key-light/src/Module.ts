@@ -70,91 +70,108 @@ const module = Module.make({
           io.on(state.on);
         }),
     });
-    for (const [id, name, type] of [
-      ["IncrementBrightness", "Increment Brightness", "brightness"],
-      ["IncrementTemperature", "Increment Temperature", "temperature"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        description:
-          type === "brightness"
-            ? "Clamps the result to 0-100."
-            : "Adds a Kelvin delta and clamps the result to 2900-7000 K.",
-        io: (io) => ({
-          delta: io.data.in("delta", t.Int, {
-            name: type === "temperature" ? "Delta (Kelvin)" : "Delta",
-            defaultValue: 0,
-          }),
-          value: io.data.out(type === "temperature" ? "kelvin" : "brightness", t.Int),
+    yield* context.schema.register({
+      id: "IncrementBrightness",
+      name: "Increment Brightness",
+      properties,
+      description: "Clamps the result to 0-100.",
+      io: (io) => ({
+        delta: io.data.in("delta", t.Int, { name: "Delta", defaultValue: 0 }),
+        value: io.data.out("brightness", t.Int),
+      }),
+      run: ({ io, properties, engine }) =>
+        Effect.gen(function* () {
+          const state = yield* engine.ElgatoKeyLightUpdateState({
+            deviceId: properties.light,
+            operation: { type: "brightness", delta: io.delta },
+          });
+          io.value(state.brightness);
         }),
-        run: ({ io, properties, engine }) =>
-          Effect.gen(function* () {
-            const state = yield* engine.ElgatoKeyLightUpdateState({
-              deviceId: properties.light,
-              operation: { type, delta: io.delta },
-            });
-            io.value(type === "temperature" ? state.kelvin : state.brightness);
-          }),
-      });
-    }
-    for (const [id, name, field, defaultValue] of [
-      ["SetBrightness", "Set Key Light Brightness", "brightness", 50],
-      ["SetTemperature", "Set Key Light Temperature", "kelvin", 4500],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        description: "Changes only this field, preserving power and the other field.",
-        io: (io) => ({ value: io.data.in(field, t.Int, { defaultValue }) }),
-        run: ({ io, properties, engine }) =>
-          engine
-            .ElgatoKeyLightUpdateState({
-              deviceId: properties.light,
-              operation: { type: "set", state: { [field]: io.value } },
-            })
-            .pipe(Effect.asVoid),
-      });
-    }
-    for (const [id, name, input, output, outputType, calculate, defaultValue] of [
-      [
-        "BrightnessToPercent",
-        "Brightness to Percent",
-        "brightness",
-        "percent",
-        t.Float,
-        (value: number) => integer(value, 0, 100, "Brightness"),
-        0,
-      ],
-      [
-        "KelvinToMireds",
-        "Kelvin to Mireds",
-        "kelvin",
-        "mireds",
-        t.Int,
-        kelvinToMireds,
-        4500,
-      ],
-      ["MiredsToKelvin", "Mireds to Kelvin", "mireds", "kelvin", t.Int, miredsToKelvin, 222],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        type: "pure",
-        description:
-          id === "BrightnessToPercent"
-            ? "Brightness is already a 0-100 percent value."
-            : "Converts Key Light temperatures with rounding to the nearest integer.",
-        io: (io) => ({
-          input: io.data.in(input, t.Int, { defaultValue }),
-          output: io.data.out(output, outputType),
+    });
+    yield* context.schema.register({
+      id: "IncrementTemperature",
+      name: "Increment Temperature",
+      properties,
+      description: "Adds a Kelvin delta and clamps the result to 2900-7000 K.",
+      io: (io) => ({
+        delta: io.data.in("delta", t.Int, { name: "Delta (Kelvin)", defaultValue: 0 }),
+        value: io.data.out("kelvin", t.Int),
+      }),
+      run: ({ io, properties, engine }) =>
+        Effect.gen(function* () {
+          const state = yield* engine.ElgatoKeyLightUpdateState({
+            deviceId: properties.light,
+            operation: { type: "temperature", delta: io.delta },
+          });
+          io.value(state.kelvin);
         }),
-        run: ({ io }) =>
-          calculate(io.input).pipe(Effect.flatMap((value) => checked(() => io.output(value)))),
-      });
-    }
+    });
+    yield* context.schema.register({
+      id: "SetBrightness",
+      name: "Set Key Light Brightness",
+      properties,
+      description: "Changes only this field, preserving power and the other field.",
+      io: (io) => ({ value: io.data.in("brightness", t.Int, { defaultValue: 50 }) }),
+      run: ({ io, properties, engine }) =>
+        engine
+          .ElgatoKeyLightUpdateState({
+            deviceId: properties.light,
+            operation: { type: "set", state: { brightness: io.value } },
+          })
+          .pipe(Effect.asVoid),
+    });
+    yield* context.schema.register({
+      id: "SetTemperature",
+      name: "Set Key Light Temperature",
+      properties,
+      description: "Changes only this field, preserving power and the other field.",
+      io: (io) => ({ value: io.data.in("kelvin", t.Int, { defaultValue: 4500 }) }),
+      run: ({ io, properties, engine }) =>
+        engine
+          .ElgatoKeyLightUpdateState({
+            deviceId: properties.light,
+            operation: { type: "set", state: { kelvin: io.value } },
+          })
+          .pipe(Effect.asVoid),
+    });
+    yield* context.schema.register({
+      id: "BrightnessToPercent",
+      name: "Brightness to Percent",
+      type: "pure",
+      description: "Brightness is already a 0-100 percent value.",
+      io: (io) => ({
+        input: io.data.in("brightness", t.Int, { defaultValue: 0 }),
+        output: io.data.out("percent", t.Float),
+      }),
+      run: ({ io }) =>
+        integer(io.input, 0, 100, "Brightness").pipe(
+          Effect.flatMap((value) => checked(() => io.output(value))),
+        ),
+    });
+    yield* context.schema.register({
+      id: "KelvinToMireds",
+      name: "Kelvin to Mireds",
+      type: "pure",
+      description: "Converts Key Light temperatures with rounding to the nearest integer.",
+      io: (io) => ({
+        input: io.data.in("kelvin", t.Int, { defaultValue: 4500 }),
+        output: io.data.out("mireds", t.Int),
+      }),
+      run: ({ io }) =>
+        kelvinToMireds(io.input).pipe(Effect.flatMap((value) => checked(() => io.output(value)))),
+    });
+    yield* context.schema.register({
+      id: "MiredsToKelvin",
+      name: "Mireds to Kelvin",
+      type: "pure",
+      description: "Converts Key Light temperatures with rounding to the nearest integer.",
+      io: (io) => ({
+        input: io.data.in("mireds", t.Int, { defaultValue: 222 }),
+        output: io.data.out("kelvin", t.Int),
+      }),
+      run: ({ io }) =>
+        miredsToKelvin(io.input).pipe(Effect.flatMap((value) => checked(() => io.output(value)))),
+    });
   }),
 });
 

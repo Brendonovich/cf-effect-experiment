@@ -45,12 +45,14 @@ export type DefinitionId = typeof DefinitionId.Type;
 export interface Custom extends Type<Readonly<Record<string, unknown>>> {
   readonly _tag: "Custom";
   readonly id: string;
+  readonly definition?: Definition;
 }
 
 /** IDs are local to a node, not a module or graph. Values are inferred from wires. */
 export interface Wildcard extends Type<unknown> {
   readonly _tag: "Wildcard";
   readonly id: string;
+  readonly value?: Any;
 }
 
 export type Any = String | Int | Float | Bool | DateTime | List | Option | Custom | Wildcard;
@@ -74,13 +76,38 @@ export const Int: Int = { _tag: "Int" };
 export const Float: Float = { _tag: "Float" };
 export const Bool: Bool = { _tag: "Bool" };
 export const DateTime: DateTime = { _tag: "DateTime" };
-export const Custom = (id: string): Custom => ({ _tag: "Custom", id });
-export const Wildcard = (id: string): Wildcard => ({ _tag: "Wildcard", id });
+export const Custom = (id: string, definition?: Definition): Custom => {
+  const custom: Custom = { _tag: "Custom", id };
+  if (definition !== undefined)
+    Object.defineProperty(custom, "definition", { value: definition, enumerable: false });
+  return custom;
+};
+export const Wildcard = (id: string, value?: Any): Wildcard => {
+  const wildcard: Wildcard = { _tag: "Wildcard", id };
+  if (value !== undefined) Object.defineProperty(wildcard, "value", { value, enumerable: false });
+  return wildcard;
+};
 export const List = <Item extends Any>(item: Item): List<Item> => ({ _tag: "List", item });
 export const Option = <Inner extends Any>(inner: Inner): Option<Inner> => ({
   _tag: "Option",
   inner,
 });
+
+export const isType = (value: unknown): value is Any => {
+  if (typeof value !== "object" || value === null || !("_tag" in value)) return false;
+  const tag = value._tag;
+  return (
+    tag === "String" ||
+    tag === "Int" ||
+    tag === "Float" ||
+    tag === "Bool" ||
+    tag === "DateTime" ||
+    tag === "List" ||
+    tag === "Option" ||
+    tag === "Custom" ||
+    tag === "Wildcard"
+  );
+};
 
 export const Descriptor: Schema.Codec<Any> = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("String") }),
@@ -151,11 +178,32 @@ export const defineEnum = (
       })),
 });
 
-export const Struct = (definition: StructDefinition): Custom => Custom(definition.id);
-export const Enum = (definition: EnumDefinition): Custom => Custom(definition.id);
+export const Struct = (definition: StructDefinition): Custom => Custom(definition.id, definition);
+export const Enum = (definition: EnumDefinition): Custom => Custom(definition.id, definition);
 
 export const Definitions = Schema.Record(Schema.String, Definition);
 export type Definitions = typeof Definitions.Type;
+
+/** Adds project-local definitions to resolved types without changing their serialized descriptor. */
+export const hydrate = (type: Any, definitions: Definitions): Any => {
+  switch (type._tag) {
+    case "Custom": {
+      const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+      return Custom(type.id, definition);
+    }
+    case "Wildcard":
+      return Wildcard(
+        type.id,
+        type.value === undefined ? undefined : hydrate(type.value, definitions),
+      );
+    case "List":
+      return List(hydrate(type.item, definitions));
+    case "Option":
+      return Option(hydrate(type.inner, definitions));
+    default:
+      return type;
+  }
+};
 
 const finiteValue = Schema.Unknown.check(
   Schema.makeFilter((value: unknown) => {
@@ -180,13 +228,24 @@ const finiteValue = Schema.Unknown.check(
 
 const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown> => {
   if (!Schema.is(finiteValue)(type)) return Schema.Never;
+  const carriesDefinition = (current: Any): boolean =>
+    current._tag === "Custom"
+      ? current.definition !== undefined
+      : current._tag === "List"
+        ? carriesDefinition(current.item)
+        : current._tag === "Option"
+          ? carriesDefinition(current.inner)
+          : false;
+  const useEmbeddedDefinitions = carriesDefinition(type);
   const visited = new Set<string>();
   const referencesExist = (current: Any): boolean => {
     if (current._tag === "Wildcard") return false;
     if (current._tag === "List") return referencesExist(current.item);
     if (current._tag === "Option") return referencesExist(current.inner);
     if (current._tag !== "Custom" || visited.has(current.id)) return true;
-    const definition = Object.hasOwn(definitions, current.id) ? definitions[current.id] : undefined;
+    const definition =
+      (useEmbeddedDefinitions ? current.definition : undefined) ??
+      (Object.hasOwn(definitions, current.id) ? definitions[current.id] : undefined);
     if (definition === undefined || definition.id !== current.id) return false;
     visited.add(current.id);
     const fields =
@@ -218,7 +277,9 @@ const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown>
         return Schema.Option(resolve(type.inner));
       case "Custom":
         return Schema.suspend((): Schema.Codec<unknown> => {
-          const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+          const definition =
+            (useEmbeddedDefinitions ? type.definition : undefined) ??
+            (Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined);
           if (
             definition === undefined ||
             definition.id !== type.id ||

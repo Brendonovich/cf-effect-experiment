@@ -58,29 +58,54 @@ const GoXLRModule = Module.make({
           ),
         ),
     });
-    for (const [id, name] of [
-      ["SetReverbAmount", "Set Reverb Amount"],
-      ["SetEchoAmount", "Set Echo Amount"],
-      ["SetPitchAmount", "Set Pitch Amount"],
-      ["SetGenderAmount", "Set Gender Amount"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        io: (io) => ({
-          amount: io.data.in("amount", t.Int, {
-            name: id === "SetGenderAmount" ? "(%)" : "Amount (%)",
-          }),
-        }),
-        run: ({ io, properties, engine }) =>
-          decodeCommand({ [id]: io.amount }).pipe(
-            Effect.flatMap((command) =>
-              engine.GoXLRCommand({ connectionId: properties.connection, command }),
-            ),
+    yield* context.schema.register({
+      id: "SetReverbAmount",
+      name: "Set Reverb Amount",
+      properties,
+      io: (io) => ({ amount: io.data.in("amount", t.Int, { name: "Amount (%)" }) }),
+      run: ({ io, properties, engine }) =>
+        decodeCommand({ SetReverbAmount: io.amount }).pipe(
+          Effect.flatMap((command) =>
+            engine.GoXLRCommand({ connectionId: properties.connection, command }),
           ),
-      });
-    }
+        ),
+    });
+    yield* context.schema.register({
+      id: "SetEchoAmount",
+      name: "Set Echo Amount",
+      properties,
+      io: (io) => ({ amount: io.data.in("amount", t.Int, { name: "Amount (%)" }) }),
+      run: ({ io, properties, engine }) =>
+        decodeCommand({ SetEchoAmount: io.amount }).pipe(
+          Effect.flatMap((command) =>
+            engine.GoXLRCommand({ connectionId: properties.connection, command }),
+          ),
+        ),
+    });
+    yield* context.schema.register({
+      id: "SetPitchAmount",
+      name: "Set Pitch Amount",
+      properties,
+      io: (io) => ({ amount: io.data.in("amount", t.Int, { name: "Amount (%)" }) }),
+      run: ({ io, properties, engine }) =>
+        decodeCommand({ SetPitchAmount: io.amount }).pipe(
+          Effect.flatMap((command) =>
+            engine.GoXLRCommand({ connectionId: properties.connection, command }),
+          ),
+        ),
+    });
+    yield* context.schema.register({
+      id: "SetGenderAmount",
+      name: "Set Gender Amount",
+      properties,
+      io: (io) => ({ amount: io.data.in("amount", t.Int, { name: "(%)" }) }),
+      run: ({ io, properties, engine }) =>
+        decodeCommand({ SetGenderAmount: io.amount }).pipe(
+          Effect.flatMap((command) =>
+            engine.GoXLRCommand({ connectionId: properties.connection, command }),
+          ),
+        ),
+    });
     yield* context.schema.register({
       id: "SetFXState",
       name: "Set FX State",

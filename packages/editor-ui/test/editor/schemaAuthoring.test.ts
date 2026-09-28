@@ -113,11 +113,11 @@ describe("schema-owned authoring", () => {
         variants: [{ name: "Yes", fields: [] }],
       },
     };
-    for (const operation of CustomTypes.operations)
+    for (const schema of CustomTypes.packageModel.schemas)
       expect(
-        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: operation.id })!.properties,
+        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: schema.id })!.properties,
       ).toEqual(
-        operation.id === "ConstructEnum"
+        schema.id === "ConstructEnum"
           ? expect.objectContaining({ variant: expect.anything() })
           : {},
       );
@@ -277,7 +277,7 @@ describe("schema-owned authoring", () => {
       };
       editor.setProject(project, {
         g: {
-          make: CustomTypes.nodeIO(n.schema, {}, {})!,
+          make: { ...empty, dataOutputs: [port("value", CustomTypes.makeWildcard)] },
           sink: { ...empty, dataInputs: [port("in", t.Custom(t.DefinitionId.make("item")))] },
         },
       });
@@ -317,7 +317,7 @@ describe("schema-owned authoring", () => {
       },
       connections: [wire("source", "out", "target", "value")],
     };
-    const base = CustomTypes.nodeIO(graph.nodes.target.schema, {}, {})!;
+    const base = { ...empty, dataInputs: [port("value", CustomTypes.breakWildcard)] };
     const result = new SchemaAuthoring.GraphResolver(BuiltinAuthoring.registry).resolve(
       graph,
       {
@@ -327,7 +327,7 @@ describe("schema-owned authoring", () => {
       {},
     );
     expect(result.io.target?.dataOutputs).toEqual([]);
-    expect(result.diagnostics.target).toEqual(["Break Struct requires an inferred custom type"]);
+    expect(result.diagnostics.target).toEqual(["Conflicting or recursive wildcard types"]);
   });
 
   it("bounds non-converging generators and reports them", () => {
@@ -413,7 +413,8 @@ describe("schema-owned authoring", () => {
       ],
     };
     const stale = {
-      ...CustomTypes.nodeIO(a.schema, {}, definitions)!,
+      ...empty,
+      dataInputs: [port("value", CustomTypes.breakWildcard)],
       dataOutputs: [{ id: IoId.make('field:"next"'), name: "next", type: t.Custom(id) }],
     };
     const resolved = new SchemaAuthoring.GraphResolver(BuiltinAuthoring.registry).resolve(

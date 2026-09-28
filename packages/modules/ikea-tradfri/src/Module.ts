@@ -23,28 +23,35 @@ const module = Module.make({
           state: { on: io.state },
         }),
     });
-    for (const [id, name, field, label, defaultValue] of [
-      ["SetBrightness", "Set Brightness", "brightness", "Brightness (0-254)", 127],
-      [
-        "SetColorTemperature",
-        "Set Color Temperature",
-        "colorTemp",
-        "Temperature (2200-4000 K)",
-        2700,
-      ],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        io: (io) => ({ value: io.data.in(field, t.Int, { name: label, defaultValue }) }),
-        run: ({ io, properties, engine }) =>
-          engine.IkeaSetLightState({
-            lightId: properties.light,
-            state: { [field]: io.value },
-          }),
-      });
-    }
+    yield* context.schema.register({
+      id: "SetBrightness",
+      name: "Set Brightness",
+      properties,
+      io: (io) => ({
+        value: io.data.in("brightness", t.Int, { name: "Brightness (0-254)", defaultValue: 127 }),
+      }),
+      run: ({ io, properties, engine }) =>
+        engine.IkeaSetLightState({
+          lightId: properties.light,
+          state: { brightness: io.value },
+        }),
+    });
+    yield* context.schema.register({
+      id: "SetColorTemperature",
+      name: "Set Color Temperature",
+      properties,
+      io: (io) => ({
+        value: io.data.in("colorTemp", t.Int, {
+          name: "Temperature (2200-4000 K)",
+          defaultValue: 2700,
+        }),
+      }),
+      run: ({ io, properties, engine }) =>
+        engine.IkeaSetLightState({
+          lightId: properties.light,
+          state: { colorTemp: io.value },
+        }),
+    });
     yield* context.schema.register({
       id: "SetColor",
       name: "Set Color",

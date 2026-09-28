@@ -154,16 +154,30 @@ export const nodeDiagnostics = (
   if (node.schema.package === CustomTypes.packageId) {
     const selection = CustomTypes.selectionError(node.schema.schema, node.properties, definitions);
     if (selection !== undefined) reasons.add(selection);
-    else if (CustomTypes.nodeIO(node.schema, node.properties, definitions) === undefined)
+    else if (!CustomTypes.isOperationSchema(node.schema.schema))
       reasons.add(`Missing generated schema ${node.schema.schema}`);
   }
   const visited = new Set<string>();
+  const available = new Map<string, t.Definition>(Object.entries(definitions));
   const check = (id: string): void => {
     if (visited.has(id)) return;
     visited.add(id);
-    const definition = Object.hasOwn(definitions, id) ? definitions[id] : undefined;
+    const definition = available.get(id);
     if (definition === undefined || definition.id !== id) reasons.add(`Missing type ${id}`);
-    else for (const ref of definitionReferences(definition)) check(ref);
+    else {
+      const fields =
+        definition._tag === "Struct"
+          ? definition.fields
+          : definition.variants.flatMap((variant) => variant.fields);
+      for (const field of fields) checkType(field.type);
+    }
+  };
+  const checkType = (type: t.Any): void => {
+    if (type._tag === "List") return checkType(type.item);
+    if (type._tag === "Option") return checkType(type.inner);
+    if (type._tag !== "Custom") return;
+    if (type.definition !== undefined) available.set(type.id, type.definition);
+    check(type.id);
   };
   for (const port of [
     ...io.dataInputs,
@@ -171,14 +185,12 @@ export const nodeDiagnostics = (
     ...io.executionInputs.flatMap((port) => port.scope ?? []),
     ...io.executionOutputs.flatMap((port) => port.scope ?? []),
   ])
-    for (const id of references(port.type)) check(id);
+    checkType(port.type);
   for (const id of valueReferences(node.properties)) check(id);
   for (const id of valueReferences(node.inputDefaults)) check(id);
   const relevant = Object.fromEntries(
     [...visited].flatMap((id) =>
-      Object.hasOwn(definitions, id) && definitions[id] !== undefined
-        ? [[id, definitions[id]!]]
-        : [],
+      available.get(id) !== undefined ? [[id, available.get(id)!]] : [],
     ),
   );
   for (const error of validate(relevant))
@@ -259,8 +271,7 @@ export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError
   }
   // Required recursive cycles without a terminating variant cannot have a finite value.
   const finite = new Set<string>();
-  const canTerminate = (type: t.Any): boolean =>
-    type._tag !== "Custom" || finite.has(type.id);
+  const canTerminate = (type: t.Any): boolean => type._tag !== "Custom" || finite.has(type.id);
   let changed = true;
   while (changed) {
     changed = false;
@@ -291,10 +302,7 @@ export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError
 };
 
 /** Deletion intentionally leaves dependents dangling; unrelated repair must remain possible. */
-export const validateChange = (
-  before: t.Definitions,
-  change: Change,
-): readonly InvalidError[] => {
+export const validateChange = (before: t.Definitions, change: Change): readonly InvalidError[] => {
   if (change._tag === "Delete") return [];
   if (!Schema.is(finiteAuthoring)(change))
     return [new InvalidError({ id: "", reason: "Type authoring requires finite descriptors" })];

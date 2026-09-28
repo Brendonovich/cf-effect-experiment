@@ -84,13 +84,18 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       executionInputs: [],
       executionOutputs: [],
     };
+    const breakStructIO: NodeIO = {
+      dataInputs: [{ id: IoId.make("value"), type: CustomTypes.breakWildcard }],
+      dataOutputs: [],
+      executionInputs: [],
+      executionOutputs: [],
+    };
     const canvas = project.graphs.graph!.canvas;
-    const node = canvas.nodes.break!;
     const editor = createEditorStore();
     editor.setProject(
       { ...project, graphs: { graph: canvas } },
       {
-        graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
+        graph: { source, break: breakStructIO },
       },
     );
     const output = () => editor.store.nodeIO.graph!.break!.dataOutputs;
@@ -118,7 +123,7 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       graph: {
         source,
         break: {
-          ...CustomTypes.nodeIO(node.schema, {}, project.types)!,
+          ...breakStructIO,
           dataOutputs: inferredOutput,
         },
       },
@@ -132,7 +137,7 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
     expect(output()).toEqual([]);
     // Snapshots carry wildcard input declarations; verify ordinary declaration reload too.
     editor.setProject(snapshot, {
-      graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
+      graph: { source, break: breakStructIO },
     });
     expect(output()[0]!.type).toEqual(t.String);
     dispose();
