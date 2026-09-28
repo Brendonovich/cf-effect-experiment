@@ -92,15 +92,7 @@ export const handler = WebhookIngress.implement(
         const deliveryId = header(request.headers, "x-github-delivery");
         const event = header(request.headers, "x-github-event");
         const signature = header(request.headers, "x-hub-signature-256");
-        const targetId = header(request.headers, "x-github-hook-installation-target-id");
-        const targetType = header(request.headers, "x-github-hook-installation-target-type");
-        if (
-          deliveryId === undefined ||
-          event === undefined ||
-          signature === undefined ||
-          targetType?.toLowerCase() !== "repository" ||
-          targetId !== request.endpoint.metadata.repositoryId
-        )
+        if (deliveryId === undefined || event === undefined || signature === undefined)
           return { status: 400 };
         const secret = yield* endpoints.secret(request.endpoint.id);
         const key = yield* Effect.tryPromise({
@@ -127,10 +119,12 @@ export const handler = WebhookIngress.implement(
         if (event === "ping") return { status: 200 };
         if (!Schema.is(WebhookEventName)(event)) return { status: 204 };
         if (!request.configuration.events.includes(event)) return { status: 204 };
-        const payload = yield* Effect.try({
+        const parsed = yield* Effect.try({
           try: () => JSON.parse(new TextDecoder().decode(request.body)) as unknown,
           catch: () => undefined,
         }).pipe(Effect.option);
+        const payload =
+          parsed._tag === "Some" ? Schema.decodeUnknownOption(Schema.Json)(parsed.value) : parsed;
         if (
           payload._tag === "None" ||
           typeof payload.value !== "object" ||
@@ -142,12 +136,11 @@ export const handler = WebhookIngress.implement(
         const installation = object.installation;
         const repository = object.repository;
         if (
-          (installation !== undefined &&
-            (typeof installation !== "object" ||
-              installation === null ||
-              !("id" in installation) ||
-              typeof installation.id !== "number" ||
-              String(installation.id) !== request.endpoint.metadata.installationId)) ||
+          typeof installation !== "object" ||
+          installation === null ||
+          !("id" in installation) ||
+          typeof installation.id !== "number" ||
+          String(installation.id) !== request.endpoint.metadata.installationId ||
           typeof repository !== "object" ||
           repository === null ||
           !("id" in repository) ||
@@ -176,7 +169,7 @@ export const handler = WebhookIngress.implement(
                 repository: webhook.repository,
                 sender,
                 deliveryId,
-                payloadJson: JSON.stringify(payload.value),
+                payload: payload.value,
               }),
               eventId: deliveryId,
             },

@@ -86,6 +86,18 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         packages: new Map(),
         runtimes: new Map(),
       });
+      const definitionsOf = (
+        current: {
+          readonly definitions: DataType.Definitions;
+          readonly packages: Map<PackageId, Package.Model>;
+        },
+        provided?: DataType.Definitions,
+      ): DataType.Definitions => ({
+        ...(provided ?? current.definitions),
+        ...Object.fromEntries(
+          [...current.packages.values()].flatMap((pkg) => Object.entries(pkg.types ?? {})),
+        ),
+      });
 
       const loadPackage = Effect.fn("Packages.loadPackage")(function* (
         pkg: Package.Model,
@@ -173,7 +185,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         if (schema === undefined) return yield* new Package.SchemaNotFoundError({ ref });
         const runtime = current.runtimes.get(calculatorKey(ref));
         if (runtime === undefined) return yield* new Package.SchemaNotFoundError({ ref });
-        return runtime.getIO(properties, definitions ?? current.definitions);
+        return runtime.getIO(properties, definitionsOf(current, definitions));
       });
 
       const normalizeProperties = Effect.fn("Packages.normalizeProperties")(function* (
@@ -300,7 +312,8 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         value: unknown,
         providedDefinitions?: DataType.Definitions,
       ) {
-        const definitions = providedDefinitions ?? (yield* Ref.get(state)).definitions;
+        const current = yield* Ref.get(state);
+        const definitions = definitionsOf(current, providedDefinitions);
         const port = yield* getDataInput(ref, properties, input);
         const codec = DataType.JsonValueSchema(port.type, definitions);
         const decoded = yield* Schema.decodeUnknownEffect(codec)(value).pipe(
@@ -345,7 +358,8 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         input: string,
         providedDefinitions?: DataType.Definitions,
       ) {
-        const definitions = providedDefinitions ?? (yield* Ref.get(state)).definitions;
+        const current = yield* Ref.get(state);
+        const definitions = definitionsOf(current, providedDefinitions);
         const port = yield* getDataInput(ref, properties, input);
         if (!port.suggestions || port.type._tag !== "String") {
           return yield* new Package.InvalidInputDefaultError({

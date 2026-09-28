@@ -2314,6 +2314,7 @@ export const layer = Layer.effect(Service)(
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
+          types: definition.types ?? {},
           ...(definition.description === undefined ? {} : { description: definition.description }),
           resources: resources.map((resource) => ({
             id: resource.key,

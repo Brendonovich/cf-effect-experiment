@@ -142,6 +142,7 @@ export type ExecutorError =
 interface RegisteredModule {
   readonly schemas: ReadonlyMap<string, Registration.RegisteredSchema>;
   readonly engineClient: unknown;
+  readonly types: DataType.Definitions;
 }
 
 interface ExecutionState {
@@ -366,6 +367,7 @@ export const make = Effect.fnUntraced(function* (
       next.set(definition.id, {
         schemas: new Map(registered.map((schema) => [schema.id, schema])),
         engineClient,
+        types: definition.types ?? {},
       });
       return next;
     });
@@ -375,9 +377,16 @@ export const make = Effect.fnUntraced(function* (
     function* (request) {
       if (request.precomputed !== undefined) return request.precomputed;
       const registeredModules = new Map(yield* Ref.get(modules));
+      const definitions: DataType.Definitions = {
+        ...request.types,
+        ...Object.fromEntries(
+          [...registeredModules.values()].flatMap((registered) => Object.entries(registered.types)),
+        ),
+      };
       registeredModules.set(CustomTypes.packageId, {
-        schemas: CustomTypes.schemas(request.types),
+        schemas: CustomTypes.schemas(definitions),
         engineClient: undefined,
+        types: {},
       });
       const registeredModule = registeredModules.get(request.moduleId);
       if (registeredModule === undefined)
@@ -404,7 +413,7 @@ export const make = Effect.fnUntraced(function* (
         nodeIO.dataInputs,
         (input) =>
           Schema.decodeUnknownEffect(
-            DataType.JsonValueSchema(resolveType(input.type), request.types),
+            DataType.JsonValueSchema(resolveType(input.type), definitions),
           )(request.inputs[input.id]).pipe(
             Effect.tap((value) =>
               Effect.sync(() => {
@@ -435,7 +444,7 @@ export const make = Effect.fnUntraced(function* (
         scopePayload = Object.fromEntries(
           yield* Effect.forEach(input.scope ?? [], (field) =>
             Schema.decodeUnknownEffect(
-              DataType.JsonValueSchema(resolveType(field.type), request.types),
+              DataType.JsonValueSchema(resolveType(field.type), definitions),
             )(request.scopeInput!.payload[field.id]).pipe(
               Effect.map((value) => [field.id, value] as const),
               Effect.catchCause(
@@ -479,7 +488,7 @@ export const make = Effect.fnUntraced(function* (
         schema.run({
           types: {
             resolve: resolveType,
-            definitions: request.types,
+            definitions,
           },
           input: (input) => inputs.get(input.id),
           scopeInput: (input) =>
@@ -525,7 +534,7 @@ export const make = Effect.fnUntraced(function* (
           : Object.fromEntries(
               yield* Effect.forEach(fields, (field) =>
                 Schema.encodeUnknownEffect(
-                  DataType.JsonValueSchema(resolveType(field.type), request.types),
+                  DataType.JsonValueSchema(resolveType(field.type), definitions),
                 )(
                   selected instanceof Registration.ScopeExecution
                     ? selected.payload[field.id]
@@ -555,7 +564,7 @@ export const make = Effect.fnUntraced(function* (
             }),
           );
         return Schema.encodeUnknownEffect(
-          DataType.JsonValueSchema(resolveType(port.type), request.types),
+          DataType.JsonValueSchema(resolveType(port.type), definitions),
         )(output.value).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
           Effect.map((value) => ({ outputId: output.outputId, value })),
@@ -588,9 +597,16 @@ export const make = Effect.fnUntraced(function* (
       invocation?.options?.stack ?? (invocation === undefined ? [] : [invocation.canvasId]);
     const invocationResult: Record<string, unknown> = {};
     const registeredModules = new Map(yield* Ref.get(modules));
+    const definitions: DataType.Definitions = {
+      ...currentProject.types,
+      ...Object.fromEntries(
+        [...registeredModules.values()].flatMap((registered) => Object.entries(registered.types)),
+      ),
+    };
     registeredModules.set(CustomTypes.packageId, {
-      schemas: CustomTypes.schemas(currentProject.types),
+      schemas: CustomTypes.schemas(definitions),
       engineClient: undefined,
+      types: {},
     });
     if (definition !== undefined && !registeredModules.has(definition.id))
       return yield* new ModuleNotRegistered({ moduleId: definition.id });
@@ -812,7 +828,7 @@ export const make = Effect.fnUntraced(function* (
           // The ordinary preflight still reports them if it reaches them.
           if (declaration !== undefined) declarations.set(candidate.id, declaration);
         }
-        const derive = CustomTypes.derivedIO(graph, currentProject.types);
+        const derive = CustomTypes.derivedIO(graph, definitions);
         let result = cache.update(declarations, graph.connections, derive);
         if (Result.isSuccess(result)) {
           for (const [id, io] of declarations) {
@@ -909,9 +925,7 @@ export const make = Effect.fnUntraced(function* (
           if (type._tag === "List") return visitType(type.item);
           if (type._tag === "Option") return visitType(type.inner);
           if (type._tag !== "Custom" || Object.hasOwn(dependencyDefinitions, type.id)) return;
-          const definition = Object.hasOwn(currentProject.types, type.id)
-            ? currentProject.types[type.id]
-            : undefined;
+          const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
           if (definition === undefined) {
             missing.add(type.id);
             return;
@@ -967,9 +981,10 @@ export const make = Effect.fnUntraced(function* (
               inputId,
               reason: "Stored default refers to a missing or ambiguous data input",
             });
-          yield* Schema.decodeUnknownEffect(
-            DataType.JsonValueSchema(inputs[0]!.type, currentProject.types),
-          )(value, { onExcessProperty: "error" }).pipe(
+          yield* Schema.decodeUnknownEffect(DataType.JsonValueSchema(inputs[0]!.type, definitions))(
+            value,
+            { onExcessProperty: "error" },
+          ).pipe(
             Effect.catchCause(
               () =>
                 new InvalidInputValue({
@@ -992,9 +1007,10 @@ export const make = Effect.fnUntraced(function* (
           if (incoming.length === 0 && !Object.hasOwn(node.inputDefaults, input.id)) {
             if (input.defaultValue === undefined)
               return yield* new MissingInput({ nodeId: node.id, inputId: input.id });
-            yield* Schema.decodeUnknownEffect(
-              DataType.ValueSchema(input.type, currentProject.types),
-            )(input.defaultValue, { onExcessProperty: "error" }).pipe(
+            yield* Schema.decodeUnknownEffect(DataType.ValueSchema(input.type, definitions))(
+              input.defaultValue,
+              { onExcessProperty: "error" },
+            ).pipe(
               Effect.catchCause(
                 () =>
                   new InvalidInputValue({
@@ -1258,7 +1274,7 @@ export const make = Effect.fnUntraced(function* (
               schema.run({
                 types: {
                   resolve: (type) => wildcardGraphs.get(graph.id)!.resolve(node.id, type),
-                  definitions: currentProject.types,
+                  definitions: definitions,
                 },
                 input: (input) => inputs.get(input.id),
                 scopeInput: (input) =>
@@ -1401,13 +1417,13 @@ export const make = Effect.fnUntraced(function* (
         };
         const serializeResult = (result: NodeExecutionResult) =>
           transformResult(result, (type, value) =>
-            Schema.encodeUnknownEffect(DataType.JsonValueSchema(type, currentProject.types))(
-              value,
-            ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json))),
+            Schema.encodeUnknownEffect(DataType.JsonValueSchema(type, definitions))(value).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+            ),
           );
         const deserializeResult = (result: SerializedNodeExecutionResult) =>
           transformResult(result, (type, value) =>
-            Schema.decodeUnknownEffect(DataType.JsonValueSchema(type, currentProject.types))(value),
+            Schema.decodeUnknownEffect(DataType.JsonValueSchema(type, definitions))(value),
           );
         const serializeRequest = Effect.gen(function* () {
           const precomputed = GraphFunction.isBoundaryNodeId(node.id)
@@ -1415,9 +1431,9 @@ export const make = Effect.fnUntraced(function* (
             : undefined;
           const encodedInputs = Object.fromEntries(
             yield* Effect.forEach(nodeIO.dataInputs, (input) =>
-              Schema.encodeUnknownEffect(
-                DataType.JsonValueSchema(input.type, currentProject.types),
-              )(inputs.get(input.id)).pipe(
+              Schema.encodeUnknownEffect(DataType.JsonValueSchema(input.type, definitions))(
+                inputs.get(input.id),
+              ).pipe(
                 Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
                 Effect.map((value) => [input.id, value] as const),
                 Effect.catchCause(
@@ -1473,9 +1489,9 @@ export const make = Effect.fnUntraced(function* (
                   inputId: incomingScope.inputId,
                   payload: Object.fromEntries(
                     yield* Effect.forEach(scopeFields ?? [], (field) =>
-                      Schema.encodeUnknownEffect(
-                        DataType.JsonValueSchema(field.type, currentProject.types),
-                      )(incomingScope.payload[field.id]).pipe(
+                      Schema.encodeUnknownEffect(DataType.JsonValueSchema(field.type, definitions))(
+                        incomingScope.payload[field.id],
+                      ).pipe(
                         Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
                         Effect.map((value) => [field.id, value] as const),
                         Effect.catchCause(
@@ -1519,7 +1535,7 @@ export const make = Effect.fnUntraced(function* (
             inputs: encodedInputs,
             properties: encodedProperties,
             ...(encodedEvent === undefined ? {} : { event: encodedEvent }),
-            types: currentProject.types,
+            types: definitions,
             resolvedTypes,
             ...(precomputed === undefined ? {} : { precomputed }),
             ...(encodedScope === undefined ? {} : { scopeInput: encodedScope }),
@@ -1571,9 +1587,9 @@ export const make = Effect.fnUntraced(function* (
               reason: `Expected ${ports[0]?.type._tag ?? "a declared data output"}`,
             });
           }
-          yield* Schema.decodeUnknownEffect(
-            DataType.ValueSchema(ports[0]!.type, currentProject.types),
-          )(output.value).pipe(
+          yield* Schema.decodeUnknownEffect(DataType.ValueSchema(ports[0]!.type, definitions))(
+            output.value,
+          ).pipe(
             Effect.catchCause(
               () =>
                 new InvalidOutputValue({
@@ -1657,7 +1673,7 @@ export const make = Effect.fnUntraced(function* (
           );
           if (Object.hasOwn(node.inputDefaults, input.id)) {
             return yield* Schema.decodeUnknownEffect(
-              DataType.JsonValueSchema(input.type, currentProject.types),
+              DataType.JsonValueSchema(input.type, definitions),
             )(node.inputDefaults[input.id]).pipe(
               Effect.catchCause(
                 () =>
@@ -1670,9 +1686,9 @@ export const make = Effect.fnUntraced(function* (
             );
           }
           if (input.defaultValue !== undefined) {
-            return yield* Schema.decodeUnknownEffect(
-              DataType.ValueSchema(input.type, currentProject.types),
-            )(input.defaultValue).pipe(
+            return yield* Schema.decodeUnknownEffect(DataType.ValueSchema(input.type, definitions))(
+              input.defaultValue,
+            ).pipe(
               Effect.catchCause(
                 () =>
                   new InvalidInputValue({
@@ -1740,9 +1756,9 @@ export const make = Effect.fnUntraced(function* (
             });
           value = state.outputs.get(key);
         }
-        return yield* Schema.decodeUnknownEffect(
-          DataType.ValueSchema(input.type, currentProject.types),
-        )(value).pipe(
+        return yield* Schema.decodeUnknownEffect(DataType.ValueSchema(input.type, definitions))(
+          value,
+        ).pipe(
           Effect.catchCause(
             () =>
               new InvalidInputValue({

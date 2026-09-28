@@ -59,7 +59,7 @@ export class WebhookDelivery extends Schema.TaggedClass<WebhookDelivery>()(
     repository: Schema.String,
     sender: Schema.String,
     deliveryId: Schema.String,
-    payloadJson: Schema.String,
+    payload: Schema.Json,
   },
 ) {}
 

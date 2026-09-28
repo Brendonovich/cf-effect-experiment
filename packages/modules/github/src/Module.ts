@@ -1,7 +1,7 @@
 import type * as Engine from "@macrograph/module/Engine";
 
 import { DataType, Module } from "@macrograph/module";
-import { Effect } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import {
   GitHubAccount,
@@ -11,11 +11,73 @@ import {
   type ActionId,
   type WebhookEventName,
 } from "./Definition.ts";
+import { WebhookPayloadTypes, WebhookTypeDefinitions } from "./WebhookTypes.ts";
+
+const preparePayload = (
+  type: DataType.Any,
+  value: Schema.Json,
+  definitions: DataType.Definitions,
+): unknown => {
+  if (type._tag === "List")
+    return Array.isArray(value)
+      ? value.map((item) => preparePayload(type.item, item, definitions))
+      : value;
+  if (type._tag === "Option")
+    return value === null
+      ? Option.none()
+      : Option.some(preparePayload(type.inner, value, definitions));
+  if (type._tag === "DateTime") {
+    const decoded = Schema.decodeUnknownOption(
+      Schema.Union([Schema.DateTimeUtc, Schema.DateTimeZoned]),
+    )(value);
+    return Option.isSome(decoded) ? decoded.value : value;
+  }
+  if (type._tag !== "Custom") return value;
+
+  const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+  if (definition === undefined) return value;
+  if (definition._tag === "Enum") {
+    if (typeof value === "string" && definition.variants.some((variant) => variant.name === value))
+      return { _type: definition.id, _tag: value };
+    if (!isJsonObject(value)) return value;
+    const tag = value["_tag"];
+    const variant = definition.variants.find((candidate) => candidate.name === tag);
+    if (variant === undefined) return value;
+    return {
+      _type: definition.id,
+      _tag: tag,
+      ...Object.fromEntries(
+        variant.fields.map((field) => [
+          field.name,
+          Object.hasOwn(value, field.name)
+            ? preparePayload(field.type, value[field.name]!, definitions)
+            : null,
+        ]),
+      ),
+    };
+  }
+  if (!isJsonObject(value)) return value;
+  return {
+    _type: definition.id,
+    ...Object.fromEntries(
+      definition.fields.map((field) => [
+        field.name,
+        Object.hasOwn(value, field.name)
+          ? preparePayload(field.type, value[field.name]!, definitions)
+          : null,
+      ]),
+    ),
+  };
+};
+
+const isJsonObject = (value: Schema.Json): value is { readonly [key: string]: Schema.Json } =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 
 const GitHubModule = Module.make({
   id: "github",
   name: "GitHub",
   engine: GitHubEngine,
+  types: WebhookTypeDefinitions,
   effect: Effect.fnUntraced(function* (ctx) {
     const request = (
       engine: Engine.RuntimeClientOf<typeof GitHubEngine>,
@@ -275,17 +337,26 @@ const GitHubModule = Module.make({
           repository: io.data.out("repository", DataType.String, { name: "Repository" }),
           sender: io.data.out("sender", DataType.String, { name: "Sender" }),
           deliveryId: io.data.out("deliveryId", DataType.String, { name: "Delivery ID" }),
-          payload: io.data.out("payload", DataType.String, { name: "Payload JSON" }),
+          payload: io.data.out("payload", WebhookPayloadTypes[definition.event], {
+            name: "Payload",
+          }),
+          payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
         }),
-        run: ({ event, io }) =>
-          Effect.sync(() => {
+        run: ({ event, io, types }) =>
+          Effect.gen(function* () {
             if (event === undefined) return;
             io.action(event.action);
             io.owner(event.owner);
             io.repository(event.repository);
             io.sender(event.sender);
             io.deliveryId(event.deliveryId);
-            io.payload(event.payloadJson);
+            io.payloadJson(JSON.stringify(event.payload));
+            const payloadType = WebhookPayloadTypes[definition.event];
+            const payload = yield* Schema.decodeUnknownEffect(
+              DataType.ValueSchema(payloadType, types.definitions),
+            )(preparePayload(payloadType, event.payload, types.definitions));
+            if (typeof payload === "object" && payload !== null && !Array.isArray(payload))
+              io.payload(payload as Readonly<Record<string, unknown>>);
           }),
       });
     }

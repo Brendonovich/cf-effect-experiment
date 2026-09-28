@@ -1,5 +1,6 @@
 import type { Effect } from "effect";
 
+import type * as DataType from "./DataType.ts";
 import type * as Engine from "./Engine.ts";
 import type { ModuleContext } from "./Registration.ts";
 
@@ -7,6 +8,7 @@ export type Module<Definition extends Engine.AnyDef = never> = {
   readonly id: string;
   readonly name?: string;
   readonly description?: string;
+  readonly types?: DataType.Definitions;
   readonly effect: (context: ModuleContext<Definition>) => Effect.Effect<void>;
 } & ([Definition] extends [never] ? { readonly engine?: never } : { readonly engine: Definition });
 
