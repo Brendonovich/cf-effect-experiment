@@ -93,7 +93,7 @@ const styles = stylex.create({
   },
   packageToggle: {
     alignItems: "center",
-    backgroundColor: { default: colors.gray3, ":hover": colors.gray5 },
+    backgroundColor: colors.gray3,
     color: colors.gray11,
     display: "flex",
     fontSize: 12,
@@ -107,6 +107,7 @@ const styles = stylex.create({
     top: 0,
     width: "100%",
     zIndex: 10,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
   disclosure: { flexShrink: 0, height: 12, width: 12 },
   disclosureOpen: { transform: "rotate(90deg)" },
@@ -114,11 +115,7 @@ const styles = stylex.create({
   packageCount: { color: colors.gray9, fontSize: 11 },
   option: {
     alignItems: "center",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.gray5,
-      ":focus-visible": colors.gray5,
-    },
+    backgroundColor: { default: "transparent", ":focus-visible": colors.gray5 },
     borderRadius: 4,
     color: colors.gray12,
     display: "flex",
@@ -130,6 +127,7 @@ const styles = stylex.create({
     textAlign: "left",
     width: "calc(100% - 8px)",
     minHeight: { default: null, "@media (pointer: coarse)": 40 },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
   dot: { borderRadius: "50%", height: 12, width: 12 },
   event: { backgroundColor: "#b91c1c" },

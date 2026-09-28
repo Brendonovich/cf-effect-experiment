@@ -8,7 +8,7 @@ import { capturedShortcut, editorShortcuts, type ShortcutAction } from "./shortc
 
 const styles = stylex.create({
   button: {
-    backgroundColor: { default: "transparent", ":hover": colors.gray4 },
+    backgroundColor: "transparent",
     borderRadius: 4,
     color: colors.gray12,
     fontSize: 12,
@@ -16,6 +16,7 @@ const styles = stylex.create({
     paddingInline: 12,
     outline: "none",
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
   },
   pane: {
     backgroundColor: colors.gray2,

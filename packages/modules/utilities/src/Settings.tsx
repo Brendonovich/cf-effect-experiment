@@ -21,7 +21,7 @@ const styles = stylex.create({
   text: { color: "var(--gray-11)", fontSize: 12, margin: 0 },
   error: { color: "var(--red-10)", fontSize: 12, margin: 0 },
   button: {
-    backgroundColor: { default: "var(--gray-4)", ":hover": "var(--gray-5)" },
+    backgroundColor: "var(--gray-4)",
     border: 0,
     borderRadius: 2,
     color: "var(--gray-12)",
@@ -32,6 +32,7 @@ const styles = stylex.create({
     height: 32,
     opacity: { default: 1, ":disabled": 0.5 },
     paddingInline: 12,
+    "@media (hover: hover)": { ":hover": { backgroundColor: "var(--gray-5)" } },
   },
 });
 

@@ -16,10 +16,14 @@ const styles = stylex.create({
   },
   row: { display: "flex", alignItems: "center", minWidth: 0 },
   selected: {
-    backgroundColor: { default: colors.gray4, ":hover": colors.gray5 },
+    backgroundColor: colors.gray4,
     boxShadow: `inset -2px 0 0 ${colors.focus}`,
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
-  unselected: { backgroundColor: { default: "transparent", ":hover": colors.gray4 } },
+  unselected: {
+    backgroundColor: "transparent",
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray4 } },
+  },
   name: {
     flex: 1,
     minWidth: 0,
@@ -89,22 +93,16 @@ const styles = stylex.create({
     paddingInline: 8,
     fontSize: 12,
     textAlign: "left",
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.gray5,
-      ":focus-visible": colors.gray5,
-    },
+    backgroundColor: { default: "transparent", ":focus-visible": colors.gray5 },
     outline: "none",
     "@media (pointer: coarse)": { minHeight: 40 },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.gray5 } },
   },
   divider: { height: 1, backgroundColor: colors.gray6, marginBlock: 3, marginInline: 4 },
   danger: {
     color: colors.red11,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": colors.red3,
-      ":focus-visible": colors.red3,
-    },
+    backgroundColor: { default: "transparent", ":focus-visible": colors.red3 },
+    "@media (hover: hover)": { ":hover": { backgroundColor: colors.red3 } },
   },
   confirmText: { fontSize: 11, color: colors.gray11, padding: 8, lineHeight: 1.5 },
 });

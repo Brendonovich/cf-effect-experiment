@@ -16,6 +16,7 @@ import {
   solidV2NoMirroredDerivedState,
   solidV2NoUntrackedRenderCallbackRead,
   solidV2PreferEffectReturnCleanup,
+  stylexRequireHoverMedia,
 } from "./macrograph.mjs";
 
 // Oxlint is supplied by Vite+ rather than declared as a root dependency.
@@ -271,6 +272,97 @@ tester.run("no-schema-class-mutation", noSchemaClassMutation, {
       filename: "/repo/packages/core/src/User.ts",
       code: 'import { Schema } from "effect"; class User extends Schema.Class<User>("User")({ name: Schema.String }) {}; const user = new User({ name: "old" }); user.name = "new"',
       errors: [{ messageId: "mutation" }],
+    },
+  ],
+});
+
+tester.run("stylex-require-hover-media", stylexRequireHoverMedia, {
+  valid: [
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: "black", "@media (hover: hover)": {
+          ":hover": { color: "red" }
+        } } })`,
+    },
+    {
+      code: `import * as sx from "@stylexjs/stylex";
+        sx.create({ icon: { opacity: 0, "@media (hover: hover)": {
+          [sx.when.ancestor(":hover", marker)]: { opacity: 1 }
+        } } })`,
+    },
+    {
+      code: `import { create as createStyles, when as conditions } from "@stylexjs/stylex";
+        createStyles({ icon: { "@media (hover: hover)": {
+          [conditions.ancestor(":hover")]: { opacity: 1 }
+        } } })`,
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: {
+          ":focus-visible": "red", ":active": "blue"
+        } } })`,
+    },
+    { code: `const unrelated = { ":hover": "red" }` },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ input: { color: {
+          [stylex.when.ancestor(":focus-within", marker)]: "red"
+        } } })`,
+    },
+  ],
+  invalid: [
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: { ":hover": {
+          default: null, "@media (hover: hover)": "red"
+        } } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: { ":hover": "red" } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ icon: { opacity: {
+          [stylex.when.ancestor(":hover", marker)]: 1
+        } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: {
+          ":hover": "red", "@media (hover: hover)": "blue"
+        } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: { ":hover": {
+          default: null, "@media (pointer: fine)": "red"
+        } } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as stylex from "@stylexjs/stylex";
+        stylex.create({ button: { color: { ":hover": {
+          nested: { "@media (hover: hover)": "red" }
+        } } } })`,
+      errors: [{ messageId: "hoverMedia" }],
+    },
+    {
+      code: `import { create as styles } from "@stylexjs/stylex";
+        styles({ button: {
+          color: { ":hover": "red" },
+          opacity: { ":hover": 1 }
+        } })`,
+      errors: [{ messageId: "hoverMedia" }, { messageId: "hoverMedia" }],
+    },
+    {
+      code: `import * as sx from "@stylexjs/stylex";
+        sx.create({ button: { color: { ":hover": "red" } } })`,
+      errors: [{ messageId: "hoverMedia" }],
     },
   ],
 });

@@ -567,6 +567,78 @@ export const noSchemaClassMutation = {
   },
 };
 
+export const stylexRequireHoverMedia = {
+  meta: {
+    type: "problem",
+    schema: false,
+    messages: {
+      hoverMedia: 'StyleX :hover conditions must be nested under "@media (hover: hover)".',
+    },
+  },
+  create(context) {
+    const namespaces = new Set();
+    const creates = new Set();
+    const whens = new Set();
+    const isNamespaceMember = (node, name) =>
+      node?.type === "MemberExpression" &&
+      node.object.type === "Identifier" &&
+      namespaces.has(node.object.name) &&
+      memberName(node) === name;
+    const isCreateCall = (node) =>
+      node.callee.type === "Identifier"
+        ? creates.has(node.callee.name)
+        : isNamespaceMember(node.callee, "create");
+    const isWhen = (node) =>
+      node?.type === "Identifier" ? whens.has(node.name) : isNamespaceMember(node, "when");
+    const isHoverCondition = (property) => {
+      if (staticSpecifier(property.key) === ":hover") return true;
+      if (!property.computed || property.key.type !== "CallExpression") return false;
+      const call = property.key;
+      return (
+        call.arguments.length > 0 &&
+        staticSpecifier(call.arguments[0]) === ":hover" &&
+        call.callee.type === "MemberExpression" &&
+        memberName(call.callee) === "ancestor" &&
+        isWhen(call.callee.object)
+      );
+    };
+    const isWithinHoverMedia = (property) => {
+      let candidate = property.parent;
+      while (candidate != null) {
+        if (
+          candidate.type === "Property" &&
+          staticSpecifier(candidate.key) === "@media (hover: hover)"
+        )
+          return true;
+        candidate = candidate.parent;
+      }
+      return false;
+    };
+    return {
+      ImportDeclaration(node) {
+        if (staticSpecifier(node.source) !== "@stylexjs/stylex") return;
+        for (const specifier of node.specifiers) {
+          if (specifier.type === "ImportNamespaceSpecifier") namespaces.add(specifier.local.name);
+          if (specifier.imported?.name === "create") creates.add(importedLocal(specifier));
+          if (specifier.imported?.name === "when") whens.add(importedLocal(specifier));
+        }
+      },
+      CallExpression(node) {
+        if (!isCreateCall(node) || node.arguments[0]?.type !== "ObjectExpression") return;
+        walk(node.arguments[0], (candidate) => {
+          if (
+            candidate.type === "Property" &&
+            isHoverCondition(candidate) &&
+            !isWithinHoverMedia(candidate)
+          )
+            context.report({ node: candidate.key, messageId: "hoverMedia" });
+          return false;
+        });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "macrograph" },
   rules: {
@@ -583,5 +655,6 @@ export default {
     "no-unhandled-run-fork": noUnhandledRunFork,
     "no-private-workspace-subpath-imports": noPrivateWorkspaceSubpathImports,
     "no-schema-class-mutation": noSchemaClassMutation,
+    "stylex-require-hover-media": stylexRequireHoverMedia,
   },
 };

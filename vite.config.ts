@@ -15,6 +15,7 @@ export default defineConfig({
       "macrograph/solid-v2-no-mirrored-derived-state": "warn",
       "macrograph/solid-v2-no-untracked-render-callback-read": "error",
       "macrograph/solid-v2-prefer-effect-return-cleanup": "error",
+      "macrograph/stylex-require-hover-media": "error",
       "macrograph/no-forbidden-architecture-imports": [
         "error",
         {
