@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
+    "alchemy": "pnpm exec node --env-file-if-exists=.env node_modules/alchemy/bin/alchemy.js",
     "deploy": "pnpm alchemy deploy",
     "dev": "pnpm alchemy dev",
     "enroll": "node src/credentials.ts enroll",

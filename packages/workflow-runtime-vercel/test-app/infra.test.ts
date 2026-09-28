@@ -1,5 +1,5 @@
 import { verify } from "@macrograph/workflow-runtime-test/verify";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "alchemy/Test/Vitest";
 import { Effect } from "effect";
 
 import stack, { providers } from "./alchemy.run.ts";

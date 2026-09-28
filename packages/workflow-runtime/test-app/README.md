@@ -12,7 +12,7 @@ workflow unrelated to MacroGraph.
 
 ## Commands
 
-Run from the repository root after `pnpm install`. Bun is required for Alchemy.
+Run from the repository root after `pnpm install`.
 
 ```sh
 pnpm --filter @macrograph/workflow-runtime-cloudflare test:infra
@@ -51,7 +51,7 @@ default loopback port 3097 is in use.
 
 ### Effect Cluster
 
-Runs a real SQL-backed `SingleRunner` locally, with Bun SQLite message storage
+Runs a real SQL-backed `SingleRunner` locally, with Node SQLite message storage
 at `packages/workflow-runtime-effect-cluster/test-app/.alchemy/cluster.sqlite`.
 Alchemy manages the server using `Command.Dev`; no cloud account is required.
 The test also submits an already-completed execution again and verifies that

@@ -1,10 +1,11 @@
-import * as BunCrypto from "@effect/platform-bun/BunCrypto";
-import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { EffectClusterRuntime } from "@macrograph/workflow-runtime-effect-cluster";
 import { input, makeModules, RunRequest } from "@macrograph/workflow-runtime-test/fixture";
 import { Cause, Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { SingleRunner } from "effect/unstable/cluster";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
 
 mkdirSync(".alchemy", { recursive: true });
 const journal = ".alchemy/executions.jsonl";
@@ -17,53 +18,69 @@ const runtime = ManagedRuntime.make(
   EffectClusterRuntime.runtimeLayer({ modules }).pipe(
     Layer.provide(SingleRunner.layer({ runnerStorage: "memory" })),
     Layer.provide(SqliteClient.layer({ filename: ".alchemy/cluster.sqlite" })),
-    Layer.provide(BunCrypto.layer),
+    Layer.provide(NodeCrypto.layer),
   ),
 );
 const workflow = EffectClusterRuntime.GraphExecutionWorkflow;
 await runtime.runPromise(Effect.void);
 
-const server = Bun.serve({
-  hostname: "127.0.0.1",
-  port: Number(process.env.PORT ?? 0),
-  async fetch(request) {
-    const path = new URL(request.url).pathname;
-    if (path === "/health") return Response.json({ ok: true });
+const server = createServer((request, response) => {
+  void (async () => {
+    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    const json = (status: number, body: unknown) => {
+      response.writeHead(status, { "content-type": "application/json" });
+      response.end(JSON.stringify(body));
+    };
+    if (path === "/health") return json(200, { ok: true });
     if (path === "/executions")
-      return Response.json({
+      return json(200, {
         count: existsSync(journal)
           ? readFileSync(journal, "utf8").trim().split("\n").filter(Boolean).length
           : 0,
       });
     if (path === "/runs" && request.method === "POST") {
-      const raw = await request.json();
-      if (!Schema.is(RunRequest)(raw)) return new Response(null, { status: 400 });
+      const chunks: Array<Uint8Array> = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const raw: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (!Schema.is(RunRequest)(raw)) return json(400, null);
       const body = raw;
       const id = await runtime.runPromise(
         workflow.execute(input(body.executionId, body.value), { discard: true }),
       );
-      return Response.json({ id });
+      return json(200, { id });
     }
     if (path.startsWith("/runs/") && request.method === "GET") {
       const result = await runtime.runPromise(workflow.poll(path.slice("/runs/".length)));
-      if (Option.isNone(result)) return Response.json({ status: "running" });
-      if (result.value._tag === "Suspended") return Response.json({ status: "suspended" });
+      if (Option.isNone(result)) return json(200, { status: "running" });
+      if (result.value._tag === "Suspended") return json(200, { status: "suspended" });
       const exit = result.value.exit;
-      return Response.json(
+      return json(
+        200,
         Exit.isSuccess(exit)
           ? { status: "complete", output: exit.value }
           : { status: "errored", error: Cause.pretty(exit.cause) },
       );
     }
-    return new Response(null, { status: 404 });
-  },
+    return json(404, null);
+  })().catch((error: unknown) => {
+    console.error(error);
+    if (!response.headersSent) response.writeHead(500);
+    response.end();
+  });
 });
-console.log(`http://127.0.0.1:${server.port}`);
+await new Promise<void>((resolve) =>
+  server.listen(Number(process.env.PORT ?? 0), "127.0.0.1", resolve),
+);
+const address = server.address();
+if (address === null || typeof address === "string") throw new Error("Server did not bind to TCP");
+console.log(`http://127.0.0.1:${address.port}`);
 let closing = false;
 const shutdown = async () => {
   if (closing) return;
   closing = true;
-  await server.stop(true);
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error === undefined ? resolve() : reject(error))),
+  );
   await runtime.dispose();
   process.exit(0);
 };

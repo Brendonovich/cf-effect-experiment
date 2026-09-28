@@ -1,6 +1,6 @@
 import { Started, Status, verify } from "@macrograph/workflow-runtime-test/verify";
 import * as Command from "alchemy/Command";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "alchemy/Test/Vitest";
 import { Effect, Schema } from "effect";
 import assert from "node:assert/strict";
 
@@ -37,11 +37,11 @@ test(
         );
         if (status.status === "complete") break;
         assert.ok(attempt < 60, "Duplicate test timed out");
-        await Bun.sleep(500);
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
       const before = await (await fetch(`${url}/executions`)).json();
       assert.equal((await start()).id, id);
-      await Bun.sleep(1_000);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
       assert.deepEqual(await (await fetch(`${url}/executions`)).json(), before);
     });
   }),
