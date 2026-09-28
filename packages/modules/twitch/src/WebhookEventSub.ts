@@ -1,4 +1,5 @@
-import { HttpEndpoint, HttpIngress } from "@macrograph/module";
+import { HttpEndpoint } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import {
   Context,
   Clock,

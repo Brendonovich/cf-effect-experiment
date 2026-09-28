@@ -1,4 +1,4 @@
-import { HttpIngress } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Option, Schema } from "effect";
 
 import { Payment, PaymentType, Shipping, ShopItem, WebhookId } from "./Definition.ts";

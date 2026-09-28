@@ -5,7 +5,6 @@ export * as Engine from "./Engine.ts";
 export * as EngineTest from "./EngineTest.ts";
 export { type ExecutionContext, type NodeExecutionContext } from "./ExecutionContext.ts";
 export * as HttpEndpoint from "./HttpEndpoint.ts";
-export * as HttpIngress from "./HttpIngress.ts";
 export * as Module from "./Module.ts";
 export * as Registration from "./Registration.ts";
 export * as Resource from "./Resource.ts";

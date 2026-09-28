@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
-import { Engine, HttpEndpoint, HttpIngress, Module } from "@macrograph/module";
+import { Engine, HttpEndpoint, Module } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Option, Redacted, Schema } from "effect";
 
 import { HttpIngressRuntime } from "../src/HttpIngressRuntime.ts";

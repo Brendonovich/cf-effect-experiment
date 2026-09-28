@@ -1,4 +1,5 @@
-import { Engine, HttpEndpoint, HttpIngress } from "@macrograph/module";
+import { Engine, HttpEndpoint } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Schema } from "effect";
 
 export class DuplicateDeployment extends Schema.TaggedError<DuplicateDeployment>()(

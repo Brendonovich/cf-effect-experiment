@@ -12,7 +12,8 @@ import {
   Packages,
   Presence,
 } from "@macrograph/editor";
-import { Credential, Engine, HttpEndpoint, HttpIngress, Resource } from "@macrograph/module";
+import { Credential, Engine, HttpEndpoint, Resource } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import GitHubModule from "@macrograph/module-github";
 import { GitHubEngine } from "@macrograph/module-github/Definition";
 import GitHubDeployment from "@macrograph/module-github/Deployment/Webhook";
