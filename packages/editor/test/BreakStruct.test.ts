@@ -11,7 +11,7 @@ import {
   SchemaId,
   Wildcards,
 } from "@macrograph/core";
-import { DataType as t, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Result } from "effect";
 
@@ -32,58 +32,70 @@ const TestLayer = Editor.defaultLayer.pipe(
   Layer.provideMerge(Packages.defaultLayer),
   Layer.provideMerge(Persistence.layerMemory),
 );
-const setup = Effect.gen(function* () {
-  yield* (yield* Persistence.Service).saveProject({
-    ...Project.empty(),
-    types: definitions,
-    graphs: { graph: Graph.empty("graph") },
-  });
-  const editor = yield* Editor.Service;
-  yield* editor.project.get();
-  yield* editor.module(
-    Module.make({
-      id: "break-test",
-      effect: (context) =>
-        context.schema.register({
-          id: "root",
-          type: "pure",
-          io: (io) => ({ value: io.data.out("value", t.Custom(rootId)) }),
-          run: () => Effect.void,
-        }),
-    }),
-  );
-  const create = (schema: string, properties = {}) =>
-    editor.node.create({
+const setup = (moduleOwned = false) =>
+  Effect.gen(function* () {
+    yield* (yield* Persistence.Service).saveProject({
+      ...Project.empty(),
+      types: moduleOwned ? {} : definitions,
+      graphs: { graph: Graph.empty("graph") },
+    });
+    const editor = yield* Editor.Service;
+    yield* editor.project.get();
+    yield* editor.module(
+      Module.make({
+        id: "break-test",
+        ...(moduleOwned ? { types: definitions } : {}),
+        effect: (context) =>
+          context.schema.register({
+            id: "root",
+            type: "pure",
+            io: (io) => ({ value: io.data.out("value", t.Custom(rootId)) }),
+            run: () => Effect.void,
+          }),
+      }),
+    );
+    const create = (schema: string, properties = {}) =>
+      editor.node.create({
+        graphID: "graph",
+        node: {
+          schema: { package: CustomTypes.packageId, schema: SchemaId.make(schema) },
+          properties,
+        },
+      });
+    const root = yield* editor.node.create({
       graphID: "graph",
       node: {
-        schema: { package: CustomTypes.packageId, schema: SchemaId.make(schema) },
-        properties,
+        schema: { package: PackageId.make("break-test"), schema: SchemaId.make("root") },
       },
     });
-  const root = yield* editor.node.create({
-    graphID: "graph",
-    node: {
-      schema: { package: PackageId.make("break-test"), schema: SchemaId.make("root") },
-    },
+    const first = yield* create("BreakStruct");
+    const second = yield* create("BreakStruct");
+    const connect = (from: string, out: string, to: string, input = "value") =>
+      editor.connection.create({
+        graphID: "graph",
+        connection: {
+          outNodeId: from,
+          outIo: OutputRef.port(out),
+          inNodeId: to,
+          inIoId: IoId.make(input),
+        },
+      });
+    return { editor, root, first, second, connect };
   });
-  const first = yield* create("BreakStruct");
-  const second = yield* create("BreakStruct");
-  const connect = (from: string, out: string, to: string, input = "value") =>
-    editor.connection.create({
-      graphID: "graph",
-      connection: {
-        outNodeId: from,
-        outIo: OutputRef.port(out),
-        inNodeId: to,
-        inIoId: IoId.make(input),
-      },
-    });
-  return { editor, root, first, second, connect };
-});
+
+it.effect("infers Break Struct fields from module-owned type definitions", () =>
+  Effect.gen(function* () {
+    const { editor, root, first, connect } = yield* setup(true);
+    yield* connect(root.node.id, "value", first.node.id);
+    expect(
+      (yield* editor.project.rendered()).graphs.graph!.nodes[first.node.id]!.io.dataOutputs,
+    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Custom(childId) }]);
+  }).pipe(Effect.provide(TestLayer)),
+);
 
 it.effect("infers chained Break fields, snapshots and pastes them without a target property", () =>
   Effect.gen(function* () {
-    const { editor, root, first, second, connect } = yield* setup;
+    const { editor, root, first, second, connect } = yield* setup();
     expect(first.node.properties).toEqual({});
     expect(first.io.dataInputs[0]!.type).toEqual(CustomTypes.breakWildcard);
     expect(first.io.dataOutputs).toEqual([]);
@@ -133,7 +145,7 @@ it.effect("infers chained Break fields, snapshots and pastes them without a targ
 
 it.effect("rejects non-struct input connections and reacts to changed definitions", () =>
   Effect.gen(function* () {
-    const { editor, root, first, connect } = yield* setup;
+    const { editor, root, first, connect } = yield* setup();
     yield* editor.module(
       Module.make({
         id: "test",
@@ -172,7 +184,7 @@ it.effect("rejects non-struct input connections and reacts to changed definition
 
 it.effect("infers Make Struct field inputs from its wildcard output without properties", () =>
   Effect.gen(function* () {
-    const { editor, connect } = yield* setup;
+    const { editor, connect } = yield* setup();
     yield* editor.module(
       Module.make({
         id: "make-test",

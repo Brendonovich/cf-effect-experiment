@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -16,8 +16,8 @@ const SpeakerBotModule = Module.make({
       name: "SpeakerBot Speak",
       properties,
       io: (io) => ({
-        voice: io.data.in("voice", DataType.String, { name: "Voice" }),
-        message: io.data.in("message", DataType.String, { name: "Message" }),
+        voice: io.data.in("voice", t.String, { name: "Voice" }),
+        message: io.data.in("message", t.String, { name: "Message" }),
       }),
       run: ({ io, properties, engine }) =>
         engine.SpeakerBotWebSocketSendMessage({
@@ -55,7 +55,7 @@ const SpeakerBotModule = Module.make({
         name,
         properties,
         io: (io) => ({
-          state: io.data.in("state", DataType.Bool, {
+          state: io.data.in("state", t.Bool, {
             name: id === "QueueToggle" ? "Queue Paused" : "State",
           }),
         }),
@@ -70,7 +70,7 @@ const SpeakerBotModule = Module.make({
       id: "EventsToggle",
       name: "SpeakerBot Events Toggle",
       properties,
-      io: (io) => ({ state: io.data.in("state", DataType.Bool, { name: "State" }) }),
+      io: (io) => ({ state: io.data.in("state", t.Bool, { name: "State" }) }),
       run: ({ io, properties, engine }) =>
         engine.SpeakerBotWebSocketSendMessage({
           connectionId: properties.connection,

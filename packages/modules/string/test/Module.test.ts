@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Option, Result } from "effect";
 
 import StringModule from "../src/Module.ts";
@@ -21,7 +21,7 @@ const run = (
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(ref.type, value), ref.id);
+        assert.isTrue(t.isValue(ref.type, value), ref.id);
         outputs.set(ref.id, value);
       },
       properties,
@@ -50,7 +50,7 @@ describe("String module", () => {
       const registered = yield* schemas;
       for (const item of registered) {
         for (const input of item.dataInputs)
-          assert.isTrue(DataType.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
+          assert.isTrue(t.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
         if (item.type === "pure") yield* run(item);
       }
       assert.strictEqual((yield* run(schema(registered, "JoinLines"))).get("output"), "");
@@ -298,9 +298,9 @@ describe("String module", () => {
         assert.deepStrictEqual(
           regex.generateIO(properties).dataOutputs.map((ref) => ({ id: ref.id, type: ref.type })),
           [
-            { id: "match", type: DataType.Option(DataType.String) },
-            { id: "group-word", type: DataType.Option(DataType.String) },
-            { id: "group-number", type: DataType.Option(DataType.String) },
+            { id: "match", type: t.Option(t.String) },
+            { id: "group-word", type: t.Option(t.String) },
+            { id: "group-number", type: t.Option(t.String) },
           ],
         );
         for (let index = 0; index < 2; index++) {

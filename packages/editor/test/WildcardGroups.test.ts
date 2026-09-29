@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Connection, IoId, OutputRef, Wildcards } from "@macrograph/core";
-import { DataType as t } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Result, Schema } from "effect";
 
 const w = t.Wildcard("T");

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 
 import JsonModule from "../src/Module.ts";
@@ -15,21 +15,21 @@ const run = (
   registered: Registration.RegisteredSchema,
   inputs: Readonly<Record<string, unknown>> = {},
   options: Readonly<Record<string, unknown>> = {},
-  definitions: DataType.Definitions = {},
+  definitions: t.Definitions = {},
 ) => {
   // Supply the inferred runtime type independently from node properties.
-  const { type: binding = DataType.String, list = false, ...properties } = options;
-  const item = Schema.decodeUnknownSync(DataType.Descriptor)(
+  const { type: binding = t.String, list = false, ...properties } = options;
+  const item = Schema.decodeUnknownSync(t.Descriptor)(
     typeof binding === "string" ? { _tag: binding } : binding,
   );
-  const inferred = list && registered.id !== "JSONGetScalarList" ? DataType.List(item) : item;
-  const resolve = (type: DataType.Any): DataType.Any =>
+  const inferred = list && registered.id !== "JSONGetScalarList" ? t.List(item) : item;
+  const resolve = (type: t.Any): t.Any =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
-        ? DataType.List(resolve(type.item))
+        ? t.List(resolve(type.item))
         : type._tag === "Option"
-          ? DataType.Option(resolve(type.inner))
+          ? t.Option(resolve(type.inner))
           : type;
   const outputs = new Map<string, unknown>();
   return registered
@@ -37,7 +37,7 @@ const run = (
       types: { resolve, definitions },
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(resolve(ref.type), value, definitions), ref.id);
+        assert.isTrue(t.isValue(resolve(ref.type), value, definitions), ref.id);
         outputs.set(ref.id, value);
       },
       properties,
@@ -64,19 +64,19 @@ describe("JSON module", () => {
   it.effect("round trips inferred containers, options, DateTimes and nominal custom values", () =>
     Effect.gen(function* () {
       const registered = yield* schemas;
-      const id = DataType.DefinitionId.make("record");
-      const definitions: DataType.Definitions = {
+      const id = t.DefinitionId.make("record");
+      const definitions: t.Definitions = {
         record: {
           _tag: "Struct",
           id,
           name: "Record",
           fields: [
-            { name: "date", type: DataType.DateTime },
-            { name: "names", type: DataType.List(DataType.String) },
+            { name: "date", type: t.DateTime },
+            { name: "names", type: t.List(t.String) },
           ],
         },
       };
-      const custom = DataType.Custom(id);
+      const custom = t.Custom(id);
       const record = {
         _type: id,
         date: DateTime.makeUnsafe("2026-09-06T00:00:00Z"),
@@ -84,9 +84,9 @@ describe("JSON module", () => {
       };
       for (const [type, value] of [
         [custom, record],
-        [DataType.List(custom), [record]],
-        [DataType.Option(DataType.List(custom)), Option.some([record])],
-        [DataType.Option(custom), Option.none()],
+        [t.List(custom), [record]],
+        [t.Option(t.List(custom)), Option.some([record])],
+        [t.Option(custom), Option.none()],
       ] as const) {
         const text = (yield* run(
           schema(registered, "ToJSON"),
@@ -113,7 +113,7 @@ describe("JSON module", () => {
       const text = (yield* run(
         schema(registered, "ToJSON"),
         { in: [record] },
-        { type: DataType.List(custom) },
+        { type: t.List(custom) },
         definitions,
       )).get("out");
       assert.deepStrictEqual(
@@ -195,7 +195,7 @@ describe("JSON module", () => {
               if (input.type._tag === "Wildcard") assert.isUndefined(input.defaultValue);
               else
                 assert.isTrue(
-                  DataType.isValue(input.type, input.defaultValue),
+                  t.isValue(input.type, input.defaultValue),
                   `${item.id}.${input.id}`,
                 );
             }
@@ -217,9 +217,9 @@ describe("JSON module", () => {
       assert.lengthOf(registered, 19);
       assert.strictEqual(new Set(registered.map((item) => item.id)).size, 19);
       assert.isTrue(registered.every((item) => !!item.description));
-      for (const type of [DataType.String, DataType.Int, DataType.Float, DataType.Bool]) {
+      for (const type of [t.String, t.Int, t.Float, t.Bool]) {
         for (const list of [false, true]) {
-          const expected = DataType.Wildcard("T");
+          const expected = t.Wildcard("T");
           assert.deepStrictEqual(
             schema(registered, "ToJSON").generateIO({ type: type._tag, list }).dataInputs[0]?.type,
             expected,
@@ -227,13 +227,13 @@ describe("JSON module", () => {
           assert.deepStrictEqual(
             schema(registered, "FromJSON").generateIO({ type: type._tag, list }).dataOutputs[0]
               ?.type,
-            DataType.Option(expected),
+            t.Option(expected),
           );
         }
         assert.deepStrictEqual(
           schema(registered, "JSONGetScalarList").generateIO({ type: type._tag }).dataOutputs[0]
             ?.type,
-          DataType.Option(DataType.List(DataType.Wildcard("T"))),
+          t.Option(t.List(t.Wildcard("T"))),
         );
       }
       for (const id of ["ToJSON", "FromJSON", "JSONGetScalarList"]) {

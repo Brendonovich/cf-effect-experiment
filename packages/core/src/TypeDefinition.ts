@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 
 import type { NodeIO } from "./IO.ts";
@@ -6,7 +6,7 @@ import type { Node } from "./Node.ts";
 
 import { CustomTypes } from "./CustomTypes.ts";
 
-export const Collection = DataType.Definitions;
+export const Collection = t.Definitions;
 
 // Run before recursive descriptor decoding, including at the RPC payload boundary.
 const finiteAuthoring = Schema.Unknown.check(
@@ -36,8 +36,8 @@ const finiteAuthoring = Schema.Unknown.check(
 export const Change = finiteAuthoring.pipe(
   Schema.decodeTo(
     Schema.Union([
-      Schema.TaggedStruct("Upsert", { definition: DataType.Definition }),
-      Schema.TaggedStruct("Delete", { id: DataType.DefinitionId }),
+      Schema.TaggedStruct("Upsert", { definition: t.Definition }),
+      Schema.TaggedStruct("Delete", { id: t.DefinitionId }),
     ]),
   ),
 );
@@ -65,7 +65,7 @@ export class StalePreviewError extends Schema.TaggedError<StalePreviewError>()(
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()(
   "TypeDefinitionNotFoundError",
   {
-    id: DataType.DefinitionId,
+    id: t.DefinitionId,
   },
 ) {}
 
@@ -81,7 +81,7 @@ const safeName = (name: string) =>
   !unsafeNames.has(name) &&
   !/[\u0000-\u001f\u007f]/.test(name);
 
-export const references = (type: DataType.Any): readonly string[] =>
+export const references = (type: t.Any): readonly string[] =>
   type._tag === "Custom"
     ? [type.id]
     : type._tag === "List"
@@ -90,7 +90,7 @@ export const references = (type: DataType.Any): readonly string[] =>
         ? references(type.inner)
         : [];
 
-export const definitionReferences = (definition: DataType.Definition): readonly string[] =>
+export const definitionReferences = (definition: t.Definition): readonly string[] =>
   (definition._tag === "Struct"
     ? definition.fields
     : definition.variants.flatMap((v) => v.fields)
@@ -99,7 +99,7 @@ export const definitionReferences = (definition: DataType.Definition): readonly 
 /** Include both old and new dependency edges when a definition is replaced. */
 export const affectedTypes = (
   id: string,
-  ...registries: readonly DataType.Definitions[]
+  ...registries: readonly t.Definitions[]
 ): readonly string[] => {
   const affected = new Set([id]);
   let changed = true;
@@ -148,7 +148,7 @@ export const valueReferences = (value: unknown): readonly string[] => {
 export const nodeDiagnostics = (
   node: Node.Model,
   io: NodeIO,
-  definitions: DataType.Definitions,
+  definitions: t.Definitions,
 ): readonly string[] => {
   const reasons = new Set<string>();
   if (node.schema.package === CustomTypes.packageId) {
@@ -191,7 +191,7 @@ export const nodeDiagnostics = (
       continue;
     }
     try {
-      Schema.decodeUnknownSync(DataType.JsonValueSchema(ports[0]!.type, definitions), {
+      Schema.decodeUnknownSync(t.JsonValueSchema(ports[0]!.type, definitions), {
         onExcessProperty: "error",
       })(value);
     } catch {
@@ -204,10 +204,10 @@ export const nodeDiagnostics = (
 };
 
 /** Validate the complete registry so mutually recursive references can be authored together. */
-export const validate = (definitions: DataType.Definitions): ReadonlyArray<InvalidError> => {
+export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError> => {
   const errors: InvalidError[] = [];
   const names = new Set<string>();
-  const checkReference = (id: string, type: DataType.Any): void => {
+  const checkReference = (id: string, type: t.Any): void => {
     if (type._tag === "Wildcard") {
       errors.push(
         new InvalidError({ id, reason: "Wildcards belong to node IO, not type definitions" }),
@@ -259,7 +259,7 @@ export const validate = (definitions: DataType.Definitions): ReadonlyArray<Inval
   }
   // Required recursive cycles without a terminating variant cannot have a finite value.
   const finite = new Set<string>();
-  const canTerminate = (type: DataType.Any): boolean =>
+  const canTerminate = (type: t.Any): boolean =>
     type._tag !== "Custom" || finite.has(type.id);
   let changed = true;
   while (changed) {
@@ -292,7 +292,7 @@ export const validate = (definitions: DataType.Definitions): ReadonlyArray<Inval
 
 /** Deletion intentionally leaves dependents dangling; unrelated repair must remain possible. */
 export const validateChange = (
-  before: DataType.Definitions,
+  before: t.Definitions,
   change: Change,
 ): readonly InvalidError[] => {
   if (change._tag === "Delete") return [];

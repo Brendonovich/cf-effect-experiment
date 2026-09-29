@@ -1,5 +1,5 @@
 import { TypeDefinition, type Project } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, useMutation } from "@tanstack/solid-query";
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
@@ -177,7 +177,7 @@ const styles = stylex.create({
   detailEmpty: { alignItems: "center", display: "flex", flex: 1, justifyContent: "center" },
 });
 
-type Field = typeof DataType.Field.Type;
+type Field = typeof t.Field.Type;
 function defaultName(base: string, items: readonly { name: string }[]) {
   const names = new Set(items.map((item) => item.name));
   let name = base;
@@ -187,7 +187,7 @@ function defaultName(base: string, items: readonly { name: string }[]) {
 
 function Fields(props: {
   fields: readonly Field[];
-  definitions: DataType.Definitions;
+  definitions: t.Definitions;
   disabled: boolean;
   onChange: (fields: readonly Field[], commit?: boolean) => void;
   onCommit: () => void;
@@ -235,7 +235,7 @@ function Fields(props: {
               </button>
             </div>
             <DataTypePicker
-              value={props.fields[index]?.type ?? DataType.String}
+              value={props.fields[index]?.type ?? t.String}
               definitions={props.definitions}
               disabled={props.disabled}
               label={`Field ${index + 1} type`}
@@ -255,7 +255,7 @@ function Fields(props: {
         disabled={props.disabled}
         onClick={() => {
           props.onChange(
-            [...props.fields, { name: defaultName("field", props.fields), type: DataType.String }],
+            [...props.fields, { name: defaultName("field", props.fields), type: t.String }],
             true,
           );
         }}
@@ -273,14 +273,14 @@ export function TypeDefinitions(props: {
   onConfirm: (token: string) => Promise<unknown>;
 }) {
   const [kind, setKind] = createSignal<"Struct" | "Enum">("Struct");
-  const [selectedId, setSelectedId] = createSignal<DataType.DefinitionId | null>(null);
+  const [selectedId, setSelectedId] = createSignal<t.DefinitionId | null>(null);
   const [search, setSearch] = createSignal("");
   const definitions = createMemo(() => props.project?.types ?? {});
   const selected = createMemo(() => {
     const id = selectedId();
     return id === null ? null : (definitions()[id] ?? null);
   });
-  const [draft, setDraft] = createSignal<DataType.Definition | null>(selected);
+  const [draft, setDraft] = createSignal<t.Definition | null>(selected);
   const choices = createMemo(() => {
     const value = draft();
     return value ? { ...definitions(), [value.id]: value } : definitions();
@@ -333,7 +333,7 @@ export function TypeDefinitions(props: {
     if (disabled()) return;
     setSearch("");
     const base = {
-      id: DataType.DefinitionId.make(crypto.randomUUID()),
+      id: t.DefinitionId.make(crypto.randomUUID()),
       name: defaultName(
         kind === "Struct" ? "New Struct" : "New Enum",
         Object.values(definitions()),
@@ -496,7 +496,7 @@ export function TypeDefinitions(props: {
                 <Show
                   when={
                     value()._tag === "Struct"
-                      ? (value() as Extract<DataType.Definition, { _tag: "Struct" }>)
+                      ? (value() as Extract<t.Definition, { _tag: "Struct" }>)
                       : undefined
                   }
                 >
@@ -517,7 +517,7 @@ export function TypeDefinitions(props: {
                 <Show
                   when={
                     value()._tag === "Enum"
-                      ? (value() as Extract<DataType.Definition, { _tag: "Enum" }>)
+                      ? (value() as Extract<t.Definition, { _tag: "Enum" }>)
                       : undefined
                   }
                 >

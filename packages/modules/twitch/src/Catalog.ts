@@ -1,6 +1,6 @@
 import type * as Registration from "@macrograph/module/Registration";
 
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Retry } from "@macrograph/module/Retry";
 import { Effect, Option, Schema } from "effect";
 
@@ -435,8 +435,8 @@ const eventSubProperty = {
     resource: TwitchEventSub,
   },
 } as const;
-const dataType = (kind: Kind): DataType.Any =>
-  kind === "string" ? DataType.String : kind === "int" ? DataType.Int : DataType.Bool;
+const dataType = (kind: Kind): t.Any =>
+  kind === "string" ? t.String : kind === "int" ? t.Int : t.Bool;
 const record = (value: unknown): Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)) : {};
 const get = (value: unknown, path: string): unknown =>
@@ -512,9 +512,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Sends a message to a Twitch channel's chat.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      message: io.data.in("message", DataType.String, { name: "Message" }),
-      replyId: io.data.in("replyId", DataType.Option(DataType.String), {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      message: io.data.in("message", t.String, { name: "Message" }),
+      replyId: io.data.in("replyId", t.Option(t.String), {
         name: "Reply Message ID",
       }),
     }),
@@ -542,11 +542,11 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Gets chat settings for a broadcaster's channel.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      emoteMode: io.data.out("emoteMode", DataType.Bool, { name: "Emote Mode" }),
-      followerMode: io.data.out("followerMode", DataType.Bool, { name: "Follower Mode" }),
-      slowMode: io.data.out("slowMode", DataType.Bool, { name: "Slow Mode" }),
-      subscriberMode: io.data.out("subscriberMode", DataType.Bool, { name: "Subscriber Mode" }),
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      emoteMode: io.data.out("emoteMode", t.Bool, { name: "Emote Mode" }),
+      followerMode: io.data.out("followerMode", t.Bool, { name: "Follower Mode" }),
+      slowMode: io.data.out("slowMode", t.Bool, { name: "Slow Mode" }),
+      subscriberMode: io.data.out("subscriberMode", t.Bool, { name: "Subscriber Mode" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -568,20 +568,20 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Updates chat settings for a broadcaster's channel.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      moderatorId: io.data.in("moderatorId", DataType.String, { name: "Moderator ID" }),
-      emoteMode: io.data.in("emoteMode", DataType.Option(DataType.Bool), { name: "Emote Mode" }),
-      followerMode: io.data.in("followerMode", DataType.Option(DataType.Bool), {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      moderatorId: io.data.in("moderatorId", t.String, { name: "Moderator ID" }),
+      emoteMode: io.data.in("emoteMode", t.Option(t.Bool), { name: "Emote Mode" }),
+      followerMode: io.data.in("followerMode", t.Option(t.Bool), {
         name: "Follower Mode",
       }),
-      followerDuration: io.data.in("followerDuration", DataType.Option(DataType.Int), {
+      followerDuration: io.data.in("followerDuration", t.Option(t.Int), {
         name: "Follower Duration (minutes)",
       }),
-      slowMode: io.data.in("slowMode", DataType.Option(DataType.Bool), { name: "Slow Mode" }),
-      slowDuration: io.data.in("slowDuration", DataType.Option(DataType.Int), {
+      slowMode: io.data.in("slowMode", t.Option(t.Bool), { name: "Slow Mode" }),
+      slowDuration: io.data.in("slowDuration", t.Option(t.Int), {
         name: "Slow Wait Time (seconds)",
       }),
-      subscriberMode: io.data.in("subscriberMode", DataType.Option(DataType.Bool), {
+      subscriberMode: io.data.in("subscriberMode", t.Option(t.Bool), {
         name: "Subscriber Mode",
       }),
     }),
@@ -641,17 +641,17 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Gets information about a Twitch channel.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      broadcasterLogin: io.data.out("broadcasterLogin", DataType.String, {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      broadcasterLogin: io.data.out("broadcasterLogin", t.String, {
         name: "Broadcaster Login",
       }),
-      broadcasterName: io.data.out("broadcasterName", DataType.String, {
+      broadcasterName: io.data.out("broadcasterName", t.String, {
         name: "Broadcaster Name",
       }),
-      gameName: io.data.out("gameName", DataType.String, { name: "Game Name" }),
-      gameId: io.data.out("gameId", DataType.String, { name: "Game ID" }),
-      title: io.data.out("title", DataType.String, { name: "Title" }),
-      language: io.data.out("language", DataType.String, { name: "Language" }),
+      gameName: io.data.out("gameName", t.String, { name: "Game Name" }),
+      gameId: io.data.out("gameId", t.String, { name: "Game ID" }),
+      title: io.data.out("title", t.String, { name: "Title" }),
+      language: io.data.out("language", t.String, { name: "Language" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -675,10 +675,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Modifies channel information for a broadcaster.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      gameId: io.data.in("gameId", DataType.Option(DataType.String), { name: "Game ID" }),
-      title: io.data.in("title", DataType.Option(DataType.String), { name: "Title" }),
-      broadcasterLanguage: io.data.in("broadcasterLanguage", DataType.Option(DataType.String), {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      gameId: io.data.in("gameId", t.Option(t.String), { name: "Game ID" }),
+      title: io.data.in("title", t.Option(t.String), { name: "Title" }),
+      broadcasterLanguage: io.data.in("broadcasterLanguage", t.Option(t.String), {
         name: "Broadcaster Language",
       }),
     }),
@@ -705,11 +705,11 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Looks up a user's active Twitch stream.",
     properties: accountProperty,
     io: (io) => ({
-      userId: io.data.in("userId", DataType.String, { name: "User ID" }),
-      isLive: io.data.out("isLive", DataType.Bool, { name: "Is Live" }),
-      viewerCount: io.data.out("viewerCount", DataType.Int, { name: "Viewer Count" }),
-      gameName: io.data.out("gameName", DataType.String, { name: "Game Name" }),
-      title: io.data.out("title", DataType.String, { name: "Title" }),
+      userId: io.data.in("userId", t.String, { name: "User ID" }),
+      isLive: io.data.out("isLive", t.Bool, { name: "Is Live" }),
+      viewerCount: io.data.out("viewerCount", t.Int, { name: "Viewer Count" }),
+      gameName: io.data.out("gameName", t.String, { name: "Game Name" }),
+      title: io.data.out("title", t.String, { name: "Title" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -729,9 +729,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Creates a clip from the broadcaster's stream.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      clipId: io.data.out("clipId", DataType.String, { name: "Clip ID" }),
-      editUrl: io.data.out("editUrl", DataType.String, { name: "Edit URL" }),
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      clipId: io.data.out("clipId", t.String, { name: "Clip ID" }),
+      editUrl: io.data.out("editUrl", t.String, { name: "Edit URL" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -751,12 +751,12 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Creates a poll with two choices for a broadcaster's channel.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      title: io.data.in("title", DataType.String, { name: "Title" }),
-      choice1: io.data.in("choice1", DataType.String, { name: "Choice 1" }),
-      choice2: io.data.in("choice2", DataType.String, { name: "Choice 2" }),
-      duration: io.data.in("duration", DataType.Int, { name: "Duration", defaultValue: 60 }),
-      pollId: io.data.out("pollId", DataType.String, { name: "Poll ID" }),
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      title: io.data.in("title", t.String, { name: "Title" }),
+      choice1: io.data.in("choice1", t.String, { name: "Choice 1" }),
+      choice2: io.data.in("choice2", t.String, { name: "Choice 2" }),
+      duration: io.data.in("duration", t.Int, { name: "Duration", defaultValue: 60 }),
+      pollId: io.data.out("pollId", t.String, { name: "Poll ID" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -777,9 +777,9 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Ends a poll that is currently active.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      id: io.data.in("id", DataType.String, { name: "Poll ID" }),
-      status: io.data.in("status", DataType.String, {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      id: io.data.in("id", t.String, { name: "Poll ID" }),
+      status: io.data.in("status", t.String, {
         name: "Status",
         defaultValue: "TERMINATED",
         suggestions: () => Effect.succeed(["ARCHIVED", "TERMINATED"]),
@@ -803,15 +803,15 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Creates a prediction with two outcomes for a broadcaster's channel.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      title: io.data.in("title", DataType.String, { name: "Title" }),
-      outcome1: io.data.in("outcome1", DataType.String, { name: "Outcome 1" }),
-      outcome2: io.data.in("outcome2", DataType.String, { name: "Outcome 2" }),
-      predictionWindow: io.data.in("predictionWindow", DataType.Int, {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      title: io.data.in("title", t.String, { name: "Title" }),
+      outcome1: io.data.in("outcome1", t.String, { name: "Outcome 1" }),
+      outcome2: io.data.in("outcome2", t.String, { name: "Outcome 2" }),
+      predictionWindow: io.data.in("predictionWindow", t.Int, {
         name: "Prediction Window",
         defaultValue: 60,
       }),
-      predictionId: io.data.out("predictionId", DataType.String, { name: "Prediction ID" }),
+      predictionId: io.data.out("predictionId", t.String, { name: "Prediction ID" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -832,14 +832,14 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Ends a prediction that is currently active.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      id: io.data.in("id", DataType.String, { name: "Prediction ID" }),
-      status: io.data.in("status", DataType.String, {
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      id: io.data.in("id", t.String, { name: "Prediction ID" }),
+      status: io.data.in("status", t.String, {
         name: "Status",
         defaultValue: "CANCELED",
         suggestions: () => Effect.succeed(["CANCELED", "LOCKED", "RESOLVED"]),
       }),
-      winningOutcomeId: io.data.in("winningOutcomeId", DataType.Option(DataType.String), {
+      winningOutcomeId: io.data.in("winningOutcomeId", t.Option(t.String), {
         name: "Winning Outcome ID",
       }),
     }),
@@ -868,14 +868,14 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Gets a Twitch user by ID or login.",
     properties: accountProperty,
     io: (io) => ({
-      userId: io.data.in("userId", DataType.Option(DataType.String), { name: "User ID" }),
-      login: io.data.in("login", DataType.Option(DataType.String), { name: "Login" }),
-      id: io.data.out("id", DataType.String, { name: "ID" }),
-      displayName: io.data.out("displayName", DataType.String, { name: "Display Name" }),
-      broadcasterType: io.data.out("broadcasterType", DataType.String, {
+      userId: io.data.in("userId", t.Option(t.String), { name: "User ID" }),
+      login: io.data.in("login", t.Option(t.String), { name: "Login" }),
+      id: io.data.out("id", t.String, { name: "ID" }),
+      displayName: io.data.out("displayName", t.String, { name: "Display Name" }),
+      broadcasterType: io.data.out("broadcasterType", t.String, {
         name: "Broadcaster Type",
       }),
-      description: io.data.out("description", DataType.String, { name: "Description" }),
+      description: io.data.out("description", t.String, { name: "Description" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -899,8 +899,8 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     description: "Gets the total followers for a broadcaster.",
     properties: accountProperty,
     io: (io) => ({
-      broadcasterId: io.data.in("broadcasterId", DataType.String, { name: "Broadcaster ID" }),
-      total: io.data.out("total", DataType.Int, { name: "Total" }),
+      broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
+      total: io.data.out("total", t.Int, { name: "Total" }),
     }),
     run: ({ io, properties, engine }) =>
       Effect.gen(function* () {
@@ -923,11 +923,11 @@ export const register = Effect.fnUntraced(function* (context: Context) {
         inputs: action.inputs.map((field) => {
           const type =
             field.kind === "int"
-              ? DataType.Int
+              ? t.Int
               : field.kind === "bool"
-                ? DataType.Bool
-                : DataType.String;
-          return io.data.in(field.id, field.optional ? DataType.Option(type) : type, {
+                ? t.Bool
+                : t.String;
+          return io.data.in(field.id, field.optional ? t.Option(type) : type, {
             name:
               field.name ??
               field.id
@@ -936,17 +936,17 @@ export const register = Effect.fnUntraced(function* (context: Context) {
                 .replace(/\bId\b/g, "ID"),
           });
         }),
-        responseJson: io.data.out("responseJson", DataType.String, { name: "Response JSON" }),
+        responseJson: io.data.out("responseJson", t.String, { name: "Response JSON" }),
         outputs: (action.outputs ?? []).map((field) => {
           const type =
             field.kind === "int"
-              ? DataType.Int
+              ? t.Int
               : field.kind === "bool" || field.kind === "exists"
-                ? DataType.Bool
-                : DataType.String;
+                ? t.Bool
+                : t.String;
           return io.data.out(
             field.id,
-            field.optional ? DataType.Option(type) : type,
+            field.optional ? t.Option(type) : type,
             field.name === undefined ? undefined : { name: field.name },
           );
         }),

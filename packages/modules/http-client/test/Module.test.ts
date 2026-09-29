@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { DataType, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration } from "@macrograph/module";
 import { Array, Cause, Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 
@@ -34,7 +34,7 @@ const TestModule = Module.make({
     });
     yield* context.schema.register({
       id: "Record",
-      io: (io) => ({ status: io.data.in("status", DataType.Int) }),
+      io: (io) => ({ status: io.data.in("status", t.Int) }),
       run: ({ io }) =>
         Effect.sync(() => {
           statuses.push(io.status);
@@ -59,7 +59,7 @@ const run = (
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(ref.type, value), ref.id);
+        assert.isTrue(t.isValue(ref.type, value), ref.id);
         outputs.set(ref.id, value);
       },
       properties: {},

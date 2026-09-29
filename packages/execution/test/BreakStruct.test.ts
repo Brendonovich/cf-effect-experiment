@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { DataType as t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import { Array, Effect, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";

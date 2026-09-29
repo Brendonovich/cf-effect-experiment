@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Registration } from "@macrograph/module";
+import { Registration, t } from "@macrograph/module";
 import { Effect, Option, Schema } from "effect";
 
 import { WebhookDelivery, WebhookId } from "../src/Definition.ts";
@@ -8,6 +8,20 @@ import module from "../src/Module.ts";
 import { WebhookPayloadTypes, WebhookTypeDefinitions } from "../src/WebhookTypes.ts";
 
 describe("GitHub module", () => {
+  it("registers every type referenced by its webhook payloads", () => {
+    const visit = (type: t.Any): void => {
+      if (type._tag === "Custom") assert.property(WebhookTypeDefinitions, type.id);
+      else if (type._tag === "List") visit(type.item);
+      else if (type._tag === "Option") visit(type.inner);
+    };
+    for (const type of Object.values(WebhookPayloadTypes)) visit(type);
+    for (const definition of Object.values(WebhookTypeDefinitions))
+      for (const field of definition._tag === "Struct"
+        ? definition.fields
+        : definition.variants.flatMap((variant) => variant.fields))
+        visit(field.type);
+  });
+
   it.effect("registers the curated REST and webhook catalog", () =>
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(module.effect);

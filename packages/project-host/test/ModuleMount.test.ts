@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { Executor } from "@macrograph/execution";
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
@@ -17,7 +17,7 @@ it.effect("registers an engine-less module without engine services, RPC clients,
         yield* context.schema.register({
           id: "Value",
           type: "pure",
-          io: (io) => ({ output: io.data.out("value", DataType.Int) }),
+          io: (io) => ({ output: io.data.out("value", t.Int) }),
           run: ({ io }) => Effect.sync(() => io.output(42)),
         });
       }),

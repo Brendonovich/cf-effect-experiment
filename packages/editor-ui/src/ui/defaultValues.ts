@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 
 export const valueRecord = (value: unknown): Readonly<Record<string, unknown>> | undefined =>
@@ -7,12 +7,12 @@ export const valueRecord = (value: unknown): Readonly<Record<string, unknown>> |
     : undefined;
 
 export const defaultValueError = (
-  type: DataType.Any,
+  type: t.Any,
   value: unknown,
-  definitions: DataType.Definitions,
+  definitions: t.Definitions,
 ): string | undefined => {
   try {
-    Schema.decodeUnknownSync(DataType.JsonValueSchema(type, definitions), {
+    Schema.decodeUnknownSync(t.JsonValueSchema(type, definitions), {
       onExcessProperty: "error",
     })(value);
     return undefined;
@@ -23,8 +23,8 @@ export const defaultValueError = (
 
 // Lists and options terminate eagerly; enums try each variant so recursive first variants cannot loop.
 export const initialDefaultValue = (
-  type: DataType.Any,
-  definitions: DataType.Definitions,
+  type: t.Any,
+  definitions: t.Definitions,
   seen: ReadonlySet<string> = new Set(),
 ): unknown => {
   switch (type._tag) {

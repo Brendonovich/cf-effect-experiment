@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -20,7 +20,7 @@ const StreamDeckModule = Module.make({
         properties: { server: { name: "Server", resource: StreamDeckServer } },
         event: (event, { properties }) =>
           Effect.succeed(event.serverId === properties.server && event.event === eventName),
-        io: (io) => ({ id: io.data.out("id", DataType.String, { name: "Key ID" }) }),
+        io: (io) => ({ id: io.data.out("id", t.String, { name: "Key ID" }) }),
         run: ({ event, io }) =>
           Effect.sync(() => {
             if (event) io.id(event.payload.settings.id);

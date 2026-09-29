@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module";
+import { t } from "@macrograph/module";
 import { Schema } from "effect";
 
 export const Output = Schema.Struct({
@@ -32,8 +32,8 @@ export const Request = Schema.Struct({
   inputs: Schema.Record(Schema.String, Schema.Json),
   properties: Schema.Record(Schema.String, Schema.Json),
   event: Schema.optionalKey(Schema.Json),
-  types: DataType.Definitions,
-  resolvedTypes: Schema.Record(Schema.String, DataType.Descriptor),
+  types: t.Definitions,
+  resolvedTypes: Schema.Record(Schema.String, t.Descriptor),
   precomputed: Schema.optionalKey(Result),
   scopeInput: Schema.optionalKey(
     Schema.Struct({

@@ -1,6 +1,6 @@
 import { Function as GraphFunction, Project } from "@macrograph/core";
 import { Executor, Queues } from "@macrograph/execution";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 /** Constructs one project-scoped executor and its in-memory queue scheduler. */
@@ -19,7 +19,7 @@ export const make = Effect.fnUntraced(function* (
       for (const field of fn.arguments) {
         if (Object.hasOwn(inputs, field.id))
           decoded[field.id] = yield* Schema.decodeUnknownEffect(
-            DataType.JsonValueSchema(field.type, project.types),
+            t.JsonValueSchema(field.type, project.types),
           )(inputs[field.id]);
       }
       return yield* executor.invokeFunction(functionId, decoded, { queueLineage });
@@ -37,7 +37,7 @@ export const make = Effect.fnUntraced(function* (
         for (const field of fn.arguments) {
           if (Object.hasOwn(invocation.inputs, field.id))
             captured[field.id] = yield* Schema.encodeUnknownEffect(
-              DataType.JsonValueSchema(field.type, project.types),
+              t.JsonValueSchema(field.type, project.types),
             )(invocation.inputs[field.id]);
         }
         return yield* queues.enqueue(invocation.queueId, invocation.functionId, captured);

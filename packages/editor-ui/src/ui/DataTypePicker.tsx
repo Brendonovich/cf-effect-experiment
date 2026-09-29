@@ -1,4 +1,4 @@
-import type { DataType } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, createSignal, Show } from "solid-js";
@@ -59,9 +59,9 @@ const styles = stylex.create({
 });
 
 export interface DataTypePickerProps {
-  readonly value: DataType.Any;
-  readonly definitions?: DataType.Definitions;
-  readonly onChange: (type: DataType.Any) => void;
+  readonly value: t.Any;
+  readonly definitions?: t.Definitions;
+  readonly onChange: (type: t.Any) => void;
   readonly label?: string;
   readonly disabled?: boolean;
 }
@@ -135,7 +135,7 @@ export function DataTypePicker(props: DataTypePickerProps) {
               aria-label={`${props.label ?? "Data type"}, ${segmentProps.index === 0 ? "outer" : `nested ${segmentProps.index}`}: ${segmentLabel(segmentProps.index)}`}
               title={
                 segments()[segmentProps.index]?._tag === "Custom"
-                  ? choiceKey(segments()[segmentProps.index] as DataType.Custom)
+                  ? choiceKey(segments()[segmentProps.index] as t.Custom)
                   : undefined
               }
               aria-haspopup="listbox"

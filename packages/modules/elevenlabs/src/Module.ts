@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { defaultModel, ElevenLabsEngine } from "./Definition.ts";
@@ -13,8 +13,8 @@ export default Module.make({
       name: "ElevenLabs TTS",
       description: "Synthesizes MP3 audio and returns base64, without writing a local file.",
       io: (io) => ({
-        text: io.data.in("text", DataType.String, { name: "Text" }),
-        modelId: io.data.in("modelId", DataType.String, {
+        text: io.data.in("text", t.String, { name: "Text" }),
+        modelId: io.data.in("modelId", t.String, {
           name: "Model Id",
           defaultValue: defaultModel,
           suggestions: () =>
@@ -26,10 +26,10 @@ export default Module.make({
               "eleven_monolingual_v1",
             ]),
         }),
-        voiceId: io.data.in("voiceId", DataType.String, { name: "Voice ID" }),
-        body: io.data.in("body", DataType.String, { name: "Body", defaultValue: "{}" }),
-        audio: io.data.out("audio", DataType.String, { name: "Audio Base64" }),
-        mime: io.data.out("mime", DataType.String, { name: "MIME Type" }),
+        voiceId: io.data.in("voiceId", t.String, { name: "Voice ID" }),
+        body: io.data.in("body", t.String, { name: "Body", defaultValue: "{}" }),
+        audio: io.data.out("audio", t.String, { name: "Audio Base64" }),
+        mime: io.data.out("mime", t.String, { name: "MIME Type" }),
       }),
       run: ({ io, engine }) =>
         engine

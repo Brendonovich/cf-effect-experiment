@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import { Canvas } from "./Canvas.ts";
@@ -19,7 +19,7 @@ export const Model = Schema.Struct({
   ),
   constants: ResourceConstants,
   queues: Queues,
-  types: DataType.Definitions.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
+  types: t.Definitions.pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
 });
 export type Model = typeof Model.Type;
 

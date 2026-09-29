@@ -11,7 +11,7 @@ import {
   Queue,
   ResourceConstant,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { For, Show } from "solid-js";
 
@@ -84,7 +84,7 @@ export function Inspector(props: {
   nodeDiagnostics?: Readonly<Record<string, ReadonlyArray<string>>>;
   constants: Project.Model["constants"];
   queues?: Project.Model["queues"];
-  definitions?: DataType.Definitions;
+  definitions?: t.Definitions;
   nodeIO?: Readonly<Record<string, NodeIO>>;
   onSaveDefault?: (nodeId: string, input: string, value: unknown) => Promise<unknown>;
   onRemoveDefault?: (nodeId: string, input: string) => Promise<unknown>;

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Clock, Effect, Random, Result } from "effect";
 import { TestClock } from "effect/testing";
 
@@ -21,7 +21,7 @@ const run = (
     .run({
       input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
       output: (ref, value) => {
-        assert.isTrue(DataType.isValue(ref.type, value), ref.id);
+        assert.isTrue(t.isValue(ref.type, value), ref.id);
         outputs.set(ref.id, value);
       },
       properties: {},
@@ -53,7 +53,7 @@ describe("Math module", () => {
       assert.isTrue(registered.every((item) => !!item.description));
       for (const item of registered) {
         for (const input of item.dataInputs)
-          assert.isTrue(DataType.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
+          assert.isTrue(t.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
         if (item.type === "pure") yield* run(item);
       }
       for (const item of registered)

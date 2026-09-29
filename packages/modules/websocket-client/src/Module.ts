@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -23,7 +23,7 @@ const WebSocketClientModule = Module.make({
       description: "Sends a text message over a connected WebSocket.",
       properties: connectionProperty,
       io: (io) => ({
-        message: io.data.in("message", DataType.String, { name: "Message" }),
+        message: io.data.in("message", t.String, { name: "Message" }),
       }),
       run: ({ io, properties, engine }) =>
         engine.WebSocketSendMessage({
@@ -42,7 +42,7 @@ const WebSocketClientModule = Module.make({
           event._tag === "WebSocketMessageReceived" && event.connectionId === properties.connection,
         ),
       io: (io) => ({
-        message: io.data.out("message", DataType.String, { name: "Message" }),
+        message: io.data.out("message", t.String, { name: "Message" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

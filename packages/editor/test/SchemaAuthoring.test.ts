@@ -6,7 +6,7 @@ import {
   SchemaId,
   type Package,
 } from "@macrograph/core";
-import { DataType as t } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Result } from "effect";
 import { expect, it } from "vitest";
 

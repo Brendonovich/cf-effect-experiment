@@ -10,7 +10,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { createRoot } from "solid-js";
 import { describe, expect, it } from "vitest";
 
@@ -20,8 +20,8 @@ describe("editor store", () => {
   it("updates definitions, generated catalog and current IO without discarding invalid graph data", () => {
     createRoot((dispose) => {
       const editor = createEditorStore();
-      const id = DataType.DefinitionId.make("person");
-      const types: DataType.Definitions = {
+      const id = t.DefinitionId.make("person");
+      const types: t.Definitions = {
         person: { _tag: "Struct", id, name: "Person", fields: [] },
       };
       const node = {

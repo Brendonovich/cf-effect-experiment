@@ -1,6 +1,6 @@
 import type * as Engine from "@macrograph/module/Engine";
 
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect, Option, Schema } from "effect";
 
 import {
@@ -13,11 +13,7 @@ import {
 } from "./Definition.ts";
 import { WebhookPayloadTypes, WebhookTypeDefinitions } from "./WebhookTypes.ts";
 
-const preparePayload = (
-  type: DataType.Any,
-  value: Schema.Json,
-  definitions: DataType.Definitions,
-): unknown => {
+const preparePayload = (type: t.Any, value: Schema.Json, definitions: t.Definitions): unknown => {
   if (type._tag === "List")
     return Array.isArray(value)
       ? value.map((item) => preparePayload(type.item, item, definitions))
@@ -108,10 +104,10 @@ const GitHubModule = Module.make({
       name: "Get Repository",
       properties: { account: { name: "Account", resource: GitHubAccount } },
       io: (io) => ({
-        owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-        repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-        status: io.data.out("status", DataType.Int, { name: "Status" }),
-        response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+        owner: io.data.in("owner", t.String, { name: "Owner" }),
+        repository: io.data.in("repository", t.String, { name: "Repository" }),
+        status: io.data.out("status", t.Int, { name: "Status" }),
+        response: io.data.out("response", t.String, { name: "Response JSON" }),
       }),
       run: ({ io, engine, properties }) =>
         request(
@@ -134,11 +130,11 @@ const GitHubModule = Module.make({
         name: definition.name,
         properties: { account: { name: "Account", resource: GitHubAccount } },
         io: (io) => ({
-          owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-          repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-          perPage: io.data.in("perPage", DataType.Int, { name: "Per Page", defaultValue: 30 }),
-          status: io.data.out("status", DataType.Int, { name: "Status" }),
-          response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+          owner: io.data.in("owner", t.String, { name: "Owner" }),
+          repository: io.data.in("repository", t.String, { name: "Repository" }),
+          perPage: io.data.in("perPage", t.Int, { name: "Per Page", defaultValue: 30 }),
+          status: io.data.out("status", t.Int, { name: "Status" }),
+          response: io.data.out("response", t.String, { name: "Response JSON" }),
         }),
         run: ({ io, engine, properties }) =>
           request(
@@ -157,12 +153,12 @@ const GitHubModule = Module.make({
       name: "List Commits",
       properties: { account: { name: "Account", resource: GitHubAccount } },
       io: (io) => ({
-        owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-        repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-        ref: io.data.in("ref", DataType.String, { name: "Branch or SHA", defaultValue: "" }),
-        perPage: io.data.in("perPage", DataType.Int, { name: "Per Page", defaultValue: 30 }),
-        status: io.data.out("status", DataType.Int, { name: "Status" }),
-        response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+        owner: io.data.in("owner", t.String, { name: "Owner" }),
+        repository: io.data.in("repository", t.String, { name: "Repository" }),
+        ref: io.data.in("ref", t.String, { name: "Branch or SHA", defaultValue: "" }),
+        perPage: io.data.in("perPage", t.Int, { name: "Per Page", defaultValue: 30 }),
+        status: io.data.out("status", t.Int, { name: "Status" }),
+        response: io.data.out("response", t.String, { name: "Response JSON" }),
       }),
       run: ({ io, engine, properties }) =>
         request(
@@ -184,12 +180,12 @@ const GitHubModule = Module.make({
         name: definition.name,
         properties: { account: { name: "Account", resource: GitHubAccount } },
         io: (io) => ({
-          owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-          repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-          state: io.data.in("state", DataType.String, { name: "State", defaultValue: "open" }),
-          perPage: io.data.in("perPage", DataType.Int, { name: "Per Page", defaultValue: 30 }),
-          status: io.data.out("status", DataType.Int, { name: "Status" }),
-          response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+          owner: io.data.in("owner", t.String, { name: "Owner" }),
+          repository: io.data.in("repository", t.String, { name: "Repository" }),
+          state: io.data.in("state", t.String, { name: "State", defaultValue: "open" }),
+          perPage: io.data.in("perPage", t.Int, { name: "Per Page", defaultValue: 30 }),
+          status: io.data.out("status", t.Int, { name: "Status" }),
+          response: io.data.out("response", t.String, { name: "Response JSON" }),
         }),
         run: ({ io, engine, properties }) =>
           request(
@@ -212,11 +208,11 @@ const GitHubModule = Module.make({
         name: definition.name,
         properties: { account: { name: "Account", resource: GitHubAccount } },
         io: (io) => ({
-          owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-          repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-          number: io.data.in("number", DataType.Int, { name: "Number" }),
-          status: io.data.out("status", DataType.Int, { name: "Status" }),
-          response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+          owner: io.data.in("owner", t.String, { name: "Owner" }),
+          repository: io.data.in("repository", t.String, { name: "Repository" }),
+          number: io.data.in("number", t.Int, { name: "Number" }),
+          status: io.data.out("status", t.Int, { name: "Status" }),
+          response: io.data.out("response", t.String, { name: "Response JSON" }),
         }),
         run: ({ io, engine, properties }) =>
           request(
@@ -235,12 +231,12 @@ const GitHubModule = Module.make({
       name: "Create Issue",
       properties: { account: { name: "Account", resource: GitHubAccount } },
       io: (io) => ({
-        owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-        repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-        title: io.data.in("title", DataType.String, { name: "Title" }),
-        body: io.data.in("body", DataType.String, { name: "Body", defaultValue: "" }),
-        status: io.data.out("status", DataType.Int, { name: "Status" }),
-        response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+        owner: io.data.in("owner", t.String, { name: "Owner" }),
+        repository: io.data.in("repository", t.String, { name: "Repository" }),
+        title: io.data.in("title", t.String, { name: "Title" }),
+        body: io.data.in("body", t.String, { name: "Body", defaultValue: "" }),
+        status: io.data.out("status", t.Int, { name: "Status" }),
+        response: io.data.out("response", t.String, { name: "Response JSON" }),
       }),
       run: ({ io, engine, properties }) =>
         request(
@@ -259,14 +255,14 @@ const GitHubModule = Module.make({
       description: "Updates the non-empty fields on an issue.",
       properties: { account: { name: "Account", resource: GitHubAccount } },
       io: (io) => ({
-        owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-        repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-        number: io.data.in("number", DataType.Int, { name: "Number" }),
-        title: io.data.in("title", DataType.String, { name: "Title", defaultValue: "" }),
-        body: io.data.in("body", DataType.String, { name: "Body", defaultValue: "" }),
-        state: io.data.in("state", DataType.String, { name: "State", defaultValue: "" }),
-        status: io.data.out("status", DataType.Int, { name: "Status" }),
-        response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+        owner: io.data.in("owner", t.String, { name: "Owner" }),
+        repository: io.data.in("repository", t.String, { name: "Repository" }),
+        number: io.data.in("number", t.Int, { name: "Number" }),
+        title: io.data.in("title", t.String, { name: "Title", defaultValue: "" }),
+        body: io.data.in("body", t.String, { name: "Body", defaultValue: "" }),
+        state: io.data.in("state", t.String, { name: "State", defaultValue: "" }),
+        status: io.data.out("status", t.Int, { name: "Status" }),
+        response: io.data.out("response", t.String, { name: "Response JSON" }),
       }),
       run: ({ io, engine, properties }) =>
         request(
@@ -291,12 +287,12 @@ const GitHubModule = Module.make({
       name: "Create Issue or Pull Request Comment",
       properties: { account: { name: "Account", resource: GitHubAccount } },
       io: (io) => ({
-        owner: io.data.in("owner", DataType.String, { name: "Owner" }),
-        repository: io.data.in("repository", DataType.String, { name: "Repository" }),
-        number: io.data.in("number", DataType.Int, { name: "Issue or Pull Request Number" }),
-        body: io.data.in("body", DataType.String, { name: "Body" }),
-        status: io.data.out("status", DataType.Int, { name: "Status" }),
-        response: io.data.out("response", DataType.String, { name: "Response JSON" }),
+        owner: io.data.in("owner", t.String, { name: "Owner" }),
+        repository: io.data.in("repository", t.String, { name: "Repository" }),
+        number: io.data.in("number", t.Int, { name: "Issue or Pull Request Number" }),
+        body: io.data.in("body", t.String, { name: "Body" }),
+        status: io.data.out("status", t.Int, { name: "Status" }),
+        response: io.data.out("response", t.String, { name: "Response JSON" }),
       }),
       run: ({ io, engine, properties }) =>
         request(
@@ -332,15 +328,15 @@ const GitHubModule = Module.make({
             event.event === definition.event && event.webhookId === properties.webhook,
           ),
         io: (io) => ({
-          action: io.data.out("action", DataType.String, { name: "Action" }),
-          owner: io.data.out("owner", DataType.String, { name: "Owner" }),
-          repository: io.data.out("repository", DataType.String, { name: "Repository" }),
-          sender: io.data.out("sender", DataType.String, { name: "Sender" }),
-          deliveryId: io.data.out("deliveryId", DataType.String, { name: "Delivery ID" }),
+          action: io.data.out("action", t.String, { name: "Action" }),
+          owner: io.data.out("owner", t.String, { name: "Owner" }),
+          repository: io.data.out("repository", t.String, { name: "Repository" }),
+          sender: io.data.out("sender", t.String, { name: "Sender" }),
+          deliveryId: io.data.out("deliveryId", t.String, { name: "Delivery ID" }),
           payload: io.data.out("payload", WebhookPayloadTypes[definition.event], {
             name: "Payload",
           }),
-          payloadJson: io.data.out("payloadJson", DataType.String, { name: "Payload JSON" }),
+          payloadJson: io.data.out("payloadJson", t.String, { name: "Payload JSON" }),
         }),
         run: ({ event, io, types }) =>
           Effect.gen(function* () {
@@ -353,7 +349,7 @@ const GitHubModule = Module.make({
             io.payloadJson(JSON.stringify(event.payload));
             const payloadType = WebhookPayloadTypes[definition.event];
             const payload = yield* Schema.decodeUnknownEffect(
-              DataType.ValueSchema(payloadType, types.definitions),
+              t.ValueSchema(payloadType, types.definitions),
             )(preparePayload(payloadType, event.payload, types.definitions));
             if (typeof payload === "object" && payload !== null && !Array.isArray(payload))
               io.payload(payload as Readonly<Record<string, unknown>>);

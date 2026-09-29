@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect } from "effect";
 
 import {
@@ -29,8 +29,8 @@ const WebSocketServerModule = Module.make({
       description: "Sends a text message to one connected client.",
       properties: serverProperty,
       io: (io) => ({
-        clientId: io.data.in("clientId", DataType.String, { name: "Client ID" }),
-        message: io.data.in("message", DataType.String, { name: "Data" }),
+        clientId: io.data.in("clientId", t.String, { name: "Client ID" }),
+        message: io.data.in("message", t.String, { name: "Data" }),
       }),
       run: ({ io, properties, engine }) =>
         engine.WebSocketServerSendToClient({
@@ -45,7 +45,7 @@ const WebSocketServerModule = Module.make({
       description: "Sends a text message to every connected client.",
       properties: serverProperty,
       io: (io) => ({
-        message: io.data.in("message", DataType.String, { name: "Message" }),
+        message: io.data.in("message", t.String, { name: "Message" }),
       }),
       run: ({ io, properties, engine }) =>
         engine.WebSocketServerBroadcast({
@@ -64,7 +64,7 @@ const WebSocketServerModule = Module.make({
           event._tag === "WebSocketServerClientConnected" && event.serverId === properties.server,
         ),
       io: (io) => ({
-        clientId: io.data.out("clientId", DataType.String, { name: "Client ID" }),
+        clientId: io.data.out("clientId", t.String, { name: "Client ID" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -83,9 +83,9 @@ const WebSocketServerModule = Module.make({
             event.serverId === properties.server,
         ),
       io: (io) => ({
-        clientId: io.data.out("clientId", DataType.String, { name: "Client ID" }),
-        cause: io.data.out("cause", DataType.String, { name: "Cause" }),
-        reason: io.data.out("reason", DataType.String, { name: "Reason" }),
+        clientId: io.data.out("clientId", t.String, { name: "Client ID" }),
+        cause: io.data.out("cause", t.String, { name: "Cause" }),
+        reason: io.data.out("reason", t.String, { name: "Reason" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -107,8 +107,8 @@ const WebSocketServerModule = Module.make({
           event._tag === "WebSocketServerMessageReceived" && event.serverId === properties.server,
         ),
       io: (io) => ({
-        clientId: io.data.out("clientId", DataType.String, { name: "Client ID" }),
-        message: io.data.out("message", DataType.String, { name: "Data" }),
+        clientId: io.data.out("clientId", t.String, { name: "Client ID" }),
+        message: io.data.out("message", t.String, { name: "Data" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

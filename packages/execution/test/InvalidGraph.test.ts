@@ -1,20 +1,20 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { DataType, Engine, Module, Resource } from "@macrograph/module";
+import { t, Engine, Module, Resource } from "@macrograph/module";
 import { Array, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
 
 class Trigger extends Schema.TaggedClass<Trigger>()("InvalidGraphTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
-const typeId = DataType.DefinitionId.make("item");
-const type = DataType.Custom(typeId);
-const definitions: DataType.Definitions = {
+const typeId = t.DefinitionId.make("item");
+const type = t.Custom(typeId);
+const definitions: t.Definitions = {
   item: {
     _tag: "Struct",
     id: typeId,
     name: "Item",
-    fields: [{ name: "count", type: DataType.Int }],
+    fields: [{ name: "count", type: t.Int }],
   },
 };
 const node = (
@@ -79,7 +79,7 @@ describe("event graph preflight", () => {
             });
             yield* context.schema.register({
               id: "int",
-              io: (io) => ({ value: io.data.in("value", DataType.Int) }),
+              io: (io) => ({ value: io.data.in("value", t.Int) }),
               run: () =>
                 Effect.sync(() => {
                   runs++;
@@ -178,7 +178,7 @@ describe("event graph preflight", () => {
                 fields: [
                   {
                     name: "child",
-                    type: DataType.Option(DataType.Custom(DataType.DefinitionId.make("deleted"))),
+                    type: t.Option(t.Custom(t.DefinitionId.make("deleted"))),
                   },
                 ],
               },
@@ -284,7 +284,7 @@ describe("event graph preflight", () => {
           });
         }),
       });
-      const unusedId = DataType.DefinitionId.make("unused");
+      const unusedId = t.DefinitionId.make("unused");
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         ...Project.empty(),
         types: {
@@ -293,7 +293,7 @@ describe("event graph preflight", () => {
             id: unusedId,
             name: "Unused",
             fields: [
-              { name: "missing", type: DataType.Custom(DataType.DefinitionId.make("missing")) },
+              { name: "missing", type: t.Custom(t.DefinitionId.make("missing")) },
             ],
           },
         },
@@ -416,7 +416,7 @@ describe("event graph preflight", () => {
           yield* context.schema.register({
             id: "resource",
             properties: { selector: { name: "Selector", resource: Selector } },
-            io: (io, properties) => ({ value: io.data.in(properties.selector, DataType.Int) }),
+            io: (io, properties) => ({ value: io.data.in(properties.selector, t.Int) }),
             run: ({ io }) =>
               Effect.sync(() => {
                 runs += io.value;
@@ -502,12 +502,12 @@ describe("event graph preflight", () => {
     "rejects cyclic live custom values as typed output errors for pure and checkpointed nodes",
     () =>
       Effect.gen(function* () {
-        const recursive: DataType.Definitions = {
+        const recursive: t.Definitions = {
           item: {
             _tag: "Struct",
             id: typeId,
             name: "Item",
-            fields: [{ name: "next", type: DataType.Option(type) }],
+            fields: [{ name: "next", type: t.Option(type) }],
           },
         };
         const cyclic: { _type: string; next: Option.Option<unknown> } = {

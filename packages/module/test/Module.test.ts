@@ -3,7 +3,7 @@ import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { expectTypeOf } from "vitest";
 
-import { DataType, Engine, Module, Registration } from "../src/index.ts";
+import { t, Engine, Module, Registration } from "../src/index.ts";
 
 describe("Module.make", () => {
   it.effect("defaults replay to unsafe for every node type and preserves explicit policies", () =>
@@ -80,11 +80,11 @@ describe("Module.make", () => {
         context.schema.register({
           id: "Route",
           type: "base",
-          properties: { count: { name: "Outputs", type: DataType.Int, defaultValue: 2 } },
+          properties: { count: { name: "Outputs", type: t.Int, defaultValue: 2 } },
           io: (io, properties) => ({
             enter: io.exec.in("enter"),
-            input: io.data.in("input", DataType.String),
-            output: io.data.out("output", DataType.String),
+            input: io.data.in("input", t.String),
+            output: io.data.out("output", t.String),
             branches: globalThis.Array.from({ length: properties.count }, (_, index) =>
               io.exec.out(`branch-${index}`),
             ),
@@ -128,8 +128,8 @@ describe("Module.make", () => {
             id: "Increment",
             type: "pure",
             io: (io) => ({
-              input: io.data.in("input", DataType.Int),
-              output: io.data.out("output", DataType.Int),
+              input: io.data.in("input", t.Int),
+              output: io.data.out("output", t.Int),
             }),
             run: ({ io, engine }) => {
               expectTypeOf(engine).toEqualTypeOf<never>();
@@ -173,7 +173,7 @@ describe("Module.make", () => {
               return Effect.succeed(event._tag === "Trigger");
             },
             io: (io) => ({
-              value: io.data.in("value", DataType.String, {
+              value: io.data.in("value", t.String, {
                 suggestions: ({ engine }) => {
                   expectTypeOf(engine).toEqualTypeOf<Engine.RuntimeClientOf<typeof TestEngine>>();
                   return engine.GetValues();

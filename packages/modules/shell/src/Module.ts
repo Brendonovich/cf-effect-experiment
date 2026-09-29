@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -14,7 +14,7 @@ const ShellModule = Module.make({
       name: "Execute Shell Command",
       description:
         "Executes a trusted command on the runtime host. Requires MACROGRAPH_ENABLE_SHELL=true.",
-      io: (io) => ({ command: io.data.in("command", DataType.String, { name: "Command" }) }),
+      io: (io) => ({ command: io.data.in("command", t.String, { name: "Command" }) }),
       run: ({ io, engine }) => engine.ShellExecute({ command: io.command }).pipe(Effect.asVoid),
     }),
 });

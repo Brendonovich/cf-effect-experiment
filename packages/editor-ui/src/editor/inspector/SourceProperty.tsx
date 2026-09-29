@@ -1,5 +1,5 @@
 import type { SchemaAuthoring, Package } from "@macrograph/core";
-import type { DataType } from "@macrograph/module/DataType";
+import type { t } from "@macrograph/module";
 
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, Show } from "solid-js";
@@ -18,7 +18,7 @@ export function SourceProperty(props: {
   source: SchemaAuthoring.PropertySource;
   property: Package.PropertyDefinition;
   properties: Readonly<Record<string, unknown>>;
-  definitions: DataType.Definitions;
+  definitions: t.Definitions;
   io?: SchemaAuthoring.Context["io"];
   disabled: boolean;
   onChange: (value: string) => void;

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 import { IoId, Scopes } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { For, createSignal } from "solid-js";
 
 import {
@@ -67,7 +67,7 @@ export const ScopeOutput: Story = {
         {
           id: IoId.make("found"),
           name: "Found",
-          scope: [{ id: IoId.make("value"), name: "Value", type: DataType.String }],
+          scope: [{ id: IoId.make("value"), name: "Value", type: t.String }],
         },
         { id: IoId.make("empty"), name: "Empty" },
       ],
@@ -85,7 +85,7 @@ export const BreakScope: Story = {
     node: Scopes.projectionNode({ id: branchNode.id, position: { x: 24, y: 24 } }),
     io: {
       dataInputs: [],
-      dataOutputs: [{ id: IoId.make("value"), name: "Value", type: DataType.String }],
+      dataOutputs: [{ id: IoId.make("value"), name: "Value", type: t.String }],
       executionInputs: [{ id: IoId.make("scope"), scope: null, name: "Scope" }],
       executionOutputs: [{ id: IoId.make("exec") }],
     },
@@ -116,8 +116,8 @@ export const InlineScope: Story = {
           id: IoId.make("found"),
           name: "Found",
           scope: [
-            { id: IoId.make("value"), name: "Value", type: DataType.String },
-            { id: IoId.make("count"), name: "Count", type: DataType.Int },
+            { id: IoId.make("value"), name: "Value", type: t.String },
+            { id: IoId.make("count"), name: "Count", type: t.Int },
           ],
         },
         { id: IoId.make("empty"), name: "Empty" },

@@ -1,5 +1,5 @@
 import { Project } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { migrate } from "drizzle-orm/node-sqlite/migrator";
@@ -16,8 +16,8 @@ import { DrizzleDriver } from "../src/DrizzleDriver.ts";
 import { SqlitePersistence } from "../src/SqlitePersistence.ts";
 
 const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url));
-const leafId = DataType.DefinitionId.make("leaf");
-const resultId = DataType.DefinitionId.make("result");
+const leafId = t.DefinitionId.make("leaf");
+const resultId = t.DefinitionId.make("result");
 const project = Schema.decodeUnknownSync(Project.Model)({
   ...Project.empty(),
   name: "Custom types persistence",
@@ -27,8 +27,8 @@ const project = Schema.decodeUnknownSync(Project.Model)({
       id: leafId,
       name: "Leaf",
       fields: [
-        { name: "label", type: DataType.String },
-        { name: "children", type: DataType.List(DataType.Custom(leafId)) },
+        { name: "label", type: t.String },
+        { name: "children", type: t.List(t.Custom(leafId)) },
       ],
     },
     result: {
@@ -37,7 +37,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
       name: "Result",
       variants: [
         { name: "Empty", fields: [] },
-        { name: "Found", fields: [{ name: "leaf", type: DataType.Custom(leafId) }] },
+        { name: "Found", fields: [{ name: "leaf", type: t.Custom(leafId) }] },
       ],
     },
   },

@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { createMemo, createSignal, For, Show } from "solid-js";
 
@@ -43,8 +43,8 @@ const styles = stylex.create({
 });
 
 function ValueFields(props: {
-  type: DataType.Any;
-  definitions: DataType.Definitions;
+  type: t.Any;
+  definitions: t.Definitions;
   value: unknown;
   label: string;
   disabled: boolean;
@@ -231,7 +231,7 @@ function ValueFields(props: {
                 <Show
                   when={
                     def()._tag === "Enum"
-                      ? (def() as Extract<DataType.Definition, { _tag: "Enum" }>)
+                      ? (def() as Extract<t.Definition, { _tag: "Enum" }>)
                       : undefined
                   }
                 >
@@ -338,8 +338,8 @@ function ValueFields(props: {
 }
 
 export function StructuredDefault(props: {
-  type?: DataType.Any;
-  definitions: DataType.Definitions;
+  type?: t.Any;
+  definitions: t.Definitions;
   value: unknown;
   present: boolean;
   label: string;

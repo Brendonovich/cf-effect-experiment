@@ -4,7 +4,7 @@ import type * as Engine from "./Engine.ts";
 import type { ExecutionContext, NodeExecutionContext } from "./ExecutionContext.ts";
 import type * as Resource from "./Resource.ts";
 
-import * as DataType from "./DataType.ts";
+import * as t from "./DataType.ts";
 
 export type SuggestionContext<
   Properties = Readonly<Record<string, unknown>>,
@@ -25,7 +25,7 @@ export class DataInputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: DataType.Any,
+    readonly type: t.Any,
     readonly name?: string,
     readonly defaultValue?: Value,
     readonly suggestions?: Suggestions,
@@ -38,7 +38,7 @@ export class DataOutputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: DataType.Any,
+    readonly type: t.Any,
     readonly name?: string,
   ) {}
 }
@@ -66,12 +66,12 @@ export class ExecutionOutputRef {
 export interface ScopeField {
   readonly id: string;
   readonly name?: string | undefined;
-  readonly type: DataType.Any;
+  readonly type: t.Any;
 }
 
-export type ScopeFields = Readonly<Record<string, DataType.Any>>;
+export type ScopeFields = Readonly<Record<string, t.Any>>;
 export type ScopeValue<Fields extends ScopeFields> = {
-  readonly [Key in keyof Fields]: DataType.Value<Fields[Key]>;
+  readonly [Key in keyof Fields]: t.Value<Fields[Key]>;
 };
 
 /** A selected execution branch and its payload are returned atomically. */
@@ -115,33 +115,32 @@ export const scopesCompatible = (
     (output.length === input.length &&
       input.every((field) =>
         output.some(
-          (candidate) =>
-            candidate.id === field.id && DataType.compatible(candidate.type, field.type),
+          (candidate) => candidate.id === field.id && t.compatible(candidate.type, field.type),
         ),
       ))
   );
 };
 
-type InputOptions<Type extends DataType.Any, Properties, EngineClient> = {
+type InputOptions<Type extends t.Any, Properties, EngineClient> = {
   readonly name?: string;
-  readonly defaultValue?: DataType.Value<Type>;
-} & (DataType.Value<Type> extends string
+  readonly defaultValue?: t.Value<Type>;
+} & (t.Value<Type> extends string
   ? { readonly suggestions?: Suggestions<Properties, EngineClient> }
   : { readonly suggestions?: never });
 
 export interface IOContext<Properties = Readonly<Record<string, unknown>>, EngineClient = unknown> {
-  readonly wildcard: (id: string) => DataType.Wildcard;
+  readonly wildcard: (id: string) => t.Wildcard;
   readonly data: {
-    readonly in: <Type extends DataType.Any>(
+    readonly in: <Type extends t.Any>(
       id: string,
       type: Type,
       options?: InputOptions<Type, Properties, EngineClient>,
-    ) => DataInputRef<DataType.Value<Type>>;
-    readonly out: <Type extends DataType.Any>(
+    ) => DataInputRef<t.Value<Type>>;
+    readonly out: <Type extends t.Any>(
       id: string,
       type: Type,
       options?: { readonly name?: string },
-    ) => DataOutputRef<DataType.Value<Type>>;
+    ) => DataOutputRef<t.Value<Type>>;
   };
   readonly exec: {
     readonly in: (id: string, options?: { readonly name?: string }) => ExecutionInputRef;
@@ -161,13 +160,13 @@ export interface IOContext<Properties = Readonly<Record<string, unknown>>, Engin
   };
 }
 
-export type ScalarPropertyDefinition<Type extends DataType.Scalar = DataType.Scalar> = {
+export type ScalarPropertyDefinition<Type extends t.Scalar = t.Scalar> = {
   readonly name: string;
   readonly description?: string;
   readonly type: Type;
 } & (
-  | { readonly optional: true; readonly defaultValue?: DataType.Value<Type> }
-  | { readonly optional?: false; readonly defaultValue: DataType.Value<Type> }
+  | { readonly optional: true; readonly defaultValue?: t.Value<Type> }
+  | { readonly optional?: false; readonly defaultValue: t.Value<Type> }
 );
 
 export type ResourcePropertyDefinition<Type extends Resource.AnyClass = Resource.AnyClass> = {
@@ -185,8 +184,8 @@ export type PropertyValues<Properties extends PropertyDefinitions> = {
     ? Resource.ResourceClassSelf<R>
     : Properties[Key] extends ScalarPropertyDefinition<infer Type>
       ? Properties[Key] extends { readonly optional: true }
-        ? DataType.Value<Type> | undefined
-        : DataType.Value<Type>
+        ? t.Value<Type> | undefined
+        : t.Value<Type>
       : never;
 };
 
@@ -212,8 +211,8 @@ export type Materialized<IO> =
                 : IO;
 
 export interface RuntimeTypes {
-  readonly resolve: (type: DataType.Any) => DataType.Any;
-  readonly definitions: DataType.Definitions;
+  readonly resolve: (type: t.Any) => t.Any;
+  readonly definitions: t.Definitions;
 }
 
 export type RunContext<IO, Definition extends Engine.AnyDef> = {
@@ -279,7 +278,7 @@ export interface RegisteredScalarProperty {
   readonly id: string;
   readonly name: string;
   readonly description?: string;
-  readonly type: DataType.Scalar;
+  readonly type: t.Scalar;
   readonly optional: boolean;
   readonly defaultValue?: unknown;
 }
@@ -334,7 +333,7 @@ export interface RegisteredNodeIO {
 }
 
 const ioContext: IOContext<Readonly<Record<string, unknown>>> = {
-  wildcard: DataType.Wildcard,
+  wildcard: t.Wildcard,
   data: {
     in: (id, type, options) =>
       new DataInputRef(id, type, options?.name, options?.defaultValue, options?.suggestions),

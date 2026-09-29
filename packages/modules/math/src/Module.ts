@@ -1,8 +1,8 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Clock, Effect, Random } from "effect";
 
-const checked = Effect.fnUntraced(function* (value: number, type: DataType.Int | DataType.Float) {
+const checked = Effect.fnUntraced(function* (value: number, type: t.Int | t.Float) {
   if (!Number.isFinite(value) || (type._tag === "Int" && !Number.isSafeInteger(value)))
     return yield* Effect.fail(
       new RangeError(type._tag === "Int" ? "Expected a safe integer" : "Expected a finite number"),
@@ -16,8 +16,8 @@ const MathModule = Module.make({
   description: "Perform arithmetic, comparisons, rounding, and other numeric operations.",
   effect: Effect.fnUntraced(function* (context) {
     for (const [suffix, type] of [
-      ["Ints", DataType.Int],
-      ["Floats", DataType.Float],
+      ["Ints", t.Int],
+      ["Floats", t.Float],
     ] as const) {
       for (const [operation, calculate] of [
         ["Add", (a: number, b: number) => a + b],
@@ -77,9 +77,9 @@ const MathModule = Module.make({
         io: (io) => ({
           input: io.data.in("number", type, { name: "Number", defaultValue: 0 }),
           compare: io.data.in("compare", type, { name: "Compare against", defaultValue: 0 }),
-          equal: io.data.out("outputE", DataType.Bool, { name: "Equal" }),
-          greater: io.data.out("outputG", DataType.Bool, { name: "Greater" }),
-          less: io.data.out("outputL", DataType.Bool, { name: "Less" }),
+          equal: io.data.out("outputE", t.Bool, { name: "Equal" }),
+          greater: io.data.out("outputG", t.Bool, { name: "Greater" }),
+          less: io.data.out("outputL", t.Bool, { name: "Less" }),
         }),
         run: ({ io }) =>
           Effect.gen(function* () {
@@ -97,8 +97,8 @@ const MathModule = Module.make({
       });
     }
     for (const [id, name, inputType, calculate] of [
-      ["DivideIntsExact", "Divide Ints Exact", DataType.Int, (a: number, b: number) => a / b],
-      ["ExponentFloats", "Exponent Floats", DataType.Float, (a: number, b: number) => a ** b],
+      ["DivideIntsExact", "Divide Ints Exact", t.Int, (a: number, b: number) => a / b],
+      ["ExponentFloats", "Exponent Floats", t.Float, (a: number, b: number) => a ** b],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -115,7 +115,7 @@ const MathModule = Module.make({
             ...(id === "ExponentFloats" ? { name: "Exponent" } : {}),
             defaultValue: 1,
           }),
-          output: io.data.out("output", DataType.Float),
+          output: io.data.out("output", t.Float),
         }),
         run: ({ io }) =>
           Effect.gen(function* () {
@@ -123,20 +123,20 @@ const MathModule = Module.make({
             const two = yield* checked(io.two, inputType);
             if (id === "DivideIntsExact" && two === 0)
               return yield* Effect.fail(new RangeError("Cannot divide by zero"));
-            const value = yield* checked(calculate(one, two), DataType.Float);
+            const value = yield* checked(calculate(one, two), t.Float);
             yield* Effect.try({ try: () => io.output(value), catch: (error) => error });
           }),
       });
     }
     for (const [id, name, inputType, outputType, calculate] of [
-      ["Sin", "Sin", DataType.Float, DataType.Float, Math.sin],
-      ["Cos", "Cos", DataType.Float, DataType.Float, Math.cos],
-      ["Tan", "Tan", DataType.Float, DataType.Float, Math.tan],
-      ["FloatToInt", "Float To Int", DataType.Float, DataType.Int, Math.round],
-      ["IntToFloat", "Int To Float", DataType.Int, DataType.Float, (value: number) => value],
-      ["FloorFloat", "Floor Float", DataType.Float, DataType.Int, Math.floor],
-      ["MakeInt", "Make Int", DataType.Int, DataType.Int, (value: number) => value],
-      ["MakeFloat", "Make Float", DataType.Float, DataType.Float, (value: number) => value],
+      ["Sin", "Sin", t.Float, t.Float, Math.sin],
+      ["Cos", "Cos", t.Float, t.Float, Math.cos],
+      ["Tan", "Tan", t.Float, t.Float, Math.tan],
+      ["FloatToInt", "Float To Int", t.Float, t.Int, Math.round],
+      ["IntToFloat", "Int To Float", t.Int, t.Float, (value: number) => value],
+      ["FloorFloat", "Floor Float", t.Float, t.Int, Math.floor],
+      ["MakeInt", "Make Int", t.Int, t.Int, (value: number) => value],
+      ["MakeFloat", "Make Float", t.Float, t.Float, (value: number) => value],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -161,25 +161,25 @@ const MathModule = Module.make({
       description: "Rounds a finite float to -308 through 308 decimal places. Overflow fails.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("input", DataType.Float, { defaultValue: 0 }),
-        decimal: io.data.in("decimal", DataType.Int, { name: "Decimal Places", defaultValue: 0 }),
-        output: io.data.out("output", DataType.Float),
+        input: io.data.in("input", t.Float, { defaultValue: 0 }),
+        decimal: io.data.in("decimal", t.Int, { name: "Decimal Places", defaultValue: 0 }),
+        output: io.data.out("output", t.Float),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
-          yield* checked(io.input, DataType.Float);
+          yield* checked(io.input, t.Float);
           if (!Number.isSafeInteger(io.decimal) || Math.abs(io.decimal) > 308)
             return yield* Effect.fail(
               new RangeError("Decimal places must be an integer between -308 and 308"),
             );
           const scale = 10 ** io.decimal;
-          const value = yield* checked(Math.round(io.input * scale) / scale, DataType.Float);
+          const value = yield* checked(Math.round(io.input * scale) / scale, t.Float);
           yield* Effect.try({ try: () => io.output(value), catch: (error) => error });
         }),
     });
     for (const [id, name, type] of [
-      ["RandomFloat", "Random Float", DataType.Float],
-      ["RandomInteger", "Random Integer", DataType.Int],
+      ["RandomFloat", "Random Float", t.Float],
+      ["RandomInteger", "Random Integer", t.Int],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -235,7 +235,7 @@ const MathModule = Module.make({
         description:
           "Samples epoch milliseconds from the Effect clock on execution, rather than as a pure value.",
         io: (io) => ({
-          output: io.data.out("out", DataType.Int, {
+          output: io.data.out("out", t.Int, {
             name: id === "DateNow" ? "Time (ms)" : "Timestamp",
           }),
         }),

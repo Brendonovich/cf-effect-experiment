@@ -15,7 +15,7 @@ import {
 } from "@macrograph/core";
 import { Engine, Module } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -32,28 +32,28 @@ import {
 } from "../src/index.ts";
 import { apply } from "../src/projectEventProjection.ts";
 
-const personId = DataType.DefinitionId.make("person");
-const groupId = DataType.DefinitionId.make("group");
-const teamId = DataType.DefinitionId.make("team");
-const person: DataType.Definition = {
+const personId = t.DefinitionId.make("person");
+const groupId = t.DefinitionId.make("group");
+const teamId = t.DefinitionId.make("team");
+const person: t.Definition = {
   _tag: "Struct",
   id: personId,
   name: "Person",
-  fields: [{ name: "name", type: DataType.String }],
+  fields: [{ name: "name", type: t.String }],
 };
-const definitions: DataType.Definitions = {
+const definitions: t.Definitions = {
   person,
   group: {
     _tag: "Struct",
     id: groupId,
     name: "Group",
-    fields: [{ name: "people", type: DataType.List(DataType.Custom(personId)) }],
+    fields: [{ name: "people", type: t.List(t.Custom(personId)) }],
   },
   team: {
     _tag: "Struct",
     id: teamId,
     name: "Team",
-    fields: [{ name: "group", type: DataType.Option(DataType.Custom(groupId)) }],
+    fields: [{ name: "group", type: t.Option(t.Custom(groupId)) }],
   },
 };
 const pkg: Package.Model = {
@@ -66,7 +66,7 @@ const pkg: Package.Model = {
       name: "Sink",
       type: "pure",
       properties: [],
-      dataInputs: [{ id: IoId.make("value"), type: DataType.Custom(teamId) }],
+      dataInputs: [{ id: IoId.make("value"), type: t.Custom(teamId) }],
       dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
@@ -76,7 +76,7 @@ const pkg: Package.Model = {
       name: "String",
       type: "pure",
       properties: [],
-      dataInputs: [{ id: IoId.make("value"), type: DataType.String }],
+      dataInputs: [{ id: IoId.make("value"), type: t.String }],
       dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
@@ -87,7 +87,7 @@ const pkg: Package.Model = {
       type: "pure",
       properties: [],
       dataInputs: [],
-      dataOutputs: [{ id: IoId.make("value"), type: DataType.Custom(personId) }],
+      dataOutputs: [{ id: IoId.make("value"), type: t.Custom(personId) }],
       executionInputs: [],
       executionOutputs: [],
     },
@@ -171,7 +171,7 @@ const seed: Project.Model = {
             "property",
             { package: pkg.id, schema: SchemaId.make("string") },
             {},
-            { type: JSON.stringify(DataType.List(DataType.Option(DataType.Custom(personId)))) },
+            { type: JSON.stringify(t.List(t.Option(t.Custom(personId)))) },
           ),
         },
         connections: [],
@@ -199,7 +199,7 @@ const fresh: TypeDefinition.Change = {
   _tag: "Upsert",
   definition: {
     _tag: "Struct",
-    id: DataType.DefinitionId.make("fresh"),
+    id: t.DefinitionId.make("fresh"),
     name: "Fresh",
     fields: [],
   },
@@ -219,11 +219,11 @@ describe("type authoring preserve-invalid", () => {
       const io = rendered.graphs.first!.nodes.make!.io;
       expect(update.properties).toEqual({});
       expect(io.dataInputs).toEqual([
-        { id: "value", type: DataType.Custom(personId) },
+        { id: "value", type: t.Custom(personId) },
         {
           id: field,
           name: "name",
-          type: DataType.Option(DataType.String),
+          type: t.Option(t.String),
           defaultValue: { _tag: "None" },
         },
       ]);
@@ -266,7 +266,7 @@ describe("type authoring preserve-invalid", () => {
       });
       const event = yield* mutate(editor, { _tag: "Delete", id: personId });
       const io = event.nodeIO.second![created.node.id]!;
-      expect(io.dataInputs).toEqual([{ id: "value", type: DataType.Wildcard("Struct") }]);
+      expect(io.dataInputs).toEqual([{ id: "value", type: t.Wildcard("Struct") }]);
       expect(TypeDefinition.nodeDiagnostics(created.node, io, event.types)).toEqual([]);
     }).pipe(Effect.provide(testLayer)),
   );
@@ -293,7 +293,7 @@ describe("type authoring preserve-invalid", () => {
         yield* persistence.saveNode("second", push);
         const snapshot = yield* editor.project.snapshot();
         expect(snapshot.nodeIO.second![create.id]!.dataInputs[0]!.type).toEqual(
-          DataType.Wildcard("Item"),
+          t.Wildcard("Item"),
         );
         expect(snapshot.nodeIO.second![create.id]!.dataInputs[0]!.defaultValue).toBeUndefined();
         expect(
@@ -352,13 +352,13 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        const cyclic: { _tag: "List"; item: DataType.Any } = {
+        const cyclic: { _tag: "List"; item: t.Any } = {
           _tag: "List",
-          item: DataType.String,
+          item: t.String,
         };
         cyclic.item = cyclic;
-        let deep: DataType.Any = DataType.String;
-        for (let i = 0; i < 1000; i++) deep = DataType.Option(deep);
+        let deep: t.Any = t.String;
+        for (let i = 0; i < 1000; i++) deep = t.Option(deep);
         for (const type of [cyclic, deep]) {
           const change: TypeDefinition.Change = {
             _tag: "Upsert",
@@ -383,11 +383,11 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        const dependent: DataType.Definition = {
+        const dependent: t.Definition = {
           _tag: "Struct",
-          id: DataType.DefinitionId.make("required"),
+          id: t.DefinitionId.make("required"),
           name: "Required",
-          fields: [{ name: "person", type: DataType.Custom(personId) }],
+          fields: [{ name: "person", type: t.Custom(personId) }],
         };
         yield* mutate(editor, { _tag: "Upsert", definition: dependent });
         const change: TypeDefinition.Change = {
@@ -400,7 +400,7 @@ describe("type authoring preserve-invalid", () => {
               { name: "Empty", fields: [] },
               {
                 name: "Nested",
-                fields: [{ name: "required", type: DataType.Custom(dependent.id) }],
+                fields: [{ name: "required", type: t.Custom(dependent.id) }],
               },
             ],
           },
@@ -413,7 +413,7 @@ describe("type authoring preserve-invalid", () => {
           anchoredConnections,
         );
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([
-          { id: "value", type: DataType.Wildcard("Struct") },
+          { id: "value", type: t.Wildcard("Struct") },
         ]);
         expect(TypeDefinition.validate(event.types)).toEqual([]);
         const unsafe: TypeDefinition.Change = {
@@ -422,7 +422,7 @@ describe("type authoring preserve-invalid", () => {
             _tag: "Struct",
             id: personId,
             name: "Person",
-            fields: [{ name: "required", type: DataType.Custom(dependent.id) }],
+            fields: [{ name: "required", type: t.Custom(dependent.id) }],
           },
         };
         expect(
@@ -439,7 +439,7 @@ describe("type authoring preserve-invalid", () => {
   it.effect("unanchored wildcard nodes do not retain a hidden type dependency", () =>
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
-      const id = DataType.DefinitionId.make("empty");
+      const id = t.DefinitionId.make("empty");
       yield* mutate(editor, {
         _tag: "Upsert",
         definition: { _tag: "Struct", id, name: "Empty", fields: [] },
@@ -539,7 +539,7 @@ describe("type authoring preserve-invalid", () => {
         expect(Project.canvases(project).first!.connections).toEqual(anchoredConnections);
         expect(event.deletedConnectionIds).toEqual({ first: ["wire"] });
         expect(event.nodeIO.first!.make!.dataInputs).toEqual([
-          { id: "value", type: DataType.Wildcard("Struct") },
+          { id: "value", type: t.Wildcard("Struct") },
         ]);
         expect((yield* editor.project.snapshot()).nodeIO).toEqual(event.nodeIO);
         expect(
@@ -568,7 +568,7 @@ describe("type authoring preserve-invalid", () => {
         );
         expect(
           (yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs[0]!.type,
-        ).toEqual(DataType.Wildcard("Struct"));
+        ).toEqual(t.Wildcard("Struct"));
         const diagnostics = TypeDefinition.nodeDiagnostics(
           seedCanvases.second!.nodes.sink!,
           event.nodeIO.second!.sink!,
@@ -607,7 +607,7 @@ describe("type authoring preserve-invalid", () => {
       const editor = yield* Editor.Service;
       const event = yield* mutate(editor, {
         _tag: "Upsert",
-        definition: { ...person, fields: [{ name: "name", type: DataType.Int }] },
+        definition: { ...person, fields: [{ name: "name", type: t.Int }] },
       });
       expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
         anchoredConnections,
@@ -674,14 +674,14 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        const enumId = DataType.DefinitionId.make("result");
-        const definition: DataType.Definition = {
+        const enumId = t.DefinitionId.make("result");
+        const definition: t.Definition = {
           _tag: "Enum",
           id: enumId,
           name: "Result",
           variants: [
             { name: "Empty", fields: [] },
-            { name: "Found", fields: [{ name: "name", type: DataType.String }] },
+            { name: "Found", fields: [{ name: "name", type: t.String }] },
           ],
         };
         yield* mutate(editor, { _tag: "Upsert", definition });
@@ -692,7 +692,7 @@ describe("type authoring preserve-invalid", () => {
               context.schema.register({
                 id: "anchor",
                 type: "pure",
-                io: (io) => ({ value: io.data.in("value", DataType.Custom(enumId)) }),
+                io: (io) => ({ value: io.data.in("value", t.Custom(enumId)) }),
                 run: () => Effect.void,
               }),
           }),
@@ -771,33 +771,33 @@ describe("type authoring preserve-invalid", () => {
   );
 
   it("diagnoses nested JSON DateTime/List/Option values strictly without blocking unrelated invalid definitions", () => {
-    const id = DataType.DefinitionId.make("record");
-    const registry: DataType.Definitions = {
+    const id = t.DefinitionId.make("record");
+    const registry: t.Definitions = {
       record: {
         _tag: "Struct",
         id,
         name: "Record",
         fields: [
-          { name: "when", type: DataType.DateTime },
-          { name: "people", type: DataType.List(DataType.Option(DataType.Custom(personId))) },
+          { name: "when", type: t.DateTime },
+          { name: "people", type: t.List(t.Option(t.Custom(personId))) },
         ],
       },
       person,
       unused: {
         _tag: "Struct",
-        id: DataType.DefinitionId.make("unused"),
+        id: t.DefinitionId.make("unused"),
         name: "Unused",
-        fields: [{ name: "missing", type: DataType.Custom(DataType.DefinitionId.make("absent")) }],
+        fields: [{ name: "missing", type: t.Custom(t.DefinitionId.make("absent")) }],
       },
     };
-    const type = DataType.Custom(id);
+    const type = t.Custom(id);
     const io = {
       dataInputs: [{ id: IoId.make("value"), type }],
       dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
     };
-    const value = Schema.encodeUnknownSync(DataType.JsonValueSchema(type, registry))({
+    const value = Schema.encodeUnknownSync(t.JsonValueSchema(type, registry))({
       _type: "record",
       when: DateTime.makeUnsafe("2026-08-31T00:00:00Z"),
       people: [Option.some({ _type: "person", name: "Ada" })],
@@ -813,7 +813,7 @@ describe("type authoring preserve-invalid", () => {
     expect(model.inputDefaults.value).toEqual(value);
     const { person: _, ...missing } = registry;
     expect(TypeDefinition.nodeDiagnostics(model, io, missing)).toContain("Missing type person");
-    const recursive: DataType.Definitions = {
+    const recursive: t.Definitions = {
       record: { _tag: "Struct", id, name: "Loop", fields: [{ name: "next", type }] },
     };
     expect(
@@ -984,24 +984,24 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        const bad: readonly DataType.Definition[] = [
-          { ...person, id: DataType.DefinitionId.make("__proto__") },
+        const bad: readonly t.Definition[] = [
+          { ...person, id: t.DefinitionId.make("__proto__") },
           { ...person, name: "constructor" },
           { ...person, name: "Group" },
           {
             ...person,
             fields: [
-              { name: "name", type: DataType.String },
-              { name: "name", type: DataType.Int },
+              { name: "name", type: t.String },
+              { name: "name", type: t.Int },
             ],
           },
-          { ...person, fields: [{ name: "next", type: DataType.Custom(personId) }] },
+          { ...person, fields: [{ name: "next", type: t.Custom(personId) }] },
           {
             ...person,
             fields: [
               {
                 name: "missing",
-                type: DataType.List(DataType.Custom(DataType.DefinitionId.make("missing"))),
+                type: t.List(t.Custom(t.DefinitionId.make("missing"))),
               },
             ],
           },
@@ -1022,7 +1022,7 @@ describe("type authoring preserve-invalid", () => {
           (yield* Effect.flip(
             editor.typeDefinition.preview({
               _tag: "Delete",
-              id: DataType.DefinitionId.make("absent"),
+              id: t.DefinitionId.make("absent"),
             }),
           ))._tag,
         ).toBe("TypeDefinitionNotFoundError");
@@ -1033,9 +1033,9 @@ describe("type authoring preserve-invalid", () => {
               _tag: "Upsert",
               definition: {
                 _tag: "Struct",
-                id: DataType.DefinitionId.make("new"),
+                id: t.DefinitionId.make("new"),
                 name: "New",
-                fields: [{ name: "group", type: DataType.Custom(groupId) }],
+                fields: [{ name: "group", type: t.Custom(groupId) }],
               },
             }),
           ))._tag,
@@ -1176,7 +1176,7 @@ describe("type authoring preserve-invalid", () => {
           const snapshot = yield* editor.project.snapshot();
           expect(snapshot.project.graphs.first!.connections).toEqual(anchoredConnections);
           expect(snapshot.nodeIO.first!.make!.dataInputs).toEqual([
-            { id: "value", type: DataType.Wildcard("Struct") },
+            { id: "value", type: t.Wildcard("Struct") },
           ]);
           yield* editor.node.clearInputDefault({ graphID: "first", nodeID: "make", input: field });
         }).pipe(

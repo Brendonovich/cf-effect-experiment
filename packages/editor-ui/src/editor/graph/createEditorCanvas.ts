@@ -385,7 +385,10 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
       const match = singleCompatibleSchema(
         store.packages,
         drag.source,
-        store.project?.types,
+        {
+          ...(store.project?.types ?? {}),
+          ...Object.fromEntries(store.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
+        },
         editor.authoring,
       );
       if (match === undefined) setNodeMenu(menu);

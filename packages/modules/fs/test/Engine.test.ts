@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { DataType, Registration } from "@macrograph/module";
+import { t, Registration } from "@macrograph/module";
 import { Effect, FileSystem, Path, Result } from "effect";
 
 import { makeRuntimeClient } from "../src/Engine.ts";
@@ -123,7 +123,7 @@ describe("Filesystem", () => {
           return schema.run({
             input: (ref) => (Object.hasOwn(inputs, ref.id) ? inputs[ref.id] : ref.defaultValue),
             output: (ref, value) => {
-              assert.isTrue(DataType.isValue(ref.type, value), ref.id);
+              assert.isTrue(t.isValue(ref.type, value), ref.id);
               outputs.set(ref.id, value);
             },
             properties: {},

@@ -1,4 +1,4 @@
-import { DataType, Module } from "@macrograph/module";
+import { t, Module } from "@macrograph/module";
 import { Effect, Option } from "effect";
 
 import { KofiEngine, KofiWebhook } from "./Definition.ts";
@@ -22,13 +22,13 @@ export default Module.make({
       },
       event: (event, { properties }) => Effect.succeed(event.webhookId === properties.webhook),
       io: (io) => ({
-        type: io.data.out("type", DataType.String, { name: "Type" }),
-        fromName: io.data.out("fromName", DataType.String, { name: "From Name" }),
-        amount: io.data.out("amount", DataType.String, { name: "Amount" }),
-        currency: io.data.out("currency", DataType.String, { name: "Currency" }),
-        message: io.data.out("message", DataType.Option(DataType.String), { name: "Message" }),
-        email: io.data.out("email", DataType.String, { name: "Email" }),
-        transactionId: io.data.out("transactionId", DataType.String, { name: "Transaction ID" }),
+        type: io.data.out("type", t.String, { name: "Type" }),
+        fromName: io.data.out("fromName", t.String, { name: "From Name" }),
+        amount: io.data.out("amount", t.String, { name: "Amount" }),
+        currency: io.data.out("currency", t.String, { name: "Currency" }),
+        message: io.data.out("message", t.Option(t.String), { name: "Message" }),
+        email: io.data.out("email", t.String, { name: "Email" }),
+        transactionId: io.data.out("transactionId", t.String, { name: "Transaction ID" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

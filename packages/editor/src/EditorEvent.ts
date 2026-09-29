@@ -10,7 +10,7 @@ import {
   Queue,
   Scopes,
 } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 const actor = Actor.Model.pipe(Schema.withDecodingDefaultKey(Effect.succeed(Actor.system)));
@@ -23,7 +23,7 @@ const emptyNodeIO: NodeIO = {
 
 export const TypeDefinitionsUpdated = Schema.TaggedStruct("TypeDefinitionsUpdated", {
   actor,
-  types: DataType.Definitions,
+  types: t.Definitions,
   nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
   deletedConnectionIds: Schema.Record(Schema.String, Schema.Array(Schema.String)).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed({})),

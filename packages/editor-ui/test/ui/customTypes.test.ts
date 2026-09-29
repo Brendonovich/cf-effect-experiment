@@ -1,19 +1,19 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { describe, expect, it } from "vitest";
 
 import { defaultValueError, initialDefaultValue } from "../../src/ui/defaultValues";
 import { filterTypeChoices, replaceTypeSegment, typeLabel } from "../../src/ui/typeSelection";
 
-const id = DataType.DefinitionId.make("person");
-const recursiveId = DataType.DefinitionId.make("tree");
-const definitions: DataType.Definitions = {
+const id = t.DefinitionId.make("person");
+const recursiveId = t.DefinitionId.make("tree");
+const definitions: t.Definitions = {
   person: {
     _tag: "Struct",
     id,
     name: "Person",
     fields: [
-      { name: "name", type: DataType.String },
-      { name: "dates", type: DataType.List(DataType.Option(DataType.DateTime)) },
+      { name: "name", type: t.String },
+      { name: "dates", type: t.List(t.Option(t.DateTime)) },
     ],
   },
   tree: {
@@ -21,7 +21,7 @@ const definitions: DataType.Definitions = {
     id: recursiveId,
     name: "Tree",
     variants: [
-      { name: "Branch", fields: [{ name: "child", type: DataType.Custom(recursiveId) }] },
+      { name: "Branch", fields: [{ name: "child", type: t.Custom(recursiveId) }] },
       { name: "Leaf", fields: [] },
     ],
   },
@@ -29,54 +29,54 @@ const definitions: DataType.Definitions = {
 
 describe("custom type UI helpers", () => {
   it("searches names and stable identities and preserves nested container children", () => {
-    expect(filterTypeChoices("person", definitions)).toEqual([DataType.Custom(id)]);
+    expect(filterTypeChoices("person", definitions)).toEqual([t.Custom(id)]);
     expect(
-      replaceTypeSegment(DataType.List(DataType.Option(DataType.String)), 2, DataType.Custom(id)),
-    ).toEqual(DataType.List(DataType.Option(DataType.Custom(id))));
-    expect(typeLabel(DataType.List(DataType.Custom(id)), definitions)).toBe("List<Person>");
-    expect(typeLabel(DataType.Custom(id))).toBe("Missing type (person)");
+      replaceTypeSegment(t.List(t.Option(t.String)), 2, t.Custom(id)),
+    ).toEqual(t.List(t.Option(t.Custom(id))));
+    expect(typeLabel(t.List(t.Custom(id)), definitions)).toBe("List<Person>");
+    expect(typeLabel(t.Custom(id))).toBe("Missing type (person)");
   });
   it("labels inferred and unresolved nested wildcard types", () => {
-    expect(typeLabel(DataType.Option(DataType.List(DataType.Wildcard("T"))))).toBe(
+    expect(typeLabel(t.Option(t.List(t.Wildcard("T"))))).toBe(
       "Option<List<Wildcard>>",
     );
   });
   it("initializes finite recursive tagged values and JSON codec containers", () => {
-    expect(initialDefaultValue(DataType.Custom(recursiveId), definitions)).toEqual({
+    expect(initialDefaultValue(t.Custom(recursiveId), definitions)).toEqual({
       _type: "tree",
       _tag: "Leaf",
     });
-    const value = initialDefaultValue(DataType.Custom(id), definitions);
+    const value = initialDefaultValue(t.Custom(id), definitions);
     expect(value).toEqual({ _type: "person", name: "", dates: [] });
-    expect(defaultValueError(DataType.Custom(id), value, definitions)).toBeUndefined();
+    expect(defaultValueError(t.Custom(id), value, definitions)).toBeUndefined();
     expect(
       defaultValueError(
-        DataType.List(DataType.Option(DataType.DateTime)),
+        t.List(t.Option(t.DateTime)),
         [{ _tag: "Some", value: "2026-08-31T00:00:00.000Z" }],
         definitions,
       ),
     ).toBeUndefined();
   });
   it("does not loop on a missing or nonterminating definition", () => {
-    expect(initialDefaultValue(DataType.Custom(id), {})).toBeUndefined();
+    expect(initialDefaultValue(t.Custom(id), {})).toBeUndefined();
     expect(
-      initialDefaultValue(DataType.Custom(id), {
+      initialDefaultValue(t.Custom(id), {
         person: {
           _tag: "Struct",
           id,
           name: "Person",
-          fields: [{ name: "self", type: DataType.Custom(id) }],
+          fields: [{ name: "self", type: t.Custom(id) }],
         },
       }),
     ).toBeUndefined();
   });
   it("diagnoses obsolete fields and nominal mismatches without changing saved values", () => {
     const saved = Object.freeze({ _type: "person", name: "Ada", dates: [], obsolete: true });
-    expect(defaultValueError(DataType.Custom(id), saved, definitions)).toBeDefined();
+    expect(defaultValueError(t.Custom(id), saved, definitions)).toBeDefined();
     expect(saved.obsolete).toBe(true);
     expect(
       defaultValueError(
-        DataType.Custom(id),
+        t.Custom(id),
         { _type: "other", name: "Ada", dates: [] },
         definitions,
       ),

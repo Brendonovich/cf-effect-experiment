@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Canvas } from "./Canvas.ts";
@@ -11,7 +11,7 @@ import * as Wildcards from "./Wildcards.ts";
 
 export interface Context {
   readonly properties: Readonly<Record<string, unknown>>;
-  readonly definitions: DataType.Definitions;
+  readonly definitions: t.Definitions;
   readonly io?: NodeIO;
 }
 
@@ -27,7 +27,7 @@ export interface PropertySource {
 export interface IOContext extends Context {
   /** Server-provided base IO. Generators must replace any snapshot-derived dynamic portions. */
   readonly declared: NodeIO;
-  readonly resolve: (type: DataType.Any) => DataType.Any;
+  readonly resolve: (type: t.Any) => t.Any;
   readonly inputScope: (input: string) => NodeIO["dataOutputs"] | undefined;
 }
 
@@ -37,13 +37,13 @@ export interface Definition {
   readonly generateIO?: (context: IOContext) => Result.Result<NodeIO, string>;
   readonly acceptsInput?: (
     input: string,
-    type: DataType.Any,
-    definitions: DataType.Definitions | undefined,
+    type: t.Any,
+    definitions: t.Definitions | undefined,
   ) => boolean;
   readonly acceptsOutput?: (
     output: string,
-    type: DataType.Any,
-    definitions: DataType.Definitions | undefined,
+    type: t.Any,
+    definitions: t.Definitions | undefined,
   ) => boolean;
 }
 
@@ -108,7 +108,7 @@ export class GraphResolver {
   resolve(
     graph: Canvas.Model,
     declared: Readonly<Record<string, NodeIO>>,
-    definitions: DataType.Definitions,
+    definitions: t.Definitions,
   ): Resolution {
     const key = JSON.stringify([
       Object.values(graph.nodes).map((node) => [node.id, node.schema, node.properties]),

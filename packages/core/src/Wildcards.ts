@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Connection } from "./Connection.ts";
@@ -8,7 +8,7 @@ import * as OutputRef from "./OutputRef.ts";
 
 interface DataPort {
   readonly id: string;
-  readonly type: DataType.Any;
+  readonly type: t.Any;
 }
 interface ExecutionPort {
   readonly id: string;
@@ -37,7 +37,7 @@ const declarationKey = (io: IO): string => {
 };
 
 /** Preserve port metadata while substituting types, without mutating declarations. */
-export const mapIO = <T extends IO>(io: T, resolve: (type: DataType.Any) => DataType.Any): T => {
+export const mapIO = <T extends IO>(io: T, resolve: (type: t.Any) => t.Any): T => {
   const data = <P extends DataPort>(port: P): P => ({ ...port, type: resolve(port.type) });
   const execution = <P extends ExecutionPort>(port: P): P => ({
     ...port,
@@ -54,9 +54,9 @@ export const mapIO = <T extends IO>(io: T, resolve: (type: DataType.Any) => Data
 
 interface Term {
   readonly node: string;
-  readonly type: DataType.Any;
+  readonly type: t.Any;
 }
-const key = (term: Term & { type: DataType.Wildcard }) => JSON.stringify([term.node, term.type.id]);
+const key = (term: Term & { type: t.Wildcard }) => JSON.stringify([term.node, term.type.id]);
 const child = (term: Term): Term | undefined =>
   term.type._tag === "List"
     ? { ...term, type: term.type.item }
@@ -72,7 +72,7 @@ export interface Conflict {
 export interface Group {
   readonly nodes: ReadonlySet<string>;
   readonly connections: ReadonlyArray<Connection.Model>;
-  readonly resolve: (node: string, type: DataType.Any) => DataType.Any;
+  readonly resolve: (node: string, type: t.Any) => t.Any;
 }
 
 export interface DerivedIO {
@@ -80,7 +80,7 @@ export interface DerivedIO {
   readonly key: string;
   readonly ports: (
     node: string,
-    resolve: (type: DataType.Any) => DataType.Any,
+    resolve: (type: t.Any) => t.Any,
   ) => Result.Result<NodeIO | undefined, string>;
 }
 
@@ -121,7 +121,7 @@ const solve = (
     if (a.type._tag !== b.type._tag) return false;
     const ac = child(a),
       bc = child(b);
-    return ac !== undefined && bc !== undefined ? unify(ac, bc) : DataType.equals(a.type, b.type);
+    return ac !== undefined && bc !== undefined ? unify(ac, bc) : t.equals(a.type, b.type);
   };
   for (const wire of connections) {
     if (!nodes.has(wire.outNodeId)) continue;
@@ -134,7 +134,7 @@ const solve = (
     const inputs = target.dataInputs.filter((port) => port.id === wire.inIoId);
     const pair = (a: DataPort, b: DataPort) => {
       // Ordinary concrete incompatibilities are handled by endpoint validation.
-      if (!DataType.hasWildcard(a.type) && !DataType.hasWildcard(b.type)) return;
+      if (!t.hasWildcard(a.type) && !t.hasWildcard(b.type)) return;
       if (!unify({ node: wire.outNodeId, type: a.type }, { node: wire.inNodeId, type: b.type }))
         conflicts.push({
           nodes,
@@ -157,17 +157,17 @@ const solve = (
     }
   }
   if (conflicts.length > 0) return Result.fail(conflicts);
-  const values = new Map<string, DataType.Any>();
-  const resolve = (node: string, type: DataType.Any): DataType.Any => {
+  const values = new Map<string, t.Any>();
+  const resolve = (node: string, type: t.Any): t.Any => {
     const id = type._tag === "Wildcard" ? key({ node, type }) : undefined;
     const cached = id === undefined ? undefined : values.get(id);
     if (cached !== undefined) return cached;
     const term = dereference({ node, type });
     const value =
       term.type._tag === "List"
-        ? DataType.List(resolve(term.node, term.type.item))
+        ? t.List(resolve(term.node, term.type.item))
         : term.type._tag === "Option"
-          ? DataType.Option(resolve(term.node, term.type.inner))
+          ? t.Option(resolve(term.node, term.type.inner))
           : term.type;
     if (id !== undefined) values.set(id, value);
     return value;
@@ -209,7 +209,7 @@ export class Cache {
   group(node: string): Group | undefined {
     return this.byNode.get(node);
   }
-  resolve(node: string, type: DataType.Any): DataType.Any {
+  resolve(node: string, type: t.Any): t.Any {
     return this.byNode.get(node)?.resolve(node, type) ?? type;
   }
   resolveIO<T extends IO>(node: string, io: T): T {

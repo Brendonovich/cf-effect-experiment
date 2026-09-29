@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Schema } from "effect";
 
@@ -25,7 +25,7 @@ export default Module.make({
       name: "Available Models",
       properties,
       description: "Returns the available model objects as a JSON array string.",
-      io: (io) => ({ models: io.data.out("models", DataType.String) }),
+      io: (io) => ({ models: io.data.out("models", t.String) }),
       run: ({ io, properties, engine }) =>
         engine.Call({ url: properties.instance, requestType: "AvailableModels", data: {} }).pipe(
           Effect.flatMap((response) =>
@@ -46,7 +46,7 @@ export default Module.make({
       properties,
       description: "Loads a model by its modelID string from Available Models.",
       io: (io) => ({
-        model: io.data.in("model", DataType.String, {
+        model: io.data.in("model", t.String, {
           defaultValue: "",
           suggestions: ({ properties, engine }) =>
             engine
@@ -81,7 +81,7 @@ export default Module.make({
       description:
         "Returns current expression objects as a JSON array string, without parameter details.",
       io: (io) => ({
-        expressions: io.data.out("expressions", DataType.String, { name: "Expressions" }),
+        expressions: io.data.out("expressions", t.String, { name: "Expressions" }),
       }),
       run: ({ io, properties, engine }) =>
         engine
@@ -109,7 +109,7 @@ export default Module.make({
       properties,
       description: "Sets an expression file's active state to the supplied boolean.",
       io: (io) => ({
-        file: io.data.in("file", DataType.String, {
+        file: io.data.in("file", t.String, {
           name: "File URL",
           defaultValue: "",
           suggestions: ({ properties, engine }) =>
@@ -136,7 +136,7 @@ export default Module.make({
                 Effect.map((expressions) => expressions.map((expression) => expression.file)),
               ),
         }),
-        active: io.data.in("active", DataType.Bool, { name: "Active", defaultValue: false }),
+        active: io.data.in("active", t.Bool, { name: "Active", defaultValue: false }),
       }),
       run: ({ io, properties, engine }) =>
         engine
@@ -154,7 +154,7 @@ export default Module.make({
       description:
         "Returns current model hotkey objects as a JSON array string. Use hotkeyID to execute one.",
       io: (io) => ({
-        hotkeys: io.data.out("hotkeys", DataType.String),
+        hotkeys: io.data.out("hotkeys", t.String),
       }),
       run: ({ io, properties, engine }) =>
         engine
@@ -178,7 +178,7 @@ export default Module.make({
       properties,
       description: "Executes a hotkey using its hotkeyID string from Get Hotkey List.",
       io: (io) => ({
-        id: io.data.in("id", DataType.String, {
+        id: io.data.in("id", t.String, {
           name: "Hotkey ID",
           defaultValue: "",
           suggestions: ({ properties, engine }) =>

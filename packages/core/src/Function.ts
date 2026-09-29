@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import type { SchemaModel } from "./Package.ts";
@@ -23,7 +23,7 @@ export const isCall = (node: Pick<NodeModel, "schema">): boolean =>
 export const Field = Schema.Struct({
   id: IoId,
   name: Schema.String,
-  type: DataType.Descriptor,
+  type: t.Descriptor,
 });
 export type Field = typeof Field.Type;
 

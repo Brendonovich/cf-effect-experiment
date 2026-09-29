@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Schema } from "effect";
 
@@ -33,8 +33,8 @@ const GoXLRModule = Module.make({
       properties,
       description: "Slider: A, B, C or D. Waits for the daemon to acknowledge the command.",
       io: (io) => ({
-        slider: io.data.in("Slider", DataType.String, { name: "Slider" }),
-        muteState: io.data.in("muteState", DataType.Bool, { name: "Mute State" }),
+        slider: io.data.in("Slider", t.String, { name: "Slider" }),
+        muteState: io.data.in("muteState", t.Bool, { name: "Mute State" }),
       }),
       run: ({ io, properties, engine }) =>
         decodeCommand({
@@ -50,7 +50,7 @@ const GoXLRModule = Module.make({
       name: "Set Microphone Type",
       properties,
       description: "Mic Type: Dynamic, Condenser or Jack.",
-      io: (io) => ({ micType: io.data.in("micType", DataType.String, { name: "Mic Type" }) }),
+      io: (io) => ({ micType: io.data.in("micType", t.String, { name: "Mic Type" }) }),
       run: ({ io, properties, engine }) =>
         decodeCommand({ SetMicrophoneType: io.micType }).pipe(
           Effect.flatMap((command) =>
@@ -69,7 +69,7 @@ const GoXLRModule = Module.make({
         name,
         properties,
         io: (io) => ({
-          amount: io.data.in("amount", DataType.Int, {
+          amount: io.data.in("amount", t.Int, {
             name: id === "SetGenderAmount" ? "(%)" : "Amount (%)",
           }),
         }),
@@ -85,7 +85,7 @@ const GoXLRModule = Module.make({
       id: "SetFXState",
       name: "Set FX State",
       properties,
-      io: (io) => ({ state: io.data.in("state", DataType.Bool, { name: "State" }) }),
+      io: (io) => ({ state: io.data.in("state", t.Bool, { name: "State" }) }),
       run: ({ io, properties, engine }) =>
         engine.GoXLRCommand({
           connectionId: properties.connection,
@@ -97,7 +97,7 @@ const GoXLRModule = Module.make({
       name: "Set FX Preset",
       properties,
       description: "Preset: Preset1 through Preset6.",
-      io: (io) => ({ preset: io.data.in("preset", DataType.String, { name: "Preset" }) }),
+      io: (io) => ({ preset: io.data.in("preset", t.String, { name: "Preset" }) }),
       run: ({ io, properties, engine }) =>
         decodeCommand({ SetActiveEffectPreset: io.preset }).pipe(
           Effect.flatMap((command) =>
@@ -112,9 +112,9 @@ const GoXLRModule = Module.make({
       description:
         "Input: Microphone, Chat, Music, Game, Console, LineIn, System, Samples. Output: Headphones, BroadcastMix, LineOut, ChatMic, Sampler.",
       io: (io) => ({
-        input: io.data.in("input", DataType.String, { name: "Input" }),
-        output: io.data.in("output", DataType.String, { name: "Output" }),
-        state: io.data.in("state", DataType.Bool, { name: "State" }),
+        input: io.data.in("input", t.String, { name: "Input" }),
+        output: io.data.in("output", t.String, { name: "Output" }),
+        state: io.data.in("state", t.Bool, { name: "State" }),
       }),
       run: ({ io, properties, engine }) =>
         decodeCommand({ SetRouter: [io.input, io.output, io.state] }).pipe(
@@ -133,8 +133,8 @@ const GoXLRModule = Module.make({
           event instanceof LevelChange && event.connectionId === properties.connection,
         ),
       io: (io) => ({
-        channel: io.data.out("channel", DataType.String, { name: "Channel" }),
-        value: io.data.out("value", DataType.Int, { name: "Value" }),
+        channel: io.data.out("channel", t.String, { name: "Channel" }),
+        value: io.data.out("value", t.Int, { name: "Value" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -154,8 +154,8 @@ const GoXLRModule = Module.make({
           event instanceof ButtonState && event.connectionId === properties.connection,
         ),
       io: (io) => ({
-        buttonName: io.data.out("buttonName", DataType.String, { name: "Button Name" }),
-        state: io.data.out("state", DataType.Bool, { name: "State" }),
+        buttonName: io.data.out("buttonName", t.String, { name: "Button Name" }),
+        state: io.data.out("state", t.Bool, { name: "State" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -173,8 +173,8 @@ const GoXLRModule = Module.make({
       event: (event, { properties }) =>
         Effect.succeed(event instanceof DialState && event.connectionId === properties.connection),
       io: (io) => ({
-        dial: io.data.out("dial", DataType.String, { name: "Dial" }),
-        amount: io.data.out("amount", DataType.Int, { name: "Amount" }),
+        dial: io.data.out("dial", t.String, { name: "Dial" }),
+        amount: io.data.out("amount", t.Int, { name: "Amount" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {
@@ -194,8 +194,8 @@ const GoXLRModule = Module.make({
           event instanceof ChannelMuteState && event.connectionId === properties.connection,
         ),
       io: (io) => ({
-        channel: io.data.out("channel", DataType.String, { name: "Channel" }),
-        state: io.data.out("state", DataType.Bool, { name: "State" }),
+        channel: io.data.out("channel", t.String, { name: "Channel" }),
+        state: io.data.out("state", t.Bool, { name: "State" }),
       }),
       run: ({ event, io }) =>
         Effect.sync(() => {

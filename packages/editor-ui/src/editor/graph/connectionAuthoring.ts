@@ -1,7 +1,7 @@
 import type { Package, SchemaRef } from "@macrograph/core";
 
 import { BuiltinAuthoring, type SchemaAuthoring } from "@macrograph/core";
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { scopesCompatible } from "@macrograph/module/Registration";
 
 import type { GraphPort } from "./GraphNode";
@@ -22,7 +22,7 @@ export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
 ): boolean => {
-  return DataType.compatible(left, right);
+  return t.compatible(left, right);
 };
 
 export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
@@ -85,7 +85,7 @@ export const compatibleSchemaPorts = (
   schema: Package.SchemaModel,
   source: Pick<PortEndpoint, "direction" | "port">,
   packageId?: string,
-  definitions?: DataType.Definitions,
+  definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
 ): ReadonlyArray<GraphPort> => {
   if (schema.internal === true) return [];
@@ -124,7 +124,7 @@ export const compatibleSchemaPorts = (
 export const singleCompatibleSchema = (
   packages: ReadonlyArray<Package.Model>,
   source: Pick<PortEndpoint, "direction" | "port">,
-  definitions?: DataType.Definitions,
+  definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
 ): { readonly ref: SchemaRef; readonly name: string } | undefined => {
   let match: { ref: SchemaRef; name: string } | undefined;

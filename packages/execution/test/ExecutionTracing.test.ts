@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { DataType, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module } from "@macrograph/module";
 import { Array, Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -28,7 +28,7 @@ const setup = Effect.fnUntraced(function* (
         id: "event",
         type: "event",
         event: () => Effect.succeed(true),
-        io: (io) => (missingInput ? { value: io.data.in("value", DataType.String) } : {}),
+        io: (io) => (missingInput ? { value: io.data.in("value", t.String) } : {}),
         run: typeof run === "function" ? run : () => run,
       }),
   });

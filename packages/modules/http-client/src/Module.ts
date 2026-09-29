@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
@@ -27,22 +27,22 @@ const HttpClientModule = Module.make({
         name: schema.name,
         description: `Makes an HTTP ${schema.method} request to the specified URL.`,
         io: (io) => ({
-          url: io.data.in("url", DataType.String, { name: "URL", defaultValue: "https://" }),
-          status: io.data.out("status", DataType.Int, { name: "Status Code" }),
-          headers: io.data.in("headers", DataType.String, {
+          url: io.data.in("url", t.String, { name: "URL", defaultValue: "https://" }),
+          status: io.data.out("status", t.Int, { name: "Status Code" }),
+          headers: io.data.in("headers", t.String, {
             name: "Headers (JSON)",
             defaultValue: "{}",
           }),
           body:
             schema.method === "GET"
               ? undefined
-              : io.data.in("body", DataType.String, {
+              : io.data.in("body", t.String, {
                   name: "Body",
                   defaultValue: "",
                 }),
-          responseBody: io.data.out("responseBody", DataType.String, { name: "Response Body" }),
-          contentType: io.data.out("contentType", DataType.String, { name: "Content Type" }),
-          responseHeaders: io.data.out("responseHeaders", DataType.String, {
+          responseBody: io.data.out("responseBody", t.String, { name: "Response Body" }),
+          contentType: io.data.out("contentType", t.String, { name: "Content Type" }),
+          responseHeaders: io.data.out("responseHeaders", t.String, {
             name: "Response Headers (JSON)",
           }),
         }),
@@ -78,8 +78,8 @@ const HttpClientModule = Module.make({
             : "Decodes a percent-encoded URL component using decodeURIComponent.",
         type: "pure",
         io: (io) => ({
-          input: io.data.in("input", DataType.String, { defaultValue: "" }),
-          output: io.data.out("output", DataType.String),
+          input: io.data.in("input", t.String, { defaultValue: "" }),
+          output: io.data.out("output", t.String),
         }),
         run: ({ io }) =>
           Effect.try({

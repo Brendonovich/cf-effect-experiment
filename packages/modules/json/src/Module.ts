@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option, Schema } from "effect";
 
@@ -32,8 +32,8 @@ const serializedOption = (value: Schema.Json | undefined): Option.Option<string>
   value === undefined ? Option.none() : Option.some(JSON.stringify(value));
 const extract = (
   value: Schema.Json,
-  type: DataType.Scalar,
-): Option.Option<DataType.Value<DataType.Scalar>> => {
+  type: t.Scalar,
+): Option.Option<t.Value<t.Scalar>> => {
   switch (type._tag) {
     case "String":
       return typeof value === "string" ? Option.some(value) : Option.none();
@@ -66,13 +66,13 @@ const JsonModule = Module.make({
         description:
           "Validates JSON text and emits compact JSON text. Invalid JSON and nonfinite numbers fail.",
         io: (io) => ({
-          input: io.data.in("in", DataType.String, {
+          input: io.data.in("in", t.String, {
             ...(id === "StringifyJSON" ? { name: "Json" } : {}),
             defaultValue: "null",
           }),
           output: io.data.out(
             "out",
-            DataType.String,
+            t.String,
             id === "StringifyJSON" ? { name: "String" } : undefined,
           ),
         }),
@@ -94,12 +94,12 @@ const JsonModule = Module.make({
       type: "pure",
       io: (io) => ({
         input: io.data.in("in", io.wildcard("T")),
-        output: io.data.out("out", DataType.String),
+        output: io.data.out("out", t.String),
       }),
       run: ({ io, types }) =>
         Effect.gen(function* () {
           const value = yield* Schema.encodeUnknownEffect(
-            DataType.JsonValueSchema(types.resolve(DataType.Wildcard("T")), types.definitions),
+            t.JsonValueSchema(types.resolve(t.Wildcard("T")), types.definitions),
           )(io.input);
           yield* Effect.try({
             try: () => io.output(JSON.stringify(value)),
@@ -114,14 +114,14 @@ const JsonModule = Module.make({
         "Decodes JSON text as the inferred type. Type mismatches return None; malformed JSON fails.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { defaultValue: "null" }),
-        output: io.data.out("out", DataType.Option(io.wildcard("T"))),
+        input: io.data.in("in", t.String, { defaultValue: "null" }),
+        output: io.data.out("out", t.Option(io.wildcard("T"))),
       }),
       run: ({ io, types }) =>
         Effect.gen(function* () {
           const value = yield* parse(io.input);
           const decoded = yield* Schema.decodeUnknownEffect(
-            DataType.JsonValueSchema(types.resolve(DataType.Wildcard("T")), types.definitions),
+            t.JsonValueSchema(types.resolve(t.Wildcard("T")), types.definitions),
           )(value, { onExcessProperty: "error" }).pipe(
             Effect.map(Option.some),
             Effect.catchTag("SchemaError", () => Effect.succeed(Option.none())),
@@ -134,10 +134,10 @@ const JsonModule = Module.make({
       name: "Query JSON",
       description:
         "Queries own object keys and array indices using .dot.paths or RFC 6901 /JSON/pointers. Empty query or '.' selects the root. Missing values return None; JSON null returns Some('null').",
-      properties: { query: { name: "Query", type: DataType.String, defaultValue: "" } },
+      properties: { query: { name: "Query", type: t.String, defaultValue: "" } },
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { defaultValue: "null" }),
-        output: io.data.out("out", DataType.Option(DataType.String)),
+        input: io.data.in("in", t.String, { defaultValue: "null" }),
+        output: io.data.out("out", t.Option(t.String)),
       }),
       run: ({ io, properties }) =>
         Effect.gen(function* () {
@@ -165,10 +165,10 @@ const JsonModule = Module.make({
         }),
     });
     for (const [id, name, type] of [
-      ["JSONGetString", "JSON Get String", DataType.String],
-      ["JSONGetNumber", "JSON Get Number", DataType.Float],
-      ["JSONGetInt", "JSON Get Int", DataType.Int],
-      ["JSONGetBoolean", "JSON Get Boolean", DataType.Bool],
+      ["JSONGetString", "JSON Get String", t.String],
+      ["JSONGetNumber", "JSON Get Number", t.Float],
+      ["JSONGetInt", "JSON Get Int", t.Int],
+      ["JSONGetBoolean", "JSON Get Boolean", t.Bool],
     ] as const) {
       yield* context.schema.register({
         id,
@@ -177,11 +177,11 @@ const JsonModule = Module.make({
           "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
         type: "pure",
         io: (io) => ({
-          input: io.data.in("in", DataType.String, {
+          input: io.data.in("in", t.String, {
             ...(id === "JSONGetInt" ? { name: "JSON" } : {}),
             defaultValue: "null",
           }),
-          output: io.data.out("out", DataType.Option(type)),
+          output: io.data.out("out", t.Option(type)),
         }),
         run: ({ io }) =>
           Effect.gen(function* () {
@@ -200,8 +200,8 @@ const JsonModule = Module.make({
         "Extracts a JSON array as an optional list of JSON texts, preserving nested objects, arrays, and null.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { defaultValue: "null" }),
-        output: io.data.out("out", DataType.Option(DataType.List(DataType.String))),
+        input: io.data.in("in", t.String, { defaultValue: "null" }),
+        output: io.data.out("out", t.Option(t.List(t.String))),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -225,15 +225,15 @@ const JsonModule = Module.make({
         "Extracts an array of the inferred element type. Returns None if any element has the wrong type; empty arrays return Some([]).",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON", defaultValue: "null" }),
-        output: io.data.out("out", DataType.Option(DataType.List(io.wildcard("T")))),
+        input: io.data.in("in", t.String, { name: "JSON", defaultValue: "null" }),
+        output: io.data.out("out", t.Option(t.List(io.wildcard("T")))),
       }),
       run: ({ io, types }) =>
         Effect.gen(function* () {
           const value = yield* parse(io.input);
           const decoded = yield* Schema.decodeUnknownEffect(
             Schema.Array(
-              DataType.JsonValueSchema(types.resolve(DataType.Wildcard("T")), types.definitions),
+              t.JsonValueSchema(types.resolve(t.Wildcard("T")), types.definitions),
             ),
           )(value, { onExcessProperty: "error" }).pipe(
             Effect.map(Option.some),
@@ -249,8 +249,8 @@ const JsonModule = Module.make({
         "Extracts an object's own keys as an optional string list. No map type is required.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON", defaultValue: "null" }),
-        output: io.data.out("out", DataType.Option(DataType.List(DataType.String))),
+        input: io.data.in("in", t.String, { name: "JSON", defaultValue: "null" }),
+        output: io.data.out("out", t.Option(t.List(t.String))),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -268,9 +268,9 @@ const JsonModule = Module.make({
         "Gets an own object key or canonical array index as optional JSON text. Missing values return None, distinct from JSON null.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON", defaultValue: "null" }),
-        key: io.data.in("key", DataType.String, { defaultValue: "" }),
-        output: io.data.out("out", DataType.Option(DataType.String)),
+        input: io.data.in("in", t.String, { name: "JSON", defaultValue: "null" }),
+        key: io.data.in("key", t.String, { defaultValue: "" }),
+        output: io.data.out("out", t.Option(t.String)),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -287,20 +287,20 @@ const JsonModule = Module.make({
       description:
         "Builds an object from JSON-text entries. Entries must be between 0 and 1024. Duplicate keys use the last value; invalid JSON fails.",
       type: "pure",
-      properties: { number: { name: "Entries", type: DataType.Int, defaultValue: 1 } },
+      properties: { number: { name: "Entries", type: t.Int, defaultValue: 1 } },
       io: (io, properties) => {
         return {
           entries: Array.from(
             { length: validCount(properties.number) ? properties.number : 0 },
             (_, index) => ({
-              key: io.data.in(`key-${index}`, DataType.String, { defaultValue: "" }),
-              value: io.data.in(`value-${index}`, DataType.String, {
+              key: io.data.in(`key-${index}`, t.String, { defaultValue: "" }),
+              value: io.data.in(`value-${index}`, t.String, {
                 name: `JSON Value ${index}`,
                 defaultValue: "null",
               }),
             }),
           ),
-          output: io.data.out("out", DataType.String, { name: "JSON Object" }),
+          output: io.data.out("out", t.String, { name: "JSON Object" }),
         };
       },
       run: ({ io, properties }) =>
@@ -324,11 +324,11 @@ const JsonModule = Module.make({
         "Inserts or replaces an own object key with a JSON-text value. Returns a new object and the previous optional JSON value. Does not modify the source. Non-object inputs fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
-        key: io.data.in("key", DataType.String, { defaultValue: "" }),
-        value: io.data.in("value", DataType.String, { name: "JSON Value", defaultValue: "null" }),
-        output: io.data.out("out", DataType.String, { name: "JSON Object" }),
-        previous: io.data.out("previous", DataType.Option(DataType.String)),
+        input: io.data.in("in", t.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", t.String, { defaultValue: "" }),
+        value: io.data.in("value", t.String, { name: "JSON Value", defaultValue: "null" }),
+        output: io.data.out("out", t.String, { name: "JSON Object" }),
+        previous: io.data.out("previous", t.Option(t.String)),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -353,10 +353,10 @@ const JsonModule = Module.make({
         "Removes an own object key from a new JSON object and returns the optional removed JSON value. Missing keys return None; JSON null is Some('null'). Non-object inputs fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
-        key: io.data.in("key", DataType.String, { defaultValue: "" }),
-        output: io.data.out("out", DataType.String, { name: "JSON Object" }),
-        removed: io.data.out("removed", DataType.Option(DataType.String)),
+        input: io.data.in("in", t.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", t.String, { defaultValue: "" }),
+        output: io.data.out("out", t.String, { name: "JSON Object" }),
+        removed: io.data.out("removed", t.Option(t.String)),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -382,9 +382,9 @@ const JsonModule = Module.make({
         "Tests whether an object has an own key, including keys whose value is null. Non-object inputs fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
-        key: io.data.in("key", DataType.String, { defaultValue: "" }),
-        output: io.data.out("out", DataType.Bool),
+        input: io.data.in("in", t.String, { name: "JSON Object", defaultValue: "{}" }),
+        key: io.data.in("key", t.String, { defaultValue: "" }),
+        output: io.data.out("out", t.Bool),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -403,8 +403,8 @@ const JsonModule = Module.make({
         "Returns an object's own values as a list of JSON texts, in Object.keys order. Non-object inputs fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
-        output: io.data.out("out", DataType.List(DataType.String)),
+        input: io.data.in("in", t.String, { name: "JSON Object", defaultValue: "{}" }),
+        output: io.data.out("out", t.List(t.String)),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {
@@ -422,8 +422,8 @@ const JsonModule = Module.make({
       description: "Counts an object's own keys. Non-object inputs fail.",
       type: "pure",
       io: (io) => ({
-        input: io.data.in("in", DataType.String, { name: "JSON Object", defaultValue: "{}" }),
-        output: io.data.out("out", DataType.Int),
+        input: io.data.in("in", t.String, { name: "JSON Object", defaultValue: "{}" }),
+        output: io.data.out("out", t.Int),
       }),
       run: ({ io }) =>
         Effect.gen(function* () {

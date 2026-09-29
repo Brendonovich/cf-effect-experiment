@@ -1,4 +1,4 @@
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import * as Registration from "@macrograph/module/Registration";
 import { Effect, Option, Result, Schema } from "effect";
 
@@ -12,14 +12,14 @@ import { PackageId, SchemaId, type SchemaRef } from "./SchemaRef.ts";
 import { executionPort } from "./Scopes.ts";
 
 export const packageId = PackageId.make("CustomTypes");
-export const breakWildcard = DataType.Wildcard("Struct");
-export const makeWildcard = DataType.Wildcard("Struct");
+export const breakWildcard = t.Wildcard("Struct");
+export const makeWildcard = t.Wildcard("Struct");
 const wildcardFor = (operation: Operation) =>
   operation.kind === "Struct"
-    ? DataType.Wildcard("Struct")
+    ? t.Wildcard("Struct")
     : operation.kind === "Enum"
-      ? DataType.Wildcard("Enum")
-      : DataType.Wildcard("Type");
+      ? t.Wildcard("Enum")
+      : t.Wildcard("Type");
 export const isBreakStruct = (node: Pick<Node.Model, "schema">) =>
   node.schema.package === packageId && node.schema.schema === "BreakStruct";
 export const isMakeStruct = (node: Pick<Node.Model, "schema">) =>
@@ -58,7 +58,7 @@ const emptyIO: Registration.RegisteredNodeIO = {
 export const selectionError = (
   schema: string,
   properties: Readonly<Record<string, unknown>>,
-  _definitions: DataType.Definitions,
+  _definitions: t.Definitions,
 ): string | undefined => {
   const operation = operationFor(schema);
   if (operation === undefined) return;
@@ -70,8 +70,8 @@ export const selectionError = (
 
 const inferenceError = (
   operation: Operation,
-  type: DataType.Any,
-  definitions: DataType.Definitions,
+  type: t.Any,
+  definitions: t.Definitions,
 ): string | undefined => {
   if (type._tag === "Wildcard") return;
   if (type._tag !== "Custom") return `${operation.name} requires an inferred custom type`;
@@ -85,8 +85,8 @@ const inferenceError = (
 const resolve = (
   operation: Operation,
   properties: Readonly<Record<string, unknown>>,
-  definitions: DataType.Definitions,
-  inferred?: DataType.Any,
+  definitions: t.Definitions,
+  inferred?: t.Any,
 ): Registration.RegisteredNodeIO & { readonly run: Registration.RegisteredSchema["run"] } => {
   const wildcard = wildcardFor(operation);
   const valueInput = new Registration.DataInputRef("value", wildcard);
@@ -97,8 +97,8 @@ const resolve = (
       ? properties.variant
       : undefined,
   );
-  const jsonInput = new Registration.DataInputRef("json", DataType.String, "JSON");
-  const jsonOutput = new Registration.DataOutputRef("json", DataType.String, "JSON");
+  const jsonInput = new Registration.DataInputRef("json", t.String, "JSON");
+  const jsonOutput = new Registration.DataOutputRef("json", t.String, "JSON");
   const execInput = new Registration.ExecutionInputRef("exec");
   const unresolved = (): Registration.RegisteredNodeIO & {
     readonly run: Registration.RegisteredSchema["run"];
@@ -132,9 +132,9 @@ const resolve = (
   if (inferredType._tag !== "Custom") throw new Error(`${operation.name} requires a custom type`);
   const definition = definitions[inferredType.id]!;
   const id = definition.id;
-  const codecType = DataType.Custom(definition.id);
-  const codec = Schema.suspend(() => DataType.ValueSchema(codecType, definitions));
-  const jsonCodec = Schema.suspend(() => DataType.JsonValueSchema(codecType, definitions));
+  const codecType = t.Custom(definition.id);
+  const codec = Schema.suspend(() => t.ValueSchema(codecType, definitions));
+  const jsonCodec = Schema.suspend(() => t.JsonValueSchema(codecType, definitions));
   const input = valueInput;
   const output = valueOutput;
   const pure = (
@@ -206,7 +206,7 @@ const resolve = (
         (field) =>
           new Registration.DataInputRef(
             fieldId(field.name),
-            DataType.Option(field.type),
+            t.Option(field.type),
             field.name,
             Option.none(),
           ),
@@ -218,7 +218,7 @@ const resolve = (
           const changes: Record<string, unknown> = {};
           for (const [index, field] of definition.fields.entries()) {
             const replacement = yield* Schema.decodeUnknownEffect(
-              Schema.Option(DataType.ValueSchema(field.type, definitions)),
+              Schema.Option(t.ValueSchema(field.type, definitions)),
             )(context.input(replacements[index]!));
             if (Option.isSome(replacement)) changes[field.name] = replacement.value;
           }
@@ -272,7 +272,7 @@ const resolve = (
       };
     }
     case "ParseJson": {
-      const json = new Registration.DataInputRef("json", DataType.String, "JSON");
+      const json = new Registration.DataInputRef("json", t.String, "JSON");
       return pure([json], [output], (context) =>
         Effect.gen(function* () {
           const text = yield* Schema.decodeUnknownEffect(Schema.String)(context.input(json));
@@ -285,7 +285,7 @@ const resolve = (
       );
     }
     case "StringifyJson": {
-      const json = new Registration.DataOutputRef("json", DataType.String, "JSON");
+      const json = new Registration.DataOutputRef("json", t.String, "JSON");
       return pure([input], [json], (context) =>
         Effect.gen(function* () {
           const encoded = yield* Schema.encodeUnknownEffect(jsonCodec)(context.input(input));
@@ -307,7 +307,7 @@ const propertiesFor = (operation: Operation) =>
         {
           id: "variant",
           name: "Variant",
-          type: DataType.String,
+          type: t.String,
           optional: false,
           defaultValue: "",
         },
@@ -315,7 +315,7 @@ const propertiesFor = (operation: Operation) =>
     : [];
 
 export const schemas = (
-  definitions: DataType.Definitions,
+  definitions: t.Definitions,
 ): ReadonlyMap<string, Registration.RegisteredSchema> =>
   new Map(
     operations.map((operation) => [
@@ -403,7 +403,7 @@ export const packageModel: Package.Model = {
 export const nodeIO = (
   ref: SchemaRef,
   properties: Readonly<Record<string, unknown>>,
-  definitions: DataType.Definitions,
+  definitions: t.Definitions,
 ): NodeIO | undefined => {
   if (ref.package !== packageId) return undefined;
   const operation = operationFor(ref.schema);
@@ -486,7 +486,7 @@ export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = O
 );
 
 /** Dynamic declarations derived from solved wildcard pins, never a persisted Type property. */
-export const derivedIO = (graph: Canvas.Model, definitions: DataType.Definitions) => ({
+export const derivedIO = (graph: Canvas.Model, definitions: t.Definitions) => ({
   key: JSON.stringify([
     definitions,
     Object.values(graph.nodes)
@@ -496,7 +496,7 @@ export const derivedIO = (graph: Canvas.Model, definitions: DataType.Definitions
   ]),
   ports: (
     nodeId: string,
-    resolve: (type: DataType.Any) => DataType.Any,
+    resolve: (type: t.Any) => t.Any,
   ): Result.Result<NodeIO | undefined, string> => {
     const node = graph.nodes[nodeId];
     const operation = node === undefined ? undefined : operationFor(node.schema.schema);

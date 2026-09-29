@@ -1,7 +1,7 @@
 import type * as Engine from "@macrograph/module/Engine";
 import type * as Registration from "@macrograph/module/Registration";
 
-import { DataType } from "@macrograph/module/DataType";
+import { t } from "@macrograph/module";
 import { Effect } from "effect";
 
 import { OBSEngine, OBSSocket } from "./Definition.ts";
@@ -81,19 +81,19 @@ const label = (field: Field) =>
     .replace(/^./, (value) => value.toUpperCase())
     .replace(/\b(Id|Uuid|Obs|Rpc|Cpu|Fps)\b/g, (value) => value.toUpperCase())
     .replace(/\bDb\b/g, "dB");
-const type = (kind: Kind): DataType.Any => {
+const type = (kind: Kind): t.Any => {
   switch (kind) {
     case "string":
     case "json":
-      return DataType.String;
+      return t.String;
     case "int":
-      return DataType.Int;
+      return t.Int;
     case "float":
-      return DataType.Float;
+      return t.Float;
     case "bool":
-      return DataType.Bool;
+      return t.Bool;
     case "strings":
-      return DataType.List(DataType.String);
+      return t.List(t.String);
   }
 };
 
@@ -755,7 +755,7 @@ const dataInput = (
 ) => {
   if (field.kind === "string" && field.suggestions !== undefined) {
     const requests = field.suggestions;
-    return io.data.in(field.id, DataType.String, {
+    return io.data.in(field.id, t.String, {
       name: label(field),
       ...(typeof field.defaultValue === "string" ? { defaultValue: field.defaultValue } : {}),
       suggestions: ({ properties, inputDefaults, engine }) =>
@@ -844,8 +844,8 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       "Converts eight RGBA hex digits (optionally prefixed with #) to OBS's unsigned ABGR colour integer.",
     type: "pure",
     io: (io) => ({
-      input: io.data.in("input", DataType.String),
-      output: io.data.out("output", DataType.Int),
+      input: io.data.in("input", t.String),
+      output: io.data.out("output", t.Int),
     }),
     run: ({ io }) =>
       Effect.gen(function* () {
@@ -873,7 +873,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
             io.data.out(field.id, type(field.kind), { name: label(field) }),
           ),
           listOutputs: listOutputs.map((field) =>
-            io.data.out(field.id, DataType.List(DataType.String), {
+            io.data.out(field.id, t.List(t.String), {
               name: label(field),
             }),
           ),
@@ -961,7 +961,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
           io.data.out(field.id, type(field.kind), { name: label(field) }),
         ),
         listOutputs: listOutputs.map((field) =>
-          io.data.out(field.id, DataType.List(DataType.String), {
+          io.data.out(field.id, t.List(t.String), {
             name: label(field),
           }),
         ),

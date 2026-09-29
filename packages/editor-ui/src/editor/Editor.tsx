@@ -456,6 +456,12 @@ function EditorContent(
     if (view.type !== "package") return null;
     return controller.editor.store.packages.find((pkg) => pkg.id === view.packageId) ?? null;
   });
+  const runtimeDefinitions = createMemo(() => ({
+    ...(controller.editor.store.project?.types ?? {}),
+    ...Object.fromEntries(
+      controller.editor.store.packages.flatMap((pkg) => Object.entries(pkg.types ?? {})),
+    ),
+  }));
 
   const workspaceTabTitle = (tab: WorkspaceTab) => {
     if (tab.type === "graph")
@@ -843,7 +849,7 @@ function EditorContent(
                                     node={node()}
                                     schema={canvas.schemaForNode(node())}
                                     io={ioForNode(node().id)}
-                                    definitions={controller.editor.store.project?.types ?? {}}
+                                    definitions={runtimeDefinitions()}
                                     diagnostics={[
                                       ...new Set([
                                         ...(controller.editor.store.nodeDiagnostics[
@@ -857,7 +863,7 @@ function EditorContent(
                                             executionInputs: [],
                                             executionOutputs: [],
                                           },
-                                          controller.editor.store.project?.types ?? {},
+                                          runtimeDefinitions(),
                                         ),
                                       ]),
                                     ]}
@@ -1018,7 +1024,7 @@ function EditorContent(
                                         schema,
                                         menu().source!,
                                         packageId,
-                                        controller.editor.store.project?.types,
+                                        runtimeDefinitions(),
                                         controller.editor.authoring,
                                       ).length > 0
                               }
@@ -1193,7 +1199,7 @@ function EditorContent(
                 node={controller.layout.selectedNode()}
                 packages={controller.editor.store.packages}
                 constants={controller.editor.store.project?.constants ?? {}}
-                definitions={controller.editor.store.project?.types ?? {}}
+                definitions={runtimeDefinitions()}
                 nodeIO={
                   controller.editor.store.nodeIO[controller.layout.selectedGraphId() ?? ""] ?? {}
                 }
