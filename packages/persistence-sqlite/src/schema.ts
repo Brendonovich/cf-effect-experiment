@@ -38,14 +38,10 @@ export const functions = sqliteTable("functions", {
     .references(() => canvases.id, { onDelete: "cascade" }),
   arguments: text("arguments", { mode: "json" })
     .notNull()
-    .$type<
-      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Any }>
-    >(),
+    .$type<ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Type }>>(),
   returns: text("returns", { mode: "json" })
     .notNull()
-    .$type<
-      ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Any }>
-    >(),
+    .$type<ReadonlyArray<{ readonly id: string; readonly name: string; readonly type: t.Type }>>(),
   inputPosition: text("input_position", { mode: "json" })
     .notNull()
     .$type<{ readonly x: number; readonly y: number }>(),

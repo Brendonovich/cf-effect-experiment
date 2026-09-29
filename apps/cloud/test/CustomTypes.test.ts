@@ -102,7 +102,7 @@ describe("hosted custom types", () => {
             context.schema.register({
               id: "source",
               type: "pure",
-              io: (io) => ({ value: io.data.out("value", t.Custom("result")) }),
+              io: (io) => ({ value: io.data.out("value", t.Enum("result")) }),
               run: ({ io }) =>
                 Effect.sync(() => io.value({ _type: "result", _tag: "Found", items: [1, 2, 3] })),
             }),

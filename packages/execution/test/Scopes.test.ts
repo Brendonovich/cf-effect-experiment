@@ -159,7 +159,7 @@ describe("scope execution", () => {
             event: () => Effect.succeed(true),
             io: (io) => ({
               output: io.scope.out("payload", {
-                value: t.Custom(t.DefinitionId.make("missing")),
+                value: t.Struct(t.DefinitionId.make("missing")),
               }),
             }),
             run: () =>

@@ -11,7 +11,7 @@ describe("type definition validation", () => {
           _tag: "Struct",
           id,
           name: "Tree",
-          fields: [{ name: "children", type: t.List(t.Custom(id)) }],
+          fields: [{ name: "children", type: t.List(t.Struct(id)) }],
         },
       }),
     ).toEqual([]);
@@ -23,7 +23,7 @@ describe("type definition validation", () => {
           name: "Chain",
           variants: [
             { name: "End", fields: [] },
-            { name: "Next", fields: [{ name: "next", type: t.Custom(id) }] },
+            { name: "Next", fields: [{ name: "next", type: t.Enum(id) }] },
           ],
         },
       }),
@@ -36,7 +36,7 @@ describe("type definition validation", () => {
           _tag: "Struct",
           id,
           name: "Loop",
-          fields: [{ name: "next", type: t.Custom(id) }],
+          fields: [{ name: "next", type: t.Struct(id) }],
         },
       }).some((error) => error.reason.includes("no finite value")),
     ).toBe(true);
@@ -51,7 +51,7 @@ describe("type definition validation", () => {
           { name: "_type", type: t.String },
           {
             name: "missing",
-            type: t.List(t.Option(t.Custom(t.DefinitionId.make("missing")))),
+            type: t.List(t.Option(t.Struct(t.DefinitionId.make("missing")))),
           },
         ],
       },

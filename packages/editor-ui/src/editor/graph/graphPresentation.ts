@@ -369,11 +369,7 @@ export const connectionPath = (from: Position, to: Position): string => {
   return `M ${from.x} ${from.y} C ${from.x + control} ${from.y}, ${to.x - control} ${to.y}, ${to.x} ${to.y}`;
 };
 
-export const wireColor = (
-  type: t | undefined,
-  scope = false,
-  definitions?: t.Definitions,
-): string => {
+export const wireColor = (type: t | undefined, scope = false): string => {
   if (scope) return "#c084fc";
   if (type === undefined) return "white";
   const primary = type._tag === "List" ? type.item : type._tag === "Option" ? type.inner : type;
@@ -390,16 +386,12 @@ export const wireColor = (
       return "#dc2626";
     case "DateTime":
       return "#3b82f6";
-    case "Custom": {
-      const definition = primary.definition ?? definitions?.[primary.id];
-      return definition?._tag === "Struct"
-        ? "#FACC15"
-        : definition?._tag === "Enum"
-          ? "#1B4DFF"
-          : "white";
-    }
+    case "Struct":
+      return "#FACC15";
+    case "Enum":
+      return "#1B4DFF";
     case "List":
     case "Option":
-      return wireColor(primary, false, definitions);
+      return wireColor(primary);
   }
 };

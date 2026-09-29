@@ -22,7 +22,7 @@ const run = (
   const inferred = Schema.decodeUnknownSync(t.Descriptor)(
     typeof binding === "string" ? { _tag: binding } : binding,
   );
-  const resolve = (type: t.Any): t.Any =>
+  const resolve = (type: t.Type): t.Type =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
@@ -65,7 +65,7 @@ describe("List module", () => {
       Effect.gen(function* () {
         const registered = yield* schemas;
         const id = t.DefinitionId.make("item");
-        const custom = t.Custom(id);
+        const custom = t.Struct(id);
         const definitions: t.Definitions = {
           item: {
             _tag: "Struct",
@@ -257,8 +257,7 @@ describe("List module", () => {
             item.id === "ListCreate" ? ["number"] : [],
           );
           for (const ref of [...io.dataInputs, ...io.dataOutputs]) {
-            if (ref.type._tag === "List")
-              assert.deepStrictEqual(ref.type.item, t.Wildcard("Item"));
+            if (ref.type._tag === "List") assert.deepStrictEqual(ref.type.item, t.Wildcard("Item"));
             if (ref.type._tag === "Option")
               assert.deepStrictEqual(ref.type.inner, t.Wildcard("Item"));
           }

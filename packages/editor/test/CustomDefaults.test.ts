@@ -10,7 +10,7 @@ describe("custom input defaults", () => {
     Effect.gen(function* () {
       const packages = yield* Packages.Service;
       const id = t.DefinitionId.make("person");
-      const type = t.Option(t.Custom(id));
+      const type = t.Option(t.Struct(id));
       const definitions: t.Definitions = {
         person: {
           _tag: "Struct",
@@ -39,9 +39,9 @@ describe("custom input defaults", () => {
       });
       const value = Option.some({ _type: "person", name: "Ada" });
       const encoded = yield* packages.validateInputDefault(ref, {}, "value", value, definitions);
-      expect(
-        Schema.decodeUnknownSync(t.JsonValueSchema(type, definitions))(encoded),
-      ).toEqual(value);
+      expect(Schema.decodeUnknownSync(t.JsonValueSchema(type, definitions))(encoded)).toEqual(
+        value,
+      );
       expect(
         (yield* Effect.flip(packages.validateInputDefault(ref, {}, "value", encoded)))._tag,
       ).toBe("InvalidInputDefaultError");

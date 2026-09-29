@@ -505,7 +505,7 @@ export const layer = Layer.effect(Service)(
     const getBaseNodeIO = (
       node: Node.Model,
       definitions?: t.Definitions,
-      resolve?: (type: t.Any) => t.Any,
+      resolve?: (type: t.Type) => t.Type,
     ) =>
       GraphFunction.isCall(node)
         ? persistence.loadProject().pipe(
@@ -732,10 +732,7 @@ export const layer = Layer.effect(Service)(
         return yield* new TypeDefinition.NotFoundError({ id: change.id });
       const error = TypeDefinition.validateChange(project.types, change)[0];
       if (error !== undefined) return yield* error;
-      const types = { ...project.types };
-      if (change._tag === "Delete") delete types[change.id];
-      else types[change.definition.id] = change.definition;
-      return types;
+      return TypeDefinition.applyChange(project.types, change);
     });
 
     const typePreview = Effect.fn("Editor.typeDefinition.preview")(function* (
@@ -2337,7 +2334,7 @@ export const layer = Layer.effect(Service)(
           Effect.orDie,
         );
         const encodeValue = (
-          type: t.Any,
+          type: t.Type,
           value: unknown,
           definitions: t.Definitions,
         ): Schema.Json =>
@@ -2420,7 +2417,7 @@ export const layer = Layer.effect(Service)(
                 getIO: (
                   properties: Readonly<Record<string, unknown>>,
                   definitions: t.Definitions,
-                  resolve?: (type: t.Any) => t.Any,
+                  resolve?: (type: t.Type) => t.Type,
                 ): NodeIO => {
                   const io = schema.generateIO(properties, {
                     resolve: resolve ?? ((type) => type),

@@ -23,7 +23,7 @@ const run = (
     typeof binding === "string" ? { _tag: binding } : binding,
   );
   const inferred = list ? t.List(item) : item;
-  const resolve = (type: t.Any): t.Any =>
+  const resolve = (type: t.Type): t.Type =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
@@ -96,11 +96,7 @@ describe("Logic module", () => {
             if (input.type._tag === "Wildcard") assert.isUndefined(input.defaultValue);
             else if (input.type._tag === "Option")
               assert.deepStrictEqual(input.defaultValue, Option.none());
-            else
-              assert.isTrue(
-                t.isValue(input.type, input.defaultValue),
-                `${item.id}.${input.id}`,
-              );
+            else assert.isTrue(t.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
           }
         }
         assert.strictEqual(

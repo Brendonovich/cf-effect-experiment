@@ -43,7 +43,7 @@ const styles = stylex.create({
 });
 
 function ValueFields(props: {
-  type: t.Any;
+  type: t.Type;
   definitions: t.Definitions;
   value: unknown;
   label: string;
@@ -54,7 +54,9 @@ function ValueFields(props: {
   const [expanded, setExpanded] = createSignal(false);
   const record = createMemo(() => valueRecord(props.value));
   const definition = createMemo(() =>
-    props.type._tag === "Custom" ? props.definitions[props.type.id] : undefined,
+    props.type._tag === "Struct" || props.type._tag === "Enum"
+      ? props.definitions[props.type.id]
+      : undefined,
   );
   const fields = createMemo(() => {
     const def = definition();
@@ -63,7 +65,7 @@ function ValueFields(props: {
       : (def?.variants.find((variant) => variant.name === record()?._tag)?.fields ?? []);
   });
   const list = createMemo(() => (Array.isArray(props.value) ? (props.value as unknown[]) : []));
-  const complex = () => ["Custom", "List", "Option"].includes(props.type._tag);
+  const complex = () => ["Struct", "Enum", "List", "Option"].includes(props.type._tag);
   const valueError = createMemo(() =>
     defaultValueError(props.type, props.value, props.definitions),
   );
@@ -214,7 +216,7 @@ function ValueFields(props: {
             </div>
           )}
         </Show>
-        <Show when={props.type._tag === "Custom"}>
+        <Show when={props.type._tag === "Struct" || props.type._tag === "Enum"}>
           <Show
             when={definition()}
             fallback={
@@ -338,7 +340,7 @@ function ValueFields(props: {
 }
 
 export function StructuredDefault(props: {
-  type?: t.Any;
+  type?: t.Type;
   definitions: t.Definitions;
   value: unknown;
   present: boolean;

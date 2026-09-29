@@ -12,7 +12,7 @@ describe("custom type execution", () => {
   it.effect("validates stored defaults, connected values, and driver JSON replay", () =>
     Effect.gen(function* () {
       const id = t.DefinitionId.make("tree");
-      const type = t.Custom(id);
+      const type = t.Struct(id);
       const definitions: t.Definitions = {
         tree: {
           _tag: "Struct",
@@ -67,9 +67,7 @@ describe("custom type execution", () => {
               nodes: {
                 event: node("event", "event"),
                 sink: node("sink", "sink", {
-                  stored: Schema.encodeUnknownSync(t.JsonValueSchema(type, definitions))(
-                    value,
-                  ),
+                  stored: Schema.encodeUnknownSync(t.JsonValueSchema(type, definitions))(value),
                 }),
               },
               connections: [

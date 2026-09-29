@@ -11,7 +11,7 @@ import {
   type ActionId,
 } from "./Definition.ts";
 import { WebhookPayloadTypes, WebhookTypeDefinitions } from "./WebhookTypes.ts";
-const preparePayload = (type: t.Any, value: Schema.Json, definitions: t.Definitions): unknown => {
+const preparePayload = (type: t.Type, value: Schema.Json, definitions: t.Definitions): unknown => {
   if (type._tag === "List")
     return Array.isArray(value)
       ? value.map((item) => preparePayload(type.item, item, definitions))
@@ -26,9 +26,9 @@ const preparePayload = (type: t.Any, value: Schema.Json, definitions: t.Definiti
     )(value);
     return Option.isSome(decoded) ? decoded.value : value;
   }
-  if (type._tag !== "Custom") return value;
+  if (type._tag !== "Struct" && type._tag !== "Enum") return value;
   const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
-  if (definition === undefined) return value;
+  if (definition === undefined || definition._tag !== type._tag) return value;
   if (definition._tag === "Enum") {
     if (typeof value === "string" && definition.variants.some((variant) => variant.name === value))
       return { _type: definition.id, _tag: value };

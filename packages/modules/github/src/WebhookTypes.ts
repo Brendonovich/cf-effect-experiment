@@ -292,4 +292,4 @@ export const WebhookPayloadTypes = {
   issue_comment: t.Struct(IssueCommentPayload),
   workflow_run: t.Struct(WorkflowRunPayload),
   release: t.Struct(ReleasePayload),
-} satisfies Readonly<Record<string, t.Custom>>;
+} satisfies Readonly<Record<string, t.Struct>>;

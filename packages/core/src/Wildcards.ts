@@ -2,11 +2,12 @@ import { t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Connection } from "./Connection.ts";
+
 import * as OutputRef from "./OutputRef.ts";
 
 interface DataPort {
   readonly id: string;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 interface ExecutionPort {
   readonly id: string;
@@ -35,7 +36,7 @@ const declarationKey = (io: IO): string => {
 };
 
 /** Preserve port metadata while substituting types, without mutating declarations. */
-export const mapIO = <T extends IO>(io: T, resolve: (type: t.Any) => t.Any): T => {
+export const mapIO = <T extends IO>(io: T, resolve: (type: t.Type) => t.Type): T => {
   const data = <P extends DataPort>(port: P): P => ({ ...port, type: resolve(port.type) });
   const execution = <P extends ExecutionPort>(port: P): P => ({
     ...port,
@@ -52,7 +53,7 @@ export const mapIO = <T extends IO>(io: T, resolve: (type: t.Any) => t.Any): T =
 
 interface Term {
   readonly node: string;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 const key = (term: Term & { type: t.Wildcard }) => JSON.stringify([term.node, term.type.id]);
 const child = (term: Term): Term | undefined =>
@@ -70,7 +71,7 @@ export interface Conflict {
 export interface Group {
   readonly nodes: ReadonlySet<string>;
   readonly connections: ReadonlyArray<Connection.Model>;
-  readonly resolve: (node: string, type: t.Any) => t.Any;
+  readonly resolve: (node: string, type: t.Type) => t.Type;
 }
 
 const solve = (
@@ -85,13 +86,11 @@ const solve = (
     wildcard.id === "Struct" || wildcard.id === "Enum" || wildcard.id === "Type"
       ? wildcard.id
       : undefined;
-  const accepts = (wildcard: t.Wildcard, type: t.Any) => {
+  const accepts = (wildcard: t.Wildcard, type: t.Type) => {
     const expected = constraint(wildcard);
     if (expected === undefined || type._tag === "Wildcard") return true;
-    if (type._tag !== "Custom") return false;
-    return (
-      type.definition === undefined || expected === "Type" || type.definition._tag === expected
-    );
+    if (type._tag !== "Struct" && type._tag !== "Enum") return false;
+    return expected === "Type" || type._tag === expected;
   };
   const dereference = (term: Term): Term => {
     while (term.type._tag === "Wildcard") {
@@ -166,8 +165,8 @@ const solve = (
     }
   }
   if (conflicts.length > 0) return Result.fail(conflicts);
-  const values = new Map<string, t.Any>();
-  const resolve = (node: string, type: t.Any): t.Any => {
+  const values = new Map<string, t.Type>();
+  const resolve = (node: string, type: t.Type): t.Type => {
     const id = type._tag === "Wildcard" ? key({ node, type }) : undefined;
     const cached = id === undefined ? undefined : values.get(id);
     if (cached !== undefined) return cached;
@@ -203,7 +202,7 @@ export class Cache {
   group(node: string): Group | undefined {
     return this.byNode.get(node);
   }
-  resolve(node: string, type: t.Any): t.Any {
+  resolve(node: string, type: t.Type): t.Type {
     return this.byNode.get(node)?.resolve(node, type) ?? type;
   }
   resolveIO<T extends IO>(node: string, io: T): T {

@@ -40,7 +40,7 @@ const sinkModule = Module.make({
     yield* context.schema.register({
       id: "source",
       type: "pure",
-      io: (io) => ({ value: io.data.out("value", t.Custom(enumId)) }),
+      io: (io) => ({ value: io.data.out("value", t.Enum(enumId)) }),
       run: () => Effect.void,
     });
   }),
@@ -226,9 +226,7 @@ it.effect(
 it.effect("infers scope projection pins on creation, type edits and disconnect", () =>
   Effect.gen(function* () {
     const { editor, match, unpack, sink } = yield* setup;
-    expect(unpack.io.dataOutputs).toEqual([
-      { id: 'field:"value"', name: "value", type: t.String },
-    ]);
+    expect(unpack.io.dataOutputs).toEqual([{ id: 'field:"value"', name: "value", type: t.String }]);
     expect(match.io.dataOutputs).toEqual([]);
     expect(match.io.executionOutputs).toEqual([
       {

@@ -29,7 +29,7 @@ export interface PropertySource {
 export interface IOContext extends Context {
   /** Server-provided base IO. Generators must replace any snapshot-derived dynamic portions. */
   readonly declared: NodeIO;
-  readonly resolve: (type: t.Any) => t.Any;
+  readonly resolve: (type: t.Type) => t.Type;
   readonly inputScope: (input: string) => NodeIO["dataOutputs"] | undefined;
 }
 
@@ -40,12 +40,12 @@ export interface Definition {
   readonly generateIO?: (context: IOContext) => Result.Result<NodeIO, string>;
   readonly acceptsInput?: (
     input: string,
-    type: t.Any,
+    type: t.Type,
     definitions: t.Definitions | undefined,
   ) => boolean;
   readonly acceptsOutput?: (
     output: string,
-    type: t.Any,
+    type: t.Type,
     definitions: t.Definitions | undefined,
   ) => boolean;
 }

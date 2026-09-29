@@ -28,7 +28,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
       name: "Leaf",
       fields: [
         { name: "label", type: t.String },
-        { name: "children", type: t.List(t.Custom(leafId)) },
+        { name: "children", type: t.List(t.Struct(leafId)) },
       ],
     },
     result: {
@@ -37,7 +37,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
       name: "Result",
       variants: [
         { name: "Empty", fields: [] },
-        { name: "Found", fields: [{ name: "leaf", type: t.Custom(leafId) }] },
+        { name: "Found", fields: [{ name: "leaf", type: t.Struct(leafId) }] },
       ],
     },
   },

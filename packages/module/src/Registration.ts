@@ -25,7 +25,7 @@ export class DataInputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: t.Any,
+    readonly type: t.Type,
     readonly name?: string,
     readonly defaultValue?: Value,
     readonly suggestions?: Suggestions,
@@ -38,7 +38,7 @@ export class DataOutputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: t.Any,
+    readonly type: t.Type,
     readonly name?: string,
   ) {}
 }
@@ -66,10 +66,10 @@ export class ExecutionOutputRef {
 export interface ScopeField {
   readonly id: string;
   readonly name?: string | undefined;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 
-export type ScopeFields = Readonly<Record<string, t.Any>>;
+export type ScopeFields = Readonly<Record<string, t.Type>>;
 export type ScopeValue<Fields extends ScopeFields> = {
   readonly [Key in keyof Fields]: t.Value<Fields[Key]>;
 };
@@ -121,7 +121,7 @@ export const scopesCompatible = (
   );
 };
 
-type InputOptions<Type extends t.Any, Properties, EngineClient> = {
+type InputOptions<Type extends t.Type, Properties, EngineClient> = {
   readonly name?: string;
   readonly defaultValue?: t.Value<Type>;
 } & (t.Value<Type> extends string
@@ -131,12 +131,12 @@ type InputOptions<Type extends t.Any, Properties, EngineClient> = {
 export interface IOContext<Properties = Readonly<Record<string, unknown>>, EngineClient = unknown> {
   readonly wildcard: (id: string) => t.Wildcard;
   readonly data: {
-    readonly in: <Type extends t.Any>(
+    readonly in: <Type extends t.Type>(
       id: string,
       type: Type,
       options?: InputOptions<Type, Properties, EngineClient>,
     ) => DataInputRef<t.Value<Type>>;
-    readonly out: <Type extends t.Any>(
+    readonly out: <Type extends t.Type>(
       id: string,
       type: Type,
       options?: { readonly name?: string },
@@ -193,7 +193,7 @@ type RuntimeProperties<Properties extends PropertyDefinitions> = keyof Propertie
   ? Readonly<Record<string, unknown>>
   : PropertyValues<Properties>;
 
-export type Materialized<IO> = IO extends t.Any | t.Definition | t.Variant | t.Field
+export type Materialized<IO> = IO extends t.Type | t.Definition | t.Variant | t.Field
   ? IO
   : IO extends ScopeOutputRef<infer Value>
     ? (value: Value) => ScopeExecution
@@ -212,7 +212,7 @@ export type Materialized<IO> = IO extends t.Any | t.Definition | t.Variant | t.F
                 : IO;
 
 export interface RuntimeTypes {
-  readonly resolve: (type: t.Any) => t.Any;
+  readonly resolve: (type: t.Type) => t.Type;
   readonly definitions: t.Definitions;
 }
 

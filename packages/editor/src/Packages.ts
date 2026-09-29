@@ -15,7 +15,7 @@ type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
 export type IOCalculator = (
   properties: Readonly<Record<string, unknown>>,
   definitions: t.Definitions,
-  resolve?: (type: t.Any) => t.Any,
+  resolve?: (type: t.Type) => t.Type,
 ) => NodeIO;
 
 export interface SchemaRuntime {
@@ -46,18 +46,18 @@ export class Service extends Context.Service<
       ref: SchemaRef,
       properties: Readonly<Record<string, unknown>>,
       definitions?: t.Definitions,
-      resolve?: (type: t.Any) => t.Any,
+      resolve?: (type: t.Type) => t.Type,
     ) => Effect.Effect<NodeIO, Package.SchemaNotFoundError>;
     readonly acceptsInput: (
       ref: SchemaRef,
       input: string,
-      type: t.Any,
+      type: t.Type,
       definitions?: t.Definitions,
     ) => Effect.Effect<boolean>;
     readonly acceptsOutput: (
       ref: SchemaRef,
       output: string,
-      type: t.Any,
+      type: t.Type,
       definitions?: t.Definitions,
     ) => Effect.Effect<boolean>;
     readonly normalizeProperties: (
@@ -195,7 +195,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         ref: SchemaRef,
         properties: Readonly<Record<string, unknown>>,
         definitions?: t.Definitions,
-        resolve?: (type: t.Any) => t.Any,
+        resolve?: (type: t.Type) => t.Type,
       ) {
         const current = yield* Ref.get(state);
         const schema = current.packages
@@ -308,7 +308,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       const acceptsInput = (
         ref: SchemaRef,
         input: string,
-        type: t.Any,
+        type: t.Type,
         definitions?: t.Definitions,
       ) =>
         Ref.get(state).pipe(
@@ -323,7 +323,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
       const acceptsOutput = (
         ref: SchemaRef,
         output: string,
-        type: t.Any,
+        type: t.Type,
         definitions?: t.Definitions,
       ) =>
         Ref.get(state).pipe(

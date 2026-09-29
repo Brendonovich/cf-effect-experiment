@@ -16,7 +16,7 @@ const meta: Meta<typeof DataTypePicker> = {
   title: "Editor/Controls/DataTypePicker",
   component: DataTypePicker,
   args: {
-    value: t.Option(t.List(t.Custom(personId))),
+    value: t.Option(t.List(t.Struct(personId))),
     definitions,
     label: "Field type",
     onChange: () => undefined,

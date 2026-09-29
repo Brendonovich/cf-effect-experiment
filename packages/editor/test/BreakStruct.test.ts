@@ -25,7 +25,7 @@ const definitions: t.Definitions = {
     _tag: "Struct",
     id: rootId,
     name: "Root",
-    fields: [{ name: "child", type: t.Custom(childId) }],
+    fields: [{ name: "child", type: t.Struct(childId) }],
   },
 };
 const TestLayer = Editor.defaultLayer.pipe(
@@ -49,7 +49,7 @@ const setup = (moduleOwned = false) =>
           context.schema.register({
             id: "root",
             type: "pure",
-            io: (io) => ({ value: io.data.out("value", t.Custom(rootId)) }),
+            io: (io) => ({ value: io.data.out("value", t.Struct(rootId)) }),
             run: () => Effect.void,
           }),
       }),
@@ -89,7 +89,7 @@ it.effect("infers Break Struct fields from module-owned type definitions", () =>
     yield* connect(root.node.id, "value", first.node.id);
     expect(
       (yield* editor.project.rendered()).graphs.graph!.nodes[first.node.id]!.io.dataOutputs,
-    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Custom(childId) }]);
+    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Struct(childId) }]);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -192,7 +192,7 @@ it.effect("infers Make Struct field inputs from its wildcard output without prop
           context.schema.register({
             id: "root",
             type: "pure",
-            io: (io) => ({ value: io.data.in("value", t.Custom(rootId)) }),
+            io: (io) => ({ value: io.data.in("value", t.Struct(rootId)) }),
             run: () => Effect.void,
           }),
       }),
@@ -218,7 +218,7 @@ it.effect("infers Make Struct field inputs from its wildcard output without prop
     const connection = yield* connect(make.node.id, "value", sink.node.id);
     expect(
       (yield* editor.project.rendered()).graphs.graph!.nodes[make.node.id]!.io.dataInputs,
-    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Custom(childId) }]);
+    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Struct(childId) }]);
     yield* editor.connection.delete({
       graphID: "graph",
       connectionId: connection.connection.id,

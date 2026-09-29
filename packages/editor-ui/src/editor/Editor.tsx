@@ -825,11 +825,7 @@ function EditorContent(
                                       }
                                       d={connectionPath(edge().from, edge().to)}
                                       fill="none"
-                                      stroke={wireColor(
-                                        edge().type,
-                                        edge().scope,
-                                        runtimeDefinitions(),
-                                      )}
+                                      stroke={wireColor(edge().type, edge().scope)}
                                       stroke-width="2"
                                       opacity="0.75"
                                     />
@@ -852,7 +848,6 @@ function EditorContent(
                                           ? drag.source.port.type
                                           : undefined,
                                         drag.source.port.kind === "scope",
-                                        runtimeDefinitions(),
                                       )}
                                       stroke-width="2"
                                       opacity="0.375"
@@ -866,10 +861,10 @@ function EditorContent(
                                     node={node()}
                                     schema={canvas.schemaForNode(node())}
                                     io={ioForNode(node().id)}
-                                     definitions={runtimeDefinitions()}
-                                     onSizeChange={(nodeId, size) => {
-                                       setNodeWidth(nodeId, size.width);
-                                     }}
+                                    definitions={runtimeDefinitions()}
+                                    onSizeChange={(nodeId, size) => {
+                                      setNodeWidth(nodeId, size.width);
+                                    }}
                                     diagnostics={[
                                       ...new Set([
                                         ...(controller.editor.store.nodeDiagnostics[

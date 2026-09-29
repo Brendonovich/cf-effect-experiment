@@ -37,7 +37,7 @@ interface ExecutionPort {
 interface DataPort {
   readonly id: string;
   readonly name?: string | undefined;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 export interface IO {
   readonly dataOutputs: ReadonlyArray<DataPort>;

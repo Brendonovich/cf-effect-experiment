@@ -64,7 +64,7 @@ describe("editor store", () => {
           graph: {
             source: {
               dataInputs: [],
-              dataOutputs: [{ id: IoId.make("payload"), type: t.Custom(payload.id) }],
+              dataOutputs: [{ id: IoId.make("payload"), type: t.Struct(payload.id) }],
               executionInputs: [],
               executionOutputs: [],
             },

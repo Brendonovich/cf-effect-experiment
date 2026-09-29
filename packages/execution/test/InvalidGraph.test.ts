@@ -8,7 +8,7 @@ import { Executor } from "../src/index.ts";
 class Trigger extends Schema.TaggedClass<Trigger>()("InvalidGraphTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 const typeId = t.DefinitionId.make("item");
-const type = t.Custom(typeId);
+const type = t.Struct(typeId);
 const definitions: t.Definitions = {
   item: {
     _tag: "Struct",
@@ -178,7 +178,7 @@ describe("event graph preflight", () => {
                 fields: [
                   {
                     name: "child",
-                    type: t.Option(t.Custom(t.DefinitionId.make("deleted"))),
+                    type: t.Option(t.Struct(t.DefinitionId.make("deleted"))),
                   },
                 ],
               },
@@ -292,7 +292,7 @@ describe("event graph preflight", () => {
             _tag: "Struct",
             id: unusedId,
             name: "Unused",
-            fields: [{ name: "missing", type: t.Custom(t.DefinitionId.make("missing")) }],
+            fields: [{ name: "missing", type: t.Struct(t.DefinitionId.make("missing")) }],
           },
         },
         graphs: {

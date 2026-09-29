@@ -270,16 +270,13 @@ const propertyDefault = (property: Package.PropertyDefinition): PreviewValue => 
   return 0;
 };
 
-const collectWildcardIds = (type: t.Any, ids: Set<string>) => {
+const collectWildcardIds = (type: t.Type, ids: Set<string>) => {
   if (type._tag === "Wildcard") ids.add(type.id);
   if (type._tag === "List") collectWildcardIds(type.item, ids);
   if (type._tag === "Option") collectWildcardIds(type.inner, ids);
 };
 
-const resolveWildcards = (
-  type: t.Any,
-  values: Readonly<Record<string, t.Any>>,
-): t.Any => {
+const resolveWildcards = (type: t.Type, values: Readonly<Record<string, t.Type>>): t.Type => {
   if (type._tag === "Wildcard") return values[type.id] ?? t.String;
   if (type._tag === "List") return t.List(resolveWildcards(type.item, values));
   if (type._tag === "Option") return t.Option(resolveWildcards(type.inner, values));
@@ -300,7 +297,7 @@ function ReferenceView(props: {
     Readonly<Record<string, Readonly<Record<string, PreviewValue>>>>
   >({});
   const [wildcardValues, setWildcardValues] = createSignal<
-    Readonly<Record<string, Readonly<Record<string, t.Any>>>>
+    Readonly<Record<string, Readonly<Record<string, t.Type>>>>
   >({});
   const [previewSelected, setPreviewSelected] = createSignal(false);
   const [previewSize, setPreviewSize] = createSignal({ width: 0, height: 0 });
@@ -465,7 +462,7 @@ function ReferenceView(props: {
       delete nextSchema[propertyId];
       return { ...current, [schemaId]: nextSchema };
     });
-  const setWildcard = (schemaId: string, wildcardId: string, value: t.Any) =>
+  const setWildcard = (schemaId: string, wildcardId: string, value: t.Type) =>
     setWildcardValues((current) => ({
       ...current,
       [schemaId]: { ...current[schemaId], [wildcardId]: value },
@@ -607,9 +604,7 @@ function ReferenceView(props: {
                               <span sx={styles.propertyNote}>{wildcardId}</span>
                               <DataTypePicker
                                 label={`${wildcardId} wildcard type`}
-                                value={
-                                  wildcardValues()[schema().id]?.[wildcardId] ?? t.String
-                                }
+                                value={wildcardValues()[schema().id]?.[wildcardId] ?? t.String}
                                 definitions={props.definitions}
                                 onChange={(value) => setWildcard(schema().id, wildcardId, value)}
                               />

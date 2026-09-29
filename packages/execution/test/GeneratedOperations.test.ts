@@ -7,7 +7,7 @@ import { Executor } from "../src/index.ts";
 
 const recordId = t.DefinitionId.make("record/id");
 const enumId = t.DefinitionId.make("result");
-const recordType = t.Custom(recordId);
+const recordType = t.Struct(recordId);
 const definitions: t.Definitions = {
   [recordId]: {
     _tag: "Struct",
@@ -51,7 +51,7 @@ const run = (
     const selected = yield* schema.run({
       types: {
         resolve: (type) =>
-          type._tag !== "Wildcard" ? type : type.id === "Enum" ? t.Custom(enumId) : recordType,
+          type._tag !== "Wildcard" ? type : type.id === "Enum" ? t.Enum(enumId) : recordType,
         definitions,
       },
       input: (port) => (Object.hasOwn(inputs, port.id) ? inputs[port.id] : port.defaultValue),
@@ -185,7 +185,7 @@ describe("generated custom operations", () => {
           '["constructor","make"]',
         ])
           expect(catalog.get(SchemaId.make(id))?.generateIO({})).toBeUndefined();
-        const custom = t.Custom(enumId);
+        const custom = t.Enum(enumId);
         const referenced: t.Definitions = {
           ...definitions,
           [recordId]: {
@@ -369,7 +369,7 @@ describe("generated custom operations", () => {
             yield* context.schema.register({
               id: "enum-anchor",
               type: "pure",
-              io: (io) => ({ value: io.data.in("value", t.Custom(enumId)) }),
+              io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
               run: () => Effect.void,
             });
             yield* context.schema.register({
@@ -477,7 +477,7 @@ describe("generated custom operations", () => {
   it.effect("executes Make Struct from an output-inferred type without properties", () =>
     Effect.gen(function* () {
       const id = t.DefinitionId.make("made");
-      const type = t.Custom(id);
+      const type = t.Struct(id);
       const types: t.Definitions = {
         [id]: {
           _tag: "Struct",

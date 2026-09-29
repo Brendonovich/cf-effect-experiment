@@ -59,9 +59,9 @@ const styles = stylex.create({
 });
 
 export interface DataTypePickerProps {
-  readonly value: t.Any;
+  readonly value: t.Type;
   readonly definitions?: t.Definitions;
-  readonly onChange: (type: t.Any) => void;
+  readonly onChange: (type: t.Type) => void;
   readonly label?: string;
   readonly disabled?: boolean;
 }
@@ -87,13 +87,17 @@ export function DataTypePicker(props: DataTypePickerProps) {
   );
   const segmentLabel = (index: number) => {
     const segment = segments()[index];
-    return segment?._tag === "Custom" ? typeLabel(segment, props.definitions) : segment?._tag;
+    return segment?._tag === "Struct" || segment?._tag === "Enum"
+      ? typeLabel(segment, props.definitions)
+      : segment?._tag;
   };
 
   function Segment(segmentProps: { index: number }) {
     const value = () => {
       const segment = segments()[segmentProps.index];
-      return segment?._tag === "Custom" ? choiceKey(segment) : (segment?._tag ?? "");
+      return segment?._tag === "Struct" || segment?._tag === "Enum"
+        ? choiceKey(segment)
+        : (segment?._tag ?? "");
     };
     return (
       <div
@@ -134,8 +138,9 @@ export function DataTypePicker(props: DataTypePickerProps) {
               sx={styles.segment}
               aria-label={`${props.label ?? "Data type"}, ${segmentProps.index === 0 ? "outer" : `nested ${segmentProps.index}`}: ${segmentLabel(segmentProps.index)}`}
               title={
-                segments()[segmentProps.index]?._tag === "Custom"
-                  ? choiceKey(segments()[segmentProps.index] as t.Custom)
+                segments()[segmentProps.index]?._tag === "Struct" ||
+                segments()[segmentProps.index]?._tag === "Enum"
+                  ? choiceKey(segments()[segmentProps.index] as t.Struct | t.Enum)
                   : undefined
               }
               aria-haspopup="listbox"

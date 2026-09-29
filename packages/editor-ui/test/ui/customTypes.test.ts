@@ -21,7 +21,7 @@ const definitions: t.Definitions = {
     id: recursiveId,
     name: "Tree",
     variants: [
-      { name: "Branch", fields: [{ name: "child", type: t.Custom(recursiveId) }] },
+      { name: "Branch", fields: [{ name: "child", type: t.Enum(recursiveId) }] },
       { name: "Leaf", fields: [] },
     ],
   },
@@ -29,26 +29,24 @@ const definitions: t.Definitions = {
 
 describe("custom type UI helpers", () => {
   it("searches names and stable identities and preserves nested container children", () => {
-    expect(filterTypeChoices("person", definitions)).toEqual([t.Custom(id)]);
-    expect(
-      replaceTypeSegment(t.List(t.Option(t.String)), 2, t.Custom(id)),
-    ).toEqual(t.List(t.Option(t.Custom(id))));
-    expect(typeLabel(t.List(t.Custom(id)), definitions)).toBe("List<Person>");
-    expect(typeLabel(t.Custom(id))).toBe("Missing type (person)");
+    expect(filterTypeChoices("person", definitions)).toEqual([t.Struct(id)]);
+    expect(replaceTypeSegment(t.List(t.Option(t.String)), 2, t.Struct(id))).toEqual(
+      t.List(t.Option(t.Struct(id))),
+    );
+    expect(typeLabel(t.List(t.Struct(id)), definitions)).toBe("List<Person>");
+    expect(typeLabel(t.Struct(id))).toBe("Missing type (person)");
   });
   it("labels inferred and unresolved nested wildcard types", () => {
-    expect(typeLabel(t.Option(t.List(t.Wildcard("T"))))).toBe(
-      "Option<List<Wildcard>>",
-    );
+    expect(typeLabel(t.Option(t.List(t.Wildcard("T"))))).toBe("Option<List<Wildcard>>");
   });
   it("initializes finite recursive tagged values and JSON codec containers", () => {
-    expect(initialDefaultValue(t.Custom(recursiveId), definitions)).toEqual({
+    expect(initialDefaultValue(t.Enum(recursiveId), definitions)).toEqual({
       _type: "tree",
       _tag: "Leaf",
     });
-    const value = initialDefaultValue(t.Custom(id), definitions);
+    const value = initialDefaultValue(t.Struct(id), definitions);
     expect(value).toEqual({ _type: "person", name: "", dates: [] });
-    expect(defaultValueError(t.Custom(id), value, definitions)).toBeUndefined();
+    expect(defaultValueError(t.Struct(id), value, definitions)).toBeUndefined();
     expect(
       defaultValueError(
         t.List(t.Option(t.DateTime)),
@@ -58,28 +56,24 @@ describe("custom type UI helpers", () => {
     ).toBeUndefined();
   });
   it("does not loop on a missing or nonterminating definition", () => {
-    expect(initialDefaultValue(t.Custom(id), {})).toBeUndefined();
+    expect(initialDefaultValue(t.Struct(id), {})).toBeUndefined();
     expect(
-      initialDefaultValue(t.Custom(id), {
+      initialDefaultValue(t.Struct(id), {
         person: {
           _tag: "Struct",
           id,
           name: "Person",
-          fields: [{ name: "self", type: t.Custom(id) }],
+          fields: [{ name: "self", type: t.Struct(id) }],
         },
       }),
     ).toBeUndefined();
   });
   it("diagnoses obsolete fields and nominal mismatches without changing saved values", () => {
     const saved = Object.freeze({ _type: "person", name: "Ada", dates: [], obsolete: true });
-    expect(defaultValueError(t.Custom(id), saved, definitions)).toBeDefined();
+    expect(defaultValueError(t.Struct(id), saved, definitions)).toBeDefined();
     expect(saved.obsolete).toBe(true);
     expect(
-      defaultValueError(
-        t.Custom(id),
-        { _type: "other", name: "Ada", dates: [] },
-        definitions,
-      ),
+      defaultValueError(t.Struct(id), { _type: "other", name: "Ada", dates: [] }, definitions),
     ).toBeDefined();
   });
 });

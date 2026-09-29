@@ -29,7 +29,7 @@ const empty: NodeIO = {
   executionInputs: [],
   executionOutputs: [],
 };
-const port = (id: string, type: t.Any) => ({ id: IoId.make(id), type });
+const port = (id: string, type: t.Type) => ({ id: IoId.make(id), type });
 const node = (
   id: string,
   schema: string,
@@ -129,7 +129,7 @@ describe("schema-owned authoring", () => {
       source.options({
         definitions,
         properties: {},
-        io: { ...empty, dataOutputs: [port("value", t.Custom(t.DefinitionId.make("a")))] },
+        io: { ...empty, dataOutputs: [port("value", t.Enum(t.DefinitionId.make("a")))] },
       }),
     ).toEqual([{ id: "Yes", name: "Yes" }]);
     expect(source.options({ definitions, properties: {}, io: empty })).toEqual([]);
@@ -187,7 +187,7 @@ describe("schema-owned authoring", () => {
       },
       [model],
     );
-    const compatible = (type: t.Any) =>
+    const compatible = (type: t.Type) =>
       compatibleSchemaPorts(
         model,
         { direction: "output", port: { kind: "data", id: "out", type } },
@@ -278,7 +278,7 @@ describe("schema-owned authoring", () => {
       editor.setProject(project, {
         g: {
           make: { ...empty, dataOutputs: [port("value", CustomTypes.makeWildcard)] },
-          sink: { ...empty, dataInputs: [port("in", t.Custom(t.DefinitionId.make("item")))] },
+          sink: { ...empty, dataInputs: [port("in", t.Struct(t.DefinitionId.make("item")))] },
         },
       });
       const before = editor.store.packages;
@@ -399,7 +399,7 @@ describe("schema-owned authoring", () => {
         _tag: "Struct",
         id,
         name: "Recursive",
-        fields: [{ name: "next", type: t.Custom(id) }],
+        fields: [{ name: "next", type: t.Struct(id) }],
       },
     };
     const a = node("a", "BreakStruct", "CustomTypes"),
@@ -415,7 +415,7 @@ describe("schema-owned authoring", () => {
     const stale = {
       ...empty,
       dataInputs: [port("value", CustomTypes.breakWildcard)],
-      dataOutputs: [{ id: IoId.make('field:"next"'), name: "next", type: t.Custom(id) }],
+      dataOutputs: [{ id: IoId.make('field:"next"'), name: "next", type: t.Struct(id) }],
     };
     const resolved = new SchemaAuthoring.GraphResolver(BuiltinAuthoring.registry).resolve(
       graph,

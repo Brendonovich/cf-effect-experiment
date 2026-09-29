@@ -235,7 +235,8 @@ const dataPinStyle = (type: t) => {
       return styles.boolPin;
     case "DateTime":
       return styles.dateTimePin;
-    case "Custom":
+    case "Struct":
+    case "Enum":
       return styles.dateTimePin;
     case "Wildcard":
       return styles.wildcardPin;
@@ -380,7 +381,7 @@ const Pin: Component<{
               props.port.kind === "data" && props.port.invalid
                 ? "#ff9592"
                 : props.port.kind === "data"
-                  ? wireColor(props.port.type, false, props.definitions)
+                  ? wireColor(props.port.type)
                   : undefined,
           }}
           sx={[

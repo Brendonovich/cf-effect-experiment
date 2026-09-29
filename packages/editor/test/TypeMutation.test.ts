@@ -47,13 +47,13 @@ const definitions: t.Definitions = {
     _tag: "Struct",
     id: groupId,
     name: "Group",
-    fields: [{ name: "people", type: t.List(t.Custom(personId)) }],
+    fields: [{ name: "people", type: t.List(t.Struct(personId)) }],
   },
   team: {
     _tag: "Struct",
     id: teamId,
     name: "Team",
-    fields: [{ name: "group", type: t.Option(t.Custom(groupId)) }],
+    fields: [{ name: "group", type: t.Option(t.Struct(groupId)) }],
   },
 };
 const pkg: Package.Model = {
@@ -66,7 +66,7 @@ const pkg: Package.Model = {
       name: "Sink",
       type: "pure",
       properties: [],
-      dataInputs: [{ id: IoId.make("value"), type: t.Custom(teamId) }],
+      dataInputs: [{ id: IoId.make("value"), type: t.Struct(teamId) }],
       dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
@@ -87,7 +87,7 @@ const pkg: Package.Model = {
       type: "pure",
       properties: [],
       dataInputs: [],
-      dataOutputs: [{ id: IoId.make("value"), type: t.Custom(personId) }],
+      dataOutputs: [{ id: IoId.make("value"), type: t.Struct(personId) }],
       executionInputs: [],
       executionOutputs: [],
     },
@@ -171,7 +171,7 @@ const seed: Project.Model = {
             "property",
             { package: pkg.id, schema: SchemaId.make("string") },
             {},
-            { type: JSON.stringify(t.List(t.Option(t.Custom(personId)))) },
+            { type: JSON.stringify(t.List(t.Option(t.Struct(personId)))) },
           ),
         },
         connections: [],
@@ -219,7 +219,7 @@ describe("type authoring preserve-invalid", () => {
       const io = rendered.graphs.first!.nodes.make!.io;
       expect(update.properties).toEqual({});
       expect(io.dataInputs).toEqual([
-        { id: "value", type: t.Custom(personId) },
+        { id: "value", type: t.Struct(personId) },
         {
           id: field,
           name: "name",
@@ -350,12 +350,12 @@ describe("type authoring preserve-invalid", () => {
     () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        const cyclic: { _tag: "List"; item: t.Any } = {
+        const cyclic: { _tag: "List"; item: t.Type } = {
           _tag: "List",
           item: t.String,
         };
         cyclic.item = cyclic;
-        let deep: t.Any = t.String;
+        let deep: t.Type = t.String;
         for (let i = 0; i < 1000; i++) deep = t.Option(deep);
         for (const type of [cyclic, deep]) {
           const change: TypeDefinition.Change = {
@@ -385,7 +385,7 @@ describe("type authoring preserve-invalid", () => {
           _tag: "Struct",
           id: t.DefinitionId.make("required"),
           name: "Required",
-          fields: [{ name: "person", type: t.Custom(personId) }],
+          fields: [{ name: "person", type: t.Struct(personId) }],
         };
         yield* mutate(editor, { _tag: "Upsert", definition: dependent });
         const change: TypeDefinition.Change = {
@@ -398,7 +398,7 @@ describe("type authoring preserve-invalid", () => {
               { name: "Empty", fields: [] },
               {
                 name: "Nested",
-                fields: [{ name: "required", type: t.Custom(dependent.id) }],
+                fields: [{ name: "required", type: t.Struct(dependent.id) }],
               },
             ],
           },
@@ -406,7 +406,10 @@ describe("type authoring preserve-invalid", () => {
         const impact = yield* editor.typeDefinition.preview(change);
         expect(impact.affectedTypes).toContain("required");
         const event = yield* editor.typeDefinition.confirm({ token: impact.token });
-        expect(event.types.required).toEqual(dependent);
+        expect(event.types.required).toEqual({
+          ...dependent,
+          fields: [{ name: "person", type: t.Enum(personId) }],
+        });
         expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
           anchoredConnections,
         );
@@ -420,7 +423,7 @@ describe("type authoring preserve-invalid", () => {
             _tag: "Struct",
             id: personId,
             name: "Person",
-            fields: [{ name: "required", type: t.Custom(dependent.id) }],
+            fields: [{ name: "required", type: t.Struct(dependent.id) }],
           },
         };
         expect(
@@ -566,7 +569,7 @@ describe("type authoring preserve-invalid", () => {
         );
         expect(
           (yield* editor.project.rendered()).graphs.first!.nodes.make!.io.dataOutputs[0]!.type,
-        ).toEqual(t.Custom(personId));
+        ).toEqual(t.Struct(personId));
         const diagnostics = TypeDefinition.nodeDiagnostics(
           seedCanvases.second!.nodes.sink!,
           event.nodeIO.second!.sink!,
@@ -690,7 +693,7 @@ describe("type authoring preserve-invalid", () => {
               context.schema.register({
                 id: "anchor",
                 type: "pure",
-                io: (io) => ({ value: io.data.in("value", t.Custom(enumId)) }),
+                io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
                 run: () => Effect.void,
               }),
           }),
@@ -777,7 +780,7 @@ describe("type authoring preserve-invalid", () => {
         name: "Record",
         fields: [
           { name: "when", type: t.DateTime },
-          { name: "people", type: t.List(t.Option(t.Custom(personId))) },
+          { name: "people", type: t.List(t.Option(t.Struct(personId))) },
         ],
       },
       person,
@@ -785,10 +788,10 @@ describe("type authoring preserve-invalid", () => {
         _tag: "Struct",
         id: t.DefinitionId.make("unused"),
         name: "Unused",
-        fields: [{ name: "missing", type: t.Custom(t.DefinitionId.make("absent")) }],
+        fields: [{ name: "missing", type: t.Struct(t.DefinitionId.make("absent")) }],
       },
     };
-    const type = t.Custom(id);
+    const type = t.Struct(id);
     const io = {
       dataInputs: [{ id: IoId.make("value"), type }],
       dataOutputs: [],
@@ -993,13 +996,13 @@ describe("type authoring preserve-invalid", () => {
               { name: "name", type: t.Int },
             ],
           },
-          { ...person, fields: [{ name: "next", type: t.Custom(personId) }] },
+          { ...person, fields: [{ name: "next", type: t.Struct(personId) }] },
           {
             ...person,
             fields: [
               {
                 name: "missing",
-                type: t.List(t.Custom(t.DefinitionId.make("missing"))),
+                type: t.List(t.Struct(t.DefinitionId.make("missing"))),
               },
             ],
           },
@@ -1033,7 +1036,7 @@ describe("type authoring preserve-invalid", () => {
                 _tag: "Struct",
                 id: t.DefinitionId.make("new"),
                 name: "New",
-                fields: [{ name: "group", type: t.Custom(groupId) }],
+                fields: [{ name: "group", type: t.Struct(groupId) }],
               },
             }),
           ))._tag,

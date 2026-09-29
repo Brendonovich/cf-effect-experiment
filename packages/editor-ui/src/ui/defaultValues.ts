@@ -7,7 +7,7 @@ export const valueRecord = (value: unknown): Readonly<Record<string, unknown>> |
     : undefined;
 
 export const defaultValueError = (
-  type: t.Any,
+  type: t.Type,
   value: unknown,
   definitions: t.Definitions,
 ): string | undefined => {
@@ -23,7 +23,7 @@ export const defaultValueError = (
 
 // Lists and options terminate eagerly; enums try each variant so recursive first variants cannot loop.
 export const initialDefaultValue = (
-  type: t.Any,
+  type: t.Type,
   definitions: t.Definitions,
   seen: ReadonlySet<string> = new Set(),
 ): unknown => {
@@ -41,10 +41,11 @@ export const initialDefaultValue = (
       return [];
     case "Option":
       return { _tag: "None" };
-    case "Custom": {
+    case "Struct":
+    case "Enum": {
       if (seen.has(type.id)) return undefined;
       const definition = definitions[type.id];
-      if (!definition) return undefined;
+      if (!definition || definition._tag !== type._tag) return undefined;
       const nextSeen = new Set([...seen, type.id]);
       const groups =
         definition._tag === "Struct" ? [{ fields: definition.fields }] : definition.variants;

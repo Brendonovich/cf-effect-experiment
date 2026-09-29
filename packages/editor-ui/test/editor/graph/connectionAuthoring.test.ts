@@ -69,7 +69,7 @@ describe("connection authoring", () => {
       id: "value",
       type: {
         _tag: "List" as const,
-        item: { _tag: "Option" as const, inner: { _tag: "Custom" as const, id } },
+        item: { _tag: "Option" as const, inner: { _tag: "Struct" as const, id } },
       },
     });
     expect(portsCompatible(port("a"), port("a"))).toBe(true);

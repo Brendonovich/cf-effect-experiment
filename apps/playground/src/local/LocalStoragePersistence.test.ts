@@ -50,9 +50,7 @@ describe("local browser project persistence", () => {
           variants: [
             {
               name: "Found",
-              fields: [
-                { name: "record", type: t.Custom(t.DefinitionId.make("deleted")) },
-              ],
+              fields: [{ name: "record", type: t.Struct(t.DefinitionId.make("deleted")) }],
             },
           ],
         },

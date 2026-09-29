@@ -238,7 +238,7 @@ export interface NodeExecutionRequest {
   readonly properties: Readonly<Record<string, Schema.Json>>;
   readonly event?: Schema.Json;
   readonly types: t.Definitions;
-  readonly resolvedTypes: Readonly<Record<string, t.Any>>;
+  readonly resolvedTypes: Readonly<Record<string, t.Type>>;
   readonly precomputed?: SerializedNodeExecutionResult;
   readonly scopeInput?: {
     readonly inputId: string;
@@ -406,7 +406,7 @@ export const make = Effect.fnUntraced(function* (
           moduleId: request.moduleId,
           schemaId: request.schemaId,
         });
-      const resolveType = (type: t.Any) => request.resolvedTypes[JSON.stringify(type)] ?? type;
+      const resolveType = (type: t.Type) => request.resolvedTypes[JSON.stringify(type)] ?? type;
       const nodeIO = yield* Effect.try({
         try: () =>
           schema.generateIO(request.properties, {
@@ -930,12 +930,16 @@ export const make = Effect.fnUntraced(function* (
         }
         const dependencyDefinitions: Record<string, t.Definition> = Object.create(null);
         const missing = new Set<string>();
-        const visitType = (type: t.Any): void => {
+        const visitType = (type: t.Type): void => {
           if (type._tag === "List") return visitType(type.item);
           if (type._tag === "Option") return visitType(type.inner);
-          if (type._tag !== "Custom" || Object.hasOwn(dependencyDefinitions, type.id)) return;
+          if (
+            (type._tag !== "Struct" && type._tag !== "Enum") ||
+            Object.hasOwn(dependencyDefinitions, type.id)
+          )
+            return;
           const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
-          if (definition === undefined) {
+          if (definition === undefined || definition._tag !== type._tag) {
             missing.add(type.id);
             return;
           }
@@ -1332,7 +1336,7 @@ export const make = Effect.fnUntraced(function* (
 
         const transformResult = <Value>(
           result: NodeExecutionResult,
-          transform: (type: t.Any, value: unknown) => Effect.Effect<Value, Schema.SchemaError>,
+          transform: (type: t.Type, value: unknown) => Effect.Effect<Value, Schema.SchemaError>,
         ) =>
           Effect.gen(function* () {
             const branch = nodeIO.executionOutputs.find(

@@ -81,7 +81,7 @@ const label = (field: Field) =>
     .replace(/^./, (value) => value.toUpperCase())
     .replace(/\b(Id|Uuid|Obs|Rpc|Cpu|Fps)\b/g, (value) => value.toUpperCase())
     .replace(/\bDb\b/g, "dB");
-const type = (kind: Kind): t.Any => {
+const type = (kind: Kind): t.Type => {
   switch (kind) {
     case "string":
     case "json":

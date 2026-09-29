@@ -8,7 +8,6 @@ import {
   SchemaId,
   type NodeIO,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -107,16 +106,12 @@ describe("graph presentation", () => {
     ]);
     const mismatched: NodeIO = {
       ...ioByNode.target!,
-      dataInputs: [{ id: inputId, type: { _tag: "Custom", id: "person" } }],
+      dataInputs: [{ id: inputId, type: { _tag: "Struct", id: "person" } }],
     };
     expect(graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))).toEqual(
       [],
     );
-    expect(
-      wireColor({ _tag: "Custom", id: "person" }, false, {
-        person: t.defineStruct("person", "Person", {}),
-      }),
-    ).toBe("#FACC15");
+    expect(wireColor({ _tag: "Struct", id: "person" })).toBe("#FACC15");
   });
   it("positions connected ports using the folded node's visible rows", () => {
     const [connection] = graphConnections(graph, (nodeId) => ioByNode[nodeId]);
@@ -152,11 +147,7 @@ describe("graph presentation", () => {
       "#dc2626",
     );
     expect(wireColor(undefined)).toBe("white");
-    expect(
-      wireColor({ _tag: "Custom", id: "status" }, false, {
-        status: t.defineEnum("status", "Status", []),
-      }),
-    ).toBe("#1B4DFF");
+    expect(wireColor({ _tag: "Enum", id: "status" })).toBe("#1B4DFF");
   });
 
   it.each([false, true])(
