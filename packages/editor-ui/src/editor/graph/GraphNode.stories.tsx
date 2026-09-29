@@ -17,12 +17,7 @@ import {
   switchSceneSchema,
 } from "../storybook-fixtures";
 import { GraphNode } from "./GraphNode";
-import {
-  graphNodeInputs,
-  graphNodeOutputs,
-  graphNodeWidth,
-  graphPortOffset,
-} from "./graphPresentation";
+import { graphNodeInputs, graphNodeOutputs, graphPortOffset } from "./graphPresentation";
 
 const meta: Meta<typeof GraphNode> = {
   title: "Editor/Graph/GraphNode",
@@ -167,6 +162,31 @@ export const UnnamedPorts: Story = {
   },
 };
 
+export const LongPortLabels: Story = {
+  args: {
+    node: { ...branchNode, name: "Break Struct", position: { x: 24, y: 24 } },
+    schema: branchSchema,
+    io: {
+      dataInputs: [{ id: IoId.make("value"), type: t.String }],
+      dataOutputs: [{ id: IoId.make("default_branch"), name: "default_branch", type: t.String }],
+      executionInputs: [],
+      executionOutputs: [],
+    },
+  },
+  render: (args) => (
+    <div style={{ height: "180px" }}>
+      <GraphNode {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const label = canvasElement.querySelector<HTMLElement>('[data-io-row="output"] span');
+    if (!label || label.textContent !== "default_branch")
+      throw new Error("Expected the generated field label");
+    if (label.scrollWidth > label.clientWidth)
+      throw new Error("Generated field labels must size the node instead of being truncated");
+  },
+};
+
 export const Suggestions: Story = {
   args: {
     node: { ...switchSceneNode, position: { x: 24, y: 24 } },
@@ -296,11 +316,11 @@ export const NodeTypes: Story = {
           const index = ports.findIndex(
             (port) => port.id === pin.dataset.ioId && port.kind === pin.dataset.ioKind,
           );
-          const expected = graphPortOffset(graphNodeWidth(node.io, node.name), direction, index);
           const bounds = pin.getBoundingClientRect();
           const nodeBounds = pin
             .closest<HTMLElement>("[style*='translate']")!
             .getBoundingClientRect();
+          const expected = graphPortOffset(nodeBounds.width / scale, direction, index);
           const x = (bounds.x + bounds.width / 2 - nodeBounds.x) / scale;
           const y = (bounds.y + bounds.height / 2 - nodeBounds.y) / scale;
           if (Math.abs(x - expected.x) > 0.1 || Math.abs(y - expected.y) > 0.1)

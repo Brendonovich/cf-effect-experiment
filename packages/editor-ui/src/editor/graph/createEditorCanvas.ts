@@ -24,11 +24,6 @@ import {
   type GraphPort,
   connectedPortIds as graphConnectedPortIds,
   graphConnections as presentGraphConnections,
-  graphNodeWidth,
-  graphNodeHeight,
-  graphNodeInputs,
-  graphNodeOutputs,
-  retainedPorts,
   handlePosition as graphHandlePosition,
   visibleNodePorts as graphVisibleNodePorts,
 } from "./graphPresentation";
@@ -86,6 +81,16 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     effect: Effect.Effect<Event, Error, Requirements>,
   ) => effect.pipe(Effect.tap((event) => Effect.sync(() => applyEvent(event))));
   const ephemeralSendIntervalMs = 24;
+  type NodeSize = { readonly width: number; readonly height: number };
+  let graphCanvas: HTMLDivElement | undefined;
+  const nodeSize = (nodeId: string): NodeSize | undefined => {
+    const element = graphCanvas?.querySelector<HTMLElement>(
+      `[data-graph-node-id="${CSS.escape(nodeId)}"]`,
+    );
+    return element === undefined || element === null
+      ? undefined
+      : { width: element.offsetWidth, height: element.offsetHeight };
+  };
 
   const gridForScale = (scale: number) => {
     const level = -Math.log2(scale);
@@ -254,15 +259,24 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     const graph = selectedGraph();
     return graph === null
       ? undefined
-      : graphHandlePosition(graph, ioForNode, nodeId, ioId, direction, kind);
+      : graphHandlePosition(
+          graph,
+          ioForNode,
+          nodeId,
+          ioId,
+          direction,
+          kind,
+          (id) => nodeSize(id)?.width,
+        );
   };
 
   const graphConnections = createMemo(() => {
     const graph = selectedGraph();
-    return graph === null ? [] : presentGraphConnections(graph, ioForNode);
+    return graph === null
+      ? []
+      : presentGraphConnections(graph, ioForNode, (nodeId) => nodeSize(nodeId)?.width);
   });
 
-  let graphCanvas: HTMLDivElement | undefined;
   const setGraphCanvas = (element: HTMLDivElement) => {
     graphCanvas = element;
   };
@@ -682,43 +696,13 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
     const bottom = Math.max(startGraph.y, current.y);
     const selected = nodes()
       .filter((node) => {
-        const io = ioForNode(node.id);
-        const width = graphNodeWidth(
-          io,
-          node.name,
-          node.splitScopeOutputs,
-          selectedGraph()
-            ?.connections.filter((wire) => wire.outNodeId === node.id)
-            .map((wire) => wire.outIo),
-        );
-        const inputs = visibleNodePorts(node.id, "input");
-        const outputs = visibleNodePorts(node.id, "output");
-        const height = graphNodeHeight(
-          inputs,
-          outputs,
-          inputs.length <
-            retainedPorts(
-              graphNodeInputs(io),
-              connectedPortIds(node.id, "input"),
-              Object.keys(node.inputDefaults),
-            ).length ||
-            outputs.length <
-              retainedPorts(
-                graphNodeOutputs(
-                  io,
-                  node.splitScopeOutputs,
-                  selectedGraph()
-                    ?.connections.filter((wire) => wire.outNodeId === node.id)
-                    .map((wire) => wire.outIo),
-                ),
-                connectedPortIds(node.id, "output"),
-              ).length,
-        );
+        const size = nodeSize(node.id);
+        if (size === undefined) return false;
         return (
           node.position.x >= left &&
           node.position.y >= top &&
-          node.position.x + width <= right &&
-          node.position.y + height <= bottom
+          node.position.x + size.width <= right &&
+          node.position.y + size.height <= bottom
         );
       })
       .map((node) => node.id);

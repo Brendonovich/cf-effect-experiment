@@ -8,6 +8,7 @@ import {
   SchemaId,
   type NodeIO,
 } from "@macrograph/core";
+import { t } from "@macrograph/module";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -111,15 +112,26 @@ describe("graph presentation", () => {
     expect(graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))).toEqual(
       [],
     );
-    expect(wireColor({ _tag: "Custom", id: "person" })).not.toBe(
-      wireColor({ _tag: "Custom", id: "other" }),
-    );
+    expect(
+      wireColor({ _tag: "Custom", id: "person" }, false, {
+        person: t.defineStruct("person", "Person", {}),
+      }),
+    ).toBe("#FACC15");
   });
   it("positions connected ports using the folded node's visible rows", () => {
     const [connection] = graphConnections(graph, (nodeId) => ioByNode[nodeId]);
 
     expect(connection?.to).toEqual({ x: 215, y: 42 });
     expect(connection?.type).toEqual({ _tag: "String" });
+  });
+
+  it("uses measured node widths for wire endpoints", () => {
+    const measured = graphConnections(
+      graph,
+      (nodeId) => ioByNode[nodeId],
+      (nodeId) => (nodeId === "source" ? 300 : 200),
+    );
+    expect(measured[0]?.from.x).toBe(285);
   });
 
   it("ignores ambiguous connections that match execution and data ports", () => {
@@ -140,6 +152,11 @@ describe("graph presentation", () => {
       "#dc2626",
     );
     expect(wireColor(undefined)).toBe("white");
+    expect(
+      wireColor({ _tag: "Custom", id: "status" }, false, {
+        status: t.defineEnum("status", "Status", []),
+      }),
+    ).toBe("#1B4DFF");
   });
 
   it.each([false, true])(

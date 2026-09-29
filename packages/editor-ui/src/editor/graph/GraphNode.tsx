@@ -2,7 +2,7 @@ import type { t } from "@macrograph/module";
 
 import { type Node, type NodeIO, type Package } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
-import { For, Show, createSignal, type Component } from "solid-js";
+import { For, Show, createSignal, onCleanup, type Component } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { defaultValueError } from "../../ui/defaultValues";
@@ -12,7 +12,6 @@ import { visiblePorts } from "./connectionAuthoring";
 import {
   graphNodeInputs,
   graphNodeOutputs,
-  graphNodeWidth,
   graphPortGroups,
   retainedPorts,
   wireColor,
@@ -105,6 +104,8 @@ const styles = stylex.create({
   checkbox: { width: 14, height: 14, accentColor: colors.focus },
   node: {
     position: "absolute",
+    width: "max-content",
+    minWidth: 104,
     overflow: "hidden",
     borderColor: "rgb(0 0 0 / 0.75)",
     borderRadius: 8,
@@ -164,7 +165,7 @@ const styles = stylex.create({
     minWidth: 0,
     flexShrink: 0,
   },
-  portLabel: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
+  portLabel: { flexShrink: 0 },
   outputSide: { justifyContent: "flex-end" },
   scopeGroup: {
     display: "flex",
@@ -295,6 +296,10 @@ interface GraphNodeProps {
   onSetInputDefault: (input: string, value: unknown) => void;
   onClearInputDefault: (input: string) => void;
   onGetSuggestions: (input: string) => Promise<ReadonlyArray<string>>;
+  onSizeChange?: (
+    nodeId: string,
+    size: { readonly width: number; readonly height: number },
+  ) => void;
 }
 
 const headerStyle = (type: Package.SchemaModel["type"] | undefined) => {
@@ -375,7 +380,7 @@ const Pin: Component<{
               props.port.kind === "data" && props.port.invalid
                 ? "#ff9592"
                 : props.port.kind === "data"
-                  ? wireColor(props.port.type)
+                  ? wireColor(props.port.type, false, props.definitions)
                   : undefined,
           }}
           sx={[
@@ -490,6 +495,22 @@ const DataDefaultControl: Component<{
 };
 
 export const GraphNode: Component<GraphNodeProps> = (props) => {
+  let resizeObserver: ResizeObserver | undefined;
+  const observeNode = (element: HTMLDivElement) => {
+    resizeObserver?.disconnect();
+    const reportSize = () =>
+      props.onSizeChange?.(props.node.id, {
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+      });
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(reportSize);
+      resizeObserver.observe(element);
+    } else queueMicrotask(reportSize);
+  };
+  onCleanup(() => {
+    resizeObserver?.disconnect();
+  });
   const declaredOutputs = () =>
     graphNodeOutputs(props.io, props.node.splitScopeOutputs, props.connectedOutputRefs);
   const inputs = () =>
@@ -613,6 +634,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
 
   return (
     <div
+      ref={observeNode}
       sx={[
         styles.node,
         props.diagnostics?.length ||
@@ -625,7 +647,6 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       ]}
       data-graph-node-id={props.node.id}
       style={{
-        width: `${graphNodeWidth(props.io, props.node.name, props.node.splitScopeOutputs, props.connectedOutputRefs)}px`,
         transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)`,
         "box-shadow":
           !props.selected && props.presenceColor ? `0 0 0 2px ${props.presenceColor}` : undefined,

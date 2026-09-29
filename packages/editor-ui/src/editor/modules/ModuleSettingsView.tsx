@@ -23,13 +23,7 @@ import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
-import {
-  GraphNode,
-  graphNodeHeight,
-  graphNodeInputs,
-  graphNodeOutputs,
-  graphNodeWidth,
-} from "../graph/GraphNode";
+import { GraphNode } from "../graph/GraphNode";
 import { PropertyControl } from "../inspector/PropertyControl";
 
 const styles = stylex.create({
@@ -309,6 +303,7 @@ function ReferenceView(props: {
     Readonly<Record<string, Readonly<Record<string, t.Any>>>>
   >({});
   const [previewSelected, setPreviewSelected] = createSignal(false);
+  const [previewSize, setPreviewSize] = createSignal({ width: 0, height: 0 });
   let previewElement: HTMLDivElement | undefined;
   const normalizedSearch = createMemo(() => search().trim().toLocaleLowerCase());
   const matchesSearch = (name: string, description?: string) => {
@@ -459,14 +454,6 @@ function ReferenceView(props: {
     event.preventDefault();
     event.clipboardData.setData("text/plain", text);
   };
-  const previewHeight = createMemo(() => {
-    const io = previewIO();
-    return io === undefined ? 0 : graphNodeHeight(graphNodeInputs(io), graphNodeOutputs(io));
-  });
-  const previewWidth = createMemo(() => {
-    const schema = selectedSchema();
-    return schema === undefined ? 0 : graphNodeWidth(previewIO(), schema.name);
-  });
   const setProperty = (schemaId: string, propertyId: string, value: PreviewValue) =>
     setPropertyValues((current) => ({
       ...current,
@@ -577,7 +564,7 @@ function ReferenceView(props: {
                 <div
                   ref={previewElement}
                   sx={styles.preview}
-                  style={{ height: `${previewHeight()}px`, width: `${previewWidth()}px` }}
+                  style={{ height: `${previewSize().height}px`, width: `${previewSize().width}px` }}
                   tabindex={-1}
                   onCopy={copyPreview}
                 >
@@ -589,6 +576,7 @@ function ReferenceView(props: {
                         io={previewIO()}
                         definitions={props.definitions}
                         allowInputDefaults={false}
+                        onSizeChange={(_nodeId, size) => setPreviewSize(size)}
                         connectedInputIds={new Set()}
                         connectedOutputIds={new Set()}
                         selected={previewSelected()}

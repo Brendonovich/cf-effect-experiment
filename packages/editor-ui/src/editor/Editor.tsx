@@ -7,7 +7,7 @@ import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
 import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
-import { createMemo, Errored, For, Show } from "solid-js";
+import { createMemo, createSignal, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
@@ -701,11 +701,23 @@ function EditorContent(
                   // Pane contents belong to the tab, not the globally focused graph.
                   const graph = () => controller.editor.store.project?.graphs[tab().graphId];
                   const nodes = createMemo(() => Object.values(graph()?.nodes ?? {}));
+                  const [nodeWidths, setNodeWidths] = createSignal<ReadonlyMap<string, number>>(
+                    new Map(),
+                  );
+                  const setNodeWidth = (nodeId: string, width: number | undefined) =>
+                    setNodeWidths((current) => {
+                      const next = new Map(current);
+                      if (width === undefined) next.delete(nodeId);
+                      else next.set(nodeId, width);
+                      return next;
+                    });
                   const ioForNode = (nodeId: string) =>
                     controller.editor.store.nodeIO[tab().graphId]?.[nodeId];
                   const edges = createMemo(() => {
                     const value = graph();
-                    return value === undefined ? [] : graphConnections(value, ioForNode);
+                    return value === undefined
+                      ? []
+                      : graphConnections(value, ioForNode, (nodeId) => nodeWidths().get(nodeId));
                   });
                   const remotePresence = () =>
                     controller.connection
@@ -813,7 +825,11 @@ function EditorContent(
                                       }
                                       d={connectionPath(edge().from, edge().to)}
                                       fill="none"
-                                      stroke={wireColor(edge().type, edge().scope)}
+                                      stroke={wireColor(
+                                        edge().type,
+                                        edge().scope,
+                                        runtimeDefinitions(),
+                                      )}
                                       stroke-width="2"
                                       opacity="0.75"
                                     />
@@ -836,6 +852,7 @@ function EditorContent(
                                           ? drag.source.port.type
                                           : undefined,
                                         drag.source.port.kind === "scope",
+                                        runtimeDefinitions(),
                                       )}
                                       stroke-width="2"
                                       opacity="0.375"
@@ -849,7 +866,10 @@ function EditorContent(
                                     node={node()}
                                     schema={canvas.schemaForNode(node())}
                                     io={ioForNode(node().id)}
-                                    definitions={runtimeDefinitions()}
+                                     definitions={runtimeDefinitions()}
+                                     onSizeChange={(nodeId, size) => {
+                                       setNodeWidth(nodeId, size.width);
+                                     }}
                                     diagnostics={[
                                       ...new Set([
                                         ...(controller.editor.store.nodeDiagnostics[
