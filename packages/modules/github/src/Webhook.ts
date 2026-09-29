@@ -127,10 +127,12 @@ export const handler = WebhookIngress.implement(
         if (event === "ping") return { status: 200 };
         if (!Schema.is(WebhookEventName)(event)) return { status: 204 };
         if (!request.configuration.events.includes(event)) return { status: 204 };
-        const payload = yield* Effect.try({
+        const parsed = yield* Effect.try({
           try: () => JSON.parse(new TextDecoder().decode(request.body)) as unknown,
           catch: () => undefined,
         }).pipe(Effect.option);
+        const payload =
+          parsed._tag === "Some" ? Schema.decodeUnknownOption(Schema.Json)(parsed.value) : parsed;
         if (
           payload._tag === "None" ||
           typeof payload.value !== "object" ||
@@ -176,7 +178,7 @@ export const handler = WebhookIngress.implement(
                 repository: webhook.repository,
                 sender,
                 deliveryId,
-                payloadJson: JSON.stringify(payload.value),
+                payload: payload.value,
               }),
               eventId: deliveryId,
             },

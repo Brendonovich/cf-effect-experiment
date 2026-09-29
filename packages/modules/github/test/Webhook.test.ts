@@ -159,6 +159,12 @@ describe("GitHub repository webhook", () => {
         sender: "octocat",
         owner: "macrograph",
         repository: "macrograph",
+        payload: {
+          ref: "refs/heads/main",
+          installation: { id: 10 },
+          repository: { id: 20, full_name: "macrograph/macrograph" },
+          sender: { login: "octocat" },
+        },
       });
     }),
   );
