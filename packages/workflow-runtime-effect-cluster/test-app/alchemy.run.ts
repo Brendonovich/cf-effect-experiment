@@ -10,7 +10,7 @@ export default Alchemy.Stack(
     state: localState(),
   },
   Effect.gen(function* () {
-    const server = yield* Command.Dev("Cluster", { command: "bun server.ts" });
+    const server = yield* Command.Dev("Cluster", { command: "node server.ts" });
     return { url: server.url };
   }),
 );

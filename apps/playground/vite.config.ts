@@ -25,7 +25,6 @@ const browserImportAudit: Plugin = {
       "/packages/modules/twitch/src/WebhookEventSub",
       "/packages/modules/websocket-server/",
       "/@effect/platform-node/",
-      "/@effect/platform-bun/",
     ];
     const polyfills = ["node-stdlib-browser", "node-polyfill", "rollup-plugin-polyfill-node"];
     const invalid = Object.values(bundle).flatMap((output) => {

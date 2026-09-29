@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "alchemy": "bun node_modules/alchemy/bin/alchemy.js",
+    "alchemy": "pnpm exec node --env-file-if-exists=.env node_modules/alchemy/bin/alchemy.js",
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run --environment node",
