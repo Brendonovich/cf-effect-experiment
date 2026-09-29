@@ -9,6 +9,7 @@ import { asOutputPort, type GraphPort } from "./GraphPort";
 export type { GraphPort } from "./GraphPort";
 
 type NodeIOFor = (nodeId: string) => NodeIO | undefined;
+type NodeWidthFor = (nodeId: string) => number | undefined;
 type t = NodeIO["dataInputs"][number]["type"];
 type Position = { readonly x: number; readonly y: number };
 
@@ -229,19 +230,22 @@ export const handlePosition = (
   ioId: string,
   direction: PortDirection,
   kind: GraphPort["kind"],
+  widthForNode?: NodeWidthFor,
 ): Position | undefined => {
   const node = graph.nodes[nodeId];
   if (node === undefined) return undefined;
   const ports = visibleNodePorts(graph, ioForNode, nodeId, direction);
   const index = ports.findIndex((port) => port.id === ioId && port.kind === kind);
   if (index < 0) return undefined;
+  const measuredWidth = widthForNode?.(nodeId);
   const offset = graphPortOffset(
-    graphNodeWidth(
-      ioForNode(nodeId),
-      node.name,
-      node.splitScopeOutputs,
-      graph.connections.filter((wire) => wire.outNodeId === nodeId).map((wire) => wire.outIo),
-    ),
+    measuredWidth ??
+      graphNodeWidth(
+        ioForNode(nodeId),
+        node.name,
+        node.splitScopeOutputs,
+        graph.connections.filter((wire) => wire.outNodeId === nodeId).map((wire) => wire.outIo),
+      ),
     direction,
     index,
     graphColumnLayout(ports).rows[index]?.y,
@@ -252,7 +256,11 @@ export const handlePosition = (
   };
 };
 
-export const graphConnections = (graph: Canvas.Model, ioForNode: NodeIOFor) => {
+export const graphConnections = (
+  graph: Canvas.Model,
+  ioForNode: NodeIOFor,
+  widthForNode?: NodeWidthFor,
+) => {
   // Index once per pass; scanning all connections for each endpoint is quadratic.
   const connected = new Map<string, Record<PortDirection, Set<string>>>();
   const outputRefs = new Map<string, OutputRef.Model[]>();
@@ -282,7 +290,10 @@ export const graphConnections = (graph: Canvas.Model, ioForNode: NodeIOFor) => {
     const node = graph.nodes[nodeId];
     if (node === undefined) return undefined;
     const io = ioForNode(node.id);
-    const width = graphNodeWidth(io, node.name, node.splitScopeOutputs, outputRefs.get(nodeId));
+    const measuredWidth = widthForNode?.(nodeId);
+    const width =
+      measuredWidth ??
+      graphNodeWidth(io, node.name, node.splitScopeOutputs, outputRefs.get(nodeId));
     const layout: Layout = { input: new Map(), output: new Map() };
     const visibleByDirection = {
       input: visiblePorts(
@@ -375,8 +386,10 @@ export const wireColor = (type: t | undefined, scope = false): string => {
       return "#dc2626";
     case "DateTime":
       return "#3b82f6";
-    case "Custom":
-      return `hsl(${[...primary.id].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0) % 360} 70% 72%)`;
+    case "Struct":
+      return "#FACC15";
+    case "Enum":
+      return "#1B4DFF";
     case "List":
     case "Option":
       return wireColor(primary);

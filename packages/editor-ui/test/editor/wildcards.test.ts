@@ -33,7 +33,7 @@ const project = Schema.decodeUnknownSync(Project.Model)({
   },
 });
 const snapshot = { ...project, graphs: { graph: project.graphs.graph!.canvas } };
-const io = (type: t.Any): NodeIO => ({
+const io = (type: t.Type): NodeIO => ({
   dataInputs: [{ id: IoId.make("in"), type }],
   dataOutputs: [{ id: IoId.make("out"), type }],
   executionInputs: [],

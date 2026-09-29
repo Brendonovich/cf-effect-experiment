@@ -1,5 +1,6 @@
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
-import { HttpEndpoint, HttpIngress } from "@macrograph/module";
+import { HttpEndpoint } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
 import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";

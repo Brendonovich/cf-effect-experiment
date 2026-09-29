@@ -23,7 +23,7 @@ it("offers Break Struct for struct or unresolved wildcard sources, not primitive
     choice: { _tag: "Enum", id: choice, name: "Choice", variants: [{ name: "Empty", fields: [] }] },
   };
   const schema = CustomTypes.packageModel.schemas.find((schema) => schema.id === "BreakStruct")!;
-  for (const type of [t.String, t.Int, t.List(t.Custom(item)), t.Custom(choice)])
+  for (const type of [t.String, t.Int, t.List(t.Struct(item)), t.Enum(choice)])
     expect(
       compatibleSchemaPorts(
         schema,
@@ -32,7 +32,7 @@ it("offers Break Struct for struct or unresolved wildcard sources, not primitive
         definitions,
       ),
     ).toEqual([]);
-  for (const type of [t.Custom(item), t.Wildcard("T")])
+  for (const type of [t.Struct(item), t.Wildcard("T")])
     expect(
       compatibleSchemaPorts(
         schema,
@@ -80,17 +80,22 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
     });
     const source: NodeIO = {
       dataInputs: [],
-      dataOutputs: [{ id: IoId.make("value"), type: t.Custom(id) }],
+      dataOutputs: [{ id: IoId.make("value"), type: t.Struct(id) }],
+      executionInputs: [],
+      executionOutputs: [],
+    };
+    const breakStructIO: NodeIO = {
+      dataInputs: [{ id: IoId.make("value"), type: CustomTypes.breakWildcard }],
+      dataOutputs: [],
       executionInputs: [],
       executionOutputs: [],
     };
     const canvas = project.graphs.graph!.canvas;
-    const node = canvas.nodes.break!;
     const editor = createEditorStore();
     editor.setProject(
       { ...project, graphs: { graph: canvas } },
       {
-        graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
+        graph: { source, break: breakStructIO },
       },
     );
     const output = () => editor.store.nodeIO.graph!.break!.dataOutputs;
@@ -118,7 +123,7 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
       graph: {
         source,
         break: {
-          ...CustomTypes.nodeIO(node.schema, {}, project.types)!,
+          ...breakStructIO,
           dataOutputs: inferredOutput,
         },
       },
@@ -132,7 +137,7 @@ it("derives Break fields on snapshot/events and clears stale fields when its anc
     expect(output()).toEqual([]);
     // Snapshots carry wildcard input declarations; verify ordinary declaration reload too.
     editor.setProject(snapshot, {
-      graph: { source, break: CustomTypes.nodeIO(node.schema, {}, project.types)! },
+      graph: { source, break: breakStructIO },
     });
     expect(output()[0]!.type).toEqual(t.String);
     dispose();

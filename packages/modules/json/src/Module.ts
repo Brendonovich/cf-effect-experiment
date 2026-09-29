@@ -1,9 +1,7 @@
 import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect, Option, Schema } from "effect";
-
 const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 && count <= 1024;
-
 // JSON numeric overflow must not silently become null when serialized again.
 const parse = Effect.fnUntraced(function* (input: string) {
   let nonfinite = false;
@@ -30,62 +28,54 @@ const member = (value: Schema.Json | undefined, key: string): Schema.Json | unde
 };
 const serializedOption = (value: Schema.Json | undefined): Option.Option<string> =>
   value === undefined ? Option.none() : Option.some(JSON.stringify(value));
-const extract = (
-  value: Schema.Json,
-  type: t.Scalar,
-): Option.Option<t.Value<t.Scalar>> => {
-  switch (type._tag) {
-    case "String":
-      return typeof value === "string" ? Option.some(value) : Option.none();
-    case "Bool":
-      return typeof value === "boolean" ? Option.some(value) : Option.none();
-    case "Int":
-      return typeof value === "number" && Number.isSafeInteger(value)
-        ? Option.some(value)
-        : Option.none();
-    case "Float":
-      return typeof value === "number" && Number.isFinite(value)
-        ? Option.some(value)
-        : Option.none();
-  }
-};
-
 const JsonModule = Module.make({
   id: "json",
   name: "JSON",
   description: "Build, inspect, and transform JSON values.",
   effect: Effect.fnUntraced(function* (context) {
-    for (const [id, name, type] of [
-      ["ParseJSON", "Parse JSON", "exec"],
-      ["StringifyJSON", "Stringify JSON", "pure"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        type,
-        description:
-          "Validates JSON text and emits compact JSON text. Invalid JSON and nonfinite numbers fail.",
-        io: (io) => ({
-          input: io.data.in("in", t.String, {
-            ...(id === "StringifyJSON" ? { name: "Json" } : {}),
-            defaultValue: "null",
-          }),
-          output: io.data.out(
-            "out",
-            t.String,
-            id === "StringifyJSON" ? { name: "String" } : undefined,
-          ),
+    yield* context.schema.register({
+      id: "ParseJSON",
+      name: "Parse JSON",
+      type: "exec",
+      description:
+        "Validates JSON text and emits compact JSON text. Invalid JSON and nonfinite numbers fail.",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          defaultValue: "null",
         }),
-        run: ({ io }) =>
-          Effect.gen(function* () {
-            const value = yield* parse(io.input);
-            yield* Effect.try({
-              try: () => io.output(JSON.stringify(value)),
-              catch: (error) => error,
-            });
-          }),
-      });
-    }
+        output: io.data.out("out", t.String, undefined),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(JSON.stringify(value)),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "StringifyJSON",
+      name: "Stringify JSON",
+      type: "pure",
+      description:
+        "Validates JSON text and emits compact JSON text. Invalid JSON and nonfinite numbers fail.",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          name: "Json",
+          defaultValue: "null",
+        }),
+        output: io.data.out("out", t.String, { name: "String" }),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(JSON.stringify(value)),
+            catch: (error) => error,
+          });
+        }),
+    });
     yield* context.schema.register({
       id: "ToJSON",
       name: "To JSON",
@@ -164,35 +154,101 @@ const JsonModule = Module.make({
           });
         }),
     });
-    for (const [id, name, type] of [
-      ["JSONGetString", "JSON Get String", t.String],
-      ["JSONGetNumber", "JSON Get Number", t.Float],
-      ["JSONGetInt", "JSON Get Int", t.Int],
-      ["JSONGetBoolean", "JSON Get Boolean", t.Bool],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description:
-          "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("in", t.String, {
-            ...(id === "JSONGetInt" ? { name: "JSON" } : {}),
-            defaultValue: "null",
-          }),
-          output: io.data.out("out", t.Option(type)),
+    yield* context.schema.register({
+      id: "JSONGetString",
+      name: "JSON Get String",
+      description:
+        "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          defaultValue: "null",
         }),
-        run: ({ io }) =>
-          Effect.gen(function* () {
-            const value = yield* parse(io.input);
-            yield* Effect.try({
-              try: () => io.output(extract(value, type)),
-              catch: (error) => error,
-            });
-          }),
-      });
-    }
+        output: io.data.out("out", t.Option(t.String)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(typeof value === "string" ? Option.some(value) : Option.none()),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONGetNumber",
+      name: "JSON Get Number",
+      description:
+        "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          defaultValue: "null",
+        }),
+        output: io.data.out("out", t.Option(t.Float)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () =>
+              io.output(
+                typeof value === "number" && Number.isFinite(value)
+                  ? Option.some(value)
+                  : Option.none(),
+              ),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONGetInt",
+      name: "JSON Get Int",
+      description:
+        "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          name: "JSON",
+          defaultValue: "null",
+        }),
+        output: io.data.out("out", t.Option(t.Int)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () =>
+              io.output(
+                typeof value === "number" && Number.isSafeInteger(value)
+                  ? Option.some(value)
+                  : Option.none(),
+              ),
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "JSONGetBoolean",
+      name: "JSON Get Boolean",
+      description:
+        "Extracts Some for the matching JSON scalar type, or None for a mismatch or unsafe Int value. Malformed JSON fails.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("in", t.String, {
+          defaultValue: "null",
+        }),
+        output: io.data.out("out", t.Option(t.Bool)),
+      }),
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const value = yield* parse(io.input);
+          yield* Effect.try({
+            try: () => io.output(typeof value === "boolean" ? Option.some(value) : Option.none()),
+            catch: (error) => error,
+          });
+        }),
+    });
     yield* context.schema.register({
       id: "JSONGetList",
       name: "JSON Get List",
@@ -232,9 +288,7 @@ const JsonModule = Module.make({
         Effect.gen(function* () {
           const value = yield* parse(io.input);
           const decoded = yield* Schema.decodeUnknownEffect(
-            Schema.Array(
-              t.JsonValueSchema(types.resolve(t.Wildcard("T")), types.definitions),
-            ),
+            Schema.Array(t.JsonValueSchema(types.resolve(t.Wildcard("T")), types.definitions)),
           )(value, { onExcessProperty: "error" }).pipe(
             Effect.map(Option.some),
             Effect.catchTag("SchemaError", () => Effect.succeed(Option.none())),
@@ -437,5 +491,4 @@ const JsonModule = Module.make({
     });
   }),
 });
-
 export default JsonModule;

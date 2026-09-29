@@ -17,7 +17,7 @@ import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
 import { Retry } from "@macrograph/module/Retry";
-import { Cause, Effect, Option, Ref, Result, Schema } from "effect";
+import { Cause, Effect, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
@@ -238,7 +238,7 @@ export interface NodeExecutionRequest {
   readonly properties: Readonly<Record<string, Schema.Json>>;
   readonly event?: Schema.Json;
   readonly types: t.Definitions;
-  readonly resolvedTypes: Readonly<Record<string, t.Any>>;
+  readonly resolvedTypes: Readonly<Record<string, t.Type>>;
   readonly precomputed?: SerializedNodeExecutionResult;
   readonly scopeInput?: {
     readonly inputId: string;
@@ -319,6 +319,20 @@ export const make = Effect.fnUntraced(function* (
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
   const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
+  const customTypeSchemas = yield* Registration.collect(CustomTypes.module.effect);
+  yield* Ref.set(
+    modules,
+    new Map([
+      [
+        CustomTypes.module.id,
+        {
+          schemas: new Map(customTypeSchemas.map((schema) => [schema.id, schema])),
+          engineClient: undefined,
+          types: {},
+        },
+      ],
+    ]),
+  );
   const projectId = options?.projectId ?? "local";
   const pendingNodes = new Map<
     string,
@@ -383,11 +397,6 @@ export const make = Effect.fnUntraced(function* (
           [...registeredModules.values()].flatMap((registered) => Object.entries(registered.types)),
         ),
       };
-      registeredModules.set(CustomTypes.packageId, {
-        schemas: CustomTypes.schemas(definitions),
-        engineClient: undefined,
-        types: {},
-      });
       const registeredModule = registeredModules.get(request.moduleId);
       if (registeredModule === undefined)
         return yield* new ModuleNotRegistered({ moduleId: request.moduleId });
@@ -397,8 +406,13 @@ export const make = Effect.fnUntraced(function* (
           moduleId: request.moduleId,
           schemaId: request.schemaId,
         });
+      const resolveType = (type: t.Type) => request.resolvedTypes[JSON.stringify(type)] ?? type;
       const nodeIO = yield* Effect.try({
-        try: () => schema.generateIO(request.properties),
+        try: () =>
+          schema.generateIO(request.properties, {
+            resolve: resolveType,
+            definitions,
+          }),
         catch: () =>
           new InvalidGraph({
             graphId: request.key.graphId,
@@ -407,14 +421,12 @@ export const make = Effect.fnUntraced(function* (
           }),
       });
       const inputs = new Map<string, unknown>();
-      const resolveType = (type: t.Any) =>
-        request.resolvedTypes[JSON.stringify(type)] ?? type;
       yield* Effect.forEach(
         nodeIO.dataInputs,
         (input) =>
-          Schema.decodeUnknownEffect(
-            t.JsonValueSchema(resolveType(input.type), definitions),
-          )(request.inputs[input.id]).pipe(
+          Schema.decodeUnknownEffect(t.JsonValueSchema(resolveType(input.type), definitions))(
+            request.inputs[input.id],
+          ).pipe(
             Effect.tap((value) =>
               Effect.sync(() => {
                 inputs.set(input.id, value);
@@ -443,9 +455,9 @@ export const make = Effect.fnUntraced(function* (
           });
         scopePayload = Object.fromEntries(
           yield* Effect.forEach(input.scope ?? [], (field) =>
-            Schema.decodeUnknownEffect(
-              t.JsonValueSchema(resolveType(field.type), definitions),
-            )(request.scopeInput!.payload[field.id]).pipe(
+            Schema.decodeUnknownEffect(t.JsonValueSchema(resolveType(field.type), definitions))(
+              request.scopeInput!.payload[field.id],
+            ).pipe(
               Effect.map((value) => [field.id, value] as const),
               Effect.catchCause(
                 () =>
@@ -533,9 +545,7 @@ export const make = Effect.fnUntraced(function* (
           ? undefined
           : Object.fromEntries(
               yield* Effect.forEach(fields, (field) =>
-                Schema.encodeUnknownEffect(
-                  t.JsonValueSchema(resolveType(field.type), definitions),
-                )(
+                Schema.encodeUnknownEffect(t.JsonValueSchema(resolveType(field.type), definitions))(
                   selected instanceof Registration.ScopeExecution
                     ? selected.payload[field.id]
                     : undefined,
@@ -563,9 +573,9 @@ export const make = Effect.fnUntraced(function* (
               reason: "Expected a declared data output",
             }),
           );
-        return Schema.encodeUnknownEffect(
-          t.JsonValueSchema(resolveType(port.type), definitions),
-        )(output.value).pipe(
+        return Schema.encodeUnknownEffect(t.JsonValueSchema(resolveType(port.type), definitions))(
+          output.value,
+        ).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
           Effect.map((value) => ({ outputId: output.outputId, value })),
           Effect.catchCause(
@@ -603,11 +613,6 @@ export const make = Effect.fnUntraced(function* (
         [...registeredModules.values()].flatMap((registered) => Object.entries(registered.types)),
       ),
     };
-    registeredModules.set(CustomTypes.packageId, {
-      schemas: CustomTypes.schemas(definitions),
-      engineClient: undefined,
-      types: {},
-    });
     if (definition !== undefined && !registeredModules.has(definition.id))
       return yield* new ModuleNotRegistered({ moduleId: definition.id });
 
@@ -766,7 +771,11 @@ export const make = Effect.fnUntraced(function* (
         properties: Readonly<Record<string, unknown>>,
       ) =>
         Effect.try({
-          try: () => schema.generateIO(properties),
+          try: () =>
+            schema.generateIO(properties, {
+              resolve: (type) => type,
+              definitions,
+            }),
           catch: () =>
             new InvalidGraph({
               graphId: graph.id,
@@ -780,26 +789,6 @@ export const make = Effect.fnUntraced(function* (
     // Event-local declarations are immutable. Reuse the solved groups for preflight,
     // live input/output checks and durable-result encoding/decoding alike.
     const wildcardGraphs = new Map<string, Wildcards.Cache>();
-    const toRegisteredIO = (io: NodeIO): Registration.RegisteredNodeIO => ({
-      dataInputs: io.dataInputs.map(
-        (port) =>
-          new Registration.DataInputRef(
-            port.id,
-            port.type,
-            port.name,
-            port.defaultValue === undefined ? undefined : Option.none(),
-          ),
-      ),
-      dataOutputs: io.dataOutputs.map(
-        (port) => new Registration.DataOutputRef(port.id, port.type, port.name),
-      ),
-      executionInputs: io.executionInputs.map(
-        (port) => new Registration.ExecutionInputRef(port.id, port.name, port.scope),
-      ),
-      executionOutputs: io.executionOutputs.map(
-        (port) => new Registration.ExecutionOutputRef(port.id, port.name, port.scope ?? undefined),
-      ),
-    });
     const generateNodeIO = Effect.fnUntraced(function* (
       graph: Canvas.Model,
       node: Node.Model,
@@ -810,6 +799,7 @@ export const make = Effect.fnUntraced(function* (
       let cache = wildcardGraphs.get(graph.id);
       if (cache?.group(node.id) === undefined) {
         cache ??= new Wildcards.Cache();
+        const currentCache = cache;
         const declarations = new Map<string, Registration.RegisteredNodeIO>();
         for (const candidate of Object.values(graph.nodes)) {
           const declaration =
@@ -828,14 +818,32 @@ export const make = Effect.fnUntraced(function* (
           // The ordinary preflight still reports them if it reaches them.
           if (declaration !== undefined) declarations.set(candidate.id, declaration);
         }
-        const derive = CustomTypes.derivedIO(graph, definitions);
-        let result = cache.update(declarations, graph.connections, derive);
-        if (Result.isSuccess(result)) {
-          for (const [id, io] of declarations) {
-            const derived = cache.derivedIO(id);
-            if (derived !== undefined) declarations.set(id, { ...io, ...toRegisteredIO(derived) });
+        let result = cache.update(declarations, graph.connections);
+        for (
+          let iteration = 0;
+          iteration <= Object.keys(graph.nodes).length && Result.isSuccess(result);
+          iteration++
+        ) {
+          let changed = false;
+          for (const candidate of Object.values(graph.nodes)) {
+            const generated = yield* Effect.gen(function* () {
+              const candidateSchema = yield* getSchema(registeredModules, candidate);
+              return candidateSchema.generateIO(
+                yield* resolveProperties(candidate, candidateSchema, false),
+                {
+                  resolve: (type) => currentCache.resolve(candidate.id, type),
+                  definitions,
+                },
+              );
+            }).pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+            if (generated === undefined) continue;
+            if (JSON.stringify(generated) !== JSON.stringify(declarations.get(candidate.id))) {
+              declarations.set(candidate.id, generated);
+              changed = true;
+            }
           }
-          result = cache.update(declarations, graph.connections, derive);
+          result = cache.update(declarations, graph.connections);
+          if (!changed) break;
         }
         if (Result.isFailure(result)) {
           const conflicts = result.failure.filter((conflict) => conflict.nodes.has(node.id));
@@ -853,7 +861,6 @@ export const make = Effect.fnUntraced(function* (
             graph.connections.filter(
               (wire) => !invalidNodes.has(wire.outNodeId) && !invalidNodes.has(wire.inNodeId),
             ),
-            derive,
           );
           if (Result.isFailure(valid))
             return yield* new InvalidGraph({
@@ -864,10 +871,12 @@ export const make = Effect.fnUntraced(function* (
         }
         wildcardGraphs.set(graph.id, cache);
       }
-      const derived = cache.derivedIO(node.id);
       return cache.resolveIO(
         node.id,
-        derived === undefined ? io : { ...io, ...toRegisteredIO(derived) },
+        schema.generateIO(properties, {
+          resolve: (type) => cache.resolve(node.id, type),
+          definitions,
+        }),
       );
     });
 
@@ -921,12 +930,16 @@ export const make = Effect.fnUntraced(function* (
         }
         const dependencyDefinitions: Record<string, t.Definition> = Object.create(null);
         const missing = new Set<string>();
-        const visitType = (type: t.Any): void => {
+        const visitType = (type: t.Type): void => {
           if (type._tag === "List") return visitType(type.item);
           if (type._tag === "Option") return visitType(type.inner);
-          if (type._tag !== "Custom" || Object.hasOwn(dependencyDefinitions, type.id)) return;
+          if (
+            (type._tag !== "Struct" && type._tag !== "Enum") ||
+            Object.hasOwn(dependencyDefinitions, type.id)
+          )
+            return;
           const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
-          if (definition === undefined) {
+          if (definition === undefined || definition._tag !== type._tag) {
             missing.add(type.id);
             return;
           }
@@ -1323,10 +1336,7 @@ export const make = Effect.fnUntraced(function* (
 
         const transformResult = <Value>(
           result: NodeExecutionResult,
-          transform: (
-            type: t.Any,
-            value: unknown,
-          ) => Effect.Effect<Value, Schema.SchemaError>,
+          transform: (type: t.Type, value: unknown) => Effect.Effect<Value, Schema.SchemaError>,
         ) =>
           Effect.gen(function* () {
             const branch = nodeIO.executionOutputs.find(
@@ -1672,9 +1682,9 @@ export const make = Effect.fnUntraced(function* (
                 : "missing",
           );
           if (Object.hasOwn(node.inputDefaults, input.id)) {
-            return yield* Schema.decodeUnknownEffect(
-              t.JsonValueSchema(input.type, definitions),
-            )(node.inputDefaults[input.id]).pipe(
+            return yield* Schema.decodeUnknownEffect(t.JsonValueSchema(input.type, definitions))(
+              node.inputDefaults[input.id],
+            ).pipe(
               Effect.catchCause(
                 () =>
                   new InvalidInputValue({

@@ -23,13 +23,7 @@ import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
-import {
-  GraphNode,
-  graphNodeHeight,
-  graphNodeInputs,
-  graphNodeOutputs,
-  graphNodeWidth,
-} from "../graph/GraphNode";
+import { GraphNode } from "../graph/GraphNode";
 import { PropertyControl } from "../inspector/PropertyControl";
 
 const styles = stylex.create({
@@ -276,16 +270,13 @@ const propertyDefault = (property: Package.PropertyDefinition): PreviewValue => 
   return 0;
 };
 
-const collectWildcardIds = (type: t.Any, ids: Set<string>) => {
+const collectWildcardIds = (type: t.Type, ids: Set<string>) => {
   if (type._tag === "Wildcard") ids.add(type.id);
   if (type._tag === "List") collectWildcardIds(type.item, ids);
   if (type._tag === "Option") collectWildcardIds(type.inner, ids);
 };
 
-const resolveWildcards = (
-  type: t.Any,
-  values: Readonly<Record<string, t.Any>>,
-): t.Any => {
+const resolveWildcards = (type: t.Type, values: Readonly<Record<string, t.Type>>): t.Type => {
   if (type._tag === "Wildcard") return values[type.id] ?? t.String;
   if (type._tag === "List") return t.List(resolveWildcards(type.item, values));
   if (type._tag === "Option") return t.Option(resolveWildcards(type.inner, values));
@@ -306,9 +297,10 @@ function ReferenceView(props: {
     Readonly<Record<string, Readonly<Record<string, PreviewValue>>>>
   >({});
   const [wildcardValues, setWildcardValues] = createSignal<
-    Readonly<Record<string, Readonly<Record<string, t.Any>>>>
+    Readonly<Record<string, Readonly<Record<string, t.Type>>>>
   >({});
   const [previewSelected, setPreviewSelected] = createSignal(false);
+  const [previewSize, setPreviewSize] = createSignal({ width: 0, height: 0 });
   let previewElement: HTMLDivElement | undefined;
   const normalizedSearch = createMemo(() => search().trim().toLocaleLowerCase());
   const matchesSearch = (name: string, description?: string) => {
@@ -459,14 +451,6 @@ function ReferenceView(props: {
     event.preventDefault();
     event.clipboardData.setData("text/plain", text);
   };
-  const previewHeight = createMemo(() => {
-    const io = previewIO();
-    return io === undefined ? 0 : graphNodeHeight(graphNodeInputs(io), graphNodeOutputs(io));
-  });
-  const previewWidth = createMemo(() => {
-    const schema = selectedSchema();
-    return schema === undefined ? 0 : graphNodeWidth(previewIO(), schema.name);
-  });
   const setProperty = (schemaId: string, propertyId: string, value: PreviewValue) =>
     setPropertyValues((current) => ({
       ...current,
@@ -478,7 +462,7 @@ function ReferenceView(props: {
       delete nextSchema[propertyId];
       return { ...current, [schemaId]: nextSchema };
     });
-  const setWildcard = (schemaId: string, wildcardId: string, value: t.Any) =>
+  const setWildcard = (schemaId: string, wildcardId: string, value: t.Type) =>
     setWildcardValues((current) => ({
       ...current,
       [schemaId]: { ...current[schemaId], [wildcardId]: value },
@@ -577,7 +561,7 @@ function ReferenceView(props: {
                 <div
                   ref={previewElement}
                   sx={styles.preview}
-                  style={{ height: `${previewHeight()}px`, width: `${previewWidth()}px` }}
+                  style={{ height: `${previewSize().height}px`, width: `${previewSize().width}px` }}
                   tabindex={-1}
                   onCopy={copyPreview}
                 >
@@ -589,6 +573,7 @@ function ReferenceView(props: {
                         io={previewIO()}
                         definitions={props.definitions}
                         allowInputDefaults={false}
+                        onSizeChange={(_nodeId, size) => setPreviewSize(size)}
                         connectedInputIds={new Set()}
                         connectedOutputIds={new Set()}
                         selected={previewSelected()}
@@ -619,9 +604,7 @@ function ReferenceView(props: {
                               <span sx={styles.propertyNote}>{wildcardId}</span>
                               <DataTypePicker
                                 label={`${wildcardId} wildcard type`}
-                                value={
-                                  wildcardValues()[schema().id]?.[wildcardId] ?? t.String
-                                }
+                                value={wildcardValues()[schema().id]?.[wildcardId] ?? t.String}
                                 definitions={props.definitions}
                                 onChange={(value) => setWildcard(schema().id, wildcardId, value)}
                               />

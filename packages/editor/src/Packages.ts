@@ -15,6 +15,7 @@ type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
 export type IOCalculator = (
   properties: Readonly<Record<string, unknown>>,
   definitions: t.Definitions,
+  resolve?: (type: t.Type) => t.Type,
 ) => NodeIO;
 
 export interface SchemaRuntime {
@@ -45,7 +46,20 @@ export class Service extends Context.Service<
       ref: SchemaRef,
       properties: Readonly<Record<string, unknown>>,
       definitions?: t.Definitions,
+      resolve?: (type: t.Type) => t.Type,
     ) => Effect.Effect<NodeIO, Package.SchemaNotFoundError>;
+    readonly acceptsInput: (
+      ref: SchemaRef,
+      input: string,
+      type: t.Type,
+      definitions?: t.Definitions,
+    ) => Effect.Effect<boolean>;
+    readonly acceptsOutput: (
+      ref: SchemaRef,
+      output: string,
+      type: t.Type,
+      definitions?: t.Definitions,
+    ) => Effect.Effect<boolean>;
     readonly normalizeProperties: (
       ref: SchemaRef,
       properties: Readonly<Record<string, unknown>>,
@@ -181,6 +195,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         ref: SchemaRef,
         properties: Readonly<Record<string, unknown>>,
         definitions?: t.Definitions,
+        resolve?: (type: t.Type) => t.Type,
       ) {
         const current = yield* Ref.get(state);
         const schema = current.packages
@@ -189,7 +204,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         if (schema === undefined) return yield* new Package.SchemaNotFoundError({ ref });
         const runtime = current.runtimes.get(calculatorKey(ref));
         if (runtime === undefined) return yield* new Package.SchemaNotFoundError({ ref });
-        return runtime.getIO(properties, definitionsOf(current, definitions));
+        return runtime.getIO(properties, definitionsOf(current, definitions), resolve);
       });
 
       const normalizeProperties = Effect.fn("Packages.normalizeProperties")(function* (
@@ -289,6 +304,36 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         }
         return normalized;
       });
+
+      const acceptsInput = (
+        ref: SchemaRef,
+        input: string,
+        type: t.Type,
+        definitions?: t.Definitions,
+      ) =>
+        Ref.get(state).pipe(
+          Effect.map(
+            (current) =>
+              authoring
+                .get(ref)
+                ?.acceptsInput?.(input, type, definitionsOf(current, definitions)) !== false,
+          ),
+        );
+
+      const acceptsOutput = (
+        ref: SchemaRef,
+        output: string,
+        type: t.Type,
+        definitions?: t.Definitions,
+      ) =>
+        Ref.get(state).pipe(
+          Effect.map(
+            (current) =>
+              authoring
+                .get(ref)
+                ?.acceptsOutput?.(output, type, definitionsOf(current, definitions)) !== false,
+          ),
+        );
 
       const getDataInput = Effect.fn("Packages.getDataInput")(function* (
         ref: SchemaRef,
@@ -427,6 +472,8 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         getPackages,
         getSchema,
         getNodeIO,
+        acceptsInput,
+        acceptsOutput,
         normalizeProperties,
         validateInputDefault,
         getSuggestions,

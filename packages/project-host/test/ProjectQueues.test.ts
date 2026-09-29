@@ -21,7 +21,7 @@ const connection = (outNodeId: string, outIo: string, inNodeId: string, inIoId: 
   inIoId: IoId.make(inIoId),
 });
 
-const identity = (id: string, type: t.Any = t.DateTime): GraphFunction.Model => ({
+const identity = (id: string, type: t.Type = t.DateTime): GraphFunction.Model => ({
   canvas: {
     id: GraphId.make(id),
     name: id,

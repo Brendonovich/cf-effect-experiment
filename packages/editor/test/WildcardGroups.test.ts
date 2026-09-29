@@ -4,7 +4,7 @@ import { t } from "@macrograph/module";
 import { Result, Schema } from "effect";
 
 const w = t.Wildcard("T");
-const io = (type: t.Any): Wildcards.IO => ({
+const io = (type: t.Type): Wildcards.IO => ({
   dataInputs: [{ id: "in", type }],
   dataOutputs: [{ id: "out", type }],
   executionInputs: [],
@@ -19,6 +19,17 @@ const wire = (id: string, from: string, to: string): Connection.Model => ({
 });
 
 describe("non-reactive wildcard connection groups", () => {
+  it("rejects primitive values for constrained custom-type wildcards", () => {
+    const result = new Wildcards.Cache().update(
+      new Map([
+        ["source", io(t.String)],
+        ["target", io(t.Wildcard("Struct"))],
+      ]),
+      [wire("wire", "source", "target")],
+    );
+    expect(Result.isFailure(result)).toBe(true);
+  });
+
   it("incremental updates agree with a fresh crawl across mixed topology and IO edits", () => {
     const cache = new Wildcards.Cache();
     const declarations = new Map<string, Wildcards.IO>();
@@ -130,7 +141,7 @@ describe("non-reactive wildcard connection groups", () => {
     "unifies nested containers through a whole-type wildcard (reverse=%s)",
     (reverse) => {
       const cache = new Wildcards.Cache();
-      const nested = (item: t.Any) => t.Option(t.List(item));
+      const nested = (item: t.Type) => t.Option(t.List(item));
       const declarations = new Map([
         ["a", io(w)],
         ["b", io(nested(w))],
@@ -252,7 +263,7 @@ describe("non-reactive wildcard connection groups", () => {
 
   it("supports nominal custom types, scope fields, and inferred Break Scope outputs", () => {
     const cache = new Wildcards.Cache();
-    const custom = t.Custom(t.DefinitionId.make("record"));
+    const custom = t.Struct(t.DefinitionId.make("record"));
     const source = {
       ...io(custom),
       executionOutputs: [{ id: "scope", scope: [{ id: "value", type: w }] }],

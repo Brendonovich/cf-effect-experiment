@@ -30,42 +30,50 @@ const SpeakerBotModule = Module.make({
           }),
         }),
     });
-    for (const [id, name, request] of [
-      ["StopCurrent", "SpeakerBot Stop Current", "Stop"],
-      ["QueueClear", "SpeakerBot Queue Clear", "Clear"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        io: () => ({}),
-        run: ({ properties, engine }) =>
-          engine.SpeakerBotWebSocketSendMessage({
-            connectionId: properties.connection,
-            data: JSON.stringify({ id: "Macrograph", request }),
-          }),
-      });
-    }
-    for (const [id, name, enabled, disabled] of [
-      ["ToggleTTS", "SpeakerBot Toggle TTS", "Enable", "Disable"],
-      ["QueueToggle", "SpeakerBot Queue Toggle", "Pause", "Resume"],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        properties,
-        io: (io) => ({
-          state: io.data.in("state", t.Bool, {
-            name: id === "QueueToggle" ? "Queue Paused" : "State",
-          }),
+    yield* context.schema.register({
+      id: "StopCurrent",
+      name: "SpeakerBot Stop Current",
+      properties,
+      io: () => ({}),
+      run: ({ properties, engine }) =>
+        engine.SpeakerBotWebSocketSendMessage({
+          connectionId: properties.connection,
+          data: JSON.stringify({ id: "Macrograph", request: "Stop" }),
         }),
-        run: ({ io, properties, engine }) =>
-          engine.SpeakerBotWebSocketSendMessage({
-            connectionId: properties.connection,
-            data: JSON.stringify({ id: "Macrograph", request: io.state ? enabled : disabled }),
-          }),
-      });
-    }
+    });
+    yield* context.schema.register({
+      id: "QueueClear",
+      name: "SpeakerBot Queue Clear",
+      properties,
+      io: () => ({}),
+      run: ({ properties, engine }) =>
+        engine.SpeakerBotWebSocketSendMessage({
+          connectionId: properties.connection,
+          data: JSON.stringify({ id: "Macrograph", request: "Clear" }),
+        }),
+    });
+    yield* context.schema.register({
+      id: "ToggleTTS",
+      name: "SpeakerBot Toggle TTS",
+      properties,
+      io: (io) => ({ state: io.data.in("state", t.Bool, { name: "State" }) }),
+      run: ({ io, properties, engine }) =>
+        engine.SpeakerBotWebSocketSendMessage({
+          connectionId: properties.connection,
+          data: JSON.stringify({ id: "Macrograph", request: io.state ? "Enable" : "Disable" }),
+        }),
+    });
+    yield* context.schema.register({
+      id: "QueueToggle",
+      name: "SpeakerBot Queue Toggle",
+      properties,
+      io: (io) => ({ state: io.data.in("state", t.Bool, { name: "Queue Paused" }) }),
+      run: ({ io, properties, engine }) =>
+        engine.SpeakerBotWebSocketSendMessage({
+          connectionId: properties.connection,
+          data: JSON.stringify({ id: "Macrograph", request: io.state ? "Pause" : "Resume" }),
+        }),
+    });
     yield* context.schema.register({
       id: "EventsToggle",
       name: "SpeakerBot Events Toggle",

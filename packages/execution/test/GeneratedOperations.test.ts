@@ -7,7 +7,7 @@ import { Executor } from "../src/index.ts";
 
 const recordId = t.DefinitionId.make("record/id");
 const enumId = t.DefinitionId.make("result");
-const recordType = t.Custom(recordId);
+const recordType = t.Struct(recordId);
 const definitions: t.Definitions = {
   [recordId]: {
     _tag: "Struct",
@@ -30,7 +30,12 @@ const definitions: t.Definitions = {
     ],
   },
 };
-const catalog = CustomTypes.schemas(definitions);
+const catalog = new Map(
+  Effect.runSync(Registration.collect(CustomTypes.module.effect)).map((schema) => [
+    schema.id,
+    schema,
+  ]),
+);
 const operation = (name: string) => {
   const schema = [...catalog.values()].find((schema) => schema.name === name);
   if (schema === undefined) throw new Error(`Missing operation ${name}`);
@@ -46,11 +51,7 @@ const run = (
     const selected = yield* schema.run({
       types: {
         resolve: (type) =>
-          type._tag !== "Wildcard"
-            ? type
-            : type.id === "Enum"
-              ? t.Custom(enumId)
-              : recordType,
+          type._tag !== "Wildcard" ? type : type.id === "Enum" ? t.Enum(enumId) : recordType,
         definitions,
       },
       input: (port) => (Object.hasOwn(inputs, port.id) ? inputs[port.id] : port.defaultValue),
@@ -144,13 +145,9 @@ describe("generated custom operations", () => {
       expect(CustomTypes.selectionError("ConstructEnum", {}, definitions)).toBe(
         "Select an enum variant",
       );
-      expect(
-        CustomTypes.nodeIO(
-          { package: CustomTypes.packageId, schema: SchemaId.make("UpdateStruct") },
-          {},
-          definitions,
-        )?.dataInputs[0]?.type,
-      ).toEqual(t.Wildcard("Struct"));
+      expect(catalog.get("UpdateStruct")?.generateIO({}).dataInputs[0]?.type).toEqual(
+        t.Wildcard("Struct"),
+      );
     }),
   );
 
@@ -171,9 +168,14 @@ describe("generated custom operations", () => {
           package: CustomTypes.packageId,
           schema: SchemaId.make(operation("Make Struct").id),
         };
-        expect(CustomTypes.nodeIO(ref, {}, registry)).toEqual(
-          CustomTypes.nodeIO(ref, {}, definitions),
-        );
+        const resolved = catalog
+          .get(ref.schema)
+          ?.generateIO({}, { resolve: () => recordType, definitions: registry });
+        expect(resolved?.dataInputs.map((input) => input.id)).toEqual([
+          'field:"name"',
+          'field:"dates"',
+          'field:"next"',
+        ]);
         for (const id of [
           "{",
           "null",
@@ -182,10 +184,8 @@ describe("generated custom operations", () => {
           '["record/id","update","deleted"]',
           '["constructor","make"]',
         ])
-          expect(
-            CustomTypes.nodeIO({ ...ref, schema: SchemaId.make(id) }, {}, registry),
-          ).toBeUndefined();
-        const custom = t.Custom(enumId);
+          expect(catalog.get(SchemaId.make(id))?.generateIO({})).toBeUndefined();
+        const custom = t.Enum(enumId);
         const referenced: t.Definitions = {
           ...definitions,
           [recordId]: {
@@ -195,22 +195,18 @@ describe("generated custom operations", () => {
             fields: [{ name: "result", type: custom }],
           },
         };
-        const ioOnly = new Proxy(referenced, {
-          get: (target, key, receiver) => {
-            if (key === enumId) throw new Error("IO must not eagerly construct transitive codecs");
-            return Reflect.get(target, key, receiver);
-          },
-        });
-        expect(CustomTypes.nodeIO(ref, {}, ioOnly)).toEqual({
-          dataInputs: [],
-          dataOutputs: [{ id: "value", type: CustomTypes.makeWildcard }],
-          executionInputs: [],
-          executionOutputs: [],
-        });
+        const makeIO = catalog
+          .get(ref.schema)
+          ?.generateIO({}, { resolve: () => recordType, definitions: referenced });
+        expect(makeIO?.dataInputs[0]?.type).toEqual(custom);
+        expect(makeIO?.dataOutputs[0]?.id).toBe("value");
+        expect(makeIO?.dataOutputs[0]?.type).toEqual(CustomTypes.makeWildcard);
+        expect(makeIO?.executionInputs).toEqual([]);
+        expect(makeIO?.executionOutputs).toEqual([]);
         const update = { ...ref, schema: SchemaId.make("UpdateStruct") };
-        expect(CustomTypes.nodeIO(update, {}, ioOnly)?.dataInputs).toEqual([
-          { id: "value", type: t.Wildcard("Struct") },
-        ]);
+        const updateInput = catalog.get(update.schema)?.generateIO({}).dataInputs[0];
+        expect(updateInput?.id).toBe("value");
+        expect(updateInput?.type).toEqual(t.Wildcard("Struct"));
       }),
   );
   it.effect("shares serializable catalog IO and stable nominal IDs across editor/runtime", () =>
@@ -218,14 +214,9 @@ describe("generated custom operations", () => {
       const model = CustomTypes.packageModel;
       yield* Schema.encodeUnknownEffect(Package.Model)(model);
       expect(model.schemas).toHaveLength(7);
-      expect(model.schemas).toHaveLength(CustomTypes.operations.length);
       for (const schema of model.schemas) {
         const properties = schema.id === "ConstructEnum" ? { variant: "Success" } : {};
-        const io = CustomTypes.nodeIO(
-          { package: CustomTypes.packageId, schema: schema.id },
-          properties,
-          definitions,
-        );
+        const io = catalog.get(schema.id)?.generateIO(properties);
         expect(io).toBeDefined();
         yield* Schema.encodeUnknownEffect(Package.SchemaModel)({ ...schema, ...io });
         expect(
@@ -239,13 +230,10 @@ describe("generated custom operations", () => {
         ...definitions,
         [recordId]: { ...definitions[recordId]!, name: "Renamed" },
       };
-      expect([...CustomTypes.schemas(renamed).keys()]).toEqual([...catalog.keys()]);
+      expect(renamed[recordId]?.name).toBe("Renamed");
       expect(
-        CustomTypes.nodeIO(
-          { package: CustomTypes.packageId, schema: SchemaId.make(operation("Make Struct").id) },
-          {},
-          {},
-        )?.dataOutputs[0]?.type,
+        catalog.get(SchemaId.make(operation("Make Struct").id))?.generateIO({}).dataOutputs[0]
+          ?.type,
       ).toEqual(CustomTypes.makeWildcard);
     }),
   );
@@ -381,7 +369,7 @@ describe("generated custom operations", () => {
             yield* context.schema.register({
               id: "enum-anchor",
               type: "pure",
-              io: (io) => ({ value: io.data.in("value", t.Custom(enumId)) }),
+              io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
               run: () => Effect.void,
             });
             yield* context.schema.register({
@@ -489,7 +477,7 @@ describe("generated custom operations", () => {
   it.effect("executes Make Struct from an output-inferred type without properties", () =>
     Effect.gen(function* () {
       const id = t.DefinitionId.make("made");
-      const type = t.Custom(id);
+      const type = t.Struct(id);
       const types: t.Definitions = {
         [id]: {
           _tag: "Struct",

@@ -81,8 +81,8 @@ const safeName = (name: string) =>
   !unsafeNames.has(name) &&
   !/[\u0000-\u001f\u007f]/.test(name);
 
-export const references = (type: t.Any): readonly string[] =>
-  type._tag === "Custom"
+export const references = (type: t.Type): readonly string[] =>
+  type._tag === "Struct" || type._tag === "Enum"
     ? [type.id]
     : type._tag === "List"
       ? references(type.item)
@@ -95,6 +95,58 @@ export const definitionReferences = (definition: t.Definition): readonly string[
     ? definition.fields
     : definition.variants.flatMap((v) => v.fields)
   ).flatMap((field) => references(field.type));
+
+const retagReference = (type: t.Type, id: string, tag: t.Definition["_tag"]): t.Type => {
+  if ((type._tag === "Struct" || type._tag === "Enum") && type.id === id)
+    return tag === "Struct" ? t.Struct(id) : t.Enum(id);
+  if (type._tag === "List") return t.List(retagReference(type.item, id, tag));
+  if (type._tag === "Option") return t.Option(retagReference(type.inner, id, tag));
+  return type;
+};
+
+const retagDefinitionReferences = (
+  definition: t.Definition,
+  id: string,
+  tag: t.Definition["_tag"],
+): t.Definition =>
+  definition._tag === "Struct"
+    ? {
+        ...definition,
+        fields: definition.fields.map((field) => ({
+          ...field,
+          type: retagReference(field.type, id, tag),
+        })),
+      }
+    : {
+        ...definition,
+        variants: definition.variants.map((variant) => ({
+          ...variant,
+          fields: variant.fields.map((field) => ({
+            ...field,
+            type: retagReference(field.type, id, tag),
+          })),
+        })),
+      };
+
+export const applyChange = (before: t.Definitions, change: Change): t.Definitions => {
+  if (change._tag === "Delete") {
+    const after = { ...before };
+    delete after[change.id];
+    return after;
+  }
+  const definition = change.definition;
+  const previous = Object.hasOwn(before, definition.id) ? before[definition.id] : undefined;
+  const after =
+    previous !== undefined && previous._tag !== definition._tag
+      ? Object.fromEntries(
+          Object.entries(before).map(([id, item]) => [
+            id,
+            retagDefinitionReferences(item, definition.id, definition._tag),
+          ]),
+        )
+      : { ...before };
+  return { ...after, [definition.id]: definition };
+};
 
 /** Include both old and new dependency edges when a definition is replaced. */
 export const affectedTypes = (
@@ -137,7 +189,12 @@ export const valueReferences = (value: unknown): readonly string[] => {
     } else if (item !== null && typeof item === "object" && !visited.has(item)) {
       visited.add(item);
       if ("_type" in item && typeof item._type === "string") result.push(item._type);
-      if ("_tag" in item && item._tag === "Custom" && "id" in item && typeof item.id === "string")
+      if (
+        "_tag" in item &&
+        (item._tag === "Struct" || item._tag === "Enum") &&
+        "id" in item &&
+        typeof item.id === "string"
+      )
         result.push(item.id);
       for (const child of Object.values(item)) pending.push(child);
     }
@@ -154,16 +211,30 @@ export const nodeDiagnostics = (
   if (node.schema.package === CustomTypes.packageId) {
     const selection = CustomTypes.selectionError(node.schema.schema, node.properties, definitions);
     if (selection !== undefined) reasons.add(selection);
-    else if (CustomTypes.nodeIO(node.schema, node.properties, definitions) === undefined)
+    else if (!CustomTypes.isOperationSchema(node.schema.schema))
       reasons.add(`Missing generated schema ${node.schema.schema}`);
   }
   const visited = new Set<string>();
+  const available = new Map<string, t.Definition>(Object.entries(definitions));
   const check = (id: string): void => {
     if (visited.has(id)) return;
     visited.add(id);
-    const definition = Object.hasOwn(definitions, id) ? definitions[id] : undefined;
+    const definition = available.get(id);
     if (definition === undefined || definition.id !== id) reasons.add(`Missing type ${id}`);
-    else for (const ref of definitionReferences(definition)) check(ref);
+    else {
+      const fields =
+        definition._tag === "Struct"
+          ? definition.fields
+          : definition.variants.flatMap((variant) => variant.fields);
+      for (const field of fields) checkType(field.type);
+    }
+  };
+  const checkType = (type: t.Type): void => {
+    if (type._tag === "List") return checkType(type.item);
+    if (type._tag === "Option") return checkType(type.inner);
+    if (type._tag !== "Struct" && type._tag !== "Enum") return;
+    if (type.definition !== undefined) available.set(type.id, type.definition);
+    check(type.id);
   };
   for (const port of [
     ...io.dataInputs,
@@ -171,14 +242,12 @@ export const nodeDiagnostics = (
     ...io.executionInputs.flatMap((port) => port.scope ?? []),
     ...io.executionOutputs.flatMap((port) => port.scope ?? []),
   ])
-    for (const id of references(port.type)) check(id);
+    checkType(port.type);
   for (const id of valueReferences(node.properties)) check(id);
   for (const id of valueReferences(node.inputDefaults)) check(id);
   const relevant = Object.fromEntries(
     [...visited].flatMap((id) =>
-      Object.hasOwn(definitions, id) && definitions[id] !== undefined
-        ? [[id, definitions[id]!]]
-        : [],
+      available.get(id) !== undefined ? [[id, available.get(id)!]] : [],
     ),
   );
   for (const error of validate(relevant))
@@ -207,13 +276,22 @@ export const nodeDiagnostics = (
 export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError> => {
   const errors: InvalidError[] = [];
   const names = new Set<string>();
-  const checkReference = (id: string, type: t.Any): void => {
+  const checkReference = (id: string, type: t.Type): void => {
     if (type._tag === "Wildcard") {
       errors.push(
         new InvalidError({ id, reason: "Wildcards belong to node IO, not type definitions" }),
       );
-    } else if (type._tag === "Custom" && !Object.hasOwn(definitions, type.id)) {
-      errors.push(new InvalidError({ id, reason: `Unknown type ${type.id}` }));
+    } else if (type._tag === "Struct" || type._tag === "Enum") {
+      const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+      if (definition === undefined)
+        errors.push(new InvalidError({ id, reason: `Unknown type ${type.id}` }));
+      else if (definition._tag !== type._tag)
+        errors.push(
+          new InvalidError({
+            id,
+            reason: `${type.id} is an ${definition._tag}, not a ${type._tag}`,
+          }),
+        );
     } else if (type._tag === "List") checkReference(id, type.item);
     else if (type._tag === "Option") checkReference(id, type.inner);
   };
@@ -259,8 +337,8 @@ export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError
   }
   // Required recursive cycles without a terminating variant cannot have a finite value.
   const finite = new Set<string>();
-  const canTerminate = (type: t.Any): boolean =>
-    type._tag !== "Custom" || finite.has(type.id);
+  const canTerminate = (type: t.Type): boolean =>
+    (type._tag !== "Struct" && type._tag !== "Enum") || finite.has(type.id);
   let changed = true;
   while (changed) {
     changed = false;
@@ -291,15 +369,12 @@ export const validate = (definitions: t.Definitions): ReadonlyArray<InvalidError
 };
 
 /** Deletion intentionally leaves dependents dangling; unrelated repair must remain possible. */
-export const validateChange = (
-  before: t.Definitions,
-  change: Change,
-): readonly InvalidError[] => {
+export const validateChange = (before: t.Definitions, change: Change): readonly InvalidError[] => {
   if (change._tag === "Delete") return [];
   if (!Schema.is(finiteAuthoring)(change))
     return [new InvalidError({ id: "", reason: "Type authoring requires finite descriptors" })];
   const definition = change.definition;
-  const after = { ...before, [definition.id]: definition };
+  const after = applyChange(before, change);
   const previous = new Set(validate(before).map((error) => `${error.id}\0${error.reason}`));
   const reachable = new Set<string>();
   const visit = (id: string): void => {

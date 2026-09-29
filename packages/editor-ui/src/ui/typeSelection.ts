@@ -9,11 +9,11 @@ export const typeChoices = [
   "List",
   "Option",
 ] as const;
-export type TypeChoice = (typeof typeChoices)[number] | t.Custom;
+export type TypeChoice = (typeof typeChoices)[number] | t.Struct | t.Enum;
 export const choiceKey = (choice: TypeChoice) =>
-  typeof choice === "string" ? choice : `custom:${choice.id}`;
-export const typeLabel = (type: t.Any, definitions: t.Definitions = {}): string =>
-  type._tag === "Custom"
+  typeof choice === "string" ? choice : `${choice._tag.toLowerCase()}:${choice.id}`;
+export const typeLabel = (type: t.Type, definitions: t.Definitions = {}): string =>
+  type._tag === "Struct" || type._tag === "Enum"
     ? (definitions[type.id]?.name ?? `Missing type (${type.id})`)
     : type._tag === "List"
       ? `List<${typeLabel(type.item, definitions)}>`
@@ -27,14 +27,11 @@ export const filterTypeChoices = (
   definitions: t.Definitions = {},
 ): TypeChoice[] => {
   const query = search.trim().toLowerCase();
-  return [
-    ...typeChoices,
-    ...Object.values(definitions).map((definition) => t.Custom(definition.id)),
-  ].filter((choice) =>
+  return [...typeChoices, ...Object.values(definitions).map(t.fromDefinition)].filter((choice) =>
     `${choiceLabel(choice, definitions)} ${choiceKey(choice)}`.toLowerCase().includes(query),
   );
 };
-export const typeSegments = (type: t.Any): ReadonlyArray<t.Any> => [
+export const typeSegments = (type: t.Type): ReadonlyArray<t.Type> => [
   type,
   ...(type._tag === "List"
     ? typeSegments(type.item)
@@ -42,16 +39,10 @@ export const typeSegments = (type: t.Any): ReadonlyArray<t.Any> => [
       ? typeSegments(type.inner)
       : []),
 ];
-export const replaceTypeSegment = (
-  type: t.Any,
-  depth: number,
-  choice: TypeChoice,
-): t.Any => {
+export const replaceTypeSegment = (type: t.Type, depth: number, choice: TypeChoice): t.Type => {
   if (depth > 0) {
-    if (type._tag === "List")
-      return t.List(replaceTypeSegment(type.item, depth - 1, choice));
-    if (type._tag === "Option")
-      return t.Option(replaceTypeSegment(type.inner, depth - 1, choice));
+    if (type._tag === "List") return t.List(replaceTypeSegment(type.item, depth - 1, choice));
+    if (type._tag === "Option") return t.Option(replaceTypeSegment(type.inner, depth - 1, choice));
     return type;
   }
   const inner = type._tag === "List" ? type.item : type._tag === "Option" ? type.inner : type;

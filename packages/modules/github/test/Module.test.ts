@@ -9,8 +9,9 @@ import { WebhookPayloadTypes, WebhookTypeDefinitions } from "../src/WebhookTypes
 
 describe("GitHub module", () => {
   it("registers every type referenced by its webhook payloads", () => {
-    const visit = (type: t.Any): void => {
-      if (type._tag === "Custom") assert.property(WebhookTypeDefinitions, type.id);
+    const visit = (type: t.Type): void => {
+      if (type._tag === "Struct" || type._tag === "Enum")
+        assert.property(WebhookTypeDefinitions, type.id);
       else if (type._tag === "List") visit(type.item);
       else if (type._tag === "Option") visit(type.inner);
     };

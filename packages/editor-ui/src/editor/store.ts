@@ -105,7 +105,11 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
         const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
         resolvers.set(graph.id, resolver);
         const declarations = next.declaredNodeIO[graph.id] ?? {};
-        const result = resolver.resolve(graph, declarations, next.project!.types);
+        const definitions = {
+          ...next.project!.types,
+          ...Object.fromEntries(next.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
+        };
+        const result = resolver.resolve(graph, declarations, definitions);
         next.nodeIO[graph.id] = { ...result.io };
         for (const projection of Object.values(graph.scopeProjections ?? {}))
           next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(

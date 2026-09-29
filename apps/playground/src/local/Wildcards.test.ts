@@ -99,7 +99,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const id = t.DefinitionId.make("record");
-      const custom = t.Custom(id);
+      const custom = t.Struct(id);
       const value = { _type: id, time: DateTime.makeUnsafe("2026-09-06T12:00:00Z") };
       const captured: unknown[] = [];
       const source = Module.make({

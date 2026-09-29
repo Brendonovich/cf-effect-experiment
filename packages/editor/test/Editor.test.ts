@@ -1500,7 +1500,7 @@ it.layer(TestLayer)((it) => {
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
         const packages = yield* Packages.Service;
-        const descriptors: ReadonlyArray<t.Any> = [
+        const descriptors: ReadonlyArray<t.Type> = [
           t.String,
           t.Int,
           t.Float,
@@ -1510,13 +1510,11 @@ it.layer(TestLayer)((it) => {
           t.Option(t.Int),
           t.List(t.Option(t.List(t.String))),
         ];
-        const encoded = yield* Schema.encodeUnknownEffect(Schema.Array(t.Descriptor))(
+        const encoded = yield* Schema.encodeUnknownEffect(Schema.Array(t.Descriptor))(descriptors);
+        expect(encoded).toEqual(descriptors);
+        expect(yield* Schema.decodeUnknownEffect(Schema.Array(t.Descriptor))(encoded)).toEqual(
           descriptors,
         );
-        expect(encoded).toEqual(descriptors);
-        expect(
-          yield* Schema.decodeUnknownEffect(Schema.Array(t.Descriptor))(encoded),
-        ).toEqual(descriptors);
         const valueCodec = t.JsonValueSchema(t.List(t.Option(t.Int)));
         const encodedValue = yield* Schema.encodeUnknownEffect(valueCodec)([
           Option.some(1),

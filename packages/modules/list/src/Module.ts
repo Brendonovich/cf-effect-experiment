@@ -53,39 +53,64 @@ const ListModule = Module.make({
       },
       run: ({ io }) => Effect.sync(() => io.output([...io.list, io.value])),
     });
-    for (const [id, name, insert] of [
-      ["InsertListValue", "Insert List Value", true],
-      ["SetListValue", "Set List Value", false],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description: `${insert ? "Inserts" : "Replaces"} a typed value in a new list. Negative indices count from the end; out-of-range indices fail.`,
-        io: (io) => {
-          const type = io.wildcard("Item");
-          return {
-            list: io.data.in("list", t.List(type), { defaultValue: [] }),
-            index: io.data.in("index", t.Int, { defaultValue: 0 }),
-            value: io.data.in("value", type),
-            output: io.data.out("outList", t.List(type)),
-          };
-        },
-        run: ({ io }) =>
-          Effect.gen(function* () {
-            const index = yield* indexOf(io.index, io.list.length);
-            if (index < 0 || index > io.list.length || (!insert && index === io.list.length))
-              return yield* Effect.fail(new RangeError("List index out of range"));
-            yield* Effect.try({
-              try: () => {
-                const list = [...io.list];
-                list.splice(index, insert ? 0 : 1, io.value);
-                io.output(list);
-              },
-              catch: (error) => error,
-            });
-          }),
-      });
-    }
+    yield* context.schema.register({
+      id: "InsertListValue",
+      name: "Insert List Value",
+      description:
+        "Inserts a typed value in a new list. Negative indices count from the end; out-of-range indices fail.",
+      io: (io) => {
+        const type = io.wildcard("Item");
+        return {
+          list: io.data.in("list", t.List(type), { defaultValue: [] }),
+          index: io.data.in("index", t.Int, { defaultValue: 0 }),
+          value: io.data.in("value", type),
+          output: io.data.out("outList", t.List(type)),
+        };
+      },
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const index = yield* indexOf(io.index, io.list.length);
+          if (index < 0 || index > io.list.length)
+            return yield* Effect.fail(new RangeError("List index out of range"));
+          yield* Effect.try({
+            try: () => {
+              const list = [...io.list];
+              list.splice(index, 0, io.value);
+              io.output(list);
+            },
+            catch: (error) => error,
+          });
+        }),
+    });
+    yield* context.schema.register({
+      id: "SetListValue",
+      name: "Set List Value",
+      description:
+        "Replaces a typed value in a new list. Negative indices count from the end; out-of-range indices fail.",
+      io: (io) => {
+        const type = io.wildcard("Item");
+        return {
+          list: io.data.in("list", t.List(type), { defaultValue: [] }),
+          index: io.data.in("index", t.Int, { defaultValue: 0 }),
+          value: io.data.in("value", type),
+          output: io.data.out("outList", t.List(type)),
+        };
+      },
+      run: ({ io }) =>
+        Effect.gen(function* () {
+          const index = yield* indexOf(io.index, io.list.length);
+          if (index < 0 || index >= io.list.length)
+            return yield* Effect.fail(new RangeError("List index out of range"));
+          yield* Effect.try({
+            try: () => {
+              const list = [...io.list];
+              list.splice(index, 1, io.value);
+              io.output(list);
+            },
+            catch: (error) => error,
+          });
+        }),
+    });
     yield* context.schema.register({
       id: "RemoveListValue",
       name: "Remove List Value",

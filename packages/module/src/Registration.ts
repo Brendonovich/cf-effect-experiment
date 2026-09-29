@@ -25,7 +25,7 @@ export class DataInputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: t.Any,
+    readonly type: t.Type,
     readonly name?: string,
     readonly defaultValue?: Value,
     readonly suggestions?: Suggestions,
@@ -38,7 +38,7 @@ export class DataOutputRef<Value = unknown> {
 
   constructor(
     readonly id: string,
-    readonly type: t.Any,
+    readonly type: t.Type,
     readonly name?: string,
   ) {}
 }
@@ -66,10 +66,10 @@ export class ExecutionOutputRef {
 export interface ScopeField {
   readonly id: string;
   readonly name?: string | undefined;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 
-export type ScopeFields = Readonly<Record<string, t.Any>>;
+export type ScopeFields = Readonly<Record<string, t.Type>>;
 export type ScopeValue<Fields extends ScopeFields> = {
   readonly [Key in keyof Fields]: t.Value<Fields[Key]>;
 };
@@ -121,7 +121,7 @@ export const scopesCompatible = (
   );
 };
 
-type InputOptions<Type extends t.Any, Properties, EngineClient> = {
+type InputOptions<Type extends t.Type, Properties, EngineClient> = {
   readonly name?: string;
   readonly defaultValue?: t.Value<Type>;
 } & (t.Value<Type> extends string
@@ -131,12 +131,12 @@ type InputOptions<Type extends t.Any, Properties, EngineClient> = {
 export interface IOContext<Properties = Readonly<Record<string, unknown>>, EngineClient = unknown> {
   readonly wildcard: (id: string) => t.Wildcard;
   readonly data: {
-    readonly in: <Type extends t.Any>(
+    readonly in: <Type extends t.Type>(
       id: string,
       type: Type,
       options?: InputOptions<Type, Properties, EngineClient>,
     ) => DataInputRef<t.Value<Type>>;
-    readonly out: <Type extends t.Any>(
+    readonly out: <Type extends t.Type>(
       id: string,
       type: Type,
       options?: { readonly name?: string },
@@ -193,8 +193,9 @@ type RuntimeProperties<Properties extends PropertyDefinitions> = keyof Propertie
   ? Readonly<Record<string, unknown>>
   : PropertyValues<Properties>;
 
-export type Materialized<IO> =
-  IO extends ScopeOutputRef<infer Value>
+export type Materialized<IO> = IO extends t.Type | t.Definition | t.Variant | t.Field
+  ? IO
+  : IO extends ScopeOutputRef<infer Value>
     ? (value: Value) => ScopeExecution
     : IO extends ScopeInputRef<infer Value>
       ? Value
@@ -211,7 +212,7 @@ export type Materialized<IO> =
                 : IO;
 
 export interface RuntimeTypes {
-  readonly resolve: (type: t.Any) => t.Any;
+  readonly resolve: (type: t.Type) => t.Type;
   readonly definitions: t.Definitions;
 }
 
@@ -306,7 +307,10 @@ export interface RegisteredSchema {
   readonly dataOutputs: ReadonlyArray<DataOutputRef>;
   readonly executionInputs: ReadonlyArray<ExecutionInputRef>;
   readonly executionOutputs: ReadonlyArray<ExecutionOutputRef>;
-  readonly generateIO: (properties: Readonly<Record<string, unknown>>) => RegisteredNodeIO;
+  readonly generateIO: (
+    properties: Readonly<Record<string, unknown>>,
+    types?: RuntimeTypes,
+  ) => RegisteredNodeIO;
   readonly matches: (
     event: { readonly _tag: string },
     properties: Readonly<Record<string, unknown>>,
@@ -332,8 +336,16 @@ export interface RegisteredNodeIO {
   readonly executionOutputs: ReadonlyArray<ExecutionOutputRef>;
 }
 
-const ioContext: IOContext<Readonly<Record<string, unknown>>> = {
-  wildcard: t.Wildcard,
+const ioContext = (types?: RuntimeTypes): IOContext<Readonly<Record<string, unknown>>> => ({
+  wildcard: (id) => {
+    const wildcard = t.Wildcard(id);
+    if (types === undefined) return wildcard;
+    const resolved = types.resolve(wildcard);
+    return t.Wildcard(
+      id,
+      resolved._tag === "Wildcard" ? undefined : t.hydrate(resolved, types.definitions),
+    );
+  },
   data: {
     in: (id, type, options) =>
       new DataInputRef(id, type, options?.name, options?.defaultValue, options?.suggestions),
@@ -347,7 +359,7 @@ const ioContext: IOContext<Readonly<Record<string, unknown>>> = {
     in: (id, fields, options) => new ScopeInputRef(id, scopeFields(fields), options?.name),
     out: (id, fields, options) => new ScopeOutputRef(id, scopeFields(fields), options?.name),
   },
-};
+});
 
 const collectRefs = (value: unknown): ReadonlyArray<IORef> => {
   if (
@@ -375,6 +387,7 @@ function materialize(value: unknown, context: Parameters<RegisteredSchema["run"]
   if (value instanceof DataInputRef) return context.input(value);
   if (value instanceof DataOutputRef) return (output: unknown) => context.output(value, output);
   if (value instanceof ExecutionInputRef || value instanceof ExecutionOutputRef) return value;
+  if (t.isType(value)) return value;
   if (Array.isArray(value)) return value.map((item) => materialize(item, context));
   if (typeof value === "object" && value !== null)
     return Object.fromEntries(
@@ -404,10 +417,13 @@ const makeRegistered = <
     }
     return resolved as RuntimeProperties<Properties>;
   };
-  const generate = (properties: Readonly<Record<string, unknown>>) => {
+  const generate = (properties: Readonly<Record<string, unknown>>, types?: RuntimeTypes) => {
     const refs = collectRefs(
       schema.io(
-        ioContext as IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
+        ioContext(types) as IOContext<
+          RuntimeProperties<Properties>,
+          Engine.RuntimeClientOf<Definition>
+        >,
         withDefaults(properties),
       ),
     );
@@ -470,7 +486,10 @@ const makeRegistered = <
         : () => Effect.succeed(false),
     run: (context) => {
       const io = schema.io(
-        ioContext as IOContext<RuntimeProperties<Properties>, Engine.RuntimeClientOf<Definition>>,
+        ioContext(context.types) as IOContext<
+          RuntimeProperties<Properties>,
+          Engine.RuntimeClientOf<Definition>
+        >,
         withDefaults(context.properties),
       );
       return schema.run({

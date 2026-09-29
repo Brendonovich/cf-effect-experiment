@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HttpEndpoint, HttpIngress } from "@macrograph/module";
+import { HttpEndpoint } from "@macrograph/module";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
 

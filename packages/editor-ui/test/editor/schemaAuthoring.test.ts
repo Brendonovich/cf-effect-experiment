@@ -29,7 +29,7 @@ const empty: NodeIO = {
   executionInputs: [],
   executionOutputs: [],
 };
-const port = (id: string, type: t.Any) => ({ id: IoId.make(id), type });
+const port = (id: string, type: t.Type) => ({ id: IoId.make(id), type });
 const node = (
   id: string,
   schema: string,
@@ -113,11 +113,11 @@ describe("schema-owned authoring", () => {
         variants: [{ name: "Yes", fields: [] }],
       },
     };
-    for (const operation of CustomTypes.operations)
+    for (const schema of CustomTypes.packageModel.schemas)
       expect(
-        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: operation.id })!.properties,
+        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: schema.id })!.properties,
       ).toEqual(
-        operation.id === "ConstructEnum"
+        schema.id === "ConstructEnum"
           ? expect.objectContaining({ variant: expect.anything() })
           : {},
       );
@@ -129,7 +129,7 @@ describe("schema-owned authoring", () => {
       source.options({
         definitions,
         properties: {},
-        io: { ...empty, dataOutputs: [port("value", t.Custom(t.DefinitionId.make("a")))] },
+        io: { ...empty, dataOutputs: [port("value", t.Enum(t.DefinitionId.make("a")))] },
       }),
     ).toEqual([{ id: "Yes", name: "Yes" }]);
     expect(source.options({ definitions, properties: {}, io: empty })).toEqual([]);
@@ -187,7 +187,7 @@ describe("schema-owned authoring", () => {
       },
       [model],
     );
-    const compatible = (type: t.Any) =>
+    const compatible = (type: t.Type) =>
       compatibleSchemaPorts(
         model,
         { direction: "output", port: { kind: "data", id: "out", type } },
@@ -277,8 +277,8 @@ describe("schema-owned authoring", () => {
       };
       editor.setProject(project, {
         g: {
-          make: CustomTypes.nodeIO(n.schema, {}, {})!,
-          sink: { ...empty, dataInputs: [port("in", t.Custom(t.DefinitionId.make("item")))] },
+          make: { ...empty, dataOutputs: [port("value", CustomTypes.makeWildcard)] },
+          sink: { ...empty, dataInputs: [port("in", t.Struct(t.DefinitionId.make("item")))] },
         },
       });
       const before = editor.store.packages;
@@ -317,7 +317,7 @@ describe("schema-owned authoring", () => {
       },
       connections: [wire("source", "out", "target", "value")],
     };
-    const base = CustomTypes.nodeIO(graph.nodes.target.schema, {}, {})!;
+    const base = { ...empty, dataInputs: [port("value", CustomTypes.breakWildcard)] };
     const result = new SchemaAuthoring.GraphResolver(BuiltinAuthoring.registry).resolve(
       graph,
       {
@@ -327,7 +327,7 @@ describe("schema-owned authoring", () => {
       {},
     );
     expect(result.io.target?.dataOutputs).toEqual([]);
-    expect(result.diagnostics.target).toEqual(["Break Struct requires an inferred custom type"]);
+    expect(result.diagnostics.target).toEqual(["Conflicting or recursive wildcard types"]);
   });
 
   it("bounds non-converging generators and reports them", () => {
@@ -399,7 +399,7 @@ describe("schema-owned authoring", () => {
         _tag: "Struct",
         id,
         name: "Recursive",
-        fields: [{ name: "next", type: t.Custom(id) }],
+        fields: [{ name: "next", type: t.Struct(id) }],
       },
     };
     const a = node("a", "BreakStruct", "CustomTypes"),
@@ -413,8 +413,9 @@ describe("schema-owned authoring", () => {
       ],
     };
     const stale = {
-      ...CustomTypes.nodeIO(a.schema, {}, definitions)!,
-      dataOutputs: [{ id: IoId.make('field:"next"'), name: "next", type: t.Custom(id) }],
+      ...empty,
+      dataInputs: [port("value", CustomTypes.breakWildcard)],
+      dataOutputs: [{ id: IoId.make('field:"next"'), name: "next", type: t.Struct(id) }],
     };
     const resolved = new SchemaAuthoring.GraphResolver(BuiltinAuthoring.registry).resolve(
       graph,

@@ -39,7 +39,7 @@ describe("JsonPersistence", () => {
             id: "tree",
             name: "Tree",
             fields: [
-              { name: "children", type: { _tag: "List", item: { _tag: "Custom", id: "tree" } } },
+              { name: "children", type: { _tag: "List", item: { _tag: "Struct", id: "tree" } } },
             ],
           },
         },

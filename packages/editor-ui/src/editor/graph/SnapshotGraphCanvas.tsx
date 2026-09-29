@@ -1,3 +1,5 @@
+import type { t } from "@macrograph/module";
+
 import { OutputRef, type Canvas, type NodeIO, type RenderedGraph } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
 import { For, createMemo, createSignal, type Component } from "solid-js";
@@ -9,6 +11,7 @@ import { connectedPortIds, connectionPath, graphConnections, wireColor } from ".
 
 interface SnapshotGraphCanvasProps {
   readonly graph: Canvas.Model | RenderedGraph.Model;
+  readonly definitions?: t.Definitions;
 }
 
 const noop = () => {};
@@ -31,6 +34,7 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
   });
   const [offset, setOffset] = createSignal({ x: 0, y: 0 });
   const [scale, setScale] = createSignal(1);
+  const [nodeWidths, setNodeWidths] = createSignal<ReadonlyMap<string, number>>(new Map());
   const origin = createMemo(() => ({
     x: initialOrigin().x + offset().x,
     y: initialOrigin().y + offset().y,
@@ -72,7 +76,9 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
       ? props.graph.schemas[node.schema.package]?.[node.schema.schema]
       : undefined;
   const ioForNode = (nodeId: string) => nodeIO().get(nodeId);
-  const edges = createMemo(() => graphConnections(props.graph, ioForNode));
+  const edges = createMemo(() =>
+    graphConnections(props.graph, ioForNode, (nodeId) => nodeWidths().get(nodeId)),
+  );
 
   return (
     <div
@@ -122,6 +128,14 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
               node={node}
               schema={schemaForNode(node)}
               io={ioForNode(node.id)}
+              {...(props.definitions === undefined ? {} : { definitions: props.definitions })}
+              onSizeChange={(nodeId, size) =>
+                setNodeWidths((current) => {
+                  const next = new Map(current);
+                  next.set(nodeId, size.width);
+                  return next;
+                })
+              }
               onSelect={noop}
               onDragStart={noop}
               onPortPointerDown={noop}

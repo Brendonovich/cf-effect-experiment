@@ -23,7 +23,7 @@ const run = (
     typeof binding === "string" ? { _tag: binding } : binding,
   );
   const inferred = list && registered.id !== "JSONGetScalarList" ? t.List(item) : item;
-  const resolve = (type: t.Any): t.Any =>
+  const resolve = (type: t.Type): t.Type =>
     type._tag === "Wildcard"
       ? inferred
       : type._tag === "List"
@@ -76,7 +76,7 @@ describe("JSON module", () => {
           ],
         },
       };
-      const custom = t.Custom(id);
+      const custom = t.Struct(id);
       const record = {
         _type: id,
         date: DateTime.makeUnsafe("2026-09-06T00:00:00Z"),
@@ -194,10 +194,7 @@ describe("JSON module", () => {
             for (const input of item.generateIO({}).dataInputs) {
               if (input.type._tag === "Wildcard") assert.isUndefined(input.defaultValue);
               else
-                assert.isTrue(
-                  t.isValue(input.type, input.defaultValue),
-                  `${item.id}.${input.id}`,
-                );
+                assert.isTrue(t.isValue(input.type, input.defaultValue), `${item.id}.${input.id}`);
             }
             if (item.type === "pure" && item.id !== "ToJSON") yield* run(item, {}, properties);
           }

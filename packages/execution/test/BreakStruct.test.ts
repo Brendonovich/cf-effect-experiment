@@ -23,7 +23,7 @@ it.effect(
             id: "event",
             type: "event",
             event: () => Effect.succeed(true),
-            io: (io) => ({ out: io.data.out("out", t.Custom(root)) }),
+            io: (io) => ({ out: io.data.out("out", t.Struct(root)) }),
             run: ({ io }) =>
               Effect.sync(() => io.out({ _type: root, child: { _type: child, text: "done" } })),
           });
@@ -44,7 +44,7 @@ it.effect(
             _tag: "Struct",
             id: root,
             name: "Root",
-            fields: [{ name: "child", type: t.Custom(child) }],
+            fields: [{ name: "child", type: t.Struct(child) }],
           },
           child: {
             _tag: "Struct",

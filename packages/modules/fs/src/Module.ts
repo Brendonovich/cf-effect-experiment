@@ -9,26 +9,34 @@ const FilesystemModule = Module.make({
   name: "Filesystem",
   engine: FilesystemEngine,
   effect: Effect.fnUntraced(function* (context) {
-    for (const kind of ["File", "Directory"] as const) {
-      const files = kind === "File";
-      yield* context.schema.register({
-        id: files ? "ListFiles" : "ListFolders",
-        name: files ? "List Files" : "List Folders",
-        description:
-          "Lists entry names in a folder on the runtime host, not the editor's computer.",
-        io: (io) => ({
-          path: io.data.in("path", t.String, { name: "Folder Path" }),
-          entries: io.data.out(files ? "files" : "folders", t.List(t.String), {
-            name: files ? "Files" : "Folders",
-          }),
-        }),
-        run: ({ io, engine }) =>
-          engine.FilesystemList({ path: io.path, kind }).pipe(
-            Effect.tap((entries) => Effect.sync(() => io.entries(entries))),
-            Effect.asVoid,
-          ),
-      });
-    }
+    yield* context.schema.register({
+      id: "ListFiles",
+      name: "List Files",
+      description: "Lists entry names in a folder on the runtime host, not the editor's computer.",
+      io: (io) => ({
+        path: io.data.in("path", t.String, { name: "Folder Path" }),
+        entries: io.data.out("files", t.List(t.String), { name: "Files" }),
+      }),
+      run: ({ io, engine }) =>
+        engine.FilesystemList({ path: io.path, kind: "File" }).pipe(
+          Effect.tap((entries) => Effect.sync(() => io.entries(entries))),
+          Effect.asVoid,
+        ),
+    });
+    yield* context.schema.register({
+      id: "ListFolders",
+      name: "List Folders",
+      description: "Lists entry names in a folder on the runtime host, not the editor's computer.",
+      io: (io) => ({
+        path: io.data.in("path", t.String, { name: "Folder Path" }),
+        entries: io.data.out("folders", t.List(t.String), { name: "Folders" }),
+      }),
+      run: ({ io, engine }) =>
+        engine.FilesystemList({ path: io.path, kind: "Directory" }).pipe(
+          Effect.tap((entries) => Effect.sync(() => io.entries(entries))),
+          Effect.asVoid,
+        ),
+    });
     yield* context.schema.register({
       id: "ReadTextFile",
       name: "Read Text File",

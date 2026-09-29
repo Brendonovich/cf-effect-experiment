@@ -435,7 +435,7 @@ const eventSubProperty = {
     resource: TwitchEventSub,
   },
 } as const;
-const dataType = (kind: Kind): t.Any =>
+const dataType = (kind: Kind): t.Type =>
   kind === "string" ? t.String : kind === "int" ? t.Int : t.Bool;
 const record = (value: unknown): Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)) : {};
@@ -921,12 +921,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       properties: accountProperty,
       io: (io) => ({
         inputs: action.inputs.map((field) => {
-          const type =
-            field.kind === "int"
-              ? t.Int
-              : field.kind === "bool"
-                ? t.Bool
-                : t.String;
+          const type = field.kind === "int" ? t.Int : field.kind === "bool" ? t.Bool : t.String;
           return io.data.in(field.id, field.optional ? t.Option(type) : type, {
             name:
               field.name ??

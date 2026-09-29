@@ -184,7 +184,7 @@ export const ImpactfulChanges: Story = {
           _tag: "Struct",
           id: t.DefinitionId.make("team"),
           name: "Team",
-          fields: [{ name: "person", type: t.Custom(t.DefinitionId.make("person")) }],
+          fields: [{ name: "person", type: t.Struct(t.DefinitionId.make("person")) }],
         },
       },
     },

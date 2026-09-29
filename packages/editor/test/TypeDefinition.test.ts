@@ -1,4 +1,4 @@
-import { TypeDefinition } from "@macrograph/core";
+import { IoId, NodeId, PackageId, SchemaId, TypeDefinition } from "@macrograph/core";
 import { t } from "@macrograph/module";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,7 @@ describe("type definition validation", () => {
           _tag: "Struct",
           id,
           name: "Tree",
-          fields: [{ name: "children", type: t.List(t.Custom(id)) }],
+          fields: [{ name: "children", type: t.List(t.Struct(id)) }],
         },
       }),
     ).toEqual([]);
@@ -23,7 +23,7 @@ describe("type definition validation", () => {
           name: "Chain",
           variants: [
             { name: "End", fields: [] },
-            { name: "Next", fields: [{ name: "next", type: t.Custom(id) }] },
+            { name: "Next", fields: [{ name: "next", type: t.Enum(id) }] },
           ],
         },
       }),
@@ -36,7 +36,7 @@ describe("type definition validation", () => {
           _tag: "Struct",
           id,
           name: "Loop",
-          fields: [{ name: "next", type: t.Custom(id) }],
+          fields: [{ name: "next", type: t.Struct(id) }],
         },
       }).some((error) => error.reason.includes("no finite value")),
     ).toBe(true);
@@ -51,9 +51,7 @@ describe("type definition validation", () => {
           { name: "_type", type: t.String },
           {
             name: "missing",
-            type: t.List(
-              t.Option(t.Custom(t.DefinitionId.make("missing"))),
-            ),
+            type: t.List(t.Option(t.Struct(t.DefinitionId.make("missing")))),
           },
         ],
       },
@@ -62,5 +60,34 @@ describe("type definition validation", () => {
       "Invalid or duplicate field _type",
       "Unknown type missing",
     ]);
+  });
+
+  it("uses definitions embedded in module-owned custom types", () => {
+    const nested = t.defineStruct("module/Nested", "Nested", { value: t.String });
+    const payload = t.defineStruct("module/Payload", "Payload", {
+      nested: t.Struct(nested),
+    });
+    const reasons = TypeDefinition.nodeDiagnostics(
+      {
+        id: NodeId.make("break"),
+        name: "Break Struct",
+        schema: {
+          package: PackageId.make("CustomTypes"),
+          schema: SchemaId.make("BreakStruct"),
+        },
+        properties: {},
+        inputDefaults: {},
+        foldPins: false,
+        position: { x: 0, y: 0 },
+      },
+      {
+        dataInputs: [{ id: IoId.make("value"), type: t.Struct(payload) }],
+        dataOutputs: [],
+        executionInputs: [],
+        executionOutputs: [],
+      },
+      {},
+    );
+    expect(reasons).toEqual([]);
   });
 });

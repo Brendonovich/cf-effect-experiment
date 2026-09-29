@@ -502,7 +502,11 @@ export const layer = Layer.effect(Service)(
       }
       return properties;
     });
-    const getBaseNodeIO = (node: Node.Model, definitions?: t.Definitions) =>
+    const getBaseNodeIO = (
+      node: Node.Model,
+      definitions?: t.Definitions,
+      resolve?: (type: t.Type) => t.Type,
+    ) =>
       GraphFunction.isCall(node)
         ? persistence.loadProject().pipe(
             Effect.map((project) => {
@@ -523,7 +527,7 @@ export const layer = Layer.effect(Service)(
             )
           : resolveIOProperties(node.schema, node.properties).pipe(
               Effect.flatMap((properties) =>
-                packages.getNodeIO(node.schema, properties, definitions),
+                packages.getNodeIO(node.schema, properties, definitions, resolve),
               ),
             );
     const validateQueueTarget = Effect.fnUntraced(function* (
@@ -618,19 +622,32 @@ export const layer = Layer.effect(Service)(
           projection.id,
           Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
         );
-      const derive = CustomTypes.derivedIO(graph, resolvedDefinitions);
-      let result = cache.update(declarations, graph.connections, derive);
-      if (Result.isSuccess(result)) {
-        for (const [id, io] of declarations) {
-          const derived = cache.derivedIO(id);
-          if (derived !== undefined) declarations.set(id, { ...io, ...derived });
+      let result = cache.update(declarations, graph.connections);
+      for (
+        let iteration = 0;
+        iteration <= Object.keys(graph.nodes).length && Result.isSuccess(result);
+        iteration++
+      ) {
+        let changed = false;
+        for (const node of Object.values(graph.nodes)) {
+          const generated = yield* getBaseNodeIO(node, resolvedDefinitions, (type) =>
+            cache.resolve(node.id, type),
+          ).pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
+          if (
+            generated !== undefined &&
+            JSON.stringify(generated) !== JSON.stringify(declarations.get(node.id))
+          ) {
+            declarations.set(node.id, generated);
+            changed = true;
+          }
         }
         for (const projection of Object.values(graph.scopeProjections ?? {}))
           declarations.set(
             projection.id,
             Scopes.projectionIO(graph, projection.id, (id) => declarations.get(id)),
           );
-        result = cache.update(declarations, graph.connections, derive);
+        result = cache.update(declarations, graph.connections);
+        if (!changed) break;
       }
       wildcardCaches.set(graph.id, cache);
       return { cache, declarations, result };
@@ -715,10 +732,7 @@ export const layer = Layer.effect(Service)(
         return yield* new TypeDefinition.NotFoundError({ id: change.id });
       const error = TypeDefinition.validateChange(project.types, change)[0];
       if (error !== undefined) return yield* error;
-      const types = { ...project.types };
-      if (change._tag === "Delete") delete types[change.id];
-      else types[change.definition.id] = change.definition;
-      return types;
+      return TypeDefinition.applyChange(project.types, change);
     });
 
     const typePreview = Effect.fn("Editor.typeDefinition.preview")(function* (
@@ -1790,7 +1804,7 @@ export const layer = Layer.effect(Service)(
         properties,
         inputDefaults,
         deletedConnectionIds: (node.schema.package === CustomTypes.packageId &&
-        CustomTypes.operationFor(node.schema.schema) !== undefined
+        CustomTypes.isOperationSchema(node.schema.schema)
           ? []
           : stale
         )
@@ -1934,6 +1948,8 @@ export const layer = Layer.effect(Service)(
       const dataInputs = inSchema.dataInputs.filter(
         (input) => input.id === options.connection.inIoId,
       );
+      const outNode = graph.nodes[options.connection.outNodeId];
+      const inNode = graph.nodes[options.connection.inNodeId];
       const outputKinds = executionOutputs.length + dataOutputs.length;
       const inputKinds = executionInputs.length + dataInputs.length;
 
@@ -1956,7 +1972,21 @@ export const layer = Layer.effect(Service)(
       if (
         dataOutputs[0] !== undefined &&
         dataInputs[0] !== undefined &&
-        !t.compatible(dataOutputs[0].type, dataInputs[0].type)
+        (!t.compatible(dataOutputs[0].type, dataInputs[0].type) ||
+          (outNode !== undefined &&
+            !(yield* packages.acceptsOutput(
+              outNode.schema,
+              dataOutputs[0].id,
+              dataInputs[0].type,
+              project.types,
+            ))) ||
+          (inNode !== undefined &&
+            !(yield* packages.acceptsInput(
+              inNode.schema,
+              dataInputs[0].id,
+              dataOutputs[0].type,
+              project.types,
+            ))))
       )
         return yield* new Connection.InvalidError({ reason: "Data types are incompatible" });
       if (
@@ -2304,7 +2334,7 @@ export const layer = Layer.effect(Service)(
           Effect.orDie,
         );
         const encodeValue = (
-          type: t.Any,
+          type: t.Type,
           value: unknown,
           definitions: t.Definitions,
         ): Schema.Json =>
@@ -2387,8 +2417,12 @@ export const layer = Layer.effect(Service)(
                 getIO: (
                   properties: Readonly<Record<string, unknown>>,
                   definitions: t.Definitions,
+                  resolve?: (type: t.Type) => t.Type,
                 ): NodeIO => {
-                  const io = schema.generateIO(properties);
+                  const io = schema.generateIO(properties, {
+                    resolve: resolve ?? ((type) => type),
+                    definitions,
+                  });
                   return {
                     dataInputs: io.dataInputs.map((input) => {
                       // Invalid schema fallback defaults must not prevent rendering repairable nodes.
@@ -2443,6 +2477,8 @@ export const layer = Layer.effect(Service)(
             return next;
           });
       }).pipe(lock.withPermit);
+
+    yield* module(CustomTypes.module);
 
     return Service.of({
       typeDefinition: { preview: typePreview, confirm: typeConfirm },

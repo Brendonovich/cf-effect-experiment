@@ -5,36 +5,38 @@ import { Schema } from "effect";
 
 declare const TypeId: unique symbol;
 
-export interface Type<Value> {
+export interface DataType<Value> {
   readonly [TypeId]?: Value;
 }
 
-export interface String extends Type<string> {
+export interface String extends DataType<string> {
   readonly _tag: "String";
 }
 
-export interface Int extends Type<number> {
+export interface Int extends DataType<number> {
   readonly _tag: "Int";
 }
 
-export interface Float extends Type<number> {
+export interface Float extends DataType<number> {
   readonly _tag: "Float";
 }
 
-export interface Bool extends Type<boolean> {
+export interface Bool extends DataType<boolean> {
   readonly _tag: "Bool";
 }
 
-export interface DateTime extends Type<EffectDateTime.DateTime> {
+export interface DateTime extends DataType<EffectDateTime.DateTime> {
   readonly _tag: "DateTime";
 }
 
-export interface List<Item extends Any = Any> extends Type<ReadonlyArray<Value<Item>>> {
+export interface List<Item extends Type = Type> extends DataType<ReadonlyArray<Value<Item>>> {
   readonly _tag: "List";
   readonly item: Item;
 }
 
-export interface Option<Inner extends Any = Any> extends Type<EffectOption.Option<Value<Inner>>> {
+export interface Option<Inner extends Type = Type> extends DataType<
+  EffectOption.Option<Value<Inner>>
+> {
   readonly _tag: "Option";
   readonly inner: Inner;
 }
@@ -42,30 +44,48 @@ export interface Option<Inner extends Any = Any> extends Type<EffectOption.Optio
 export const DefinitionId = Schema.String.pipe(Schema.brand("TypeDefinitionId"));
 export type DefinitionId = typeof DefinitionId.Type;
 
-export interface Custom extends Type<Readonly<Record<string, unknown>>> {
-  readonly _tag: "Custom";
+export interface Struct extends DataType<Readonly<Record<string, unknown>>> {
+  readonly _tag: "Struct";
   readonly id: string;
+  readonly definition?: StructDefinition;
+}
+
+export interface Enum extends DataType<Readonly<Record<string, unknown>>> {
+  readonly _tag: "Enum";
+  readonly id: string;
+  readonly definition?: EnumDefinition;
 }
 
 /** IDs are local to a node, not a module or graph. Values are inferred from wires. */
-export interface Wildcard extends Type<unknown> {
+export interface Wildcard extends DataType<unknown> {
   readonly _tag: "Wildcard";
   readonly id: string;
+  readonly value?: Type;
 }
 
-export type Any = String | Int | Float | Bool | DateTime | List | Option | Custom | Wildcard;
+export type Type =
+  | String
+  | Int
+  | Float
+  | Bool
+  | DateTime
+  | List
+  | Option
+  | Struct
+  | Enum
+  | Wildcard;
 export type Scalar = String | Int | Float | Bool;
 
-export type Value<Data extends Type<unknown>> =
+export type Value<Data extends DataType<unknown>> =
   Data extends List<infer Item>
-    ? Any extends Item
+    ? Type extends Item
       ? ReadonlyArray<unknown>
       : ReadonlyArray<Value<Item>>
     : Data extends Option<infer Inner>
-      ? Any extends Inner
+      ? Type extends Inner
         ? EffectOption.Option<unknown>
         : EffectOption.Option<Value<Inner>>
-      : Data extends Type<infer Value>
+      : Data extends DataType<infer Value>
         ? Value
         : never;
 
@@ -74,29 +94,68 @@ export const Int: Int = { _tag: "Int" };
 export const Float: Float = { _tag: "Float" };
 export const Bool: Bool = { _tag: "Bool" };
 export const DateTime: DateTime = { _tag: "DateTime" };
-export const Custom = (id: string): Custom => ({ _tag: "Custom", id });
-export const Wildcard = (id: string): Wildcard => ({ _tag: "Wildcard", id });
-export const List = <Item extends Any>(item: Item): List<Item> => ({ _tag: "List", item });
-export const Option = <Inner extends Any>(inner: Inner): Option<Inner> => ({
+const nominal = <Tag extends "Struct" | "Enum", Def extends Definition>(
+  tag: Tag,
+  id: string,
+  definition?: Def,
+): { readonly _tag: Tag; readonly id: string; readonly definition?: Def } => {
+  const type = { _tag: tag, id } as {
+    readonly _tag: Tag;
+    readonly id: string;
+    readonly definition?: Def;
+  };
+  if (definition !== undefined)
+    Object.defineProperty(type, "definition", { value: definition, enumerable: false });
+  return type;
+};
+const struct = (id: string, definition?: StructDefinition): Struct =>
+  nominal("Struct", id, definition);
+const enumeration = (id: string, definition?: EnumDefinition): Enum =>
+  nominal("Enum", id, definition);
+export const Wildcard = (id: string, value?: Type): Wildcard => {
+  const wildcard: Wildcard = { _tag: "Wildcard", id };
+  if (value !== undefined) Object.defineProperty(wildcard, "value", { value, enumerable: false });
+  return wildcard;
+};
+export const List = <Item extends Type>(item: Item): List<Item> => ({ _tag: "List", item });
+export const Option = <Inner extends Type>(inner: Inner): Option<Inner> => ({
   _tag: "Option",
   inner,
 });
 
-export const Descriptor: Schema.Codec<Any> = Schema.Union([
+export const isType = (value: unknown): value is Type => {
+  if (typeof value !== "object" || value === null || !("_tag" in value)) return false;
+  const tag = value._tag;
+  return (
+    tag === "String" ||
+    tag === "Int" ||
+    tag === "Float" ||
+    tag === "Bool" ||
+    tag === "DateTime" ||
+    tag === "List" ||
+    tag === "Option" ||
+    tag === "Struct" ||
+    tag === "Enum" ||
+    tag === "Wildcard"
+  );
+};
+
+export const Descriptor: Schema.Codec<Type> = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("String") }),
   Schema.Struct({ _tag: Schema.Literal("Int") }),
   Schema.Struct({ _tag: Schema.Literal("Float") }),
   Schema.Struct({ _tag: Schema.Literal("Bool") }),
   Schema.Struct({ _tag: Schema.Literal("DateTime") }),
-  Schema.Struct({ _tag: Schema.Literal("Custom"), id: Schema.String }),
+  Schema.Struct({ _tag: Schema.Literal("Struct"), id: Schema.String }),
+  Schema.Struct({ _tag: Schema.Literal("Enum"), id: Schema.String }),
   Schema.Struct({ _tag: Schema.Literal("Wildcard"), id: Schema.String }),
   Schema.Struct({
     _tag: Schema.Literal("List"),
-    item: Schema.suspend((): Schema.Codec<Any> => Descriptor),
+    item: Schema.suspend((): Schema.Codec<Type> => Descriptor),
   }),
   Schema.Struct({
     _tag: Schema.Literal("Option"),
-    inner: Schema.suspend((): Schema.Codec<Any> => Descriptor),
+    inner: Schema.suspend((): Schema.Codec<Type> => Descriptor),
   }),
 ]);
 
@@ -121,7 +180,7 @@ export const Definition = Schema.Union([
 export type Definition = typeof Definition.Type;
 export type StructDefinition = Extract<Definition, { readonly _tag: "Struct" }>;
 export type EnumDefinition = Extract<Definition, { readonly _tag: "Enum" }>;
-export type Fields = Readonly<Record<string, Any>>;
+export type Fields = Readonly<Record<string, Type>>;
 export type Variants = Readonly<Record<string, Fields>>;
 
 const isVariantList = (
@@ -151,11 +210,48 @@ export const defineEnum = (
       })),
 });
 
-export const Struct = (definition: StructDefinition): Custom => Custom(definition.id);
-export const Enum = (definition: EnumDefinition): Custom => Custom(definition.id);
+export function Struct(definition: StructDefinition): Struct;
+export function Struct(id: string): Struct;
+export function Struct(definition: StructDefinition | string): Struct {
+  return typeof definition === "string" ? struct(definition) : struct(definition.id, definition);
+}
+export function Enum(definition: EnumDefinition): Enum;
+export function Enum(id: string): Enum;
+export function Enum(definition: EnumDefinition | string): Enum {
+  return typeof definition === "string"
+    ? enumeration(definition)
+    : enumeration(definition.id, definition);
+}
+export const fromDefinition = (definition: Definition): Struct | Enum =>
+  definition._tag === "Struct" ? Struct(definition) : Enum(definition);
 
 export const Definitions = Schema.Record(Schema.String, Definition);
 export type Definitions = typeof Definitions.Type;
+
+/** Adds project-local definitions to resolved types without changing their serialized descriptor. */
+export const hydrate = (type: Type, definitions: Definitions): Type => {
+  switch (type._tag) {
+    case "Struct": {
+      const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+      return struct(type.id, definition?._tag === "Struct" ? definition : undefined);
+    }
+    case "Enum": {
+      const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+      return enumeration(type.id, definition?._tag === "Enum" ? definition : undefined);
+    }
+    case "Wildcard":
+      return Wildcard(
+        type.id,
+        type.value === undefined ? undefined : hydrate(type.value, definitions),
+      );
+    case "List":
+      return List(hydrate(type.item, definitions));
+    case "Option":
+      return Option(hydrate(type.inner, definitions));
+    default:
+      return type;
+  }
+};
 
 const finiteValue = Schema.Unknown.check(
   Schema.makeFilter((value: unknown) => {
@@ -178,16 +274,33 @@ const finiteValue = Schema.Unknown.check(
   }),
 );
 
-const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown> => {
+const valueSchema = (type: Type, definitions: Definitions): Schema.Codec<unknown> => {
   if (!Schema.is(finiteValue)(type)) return Schema.Never;
+  const carriesDefinition = (current: Type): boolean =>
+    current._tag === "Struct" || current._tag === "Enum"
+      ? current.definition !== undefined
+      : current._tag === "List"
+        ? carriesDefinition(current.item)
+        : current._tag === "Option"
+          ? carriesDefinition(current.inner)
+          : false;
+  const useEmbeddedDefinitions = carriesDefinition(type);
   const visited = new Set<string>();
-  const referencesExist = (current: Any): boolean => {
+  const referencesExist = (current: Type): boolean => {
     if (current._tag === "Wildcard") return false;
     if (current._tag === "List") return referencesExist(current.item);
     if (current._tag === "Option") return referencesExist(current.inner);
-    if (current._tag !== "Custom" || visited.has(current.id)) return true;
-    const definition = Object.hasOwn(definitions, current.id) ? definitions[current.id] : undefined;
-    if (definition === undefined || definition.id !== current.id) return false;
+    if ((current._tag !== "Struct" && current._tag !== "Enum") || visited.has(current.id))
+      return true;
+    const definition =
+      (useEmbeddedDefinitions ? current.definition : undefined) ??
+      (Object.hasOwn(definitions, current.id) ? definitions[current.id] : undefined);
+    if (
+      definition === undefined ||
+      definition.id !== current.id ||
+      definition._tag !== current._tag
+    )
+      return false;
     visited.add(current.id);
     const fields =
       definition._tag === "Struct"
@@ -198,7 +311,7 @@ const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown>
     );
   };
   if (!referencesExist(type)) return Schema.Never;
-  const resolve = (type: Any): Schema.Codec<unknown> => {
+  const resolve = (type: Type): Schema.Codec<unknown> => {
     switch (type._tag) {
       case "Wildcard":
         return Schema.Never;
@@ -216,12 +329,16 @@ const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown>
         return Schema.Array(resolve(type.item));
       case "Option":
         return Schema.Option(resolve(type.inner));
-      case "Custom":
+      case "Struct":
+      case "Enum":
         return Schema.suspend((): Schema.Codec<unknown> => {
-          const definition = Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined;
+          const definition =
+            (useEmbeddedDefinitions ? type.definition : undefined) ??
+            (Object.hasOwn(definitions, type.id) ? definitions[type.id] : undefined);
           if (
             definition === undefined ||
             definition.id !== type.id ||
+            definition._tag !== type._tag ||
             ["__proto__", "constructor", "prototype"].includes(type.id)
           )
             return Schema.Never;
@@ -278,7 +395,7 @@ const valueSchema = (type: Any, definitions: Definitions): Schema.Codec<unknown>
 };
 
 // Guard both parse directions without hiding the runtime checks behind an Unknown schema.
-export const ValueSchema = (type: Any, definitions: Definitions = {}): Schema.Codec<unknown> => {
+export const ValueSchema = (type: Type, definitions: Definitions = {}): Schema.Codec<unknown> => {
   const schema = valueSchema(type, definitions);
   return finiteValue.pipe(
     Schema.decodeTo(schema),
@@ -293,7 +410,7 @@ export const ValueSchema = (type: Any, definitions: Definitions = {}): Schema.Co
 };
 
 export const JsonValueSchema = (
-  type: Any,
+  type: Type,
   definitions: Definitions = {},
 ): Schema.Codec<unknown, Schema.Json> => {
   const schema = valueSchema(type, definitions);
@@ -311,16 +428,17 @@ export const JsonValueSchema = (
   );
 };
 
-export const equals = (left: Any, right: Any): boolean => {
+export const equals = (left: Type, right: Type): boolean => {
   if (left._tag !== right._tag) return false;
-  if (left._tag === "Custom" && right._tag === "Custom") return left.id === right.id;
+  if (left._tag === "Struct" && right._tag === "Struct") return left.id === right.id;
+  if (left._tag === "Enum" && right._tag === "Enum") return left.id === right.id;
   if (left._tag === "Wildcard" && right._tag === "Wildcard") return left.id === right.id;
   if (left._tag === "List" && right._tag === "List") return equals(left.item, right.item);
   if (left._tag === "Option" && right._tag === "Option") return equals(left.inner, right.inner);
   return true;
 };
 
-export const hasWildcard = (type: Any): boolean =>
+export const hasWildcard = (type: Type): boolean =>
   type._tag === "Wildcard" ||
   (type._tag === "List" && hasWildcard(type.item)) ||
   (type._tag === "Option" && hasWildcard(type.inner));
@@ -329,11 +447,11 @@ export const hasWildcard = (type: Any): boolean =>
  * A wildcard itself has no value/default. Runtime validation still requires resolved IO.
  */
 export const JsonDefaultSchema = (
-  type: Any,
+  type: Type,
   definitions: Definitions = {},
 ): Schema.Codec<unknown, Schema.Json> => {
   if (!hasWildcard(type)) return JsonValueSchema(type, definitions);
-  const resolve = (type: Any): Schema.Codec<unknown> => {
+  const resolve = (type: Type): Schema.Codec<unknown> => {
     if (type._tag === "Wildcard") return Schema.Never;
     if (type._tag === "List") return Schema.Array(resolve(type.item));
     if (type._tag === "Option") return Schema.Option(resolve(type.inner));
@@ -346,14 +464,14 @@ export const JsonDefaultSchema = (
 };
 
 /** A local authoring check only. Graph-wide unification must also succeed. */
-export const compatible = (left: Any, right: Any): boolean => {
+export const compatible = (left: Type, right: Type): boolean => {
   if (left._tag === "Wildcard" || right._tag === "Wildcard") return true;
   if (left._tag === "List" && right._tag === "List") return compatible(left.item, right.item);
   if (left._tag === "Option" && right._tag === "Option") return compatible(left.inner, right.inner);
   return equals(left, right);
 };
 
-export const isValue = (type: Any, value: unknown, definitions: Definitions = {}): boolean =>
+export const isValue = (type: Type, value: unknown, definitions: Definitions = {}): boolean =>
   Schema.is(finiteValue)(value) && Schema.is(valueSchema(type, definitions))(value);
 
 export * as t from "./DataType.ts";

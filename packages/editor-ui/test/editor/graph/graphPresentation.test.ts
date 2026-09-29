@@ -106,20 +106,27 @@ describe("graph presentation", () => {
     ]);
     const mismatched: NodeIO = {
       ...ioByNode.target!,
-      dataInputs: [{ id: inputId, type: { _tag: "Custom", id: "person" } }],
+      dataInputs: [{ id: inputId, type: { _tag: "Struct", id: "person" } }],
     };
     expect(graphConnections(graph, (id) => (id === "target" ? mismatched : ioByNode[id]))).toEqual(
       [],
     );
-    expect(wireColor({ _tag: "Custom", id: "person" })).not.toBe(
-      wireColor({ _tag: "Custom", id: "other" }),
-    );
+    expect(wireColor({ _tag: "Struct", id: "person" })).toBe("#FACC15");
   });
   it("positions connected ports using the folded node's visible rows", () => {
     const [connection] = graphConnections(graph, (nodeId) => ioByNode[nodeId]);
 
     expect(connection?.to).toEqual({ x: 215, y: 42 });
     expect(connection?.type).toEqual({ _tag: "String" });
+  });
+
+  it("uses measured node widths for wire endpoints", () => {
+    const measured = graphConnections(
+      graph,
+      (nodeId) => ioByNode[nodeId],
+      (nodeId) => (nodeId === "source" ? 300 : 200),
+    );
+    expect(measured[0]?.from.x).toBe(285);
   });
 
   it("ignores ambiguous connections that match execution and data ports", () => {
@@ -140,6 +147,7 @@ describe("graph presentation", () => {
       "#dc2626",
     );
     expect(wireColor(undefined)).toBe("white");
+    expect(wireColor({ _tag: "Enum", id: "status" })).toBe("#1B4DFF");
   });
 
   it.each([false, true])(

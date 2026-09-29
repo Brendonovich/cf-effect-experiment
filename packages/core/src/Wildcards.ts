@@ -2,13 +2,12 @@ import { t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Connection } from "./Connection.ts";
-import type { NodeIO } from "./IO.ts";
 
 import * as OutputRef from "./OutputRef.ts";
 
 interface DataPort {
   readonly id: string;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 interface ExecutionPort {
   readonly id: string;
@@ -37,7 +36,7 @@ const declarationKey = (io: IO): string => {
 };
 
 /** Preserve port metadata while substituting types, without mutating declarations. */
-export const mapIO = <T extends IO>(io: T, resolve: (type: t.Any) => t.Any): T => {
+export const mapIO = <T extends IO>(io: T, resolve: (type: t.Type) => t.Type): T => {
   const data = <P extends DataPort>(port: P): P => ({ ...port, type: resolve(port.type) });
   const execution = <P extends ExecutionPort>(port: P): P => ({
     ...port,
@@ -54,7 +53,7 @@ export const mapIO = <T extends IO>(io: T, resolve: (type: t.Any) => t.Any): T =
 
 interface Term {
   readonly node: string;
-  readonly type: t.Any;
+  readonly type: t.Type;
 }
 const key = (term: Term & { type: t.Wildcard }) => JSON.stringify([term.node, term.type.id]);
 const child = (term: Term): Term | undefined =>
@@ -72,16 +71,7 @@ export interface Conflict {
 export interface Group {
   readonly nodes: ReadonlySet<string>;
   readonly connections: ReadonlyArray<Connection.Model>;
-  readonly resolve: (node: string, type: t.Any) => t.Any;
-}
-
-export interface DerivedIO {
-  /** Changes when external definitions or the set of dynamic nodes changes. */
-  readonly key: string;
-  readonly ports: (
-    node: string,
-    resolve: (type: t.Any) => t.Any,
-  ) => Result.Result<NodeIO | undefined, string>;
+  readonly resolve: (node: string, type: t.Type) => t.Type;
 }
 
 const solve = (
@@ -92,6 +82,16 @@ const solve = (
   const bindings = new Map<string, Term>();
   const bound: string[] = [];
   const conflicts: Conflict[] = [];
+  const constraint = (wildcard: t.Wildcard) =>
+    wildcard.id === "Struct" || wildcard.id === "Enum" || wildcard.id === "Type"
+      ? wildcard.id
+      : undefined;
+  const accepts = (wildcard: t.Wildcard, type: t.Type) => {
+    const expected = constraint(wildcard);
+    if (expected === undefined || type._tag === "Wildcard") return true;
+    if (type._tag !== "Struct" && type._tag !== "Enum") return false;
+    return expected === "Type" || type._tag === expected;
+  };
   const dereference = (term: Term): Term => {
     while (term.type._tag === "Wildcard") {
       const next = bindings.get(key({ ...term, type: term.type }));
@@ -111,7 +111,15 @@ const solve = (
     b = dereference(b);
     if (a.type._tag === "Wildcard") {
       const id = key({ ...a, type: a.type });
-      if (b.type._tag === "Wildcard" && key({ ...b, type: b.type }) === id) return true;
+      if (b.type._tag === "Wildcard") {
+        if (key({ ...b, type: b.type }) === id) return true;
+        const aConstraint = constraint(a.type);
+        const bConstraint = constraint(b.type);
+        if (aConstraint !== undefined && bConstraint !== undefined && aConstraint !== bConstraint)
+          return false;
+        if (aConstraint !== undefined && bConstraint === undefined) return unify(b, a);
+      }
+      if (!accepts(a.type, b.type)) return false;
       if (occurs(id, b)) return false;
       bindings.set(id, b);
       bound.push(id);
@@ -157,8 +165,8 @@ const solve = (
     }
   }
   if (conflicts.length > 0) return Result.fail(conflicts);
-  const values = new Map<string, t.Any>();
-  const resolve = (node: string, type: t.Any): t.Any => {
+  const values = new Map<string, t.Type>();
+  const resolve = (node: string, type: t.Type): t.Type => {
     const id = type._tag === "Wildcard" ? key({ node, type }) : undefined;
     const cached = id === undefined ? undefined : values.get(id);
     if (cached !== undefined) return cached;
@@ -187,21 +195,6 @@ export class Cache {
   // Include non-data wires too: an IO change can turn an exec port into a data port.
   private incident = new Map<string, ReadonlyMap<string, Connection.Model>>();
   private byNode = new Map<string, Group>();
-  private derivedDeclarations = new Map<string, NodeIO>();
-  private sourceKey: string | undefined;
-
-  derivedInputs(node: string): NodeIO["dataInputs"] | undefined {
-    return this.derivedDeclarations.get(node)?.dataInputs;
-  }
-  derivedOutputs(node: string): NodeIO["dataOutputs"] | undefined {
-    return this.derivedDeclarations.get(node)?.dataOutputs;
-  }
-  derivedIO(node: string): NodeIO | undefined {
-    return this.derivedDeclarations.get(node);
-  }
-  setDerivedIO(node: string, io: NodeIO): void {
-    this.derivedDeclarations.set(node, io);
-  }
 
   get groups(): ReadonlySet<Group> {
     return new Set(this.byNode.values());
@@ -209,7 +202,7 @@ export class Cache {
   group(node: string): Group | undefined {
     return this.byNode.get(node);
   }
-  resolve(node: string, type: t.Any): t.Any {
+  resolve(node: string, type: t.Type): t.Type {
     return this.byNode.get(node)?.resolve(node, type) ?? type;
   }
   resolveIO<T extends IO>(node: string, io: T): T {
@@ -220,77 +213,8 @@ export class Cache {
   update(
     io: ReadonlyMap<string, IO>,
     connections: ReadonlyArray<Connection.Model>,
-    derive?: DerivedIO,
   ): Result.Result<void, ReadonlyArray<Conflict>> {
-    if (derive === undefined) {
-      const result = this.updateOnce(io, connections);
-      if (Result.isSuccess(result)) {
-        this.derivedDeclarations = new Map();
-        this.sourceKey = undefined;
-      }
-      return result;
-    }
-    // Start from declarations without last snapshot's inferred fields. Otherwise a
-    // disconnected Make/Break chain could keep itself anchored through stale field ports.
-    let declarations = new Map(io);
-    for (const [id, ports] of io) {
-      const derived = derive.ports(id, (type) => type);
-      if (Result.isSuccess(derived) && derived.success !== undefined)
-        declarations.set(id, { ...ports, ...derived.success });
-    }
-    const sourceKey = JSON.stringify([
-      derive.key,
-      [...declarations].map(([id, ports]) => [id, declarationKey(ports)]),
-      connections,
-    ]);
-    if (this.sourceKey === sourceKey) return Result.succeed(undefined);
-    const staged = new Cache();
-    staged.declarations = this.declarations;
-    staged.wires = this.wires;
-    staged.incident = new Map(this.incident);
-    staged.byNode = new Map(this.byNode);
-    for (let round = 0; round <= io.size; round++) {
-      const result = staged.updateOnce(declarations, connections);
-      if (Result.isFailure(result)) return result;
-      const next = new Map(declarations);
-      const derivedDeclarations = new Map<string, NodeIO>();
-      const conflicts: Conflict[] = [];
-      let changed = false;
-      for (const [id, ports] of declarations) {
-        const derived = derive.ports(id, (type) => staged.resolve(id, type));
-        if (Result.isFailure(derived)) {
-          conflicts.push({
-            nodes: staged.group(id)?.nodes ?? new Set([id]),
-            connectionId: connections.find((wire) => wire.inNodeId === id)?.id ?? "",
-            reason: derived.failure,
-          });
-        } else if (derived.success !== undefined) {
-          derivedDeclarations.set(id, derived.success);
-          if (JSON.stringify(ports) !== JSON.stringify(derived.success)) {
-            changed = true;
-            next.set(id, { ...ports, ...derived.success });
-          }
-        }
-      }
-      if (conflicts.length > 0) return Result.fail(conflicts);
-      if (!changed) {
-        this.declarations = staged.declarations;
-        this.wires = staged.wires;
-        this.incident = staged.incident;
-        this.byNode = staged.byNode;
-        this.derivedDeclarations = derivedDeclarations;
-        this.sourceKey = sourceKey;
-        return Result.succeed(undefined);
-      }
-      declarations = next;
-    }
-    return Result.fail([
-      {
-        nodes: new Set(io.keys()),
-        connectionId: "",
-        reason: "Inferred output types did not stabilize",
-      },
-    ]);
+    return this.updateOnce(io, connections);
   }
 
   private updateOnce(

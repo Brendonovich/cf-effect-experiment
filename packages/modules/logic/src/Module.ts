@@ -38,26 +38,66 @@ const LogicModule = Module.make({
           ? Effect.sleep(io.delay)
           : Effect.fail(new RangeError("Delay must be an integer between 0 and 2147483647 ms")),
     });
-    for (const [id, operation] of [
-      ["AND", (a: boolean, b: boolean) => a && b],
-      ["NAND", (a: boolean, b: boolean) => !(a && b)],
-      ["OR", (a: boolean, b: boolean) => a || b],
-      ["NOR", (a: boolean, b: boolean) => !(a || b)],
-      ["XOR", (a: boolean, b: boolean) => a !== b],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name: id,
-        description: `Boolean ${id} of two inputs.`,
-        type: "pure",
-        io: (io) => ({
-          one: io.data.in("one", t.Bool, { defaultValue: false }),
-          two: io.data.in("two", t.Bool, { defaultValue: false }),
-          value: io.data.out("value", t.Bool),
-        }),
-        run: ({ io }) => Effect.sync(() => io.value(operation(io.one, io.two))),
-      });
-    }
+    yield* context.schema.register({
+      id: "AND",
+      name: "AND",
+      description: "Boolean AND of two inputs.",
+      type: "pure",
+      io: (io) => ({
+        one: io.data.in("one", t.Bool, { defaultValue: false }),
+        two: io.data.in("two", t.Bool, { defaultValue: false }),
+        value: io.data.out("value", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.value(io.one && io.two)),
+    });
+    yield* context.schema.register({
+      id: "NAND",
+      name: "NAND",
+      description: "Boolean NAND of two inputs.",
+      type: "pure",
+      io: (io) => ({
+        one: io.data.in("one", t.Bool, { defaultValue: false }),
+        two: io.data.in("two", t.Bool, { defaultValue: false }),
+        value: io.data.out("value", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.value(!(io.one && io.two))),
+    });
+    yield* context.schema.register({
+      id: "OR",
+      name: "OR",
+      description: "Boolean OR of two inputs.",
+      type: "pure",
+      io: (io) => ({
+        one: io.data.in("one", t.Bool, { defaultValue: false }),
+        two: io.data.in("two", t.Bool, { defaultValue: false }),
+        value: io.data.out("value", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.value(io.one || io.two)),
+    });
+    yield* context.schema.register({
+      id: "NOR",
+      name: "NOR",
+      description: "Boolean NOR of two inputs.",
+      type: "pure",
+      io: (io) => ({
+        one: io.data.in("one", t.Bool, { defaultValue: false }),
+        two: io.data.in("two", t.Bool, { defaultValue: false }),
+        value: io.data.out("value", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.value(!(io.one || io.two))),
+    });
+    yield* context.schema.register({
+      id: "XOR",
+      name: "XOR",
+      description: "Boolean XOR of two inputs.",
+      type: "pure",
+      io: (io) => ({
+        one: io.data.in("one", t.Bool, { defaultValue: false }),
+        two: io.data.in("two", t.Bool, { defaultValue: false }),
+        value: io.data.out("value", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.value(io.one !== io.two)),
+    });
     yield* context.schema.register({
       id: "NOT",
       name: "NOT",
@@ -174,45 +214,51 @@ const LogicModule = Module.make({
       }),
       run: ({ io }) => Effect.sync(() => io.output(Option.getOrElse(io.input, () => io.fallback))),
     });
-    for (const [id, name, predicate] of [
-      ["IsOptionSome", "Is Option Some", Option.isSome],
-      ["IsOptionNone", "Is Option None", Option.isNone],
-    ] as const) {
-      yield* context.schema.register({
-        id,
-        name,
-        description: `${name} for an option of the inferred type.`,
-        type: "pure",
-        io: (io) => ({
-          input: io.data.in("input", t.Option(io.wildcard("T")), {
-            defaultValue: Option.none(),
-          }),
-          output: io.data.out("output", t.Bool),
-        }),
-        run: ({ io }) => Effect.sync(() => io.output(predicate(io.input))),
-      });
-    }
-    for (const id of ["Cache", "Copy"] as const) {
-      yield* context.schema.register({
-        id,
-        name: id,
-        description:
-          id === "Copy"
-            ? "Captures a value of the inferred type, shallow-copying lists without modifying the input."
-            : "Captures a value of the inferred type on execution for downstream reuse; the value is not cloned.",
-        io: (io) => {
-          const type = io.wildcard("T");
-          return {
-            input: io.data.in("in", type),
-            output: io.data.out("out", type),
-          };
-        },
-        run: ({ io }) =>
-          Effect.sync(() =>
-            io.output(id === "Copy" && Array.isArray(io.input) ? [...io.input] : io.input),
-          ),
-      });
-    }
+    yield* context.schema.register({
+      id: "IsOptionSome",
+      name: "Is Option Some",
+      description: "Is Option Some for an option of the inferred type.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.Option(io.wildcard("T")), { defaultValue: Option.none() }),
+        output: io.data.out("output", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(Option.isSome(io.input))),
+    });
+    yield* context.schema.register({
+      id: "IsOptionNone",
+      name: "Is Option None",
+      description: "Is Option None for an option of the inferred type.",
+      type: "pure",
+      io: (io) => ({
+        input: io.data.in("input", t.Option(io.wildcard("T")), { defaultValue: Option.none() }),
+        output: io.data.out("output", t.Bool),
+      }),
+      run: ({ io }) => Effect.sync(() => io.output(Option.isNone(io.input))),
+    });
+    yield* context.schema.register({
+      id: "Cache",
+      name: "Cache",
+      description:
+        "Captures a value of the inferred type on execution for downstream reuse; the value is not cloned.",
+      io: (io) => {
+        const type = io.wildcard("T");
+        return { input: io.data.in("in", type), output: io.data.out("out", type) };
+      },
+      run: ({ io }) => Effect.sync(() => io.output(io.input)),
+    });
+    yield* context.schema.register({
+      id: "Copy",
+      name: "Copy",
+      description:
+        "Captures a value of the inferred type, shallow-copying lists without modifying the input.",
+      io: (io) => {
+        const type = io.wildcard("T");
+        return { input: io.data.in("in", type), output: io.data.out("out", type) };
+      },
+      run: ({ io }) =>
+        Effect.sync(() => io.output(Array.isArray(io.input) ? [...io.input] : io.input)),
+    });
   }),
 });
 
