@@ -39,7 +39,9 @@ export const entry = <Definition extends Engine.AnyDef = never>(
   decode: (input) =>
     args.length === 1
       ? Schema.decodeUnknownEffect(Schema.Never)(input)
-      : Schema.decodeUnknownEffect(args[1])(input),
+      : Schema.decodeUnknownEffect(args[1])(input).pipe(
+          Effect.flatMap(Schema.encodeUnknownEffect(args[1])),
+        ),
   handle: (executor, input) =>
     args.length === 1
       ? Schema.decodeUnknownEffect(Schema.Never)(input)

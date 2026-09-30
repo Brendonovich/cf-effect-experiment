@@ -324,6 +324,66 @@ describe("Event.make replay", () => {
   }
 });
 
+describe("Event.make list", () => {
+  it.effect("loads legacy GitHub events", () =>
+    Effect.gen(function* () {
+      const payload = {
+        _tag: "GitHubWebhookDelivery",
+        webhookId: "primary",
+        event: "pull_request",
+        action: "closed",
+        owner: "macrograph",
+        repository: "macrograph",
+        sender: "octocat",
+        deliveryId: "delivery-1",
+        payloadJson: JSON.stringify({ action: "closed", number: 79 }),
+      };
+      const event = yield* Event.make({ replayEvent: () => Effect.void }).pipe(
+        Effect.provideService(EventPolicy.Service, {
+          canView: () => Effect.void,
+          canEdit: () => Effect.void,
+        }),
+        Effect.provide(
+          databaseLayer((sql) => {
+            if (sql.includes('from "project_ingress_events"')) return [];
+            if (sql.includes('from "project_events"'))
+              return [
+                [
+                  "event-1",
+                  "project",
+                  "ingress",
+                  null,
+                  "github",
+                  "GitHubWebhookDelivery",
+                  "delivery-1",
+                  JSON.stringify(payload),
+                  null,
+                  null,
+                  "2026-09-28T00:00:00.000Z",
+                ],
+              ];
+            if (sql.includes('from "project_executions"')) return [];
+            if (sql.includes('from "project_ingress_endpoints"')) return [];
+            return assert.fail(`Unexpected SQL: ${sql}`);
+          }),
+        ),
+      );
+      const result = yield* event.list("project");
+      assert.deepStrictEqual(result.events[0]?.eventPayload, {
+        _tag: "GitHubWebhookDelivery",
+        webhookId: "primary",
+        event: "pull_request",
+        action: "closed",
+        owner: "macrograph",
+        repository: "macrograph",
+        sender: "octocat",
+        deliveryId: "delivery-1",
+        payload: { action: "closed", number: 79 },
+      });
+    }).pipe(Effect.provideService(CurrentUser, { id: "viewer", sessionId: undefined })),
+  );
+});
+
 describe("EventPolicy.layer", () => {
   for (const allowed of [true, false]) {
     it.effect(`delegates ${allowed ? "allowed" : "denied"} edits to ProjectPolicy.canEdit`, () =>
