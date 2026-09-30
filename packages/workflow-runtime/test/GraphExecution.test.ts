@@ -14,6 +14,7 @@ it.effect("runs an event through the app-provided executor catalog", () =>
     const modules: ModuleRegistry = {
       entries: [],
       register: () => Effect.sync(() => void (registered = true)),
+      decode: (_moduleId, event) => Effect.succeed(event),
       handle: (_executor, moduleId, event) =>
         Effect.sync(() => {
           assert.strictEqual(moduleId, "module");

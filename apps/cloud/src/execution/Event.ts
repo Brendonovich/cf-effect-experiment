@@ -17,15 +17,24 @@ import {
   projects,
 } from "../database/DatabaseSchema.ts";
 import * as EventPolicy from "./EventPolicy.ts";
+import { registry as executorModules } from "./ExecutorModules.ts";
 
 export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
   Effect.gen(function* () {
     const database = yield* Database.Service;
     const eventPolicy = yield* EventPolicy.Service;
-    const decodeEvent = (event: typeof projectEvents.$inferSelect) => ({
-      ...event,
-      eventPayload: JSON.parse(event.eventPayload),
-    });
+    const decodeEvent = <
+      Event extends { readonly moduleId: string; readonly eventPayload: string },
+    >(
+      event: Event,
+    ) =>
+      Effect.gen(function* () {
+        const payload = JSON.parse(event.eventPayload) as unknown;
+        const eventPayload = yield* executorModules
+          .decode(event.moduleId, payload)
+          .pipe(Effect.catchTag("SchemaError", () => Effect.succeed(payload)));
+        return { ...event, eventPayload };
+      });
 
     return {
       replay: (projectId: string, eventId: string, kind: "event" | "ingress") =>
@@ -168,13 +177,12 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
             deployed: endpoint.deployed,
             preview: endpoint.preview,
           }));
+          const ingressEvents = yield* Effect.forEach(ingressRows, decodeEvent);
+          const events = yield* Effect.forEach(eventRows, decodeEvent);
           return {
             ingresses,
-            ingressEvents: ingressRows.map((event) => ({
-              ...event,
-              eventPayload: JSON.parse(event.eventPayload),
-            })),
-            events: eventRows.map(decodeEvent),
+            ingressEvents,
+            events,
             executions,
           };
         }).pipe(Policy.withPolicy(eventPolicy.canView(projectId))),
@@ -208,7 +216,8 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
                     ),
                   )
                   .pipe(Effect.orDie);
-          return { executions, events: events.map(decodeEvent) };
+          const decodedEvents = yield* Effect.forEach(events, decodeEvent);
+          return { executions, events: decodedEvents };
         }).pipe(Policy.withPolicy(eventPolicy.canView(projectId))),
       getExecution: (projectId: string, executionId: string) =>
         Effect.gen(function* () {
@@ -244,7 +253,7 @@ export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
             .where(eq(projectExecutionNodes.executionId, execution.id))
             .orderBy(projectExecutionNodes.startedAt)
             .pipe(Effect.orDie);
-          return { execution, event: decodeEvent(event), nodes };
+          return { execution, event: yield* decodeEvent(event), nodes };
         }).pipe(Policy.withPolicy(eventPolicy.canView(projectId))),
     };
   });

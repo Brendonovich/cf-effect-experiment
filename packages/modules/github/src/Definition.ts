@@ -1,5 +1,5 @@
 import { Engine, Resource } from "@macrograph/module";
-import { Array, Effect, Schema } from "effect";
+import { Array, Effect, Schema, SchemaGetter } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 export const AccountId = Schema.String.pipe(Schema.brand("GitHubAccountId"));
@@ -62,6 +62,42 @@ export class WebhookDelivery extends Schema.TaggedClass<WebhookDelivery>()(
     payload: Schema.Json,
   },
 ) {}
+
+const LegacyWebhookDelivery = Schema.Struct({
+  _tag: Schema.Literal("GitHubWebhookDelivery"),
+  webhookId: WebhookId,
+  event: WebhookEventName,
+  action: Schema.String,
+  owner: Schema.String,
+  repository: Schema.String,
+  sender: Schema.String,
+  deliveryId: Schema.String,
+  payloadJson: Schema.fromJsonString(Schema.Json),
+});
+
+export const WebhookDeliveryEvent = Schema.Union([WebhookDelivery, LegacyWebhookDelivery]).pipe(
+  Schema.decodeTo(WebhookDelivery, {
+    decode: SchemaGetter.transform((delivery) =>
+      "payloadJson" in delivery
+        ? {
+            _tag: delivery._tag,
+            webhookId: delivery.webhookId,
+            event: delivery.event,
+            action: delivery.action,
+            owner: delivery.owner,
+            repository: delivery.repository,
+            sender: delivery.sender,
+            deliveryId: delivery.deliveryId,
+            payload: delivery.payloadJson,
+          }
+        : delivery,
+    ),
+    encode: SchemaGetter.transform(
+      (delivery) =>
+        new WebhookDelivery({ ...delivery, webhookId: WebhookId.make(delivery.webhookId) }),
+    ),
+  }),
+);
 
 const RepositoryWebhook = Schema.Struct({
   name: Schema.String,
