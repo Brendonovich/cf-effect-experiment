@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect";
 export interface Entry {
   readonly id: string;
   readonly register: (executor: Executor.Service) => Effect.Effect<void>;
+  readonly decode: (event: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
   readonly handle: (
     executor: Executor.Service,
     event: unknown,
@@ -15,6 +16,7 @@ export interface Entry {
 export interface Registry {
   readonly entries: ReadonlyArray<Entry>;
   readonly register: (executor: Executor.Service) => Effect.Effect<void>;
+  readonly decode: (moduleId: string, event: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
   readonly handle: (
     executor: Executor.Service,
     moduleId: string,
@@ -34,6 +36,10 @@ export const entry = <Definition extends Engine.AnyDef = never>(
   id: args[0].id,
   register: (executor) =>
     args.length === 1 ? executor.module(args[0]) : executor.module(args[0], args[2]),
+  decode: (input) =>
+    args.length === 1
+      ? Schema.decodeUnknownEffect(Schema.Never)(input)
+      : Schema.decodeUnknownEffect(args[1])(input),
   handle: (executor, input) =>
     args.length === 1
       ? Schema.decodeUnknownEffect(Schema.Never)(input)
@@ -46,6 +52,10 @@ export const make = (entries: ReadonlyArray<Entry>): Registry => ({
   entries,
   register: (executor: Executor.Service) =>
     Effect.forEach(entries, (module) => module.register(executor), { discard: true }),
+  decode: (moduleId: string, event: unknown) => {
+    const module = entries.find((candidate) => candidate.id === moduleId);
+    return module === undefined ? Effect.succeed(event) : module.decode(event);
+  },
   handle: (executor: Executor.Service, moduleId: string, event: unknown) => {
     const module = entries.find((candidate) => candidate.id === moduleId);
     return module === undefined
