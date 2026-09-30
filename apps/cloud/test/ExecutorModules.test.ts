@@ -9,7 +9,6 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { WebhookDelivery } from "@macrograph/module-github/Definition";
 import { unavailableRuntimeClient as unavailableTwitchRuntimeClient } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Result, Schema } from "effect";
@@ -164,21 +163,17 @@ describe("ExecutorModules", () => {
         deliveryId: "delivery-1",
         payloadJson: JSON.stringify({ action: "closed", number: 79 }),
       });
-      assert.instanceOf(decoded, WebhookDelivery);
-      assert.deepStrictEqual(
-        { ...decoded },
-        {
-          _tag: "GitHubWebhookDelivery",
-          webhookId: "primary",
-          event: "pull_request",
-          action: "closed",
-          owner: "macrograph",
-          repository: "macrograph",
-          sender: "octocat",
-          deliveryId: "delivery-1",
-          payload: { action: "closed", number: 79 },
-        },
-      );
+      assert.deepStrictEqual(decoded, {
+        _tag: "GitHubWebhookDelivery",
+        webhookId: "primary",
+        event: "pull_request",
+        action: "closed",
+        owner: "macrograph",
+        repository: "macrograph",
+        sender: "octocat",
+        deliveryId: "delivery-1",
+        payload: { action: "closed", number: 79 },
+      });
     }),
   );
 
