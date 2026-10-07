@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import {
+  noCryptoRandomUuidInBrowser,
   noEffectV3Api,
   noCrossPackageRelativeImports,
   noForbiddenArchitectureImports,
@@ -98,6 +99,40 @@ tester.run("no-node-imports-in-browser", noNodeImportsInBrowser, {
       code: 'const fs = require("fs")',
       options: [["apps/playground"]],
       errors: [{ messageId: "nodeImport", data: { module: "fs" } }],
+    },
+  ],
+});
+
+tester.run("no-crypto-random-uuid-in-browser", noCryptoRandomUuidInBrowser, {
+  valid: [
+    {
+      filename: "/repo/apps/server/src/Store.ts",
+      code: "const id = crypto.randomUUID()",
+      options: [["apps/server/client"]],
+    },
+    {
+      filename: "/repo/apps/server/client/vite.config.ts",
+      code: "const id = crypto.randomUUID()",
+      options: [["apps/server/client"]],
+    },
+    {
+      filename: "/repo/apps/server/client/src/App.tsx",
+      code: "const bytes = crypto.getRandomValues(new Uint8Array(16))",
+      options: [["apps/server/client"]],
+    },
+  ],
+  invalid: [
+    {
+      filename: "/repo/apps/server/client/src/App.tsx",
+      code: "const id = crypto.randomUUID()",
+      options: [["apps/server/client"]],
+      errors: [{ messageId: "randomUuid" }],
+    },
+    {
+      filename: "/repo/packages/editor-ui/src/Catalog.tsx",
+      code: 'const a = globalThis.crypto.randomUUID(); const b = window.crypto["randomUUID"]()',
+      options: [["packages/editor-ui"]],
+      errors: [{ messageId: "randomUuid" }, { messageId: "randomUuid" }],
     },
   ],
 });

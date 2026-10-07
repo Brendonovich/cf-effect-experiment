@@ -52,6 +52,16 @@ export default defineConfig({
         "error",
         ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
       ],
+      "macrograph/no-crypto-random-uuid-in-browser": [
+        "error",
+        [
+          "apps/cloud/frontend",
+          "apps/playground",
+          "apps/server/client",
+          "packages/editor",
+          "packages/editor-ui",
+        ],
+      ],
       "macrograph/no-unhandled-run-fork": [
         "error",
         ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],

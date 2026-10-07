@@ -1,3 +1,4 @@
+import { randomUUID } from "@macrograph/editor";
 import {
   AccountMenu,
   Button,
@@ -28,7 +29,7 @@ type AuthContext =
 const localUserId = () => {
   const stored = localStorage.getItem("macrograph:self-hosted:user");
   if (stored !== null) return stored;
-  const created = crypto.randomUUID();
+  const created = randomUUID();
   localStorage.setItem("macrograph:self-hosted:user", created);
   return created;
 };

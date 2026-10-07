@@ -1,3 +1,4 @@
+import { randomUUID } from "@macrograph/editor";
 import {
   Button,
   CredentialSettings,
@@ -28,7 +29,7 @@ const localPath = (path: string) =>
 
 const localUserId = () => {
   const key = "macrograph:local-user";
-  const created = crypto.randomUUID();
+  const created = randomUUID();
   try {
     const stored = localStorage.getItem(key);
     if (stored !== null) return stored;

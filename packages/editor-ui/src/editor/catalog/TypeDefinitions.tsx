@@ -1,4 +1,5 @@
 import { TypeDefinition, type Project } from "@macrograph/core";
+import { randomUUID } from "@macrograph/editor";
 import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, useMutation } from "@tanstack/solid-query";
@@ -333,7 +334,7 @@ export function TypeDefinitions(props: {
     if (disabled()) return;
     setSearch("");
     const base = {
-      id: t.DefinitionId.make(crypto.randomUUID()),
+      id: t.DefinitionId.make(randomUUID()),
       name: defaultName(
         kind === "Struct" ? "New Struct" : "New Enum",
         Object.values(definitions()),
