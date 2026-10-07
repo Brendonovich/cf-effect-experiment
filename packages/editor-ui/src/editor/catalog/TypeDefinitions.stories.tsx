@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
 import { TypeDefinition, type Project } from "@macrograph/core";
+import { randomUUID } from "@macrograph/editor";
 import { t } from "@macrograph/module";
 import { createMemo, createSignal } from "solid-js";
 
@@ -32,7 +33,7 @@ const meta: Meta<typeof TypeDefinitions> = {
               change._tag === "Upsert"
                 ? { ...before, [id]: change.definition }
                 : Object.fromEntries(Object.entries(before).filter(([key]) => key !== id));
-            const token = crypto.randomUUID();
+            const token = randomUUID();
             pending.set(token, change);
             return {
               token,

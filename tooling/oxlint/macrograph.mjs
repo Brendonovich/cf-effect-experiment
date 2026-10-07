@@ -160,6 +160,42 @@ export const noNodeImportsInBrowser = {
   },
 };
 
+const cryptoGlobals = new Set(["globalThis", "window", "self"]);
+
+const isCryptoObject = (node) =>
+  (node?.type === "Identifier" && node.name === "crypto") ||
+  (node?.type === "MemberExpression" &&
+    node.object.type === "Identifier" &&
+    cryptoGlobals.has(node.object.name) &&
+    memberName(node) === "crypto");
+
+export const noCryptoRandomUuidInBrowser = {
+  meta: {
+    type: "problem",
+    schema: false,
+    messages: {
+      randomUuid:
+        "crypto.randomUUID is only available in secure contexts (HTTPS or localhost) and crashes self-hosted servers accessed over plain HTTP.",
+    },
+  },
+  create(context) {
+    const browserRoots = context.options[0] ?? [];
+    const unit = workspaceUnit(context.filename);
+    if (
+      unit === undefined ||
+      !browserRoots.includes(unit) ||
+      !normalize(context.filename).includes("/src/")
+    )
+      return {};
+    return {
+      MemberExpression(node) {
+        if (memberName(node) === "randomUUID" && isCryptoObject(node.object))
+          context.report({ node, messageId: "randomUuid" });
+      },
+    };
+  },
+};
+
 export const solidV2CreateEffectSignature = {
   meta: {
     type: "problem",
@@ -573,6 +609,7 @@ export default {
     "no-cross-package-relative-imports": noCrossPackageRelativeImports,
     "no-forbidden-architecture-imports": noForbiddenArchitectureImports,
     "no-node-imports-in-browser": noNodeImportsInBrowser,
+    "no-crypto-random-uuid-in-browser": noCryptoRandomUuidInBrowser,
     "solid-v2-create-effect-signature": solidV2CreateEffectSignature,
     "solid-v2-prefer-effect-return-cleanup": solidV2PreferEffectReturnCleanup,
     "solid-v2-no-eager-component-prop-read": solidV2NoEagerComponentPropRead,

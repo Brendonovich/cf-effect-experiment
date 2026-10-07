@@ -10,3 +10,4 @@ export { EditorAccess } from "./EditorAccess.ts";
 export { Presence } from "./Presence.ts";
 
 export * from "./QueueRuntime.ts";
+export { randomUUID } from "./Uuid.ts";

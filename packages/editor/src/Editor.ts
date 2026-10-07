@@ -45,6 +45,7 @@ import {
 import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
 import { Packages } from "./Packages.ts";
+import { randomUUID } from "./Uuid.ts";
 
 const ResourceKey = Schema.String.pipe(Schema.brand("ResourceKey"));
 type ResourceKey = typeof ResourceKey.Type;
@@ -464,7 +465,7 @@ export const layer = Layer.effect(Service)(
         readonly packages: string;
       }
     >();
-    const clipboardSession = crypto.randomUUID();
+    const clipboardSession = randomUUID();
     const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
     const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
       new Map(),
@@ -855,7 +856,7 @@ export const layer = Layer.effect(Service)(
       const now = yield* Clock.currentTimeMillis;
       for (const [token, preview] of previews) if (preview.expires <= now) previews.delete(token);
       while (previews.size >= 128) previews.delete(previews.keys().next().value!);
-      const token = crypto.randomUUID();
+      const token = randomUUID();
       // Clone the proposal so in-process callers cannot alter an already reviewed change.
       previews.set(token, {
         state: projectState(project),
@@ -1004,7 +1005,7 @@ export const layer = Layer.effect(Service)(
     }, lock.withPermit);
 
     const functionCreate = Effect.fn("Editor.function.create")(function* (name?: string) {
-      const graphId = GraphId.make(crypto.randomUUID());
+      const graphId = GraphId.make(randomUUID());
       const canvas: Canvas.Model = {
         id: graphId,
         name: name ?? "New Function",
@@ -1038,7 +1039,7 @@ export const layer = Layer.effect(Service)(
     ) {
       const fn = yield* getFunction(graphId);
       const fields = functionFields(fn, direction);
-      const id = IoId.make(crypto.randomUUID());
+      const id = IoId.make(randomUUID());
       const field: GraphFunction.Field = {
         id,
         name: `${direction === "input" ? "Input" : "Output"} ${fields.length + 1}`,
@@ -1324,9 +1325,9 @@ export const layer = Layer.effect(Service)(
                   ? value
                   : yield* packages.validateInputDefault(source.schema, ioProperties, input, value);
             }
-            let id = NodeId.make(crypto.randomUUID());
+            let id = NodeId.make(randomUUID());
             while (Object.hasOwn(graph.nodes, id) || nodes.some((node) => node.id === id))
-              id = NodeId.make(crypto.randomUUID());
+              id = NodeId.make(randomUUID());
             const position = {
               x: options.position.x + source.position.x - anchor.x,
               y: options.position.y + source.position.y - anchor.y,
@@ -1358,14 +1359,14 @@ export const layer = Layer.effect(Service)(
           remap.set(source.id, node.id);
         }
         for (const source of fragment.scopeProjections ?? []) {
-          let id = NodeId.make(crypto.randomUUID());
+          let id = NodeId.make(randomUUID());
           while (
             Object.hasOwn(graph.nodes, id) ||
             Object.hasOwn(graph.scopeProjections ?? {}, id) ||
             nodes.some((node) => node.id === id) ||
             scopeProjections.some((projection) => projection.id === id)
           )
-            id = NodeId.make(crypto.randomUUID());
+            id = NodeId.make(randomUUID());
           const position = {
             x: options.position.x + source.position.x - anchor.x,
             y: options.position.y + source.position.y - anchor.y,
@@ -1398,7 +1399,7 @@ export const layer = Layer.effect(Service)(
               )
               .map((wire) => ({
                 ...wire,
-                id: Connection.ConnectionId.make(crypto.randomUUID()),
+                id: Connection.ConnectionId.make(randomUUID()),
                 outNodeId: remap.get(wire.outNodeId) ?? wire.outNodeId,
                 inNodeId: remap.get(wire.inNodeId) ?? wire.inNodeId,
               })),
@@ -1470,8 +1471,8 @@ export const layer = Layer.effect(Service)(
             return yield* new Clipboard.InvalidError({
               reason: `Connection ${source.id}: missing, ambiguous or incompatible ports`,
             });
-          let id = Connection.ConnectionId.make(crypto.randomUUID());
-          while (connectionIds.has(id)) id = Connection.ConnectionId.make(crypto.randomUUID());
+          let id = Connection.ConnectionId.make(randomUUID());
+          while (connectionIds.has(id)) id = Connection.ConnectionId.make(randomUUID());
           connectionIds.add(id);
           connections.push({ ...source, id, outNodeId, inNodeId });
           occupied.add(inputKey);
@@ -1641,10 +1642,10 @@ export const layer = Layer.effect(Service)(
         output.port.scope == null
       )
         return yield* new Connection.InvalidError({ reason: "Output is not a bundled scope" });
-      const id = NodeId.make(crypto.randomUUID());
+      const id = NodeId.make(randomUUID());
       const projection: Scopes.Projection = { id, position: options.position };
       const connection: Connection.Model = {
-        id: Connection.ConnectionId.make(crypto.randomUUID()),
+        id: Connection.ConnectionId.make(randomUUID()),
         outNodeId: options.sourceNodeID,
         outIo: options.sourceOutput,
         inNodeId: id,
@@ -2118,7 +2119,7 @@ export const layer = Layer.effect(Service)(
           resource: resource.resource,
           reason: "Resource is not registered",
         });
-      const id = ResourceConstant.Id.make(crypto.randomUUID());
+      const id = ResourceConstant.Id.make(randomUUID());
       const constants = (yield* persistence.loadProject()).constants;
       const isDefault = ResourceConstant.getDefault(constants, resource) === undefined;
       return yield* events.publish({
@@ -2128,7 +2129,7 @@ export const layer = Layer.effect(Service)(
     }, lock.withPermit);
 
     const queueCreate = Effect.fn("Editor.queue.create")(function* (name: string) {
-      const id = Queue.QueueId.make(crypto.randomUUID());
+      const id = Queue.QueueId.make(randomUUID());
       return yield* events.publish({ _tag: "QueueUpdated", queue: { id, name } });
     }, lock.withPermit);
     const getQueue = Effect.fnUntraced(function* (id: string) {
