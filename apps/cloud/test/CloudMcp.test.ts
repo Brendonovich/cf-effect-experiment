@@ -121,10 +121,10 @@ describe("Cloud MCP toolkit", () => {
             caller: ApiCaller.forApiKey({ id: `key-${id}`, name: `${id}'s key` }, null),
           };
         });
-        const send = (body: object, authorization?: string, sessionId?: string) =>
+        const send = (body: object, authorization?: string, sessionId?: string, target = app) =>
           Effect.gen(function* () {
             const response = yield* Ref.make(Option.none<HttpServerResponse.HttpServerResponse>());
-            yield* HttpEffect.toHandled(CloudMcp.authenticated(app, authenticate), (_, value) =>
+            yield* HttpEffect.toHandled(CloudMcp.authenticated(target, authenticate), (_, value) =>
               Ref.set(response, Option.some(value)),
             ).pipe(
               Effect.provideService(
@@ -227,6 +227,24 @@ describe("Cloud MCP toolkit", () => {
         );
         assert.strictEqual(calledAgainBody.result.isError, false);
         assert.strictEqual(calledAgainBody.result.structuredContent.projects[0].createdBy, "alice");
+
+        // Workers handle each request on any isolate, so sessions must not depend on server memory.
+        const otherInstance = yield* CloudMcp.layer(handlers).pipe(HttpRouter.toHttpEffect);
+        const calledElsewhere = yield* send(
+          { ...callRequest, id: 5 },
+          "Bearer bob",
+          sessionId,
+          otherInstance,
+        );
+        assert.strictEqual(calledElsewhere.status, 200);
+        const calledElsewhereBody = yield* Effect.promise(() =>
+          HttpServerResponse.toWeb(calledElsewhere).json(),
+        );
+        assert.strictEqual(calledElsewhereBody.result.isError, false);
+        assert.deepStrictEqual(
+          JSON.parse(calledElsewhereBody.result.structuredContent.projects[0].name).mcpClient,
+          { name: "test-client", version: "1.0.0" },
+        );
       }),
     ),
   );
