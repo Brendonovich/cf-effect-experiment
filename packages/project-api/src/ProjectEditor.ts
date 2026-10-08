@@ -40,7 +40,8 @@ export const make = Effect.gen(function* () {
       Effect.catchTag("InvalidPresenceUpdate", () =>
         presence.touch(identity, { ...activity, cursor: null, ttl: presenceTtl }),
       ),
-      Effect.ignore,
+      // Presence is best-effort; Effect.ignore alone would let an interrupt fail the operation.
+      Effect.catchCause((cause) => Effect.logWarning("Failed to update presence", cause)),
     );
 
   const touched =

@@ -36,7 +36,7 @@ import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
-import { HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
+import { Cause, HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
 import { FetchHttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -538,7 +538,23 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         return yield* editor.project.rendered().pipe(Effect.orDie);
       });
 
-      const projectEditor = yield* ProjectEditor.make;
+      // An interrupt-only cause reaches MCP/REST callers as an opaque "unexpected cause", so
+      // surface it as a defect naming the operation.
+      const projectEditor = Object.fromEntries(
+        Object.entries(yield* ProjectEditor.make).map(([name, operation]) => [
+          name,
+          (...args: ReadonlyArray<unknown>) =>
+            (operation as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>)(
+              ...args,
+            ).pipe(
+              Effect.catchCause((cause) =>
+                Cause.hasInterruptsOnly(cause)
+                  ? Effect.die(new Error(`${name} was interrupted: ${Cause.pretty(cause)}`))
+                  : Effect.failCause(cause),
+              ),
+            ),
+        ]),
+      ) as unknown as ProjectEditor.Operations;
 
       const fetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
