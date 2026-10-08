@@ -40,6 +40,53 @@ export const apiKeys = pgTable(
   ],
 );
 
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: jsonb("redirect_uris").$type<ReadonlyArray<string>>().notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const oauthAuthorizationCodes = pgTable(
+  "oauth_authorization_codes",
+  {
+    codeHash: text("code_hash").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    redirectUri: text("redirect_uri").notNull(),
+    codeChallenge: text("code_challenge").notNull(),
+    resource: text("resource").notNull(),
+    scope: text("scope").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [index("oauth_authorization_codes_expires_at_idx").on(table.expiresAt)],
+);
+
+export const oauthAccessTokens = pgTable(
+  "oauth_access_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    resource: text("resource").notNull(),
+    scope: text("scope").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("oauth_access_tokens_user_id_idx").on(table.userId),
+    index("oauth_access_tokens_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const teams = pgTable(
   "teams",
   {

@@ -5,15 +5,16 @@ import {
   sessionSecurity,
 } from "@macrograph/cloud-api";
 import { ApiCaller, ApiKey, type ProjectMcp } from "@macrograph/project-api";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
-import { apiKeys, users } from "../database/DatabaseSchema.ts";
+import { apiKeys, oauthAccessTokens, users } from "../database/DatabaseSchema.ts";
 import CloudAuthDO from "./CloudAuthDO.ts";
+import * as McpOAuthConfig from "./McpOAuthConfig.ts";
 
 export const make = Effect.gen(function* () {
   const database = yield* Database.Service;
@@ -29,7 +30,7 @@ export const make = Effect.gen(function* () {
       .pipe(Effect.orDie);
   };
 
-  const authenticatedSession = (request: HttpServerRequest.HttpServerRequest) =>
+  const authenticateSession = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
       const sessionId = request.cookies[sessionCookieName];
       if (!sessionId || !hasTrustedOrigin(request)) return yield* new HttpApiError.Unauthorized();
@@ -40,7 +41,7 @@ export const make = Effect.gen(function* () {
 
   const issueApiKey = (name: string, request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
-      const { userId } = yield* authenticatedSession(request);
+      const { userId } = yield* authenticateSession(request);
       const { key, keyHash } = yield* ApiKey.generate;
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
@@ -53,7 +54,7 @@ export const make = Effect.gen(function* () {
 
   const revokeApiKey = (apiKeyId: string, request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
-      const { userId } = yield* authenticatedSession(request);
+      const { userId } = yield* authenticateSession(request);
       yield* database
         .delete(apiKeys)
         .where(and(eq(apiKeys.id, apiKeyId), eq(apiKeys.userId, userId)))
@@ -85,6 +86,39 @@ export const make = Effect.gen(function* () {
       };
     });
 
+  const authenticateMcpBearer = (): Effect.Effect<
+    ProjectMcp.Principal,
+    HttpApiError.Unauthorized,
+    HttpServerRequest.HttpServerRequest
+  > =>
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const match = /^Bearer ([^\s]+)$/i.exec(request.headers.authorization ?? "");
+      if (match === null) return yield* new HttpApiError.Unauthorized();
+      const keyHash = yield* ApiKey.hash(match[1]);
+      const oauthRows = yield* database
+        .select({ userId: oauthAccessTokens.userId, email: users.email })
+        .from(oauthAccessTokens)
+        .leftJoin(users, eq(users.id, oauthAccessTokens.userId))
+        .where(
+          and(
+            eq(oauthAccessTokens.tokenHash, keyHash),
+            eq(oauthAccessTokens.resource, McpOAuthConfig.resource()),
+            eq(oauthAccessTokens.scope, McpOAuthConfig.scope),
+            gt(oauthAccessTokens.expiresAt, new Date().toISOString()),
+          ),
+        )
+        .limit(1)
+        .pipe(Effect.orDie);
+      const oauthUser = oauthRows[0];
+      if (oauthUser !== undefined)
+        return {
+          user: { id: oauthUser.userId, sessionId: undefined },
+          caller: { ...ApiCaller.anonymous, email: oauthUser.email },
+        };
+      return yield* authenticateBearer();
+    });
+
   const setSessionCookie = (request: HttpServerRequest.HttpServerRequest, sessionId: string) =>
     HttpApiBuilder.securitySetCookie(sessionSecurity, sessionId, {
       path: "/",
@@ -107,7 +141,9 @@ export const make = Effect.gen(function* () {
     cloudAuth,
     issueApiKey,
     revokeApiKey,
+    authenticateSession,
     authenticateBearer,
+    authenticateMcpBearer,
     sessionStatus: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
         const existingSessionId = request.cookies[sessionCookieName] || undefined;
