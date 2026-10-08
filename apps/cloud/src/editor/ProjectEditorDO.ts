@@ -586,7 +586,12 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         ...projectEditor,
         ...rpcWs.handlers,
       };
-    }).pipe(Effect.provide(AppLayer), Effect.provide(FetchHttpClient.layer));
+    }).pipe(
+      // Effect.provide would close the layer's scope once construction finishes, shutting down
+      // services such as the presence registry for every later request.
+      Effect.provide(Layer.effectContext(Layer.buildWithScope(AppLayer, Scope.makeUnsafe()))),
+      Effect.provide(FetchHttpClient.layer),
+    );
   }),
 ) {}
 
