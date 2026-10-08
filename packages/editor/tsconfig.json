@@ -13,6 +13,8 @@
     { "path": "../persistence" },
     { "path": "../persistence-sqlite" },
     { "path": "../modules/utilities" },
-    { "path": "../modules/list" }
+    { "path": "../modules/list" },
+    { "path": "../modules/math" },
+    { "path": "../modules/string" }
   ]
 }

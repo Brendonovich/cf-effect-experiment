@@ -1,3 +1,4 @@
+import { Persistence } from "@macrograph/persistence";
 import { persistenceContract } from "@macrograph/persistence/test-contract";
 import { Layer } from "effect";
 import { fileURLToPath } from "node:url";
@@ -10,3 +11,8 @@ const TestLayer = SqlitePersistence.layer.pipe(
 );
 
 persistenceContract("SqlitePersistence contract", TestLayer);
+
+persistenceContract(
+  "Persistence.withMemoryBuffer(SqlitePersistence) contract",
+  Persistence.withMemoryBuffer(TestLayer),
+);

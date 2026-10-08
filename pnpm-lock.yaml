@@ -934,6 +934,12 @@ importers:
       '@macrograph/module-list':
         specifier: workspace:*
         version: link:../modules/list
+      '@macrograph/module-math':
+        specifier: workspace:*
+        version: link:../modules/math
+      '@macrograph/module-string':
+        specifier: workspace:*
+        version: link:../modules/string
       '@macrograph/module-utilities':
         specifier: workspace:*
         version: link:../modules/utilities
