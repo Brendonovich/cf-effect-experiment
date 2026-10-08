@@ -107,7 +107,8 @@ export default Layer.unwrap(
               directory,
               htmlHandling: "auto-trailing-slash",
               notFoundHandling: "single-page-application",
-              runWorkerFirst: ["/api/*", "/oauth/*", "/.well-known/*"],
+              // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
+              runWorkerFirst: ["/api/*", "/oauth/*", "/.well-known/*", "/rpc", "/rpc/*"],
             }))
           : undefined,
         dev: { port: 1337, strictPort: true },
