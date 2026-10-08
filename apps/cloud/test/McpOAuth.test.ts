@@ -95,13 +95,31 @@ describe("MCP OAuth", () => {
         const registered = yield* send(app, "/oauth/register", {
           method: "POST",
           headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.1" },
-          body: JSON.stringify({ client_name: "OpenCode", redirect_uris: [redirectUri] }),
+          body: JSON.stringify({
+            client_name: "OpenCode",
+            redirect_uris: [redirectUri],
+            grant_types: ["authorization_code", "refresh_token"],
+            response_types: ["code"],
+            token_endpoint_auth_method: "client_secret_post",
+          }),
         });
         assert.strictEqual(registered.status, 201);
         const registration = yield* Effect.promise(() =>
           HttpServerResponse.toWeb(registered).json(),
         );
         assert.isString(registration.client_id);
+        assert.deepStrictEqual(registration.grant_types, ["authorization_code"]);
+        assert.strictEqual(registration.token_endpoint_auth_method, "none");
+
+        const unsupportedGrant = yield* send(app, "/oauth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json", "cf-connecting-ip": "192.0.2.1" },
+          body: JSON.stringify({
+            redirect_uris: [redirectUri],
+            grant_types: ["client_credentials"],
+          }),
+        });
+        assert.strictEqual(unsupportedGrant.status, 400);
 
         const challenge = yield* Effect.promise(() =>
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)).then((digest) =>

@@ -227,6 +227,8 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
           const body = yield* request.json.pipe(Effect.catch(() => Effect.succeed(null)));
           if (!isRecord(body))
             return oauthError("invalid_client_metadata", "Expected a JSON object");
+          // RFC 7591 lets servers replace requested metadata, so unsupported extras such as
+          // refresh_token or a confidential auth method register as a public authorization_code client.
           const redirectUris = body.redirect_uris;
           const clientName = body.client_name;
           if (
@@ -239,15 +241,12 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
             (clientName !== undefined &&
               (typeof clientName !== "string" || clientName.length > 200)) ||
             (body.token_endpoint_auth_method !== undefined &&
-              body.token_endpoint_auth_method !== "none") ||
+              typeof body.token_endpoint_auth_method !== "string") ||
             (body.grant_types !== undefined &&
               (!Array.isArray(body.grant_types) ||
-                body.grant_types.length !== 1 ||
-                body.grant_types[0] !== "authorization_code")) ||
+                !body.grant_types.includes("authorization_code"))) ||
             (body.response_types !== undefined &&
-              (!Array.isArray(body.response_types) ||
-                body.response_types.length !== 1 ||
-                body.response_types[0] !== "code"))
+              (!Array.isArray(body.response_types) || !body.response_types.includes("code")))
           )
             return oauthError("invalid_client_metadata", "Unsupported client metadata");
           const clientId = crypto.randomUUID();
