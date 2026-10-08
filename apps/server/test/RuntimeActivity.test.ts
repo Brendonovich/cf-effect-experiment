@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { CustomTypes, Function as GraphFunction, Project } from "@macrograph/core";
+import { Actor, CustomTypes, Function as GraphFunction, Project } from "@macrograph/core";
 import {
   Editor,
   EditorAccess,
@@ -113,9 +113,9 @@ describe("workspace runtime activity access", () => {
           Effect.provideService(EditorAccess.Policy, {
             resolve: (_headers, clientId) =>
               Effect.succeed({
-                actor: { type: "CLIENT", id: String(clientId) },
-                connectionId: String(clientId),
+                actor: Actor.client("browser", String(clientId)),
                 displayName: "Test",
+                email: null,
                 projectId: "test",
                 canEdit,
                 canManageCredentials: canEdit,

@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { Actor } from "@macrograph/core";
 import { Effect, Result, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -23,9 +24,9 @@ it("keeps credential reads read-only and authorizes refetch as a mutation", () =
   assert.isTrue(EditorRpc.requiresWriteAccess("RefetchCredentials"));
   assert.isTrue(EditorRpc.requiresWriteAccess("StartCredentialAuth"));
   const identity = {
-    actor: { type: "CLIENT" as const, id: "viewer" },
-    connectionId: "viewer",
+    actor: Actor.client("browser", "viewer"),
     displayName: "Viewer",
+    email: null,
     projectId: "project",
     canEdit: true,
     canManageCredentials: false,

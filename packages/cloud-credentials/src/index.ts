@@ -111,6 +111,10 @@ export type CredentialClient = Engine.CredentialService & {
 export interface Service {
   readonly credentials: CredentialClient;
   readonly auth: Credential.AuthController;
+  /** Like `auth.poll`, but only completes when the expected MacroGraph account approved the registration. */
+  readonly pollOwner: (
+    ownerId: string,
+  ) => Effect.Effect<Credential.AuthStatus, Credential.AuthError>;
   readonly clientAuth: {
     readonly start: Effect.Effect<typeof DeviceAuthorization.Type, CloudCredentialError>;
     readonly poll: (
@@ -346,39 +350,8 @@ export const make = Effect.fnUntraced(function* (
       : { state: "disconnected" };
   });
 
-  const auth: Credential.AuthController = {
-    providerName: "MacroGraph",
-    status: lock.withPermit(statusUnlocked).pipe(
-      Effect.mapError(storageError),
-      Effect.tap(() => notifyIfAuthorizationChanged),
-    ),
-    start: lock.withPermit(
-      Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
-        const current = yield* statusUnlocked.pipe(Effect.mapError(storageError));
-        if (current.state !== "disconnected") return current;
-        const started = yield* request("/server/registration/start", RegistrationStart, {
-          method: "POST",
-        }).pipe(Effect.mapError((error) => new Credential.AuthError({ reason: error.reason })));
-        const verificationUrl = new URL(started.verification_uri_complete);
-        if (
-          verificationUrl.protocol !== "https:" ||
-          verificationUrl.username !== "" ||
-          verificationUrl.password !== ""
-        )
-          return yield* new Credential.AuthError({
-            reason: "MacroGraph returned an unsafe verification URL",
-          });
-        const pending: StoredState = {
-          state: "pending",
-          id: started.id,
-          verificationUrl: verificationUrl.href,
-        };
-        yield* options.store.write(JSON.stringify(pending)).pipe(Effect.mapError(storageError));
-        stored = pending;
-        return { state: "pending" as const, verificationUrl: verificationUrl.href };
-      }),
-    ),
-    poll: lock
+  const pollRegistration = (expectedOwnerId: string | undefined) =>
+    lock
       .withPermit(
         Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
           yield* load.pipe(Effect.mapError(storageError));
@@ -411,6 +384,12 @@ export const make = Effect.fnUntraced(function* (
             return yield* new Credential.AuthError({
               reason: "MacroGraph returned an invalid account identity",
             });
+          if (expectedOwnerId !== undefined && registration.ownerId !== expectedOwnerId) {
+            yield* clear.pipe(Effect.mapError(storageError));
+            return yield* new Credential.AuthError({
+              reason: "Only the server owner's MacroGraph account can connect this server",
+            });
+          }
           const session: StoredState = {
             state: "connected",
             token: result.token,
@@ -427,7 +406,41 @@ export const make = Effect.fnUntraced(function* (
           };
         }),
       )
-      .pipe(Effect.tap(() => notify)),
+      .pipe(Effect.tap(() => notify));
+
+  const auth: Credential.AuthController = {
+    providerName: "MacroGraph",
+    status: lock.withPermit(statusUnlocked).pipe(
+      Effect.mapError(storageError),
+      Effect.tap(() => notifyIfAuthorizationChanged),
+    ),
+    start: lock.withPermit(
+      Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
+        const current = yield* statusUnlocked.pipe(Effect.mapError(storageError));
+        if (current.state !== "disconnected") return current;
+        const started = yield* request("/server/registration/start", RegistrationStart, {
+          method: "POST",
+        }).pipe(Effect.mapError((error) => new Credential.AuthError({ reason: error.reason })));
+        const verificationUrl = new URL(started.verification_uri_complete);
+        if (
+          verificationUrl.protocol !== "https:" ||
+          verificationUrl.username !== "" ||
+          verificationUrl.password !== ""
+        )
+          return yield* new Credential.AuthError({
+            reason: "MacroGraph returned an unsafe verification URL",
+          });
+        const pending: StoredState = {
+          state: "pending",
+          id: started.id,
+          verificationUrl: verificationUrl.href,
+        };
+        yield* options.store.write(JSON.stringify(pending)).pipe(Effect.mapError(storageError));
+        stored = pending;
+        return { state: "pending" as const, verificationUrl: verificationUrl.href };
+      }),
+    ),
+    poll: pollRegistration(undefined),
     disconnect: lock
       .withPermit(clear.pipe(Effect.mapError(storageError)))
       .pipe(Effect.andThen(notify)),
@@ -567,6 +580,7 @@ export const make = Effect.fnUntraced(function* (
 
   return {
     auth,
+    pollOwner: pollRegistration,
     clientAuth: { start: startClientAuth, poll: pollClientAuth },
     credentials: { get, refresh, subscribe, catalog, refetch, auth },
   };

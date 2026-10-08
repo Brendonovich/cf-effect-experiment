@@ -33,6 +33,7 @@ const makeHarness = (
   const sessionStore = memoryStore();
   const requests: string[] = [];
   let approved = false;
+  let approver = "owner";
   const http = HttpClient.make((outgoing, url) =>
     Effect.sync(() => {
       const request = `${outgoing.method} ${url.pathname}`;
@@ -61,8 +62,8 @@ const makeHarness = (
           assert.strictEqual(outgoing.headers.authorization, "Bearer cloud-token");
           return json(
             request.endsWith("/user")
-              ? { id: "owner", email: "owner@example.com" }
-              : { ownerId: "owner" },
+              ? { id: approver, email: `${approver}@example.com` }
+              : { ownerId: approver },
           );
         default:
           throw new Error(`Unexpected cloud request: ${request}`);
@@ -76,7 +77,13 @@ const makeHarness = (
     }).pipe(Effect.provideService(HttpClient.HttpClient, http)),
   );
   const sessions = ClientSessions.make(sessionStore);
-  const setup = ServerSetup.make({ store, legacyAuthStore, auth: cloud.auth, sessions });
+  const setup = ServerSetup.make({
+    store,
+    legacyAuthStore,
+    auth: cloud.auth,
+    pollOwner: cloud.pollOwner,
+    sessions,
+  });
   return {
     store,
     legacyAuthStore,
@@ -86,8 +93,9 @@ const makeHarness = (
     sessions,
     setup,
     requests,
-    approve: () => {
+    approve: (account = "owner") => {
       approved = true;
+      approver = account;
     },
   };
 };
@@ -187,14 +195,15 @@ describe("ServerSetup", () => {
           store,
           legacyAuthStore,
           sessions: restartedSessions,
-          auth: (yield* CloudCredentials.make({ store: legacyAuthStore }).pipe(
+          ...(yield* CloudCredentials.make({ store: legacyAuthStore, now: () => 0 }).pipe(
             Effect.provideService(HttpClient.HttpClient, http),
-          )).auth,
+            Effect.map(({ auth, pollOwner }) => ({ auth, pollOwner })),
+          )),
         });
         assert.strictEqual(yield* restarted.ownerId, "owner");
         assert.isUndefined(yield* restarted.setupKey);
         const identity = yield* restartedSessions
-          .policy(restarted.ownerId, new Set())
+          .policy(restarted.ownerId, new Set(), "ws")
           .resolve(Headers.fromInput({ authorization: `Bearer ${result.token}` }), 1);
         assert.isTrue(identity.canEdit);
         assert.isTrue(identity.canManageCredentials);
@@ -235,6 +244,7 @@ describe("ServerSetup", () => {
         legacyAuthStore,
         sessions,
         auth: cloud.auth,
+        pollOwner: cloud.pollOwner,
       });
       const key = (yield* setup.setupKey)!;
       yield* setup.start(key);
@@ -260,7 +270,7 @@ describe("ServerSetup", () => {
   );
 
   for (const reason of ["disconnect", "expiry"]) {
-    it.effect(`keeps ownership and local access after cloud ${reason}`, () =>
+    it.effect(`keeps ownership and local access but requires setup after cloud ${reason}`, () =>
       Effect.gen(function* () {
         let now = 0;
         const { setup, store, legacyAuthStore, sessions, cloud, approve } = makeHarness({
@@ -275,12 +285,21 @@ describe("ServerSetup", () => {
         else now = SESSION_LIFETIME_MS;
         assert.deepStrictEqual(yield* cloud.auth.status, { state: "disconnected" });
         assert.isNull(yield* legacyAuthStore.read);
-        const restarted = ServerSetup.make({ store, legacyAuthStore, sessions, auth: cloud.auth });
+        const restarted = ServerSetup.make({
+          store,
+          legacyAuthStore,
+          sessions,
+          auth: cloud.auth,
+          pollOwner: cloud.pollOwner,
+        });
         for (const current of [setup, restarted]) {
           assert.strictEqual(yield* current.ownerId, "owner");
-          assert.isUndefined(yield* current.setupKey);
+          assert.deepStrictEqual(yield* current.status, { ownerId: "owner", setupRequired: true });
+          const reconnectKey = yield* current.setupKey;
+          assert.isDefined(reconnectKey);
+          assert.notStrictEqual(reconnectKey, key);
           const identity = yield* sessions
-            .policy(current.ownerId, new Set())
+            .policy(current.ownerId, new Set(), "ws")
             .resolve(Headers.fromInput({ "x-macrograph-session": result.token }), 1);
           assert.isTrue(identity.canEdit);
           assert.isTrue(identity.canManageCredentials);
@@ -304,7 +323,6 @@ describe("ServerSetup", () => {
           const { setup, store, legacyAuthStore, sessionStore, cloud, requests } = makeHarness({
             legacy,
           });
-          assert.isUndefined(yield* setup.setupKey);
           assert.strictEqual(yield* setup.ownerId, "legacy-owner");
           assert.deepStrictEqual(JSON.parse((yield* store.read)!), { ownerId: "legacy-owner" });
           assert.strictEqual(yield* legacyAuthStore.read, legacy);
@@ -314,6 +332,7 @@ describe("ServerSetup", () => {
             expiresAt === 0 ? "disconnected" : "connected",
           );
           if (expiresAt === 0) assert.isNull(yield* legacyAuthStore.read);
+          assert.strictEqual((yield* setup.setupKey) !== undefined, expiresAt === 0);
           assert.strictEqual(yield* setup.ownerId, "legacy-owner");
           assert.deepStrictEqual(requests, []);
         }),
@@ -327,7 +346,10 @@ describe("ServerSetup", () => {
         legacy: JSON.stringify({ state: "connected", userId: "other-user" }),
       });
       assert.strictEqual(yield* setup.ownerId, "original-owner");
-      assert.isUndefined(yield* setup.setupKey);
+      assert.deepStrictEqual(yield* setup.status, {
+        ownerId: "original-owner",
+        setupRequired: true,
+      });
       assert.deepStrictEqual(JSON.parse((yield* store.read)!), { ownerId: "original-owner" });
     }),
   );
@@ -339,7 +361,13 @@ describe("ServerSetup", () => {
         const { setup, store, legacyAuthStore, sessions, cloud, requests } = makeHarness();
         const oldKey = (yield* setup.setupKey)!;
         yield* setup.start(oldKey);
-        const restarted = ServerSetup.make({ store, legacyAuthStore, sessions, auth: cloud.auth });
+        const restarted = ServerSetup.make({
+          store,
+          legacyAuthStore,
+          sessions,
+          auth: cloud.auth,
+          pollOwner: cloud.pollOwner,
+        });
         const newKey = (yield* restarted.setupKey)!;
         assert.notStrictEqual(newKey, oldKey);
         for (const operation of [restarted.start, restarted.poll]) {
@@ -398,6 +426,7 @@ describe("ServerSetup", () => {
         legacyAuthStore,
         sessions,
         auth: cloud.auth,
+        pollOwner: cloud.pollOwner,
       });
       const key = (yield* setup.setupKey)!;
       yield* setup.start(key);
@@ -408,9 +437,100 @@ describe("ServerSetup", () => {
       assert.strictEqual(yield* setup.setupKey, key);
       assert.isNull(yield* store.read);
       assert.isNull(yield* sessionStore.read);
-      const identity = yield* sessions.policy(setup.ownerId, new Set()).resolve(Headers.empty, 1);
+      const identity = yield* sessions
+        .policy(setup.ownerId, new Set(), "ws")
+        .resolve(Headers.empty, 1);
       assert.isFalse(identity.canEdit);
       assert.isFalse(identity.canManageCredentials);
     }),
+  );
+
+  it.effect("issues and logs a setup key when the server loses its connection", () =>
+    Effect.gen(function* () {
+      const { store, legacyAuthStore, sessions, cloud, approve } = makeHarness();
+      const issued: Array<readonly [string, ServerSetup.SetupReason]> = [];
+      const setup = ServerSetup.make({
+        store,
+        legacyAuthStore,
+        sessions,
+        auth: cloud.auth,
+        pollOwner: cloud.pollOwner,
+        onKeyIssued: (key, reason) => Effect.sync(() => void issued.push([key, reason])),
+      });
+      const key = (yield* setup.setupKey)!;
+      assert.deepStrictEqual(issued, [[key, "unclaimed"]]);
+      yield* setup.start(key);
+      approve();
+      yield* setup.poll(key);
+      assert.deepStrictEqual(yield* setup.status, { ownerId: "owner", setupRequired: false });
+      yield* cloud.auth.disconnect;
+      const reconnectKey = (yield* setup.setupKey)!;
+      assert.deepStrictEqual(yield* setup.status, { ownerId: "owner", setupRequired: true });
+      assert.deepStrictEqual(issued, [
+        [key, "unclaimed"],
+        [reconnectKey, "disconnected"],
+      ]);
+      assert.deepStrictEqual(
+        yield* Effect.exit(setup.start(key)),
+        Exit.fail(new SetupError({ reason: "Invalid setup key" })),
+      );
+    }),
+  );
+
+  it.effect(
+    "reconnects an owned server only with the owner's approval and then invalidates the key",
+    () =>
+      Effect.gen(function* () {
+        const { setup, store, legacyAuthStore, sessions, sessionStore, approve, requests } =
+          makeHarness({ owner: JSON.stringify({ ownerId: "owner" }) });
+        assert.deepStrictEqual(yield* setup.status, { ownerId: "owner", setupRequired: true });
+        const key = (yield* setup.setupKey)!;
+        assert.match(key, /^[A-Za-z0-9_-]{43}$/);
+        assert.deepStrictEqual(
+          yield* Effect.exit(setup.start("wrong")),
+          Exit.fail(new SetupError({ reason: "Invalid setup key" })),
+        );
+        const pending = yield* setup.start(key);
+        assert.strictEqual(pending.state, "pending");
+
+        approve("intruder");
+        const rejected = yield* Effect.flip(setup.poll(key));
+        assert.strictEqual(
+          rejected.reason,
+          "Only the server owner's MacroGraph account can connect this server",
+        );
+        assert.isNull(yield* legacyAuthStore.read);
+        assert.isNull(yield* sessionStore.read);
+        assert.deepStrictEqual(yield* setup.status, { ownerId: "owner", setupRequired: true });
+        assert.strictEqual(yield* setup.setupKey, key);
+
+        assert.strictEqual((yield* setup.start(key)).state, "pending");
+        approve("owner");
+        const result = yield* setup.poll(key);
+        if (result.state !== "connected") return assert.fail("Expected a connected local session");
+        assert.deepStrictEqual(yield* sessions.resolve(result.token), {
+          userId: "owner",
+          email: "owner@example.com",
+        });
+        assert.deepStrictEqual(JSON.parse((yield* store.read)!), { ownerId: "owner" });
+        assert.deepStrictEqual(yield* setup.status, { ownerId: "owner", setupRequired: false });
+        assert.isUndefined(yield* setup.setupKey);
+        for (const operation of [setup.start, setup.poll]) {
+          assert.deepStrictEqual(
+            yield* Effect.exit<unknown, unknown, never>(operation(key)),
+            Exit.fail(new SetupError({ reason: "This server has already been configured" })),
+          );
+        }
+        assert.deepStrictEqual(requests, [
+          "POST /api/server/registration/start",
+          "POST /api/server/registration",
+          "GET /api/server/registration",
+          "GET /api/user",
+          "POST /api/server/registration/start",
+          "POST /api/server/registration",
+          "GET /api/server/registration",
+          "GET /api/user",
+        ]);
+      }),
   );
 });

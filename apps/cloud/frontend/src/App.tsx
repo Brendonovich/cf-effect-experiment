@@ -6,6 +6,7 @@ import {
   Editor,
   LoadingState,
   macrographLogo,
+  PresenceList,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useNavigate, useParams, useRouteMatches, type RouteSectionProps } from "@solidjs/router";
@@ -461,6 +462,14 @@ export function App(
             </nav>
           </Show>
           <div sx={styles.account}>
+            <Show when={editorController()}>
+              {(controller) => (
+                <PresenceList
+                  controller={controller()}
+                  onFollow={() => openWorkspaceView("editor")}
+                />
+              )}
+            </Show>
             <Loading fallback={null}>
               <AccountMenu
                 email={props.user.email}

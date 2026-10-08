@@ -1,19 +1,16 @@
-import type { CreateGraphRequest } from "@macrograph/cloud-api";
 import type * as S from "effect/Schema";
 
-import { Connection, Graph, Node, Package, Project } from "@macrograph/core";
+import { Actor, Connection, Graph, Node, Package, Project } from "@macrograph/core";
 import {
   DualProtocol,
   Editor,
   EditorAccess,
-  EditorEvents,
   EditorRpc,
   EditorServer,
   Packages,
   Presence,
 } from "@macrograph/editor";
 import { Credential, Engine, HttpEndpoint, Resource } from "@macrograph/module";
-import * as HttpIngress from "@macrograph/module/HttpIngress";
 import GitHubModule from "@macrograph/module-github";
 import { GitHubEngine } from "@macrograph/module-github/Definition";
 import GitHubDeployment from "@macrograph/module-github/Deployment/Webhook";
@@ -31,8 +28,10 @@ import { EventSubEndpoint } from "@macrograph/module-twitch/EventSub/Webhook";
 import UtilitiesModule from "@macrograph/module-utilities";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { make as makeUtilitiesEngine } from "@macrograph/module-utilities/Engine";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Persistence } from "@macrograph/persistence";
 import { SqlitePersistence } from "@macrograph/persistence-sqlite";
+import { ProjectEditor } from "@macrograph/project-api";
 import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -71,6 +70,15 @@ const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   ...HostedDeployments.map((deployment) => deployment.definition.ClientRpcs),
 ).middleware(EditorRpc.ConnectionMiddleware);
 const editorIdentityKey = "editor-identity";
+
+/** Named here so the Durable Object's inferred RPC type can refer to the editor's errors. */
+export type ProjectEditorError =
+  | Connection.InvalidError
+  | Graph.NotFoundError
+  | Node.NotFoundError
+  | Package.SchemaNotFoundError
+  | Package.InvalidPropertyError
+  | Package.InvalidInputDefaultError;
 const editorCredentialsKey = "editor-credentials";
 
 /**
@@ -111,10 +119,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
 
     return Effect.gen(function* () {
       const editor = yield* Editor.Service;
-      const editorEvents = yield* EditorEvents.Service;
-      const packages = yield* Packages.Service;
       const persistence = yield* Persistence.Service;
-      const presence = yield* Presence.Registry;
       yield* persistence.loadProject().pipe(
         Effect.catchTag("ProjectNotFoundError", () => persistence.saveProject(Project.empty())),
         Effect.orDie,
@@ -469,8 +474,11 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
                   headers["x-macrograph-connection-id"] ?? `cloud-http-${clientId}`;
                 const role = headers["x-macrograph-role"];
                 const projectId = headers["x-macrograph-project-id"];
+                const userId = headers["x-macrograph-user-id"];
+                const email = headers["x-macrograph-email"];
                 if (
                   role === undefined ||
+                  userId === undefined ||
                   (role !== "owner" && role !== "member" && role !== "viewer") ||
                   projectId === undefined ||
                   activeProjectId === undefined ||
@@ -478,9 +486,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
                 )
                   return new EditorAccess.Forbidden({ operation: "connect" });
                 return Effect.succeed({
-                  actor: { type: "CLIENT", id: connectionId },
-                  connectionId,
+                  actor: Actor.client("browser", connectionId, userId),
                   displayName: headers["x-macrograph-display-name"] ?? "",
+                  email: email === undefined || email.length === 0 ? null : email,
                   projectId,
                   canEdit: canMutateProject(role),
                   canManageCredentials: headers["x-macrograph-can-manage-credentials"] === "true",
@@ -530,135 +538,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         return yield* editor.project.rendered().pipe(Effect.orDie);
       });
 
-      const listGraphs = () =>
-        editor.project.get().pipe(
-          Effect.map((project) =>
-            Object.values(project.graphs).map(({ canvas }) => ({
-              id: canvas.id,
-              name: canvas.name,
-            })),
-          ),
-        );
-
-      const createGraph = (input: CreateGraphRequest, userId: string) =>
-        editorEvents.withActor(
-          Effect.gen(function* () {
-            const nodes = input.nodes ?? {};
-            const connections = input.connections ?? [];
-
-            for (const connection of connections) {
-              if (
-                !Object.hasOwn(nodes, connection.outNodeId) ||
-                !Object.hasOwn(nodes, connection.inNodeId)
-              ) {
-                return yield* new Connection.InvalidError({
-                  reason: "Connection references a node that is not being created",
-                });
-              }
-            }
-
-            const created = yield* editor.graph.create(
-              input.name === undefined ? {} : { name: input.name },
-            );
-
-            return yield* Effect.gen(function* () {
-              const nodeIds = new Map<string, string>();
-
-              for (const [reference, node] of Object.entries(nodes)) {
-                const event = yield* editor.node
-                  .create({ graphID: created.graph.id, node })
-                  .pipe(
-                    Effect.catchTag("FunctionEventNodeNotAllowedError", () =>
-                      Effect.die("A newly-created graph was unexpectedly treated as a function"),
-                    ),
-                  );
-                nodeIds.set(reference, event.node.id);
-              }
-
-              for (const connection of connections) {
-                const outNodeId = nodeIds.get(connection.outNodeId);
-                const inNodeId = nodeIds.get(connection.inNodeId);
-                if (outNodeId === undefined || inNodeId === undefined) {
-                  return yield* new Connection.InvalidError({
-                    reason: "Connection references a node that is not being created",
-                  });
-                }
-
-                yield* editor.connection.create({
-                  graphID: created.graph.id,
-                  connection: { ...connection, outNodeId, inNodeId },
-                });
-              }
-
-              return yield* persistence.loadGraph(created.graph.id);
-            }).pipe(
-              Effect.catchCause((cause) =>
-                editor.graph
-                  .delete({ graphID: created.graph.id })
-                  .pipe(Effect.orDie, Effect.andThen(Effect.failCause(cause))),
-              ),
-            );
-          }),
-          { type: "CLIENT", id: userId },
-        );
-
-      const getGraph = Effect.fnUntraced(function* (graphId: string) {
-        const snapshot = yield* editor.project.snapshot();
-        const graph = snapshot.project.graphs[graphId];
-        if (graph === undefined) return yield* new Graph.NotFoundError({ id: graphId });
-        return { graph, nodeIO: snapshot.nodeIO[graphId] ?? {} };
-      });
-
-      const deleteGraph = Effect.fnUntraced(function* (
-        graphId: string,
-        projectId: string,
-        userId: string,
-      ) {
-        yield* persistence.loadGraph(graphId);
-        const actor = { type: "CLIENT", id: userId } as const;
-        yield* editorEvents.withActor(
-          editor.graph.delete({ graphID: graphId }).pipe(
-            Effect.tap(() =>
-              presence.graphDeleted(graphId).pipe(
-                Effect.provideService(EditorAccess.Connection, {
-                  actor,
-                  connectionId: `api-${userId}`,
-                  displayName: userId,
-                  projectId,
-                  canEdit: true,
-                  canManageCredentials: true,
-                }),
-              ),
-            ),
-          ),
-          actor,
-        );
-      });
-
-      const getPackages = () => packages.getPackages();
-
-      const listResources = () =>
-        editor.project.get().pipe(Effect.map((project) => Object.values(project.constants)));
-
-      const createNode: (
-        graphId: string,
-        node: Node.CreateInput,
-        userId: string,
-      ) => ReturnType<Editor.Interface["node"]["create"]> = (graphId, node, userId) =>
-        editorEvents.withActor(editor.node.create({ graphID: graphId, node }), {
-          type: "CLIENT",
-          id: userId,
-        });
-
-      const createConnection = (
-        graphId: string,
-        connection: Connection.CreateInput,
-        userId: string,
-      ) =>
-        editorEvents.withActor(editor.connection.create({ graphID: graphId, connection }), {
-          type: "CLIENT",
-          id: userId,
-        });
+      const projectEditor = yield* ProjectEditor.make;
 
       const fetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -703,14 +583,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         setCredentials,
         getProject,
         getRenderedProject,
-        listGraphs,
-        createGraph,
-        getGraph,
-        deleteGraph,
-        getPackages,
-        listResources,
-        createNode,
-        createConnection,
+        ...projectEditor,
         ...rpcWs.handlers,
       };
     }).pipe(Effect.provide(AppLayer), Effect.provide(FetchHttpClient.layer));
@@ -721,6 +594,7 @@ type SocketAttachment = {
   uuid: string;
   identity?: {
     readonly displayName: string;
+    readonly email: string;
     readonly projectId: string;
     readonly role: string;
     readonly userId: string;
@@ -772,6 +646,8 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
           ? []
           : [
               ["x-macrograph-display-name", identity.displayName] as [string, string],
+              ["x-macrograph-email", identity.email] as [string, string],
+              ["x-macrograph-user-id", identity.userId] as [string, string],
               ["x-macrograph-project-id", identity.projectId] as [string, string],
               ["x-macrograph-role", identity.role] as [string, string],
               ["x-macrograph-can-manage-credentials", String(identity.canManageCredentials)] as [
@@ -925,6 +801,7 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
     const [response, socket] = yield* Cloudflare.upgrade();
 
     const displayName = request.headers["x-macrograph-display-name"];
+    const email = request.headers["x-macrograph-email"] ?? "";
     const projectId = request.headers["x-macrograph-project-id"];
     const role = request.headers["x-macrograph-role"];
     const userId = request.headers["x-macrograph-user-id"];
@@ -938,6 +815,7 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
         ? undefined
         : {
             displayName,
+            email,
             projectId,
             role,
             userId,

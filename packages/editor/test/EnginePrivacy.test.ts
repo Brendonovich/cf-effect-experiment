@@ -34,9 +34,9 @@ const policy = (canEdit: boolean) =>
   Layer.succeed(EditorAccess.Policy, {
     resolve: () =>
       Effect.succeed({
-        actor: { type: "CLIENT" as const, id: "privacy-client" },
-        connectionId: "privacy-client",
+        actor: Actor.client("browser", "privacy-client"),
         displayName: "Privacy test",
+        email: null,
         projectId: "privacy-project",
         canEdit,
         canManageCredentials: canEdit,

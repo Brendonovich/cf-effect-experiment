@@ -1,4 +1,5 @@
-import { EditorAccess } from "@macrograph/editor";
+import { Actor } from "@macrograph/core";
+import { EditorAccess, Presence } from "@macrograph/editor";
 import { Effect, Schema, Semaphore } from "effect";
 import { randomBytes } from "node:crypto";
 
@@ -12,11 +13,21 @@ export interface ClientSessions {
   readonly create: (session: Session) => Effect.Effect<string>;
   readonly remove: (token: string) => Effect.Effect<void>;
   readonly resolve: (token: string | undefined) => Effect.Effect<Session | undefined>;
+  /**
+   * RPC servers number their clients independently, so client numbers are only used for the
+   * single WebSocket server. Every HTTP RPC server shares a policy and gets random IDs instead,
+   * which keeps HTTP callers from sharing an ID with a tab or with each other.
+   */
   readonly policy: (
     ownerId: Effect.Effect<string | undefined>,
     adminIds: ReadonlySet<string>,
+    transport: Transport,
   ) => EditorAccess.Policy["Service"];
 }
+
+export type Transport = "ws" | "http";
+
+const clientKinds: Record<Transport, Actor.ClientKind> = { ws: "browser", http: "api" };
 
 export const make = (store: AtomicFileStore): ClientSessions => {
   const lock = Semaphore.makeUnsafe(1);
@@ -71,7 +82,7 @@ export const make = (store: AtomicFileStore): ClientSessions => {
         }),
       ),
     resolve,
-    policy: (ownerId, adminIds) =>
+    policy: (ownerId, adminIds, transport) =>
       EditorAccess.Policy.of({
         resolve: (headers, clientId) =>
           Effect.gen(function* () {
@@ -81,13 +92,18 @@ export const make = (store: AtomicFileStore): ClientSessions => {
               : undefined;
             const session = yield* resolve(headers["x-macrograph-session"] ?? bearer);
             const owner = yield* ownerId;
-            const connectionId = `self-hosted-${clientId}`;
             const canEdit =
               session !== undefined && (session.userId === owner || adminIds.has(session.userId));
             return {
-              actor: { type: "CLIENT", id: connectionId },
-              connectionId,
-              displayName: session?.email.split("@")[0] ?? "",
+              actor: Actor.client(
+                clientKinds[transport],
+                transport === "ws"
+                  ? `self-hosted-ws-${clientId}`
+                  : `self-hosted-http-${randomBytes(16).toString("base64url")}`,
+                session?.userId ?? null,
+              ),
+              displayName: session === undefined ? "" : Presence.nameFromEmail(session.email),
+              email: session?.email ?? null,
               projectId: "local",
               canEdit,
               canManageCredentials:

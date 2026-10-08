@@ -2,6 +2,7 @@ import macrographLogo from "./macrograph-logo.png";
 
 export { AccountMenu, type AccountMenuProps } from "./account/AccountMenu.tsx";
 export { Avatar, type AvatarProps } from "./account/Avatar.tsx";
+export { PresenceList, type PresenceListProps } from "./presence/PresenceList.tsx";
 export { Button, type ButtonProps, ButtonLink, type ButtonLinkProps } from "./ui/Button.tsx";
 export { LoadingState } from "./ui/LoadingState.tsx";
 export { DataTypePicker } from "./ui/DataTypePicker.tsx";
@@ -29,6 +30,13 @@ export {
 } from "./editor/createEditorController.ts";
 export { macrographLogo };
 export { CredentialSettings } from "./credentials/CredentialSettings.tsx";
+export {
+  ApiKeySettings,
+  type ApiKeyClient,
+  type ApiKeySettingsProps,
+  type ApiKeySummary,
+  type CreatedApiKey,
+} from "./apiKeys/ApiKeySettings.tsx";
 export { CredentialTable, type CredentialTableProps } from "./credentials/CredentialTable.tsx";
 export { SnapshotGraphCanvas } from "./editor/graph/SnapshotGraphCanvas.tsx";
 export { RealtimeWorkspace } from "./editor/RealtimeWorkspace.tsx";

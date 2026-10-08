@@ -423,4 +423,41 @@ describe("MacroGraph cloud credentials", () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(signal?.aborted).toBe(true);
   });
+
+  effectIt.effect("does not store a registration approved by an unexpected owner", () =>
+    Effect.gen(function* () {
+      const store = new MemoryStore();
+      const service = yield* CloudCredentials.make({ store }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.sync(() => {
+              const url = request.url;
+              const response = url.endsWith("/server/registration/start")
+                ? json({
+                    id: "registration-1",
+                    userCode: "ABCD",
+                    verification_uri: "https://www.macrograph.app/connect",
+                    verification_uri_complete: "https://www.macrograph.app/connect?code=ABCD",
+                  })
+                : url.endsWith("/server/registration") && request.method === "POST"
+                  ? json({ token: "intruder-token" })
+                  : url.endsWith("/server/registration")
+                    ? json({ ownerId: "intruder" })
+                    : json({ id: "intruder", email: "intruder@example.com" });
+              return HttpClientResponse.fromWeb(request, response);
+            }),
+          ),
+        ),
+      );
+      yield* service.auth.start;
+      const error = yield* Effect.flip(service.pollOwner("owner"));
+      assert.strictEqual(
+        error.reason,
+        "Only the server owner's MacroGraph account can connect this server",
+      );
+      assert.isNull(store.value);
+      assert.deepStrictEqual(yield* service.auth.status, { state: "disconnected" });
+    }),
+  );
 });

@@ -69,7 +69,7 @@ export default defineConfig((): UserConfig => {
       strictPort: true,
       allowedHosts: true,
       proxy: Object.fromEntries(
-        ["/health", "/auth", "/rpc", "/rpc-ws", "/module"].map((path) => [
+        ["/health", "/auth", "/api", "/rpc", "/rpc-ws", "/module"].map((path) => [
           `${prefix}${path}`,
           { target: backend, changeOrigin: true, ws: true },
         ]),

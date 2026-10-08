@@ -8,7 +8,7 @@ import { Headers, HttpServerRequest, HttpServerResponse } from "effect/unstable/
 import { hasTrustedOrigin } from "../api/HttpOrigin.ts";
 import * as Authentication from "../auth/Authentication.ts";
 import * as Database from "../database/Database.ts";
-import { projects, teamMemberships } from "../database/DatabaseSchema.ts";
+import { projects, teamMemberships, users } from "../database/DatabaseSchema.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as EditorRpcPolicy from "./EditorRpcPolicy.ts";
 import ProjectEditorDO from "./ProjectEditorDO.ts";
@@ -33,19 +33,22 @@ export const make = Effect.gen(function* () {
         if (projectId === null) return HttpServerResponse.empty({ status: 400 });
         return yield* Effect.gen(function* () {
           const rows = yield* database
-            .select({ project: projects, role: teamMemberships.role })
+            .select({ project: projects, role: teamMemberships.role, email: users.email })
             .from(projects)
             .innerJoin(
               teamMemberships,
               and(eq(teamMemberships.teamId, projects.teamId), eq(teamMemberships.userId, userId)),
             )
+            .innerJoin(users, eq(users.id, userId))
             .where(eq(projects.id, projectId))
             .limit(1)
             .pipe(Effect.orDie);
           const row = rows[0];
           if (row === undefined) return HttpServerResponse.empty({ status: 404 });
-          const { project, role } = row;
-          const displayName = Presence.fallbackName(`${project.id}\0${userId}`);
+          const { project, role, email } = row;
+          const emailName = email === null ? "" : Presence.nameFromEmail(email);
+          const displayName =
+            emailName.length > 0 ? emailName : Presence.fallbackName(`${project.id}\0${userId}`);
           const editor = projectEditors.getByName(project.id);
           if (!(request.source instanceof Request))
             return yield* Effect.die("Cloudflare request source is not a native Request");
@@ -54,6 +57,8 @@ export const make = Effect.gen(function* () {
             "x-macrograph-project-name": project.name,
             "x-macrograph-user-id": userId,
             "x-macrograph-display-name": displayName,
+            // Always set so a client cannot supply its own address.
+            "x-macrograph-email": email ?? "",
             "x-macrograph-project-id": project.id,
             "x-macrograph-role": role,
             "x-macrograph-session-id": sessionId,

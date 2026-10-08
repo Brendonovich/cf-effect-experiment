@@ -133,23 +133,23 @@ describe("DualProtocol presence cleanup", () => {
         const observer = yield* (yield* server.connect()).subscribe();
         const connection = yield* server.connect();
         const departing = yield* connection.subscribe();
-        const observerId = observer.snapshot.selfConnectionId;
-        const departingId = departing.snapshot.selfConnectionId;
+        const observerId = observer.snapshot.selfId;
+        const departingId = departing.snapshot.selfId;
         assert.notStrictEqual(departingId, observerId);
         assert.deepStrictEqual(
-          departing.snapshot.clients.map((client) => client.connectionId),
+          departing.snapshot.clients.map((client) => client.id),
           [observerId, departingId],
         );
 
         yield* connection.client.UpdatePresence({
           activeGraph: "graph",
           cursor: { x: 42, y: 24 },
+          viewport: null,
           selectedNodeIds: ["node"],
         });
         yield* TestClock.adjust("20 millis");
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.find((client) => client.connectionId === departingId)
-            ?.cursor,
+          observer.changes.at(-1)?.clients.find((client) => client.id === departingId)?.cursor,
           { x: 42, y: 24 },
         );
         yield* TestClock.adjust("15 seconds");
@@ -167,7 +167,7 @@ describe("DualProtocol presence cleanup", () => {
         yield* TestClock.adjust("20 millis");
         assert.isAbove(observer.changes.length, beforeRemoval);
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.map((client) => client.connectionId),
+          observer.changes.at(-1)?.clients.map((client) => client.id),
           [observerId],
         );
         assert.strictEqual((yield* server.clientIds).size, socketDisconnected ? 1 : 2);
@@ -175,28 +175,34 @@ describe("DualProtocol presence cleanup", () => {
         // HMR restarts a subscription on the existing socket; a reconnect opens a new socket.
         const reconnected = socketDisconnected ? yield* server.connect() : connection;
         const fresh = yield* reconnected.subscribe();
-        const freshId = fresh.snapshot.selfConnectionId;
+        const freshId = fresh.snapshot.selfId;
         if (socketDisconnected) {
           assert.notStrictEqual(freshId, departingId);
         } else {
           assert.strictEqual(freshId, departingId);
         }
         assert.deepStrictEqual(
-          fresh.snapshot.clients.map((client) => client.connectionId),
+          fresh.snapshot.clients.map((client) => client.id),
           [observerId, freshId],
         );
-        assert.deepStrictEqual(
-          fresh.snapshot.clients.find((client) => client.connectionId === freshId),
-          {
-            connectionId: freshId,
-            displayName: socketDisconnected ? "Local 3" : "Local 2",
-            color: Presence.colorFor(socketDisconnected ? "Local 3" : "Local 2"),
-            canEdit: true,
-            activeGraph: null,
-            cursor: null,
-            selectedNodeIds: [],
-          },
-        );
+        const { lastActiveAt: _, ...freshClient } = fresh.snapshot.clients.find(
+          (client) => client.id === freshId,
+        )!;
+        assert.deepStrictEqual(freshClient, {
+          id: freshId,
+          kind: "browser",
+          userId: null,
+          displayName: socketDisconnected ? "Local 3" : "Local 2",
+          email: null,
+          color: Presence.colorFor(socketDisconnected ? "Local 3" : "Local 2"),
+          canEdit: true,
+          activeGraph: null,
+          cursor: null,
+          viewport: null,
+          selectedNodeIds: [],
+          remote: null,
+          expiresAt: null,
+        });
         yield* TestClock.adjust("20 millis");
         assert.deepStrictEqual(observer.changes.at(-1)?.clients, fresh.snapshot.clients);
 
@@ -205,7 +211,7 @@ describe("DualProtocol presence cleanup", () => {
         yield* TestClock.adjust("20 millis");
         assert.isAbove(observer.changes.length, beforeFinalRemoval);
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.map((client) => client.connectionId),
+          observer.changes.at(-1)?.clients.map((client) => client.id),
           [observerId],
         );
         if (closed !== undefined) {

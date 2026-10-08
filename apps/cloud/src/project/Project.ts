@@ -4,7 +4,8 @@ import {
   CurrentUser,
   ProjectNotFound,
 } from "@macrograph/cloud-api";
-import { Connection, Node, Policy, ResourceConstant } from "@macrograph/core";
+import { Connection, Node, Policy } from "@macrograph/core";
+import { ProjectEditor } from "@macrograph/project-api";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
@@ -26,6 +27,7 @@ import { deploymentSnapshotObjectKey } from "../deployment/DeploymentObjectKey.t
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
 import * as Team from "../team/Team.ts";
 import * as TeamPolicy from "../team/TeamPolicy.ts";
+import { ProjectCaller } from "./ProjectCaller.ts";
 import * as ProjectPolicy from "./ProjectPolicy.ts";
 
 export const make = (
@@ -52,6 +54,14 @@ export const make = (
         if (project === undefined) return yield* new ProjectNotFound();
         return project;
       });
+
+    /** A reading caller's identity; presence shows whether its user may also edit. */
+    const readerIdentity = (projectId: string) =>
+      projectPolicy.canEdit(projectId).pipe(
+        Effect.as(true),
+        Effect.catchTag("ProjectNotFound", () => Effect.succeed(false)),
+        Effect.flatMap((canEdit) => ProjectCaller.identity(projectId, canEdit)),
+      );
 
     return {
       list: () =>
@@ -188,7 +198,7 @@ export const make = (
           const project = yield* load(projectId);
           const graphs = yield* projectEditors
             .getByName(project.id)
-            .listGraphs()
+            .listGraphs(yield* readerIdentity(project.id))
             .pipe(Effect.orDie);
           return { graphs };
         }).pipe(Policy.withPolicy(projectPolicy.canView(projectId))),
@@ -197,23 +207,11 @@ export const make = (
         ...payload
       }: CreateGraphRequest & { readonly projectId: string }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
           const project = yield* load(projectId);
           const graph = yield* projectEditors
             .getByName(project.id)
-            .createGraph(payload, user.id)
-            .pipe(
-              Effect.catchTags({
-                SchemaNotFoundError: () => new HttpApiError.BadRequest(),
-                InvalidPropertyError: () => new HttpApiError.BadRequest(),
-                InvalidInputDefaultError: () => new HttpApiError.BadRequest(),
-                InvalidConnectionError: () => new HttpApiError.BadRequest(),
-                NodeNotFoundError: () => new HttpApiError.BadRequest(),
-                GraphNotFoundError: () => Effect.die("New editor graph was not found"),
-                ProjectNotFoundError: () => Effect.die("Editor project was not found"),
-                PersistenceError: (error) => Effect.die(error),
-              }),
-            );
+            .createGraph(payload, yield* ProjectCaller.identity(project.id, true))
+            .pipe(ProjectEditor.httpErrors.createGraph);
           if (graph === undefined) return yield* Effect.die("Created graph could not be loaded");
           return { graph };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
@@ -228,14 +226,8 @@ export const make = (
           const project = yield* load(projectId);
           return yield* projectEditors
             .getByName(project.id)
-            .getGraph(graphId)
-            .pipe(
-              Effect.catchTag("GraphNotFoundError", () => new HttpApiError.NotFound()),
-              Effect.catchTags({
-                ProjectNotFoundError: () => Effect.die("Editor project was not found"),
-                PersistenceError: (error) => Effect.die(error),
-              }),
-            );
+            .getGraph(graphId, yield* readerIdentity(project.id))
+            .pipe(ProjectEditor.httpErrors.getGraph);
         }).pipe(Policy.withPolicy(projectPolicy.canView(projectId))),
       deleteGraph: ({
         projectId,
@@ -245,17 +237,11 @@ export const make = (
         readonly graphId: string;
       }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
           const project = yield* load(projectId);
           yield* projectEditors
             .getByName(project.id)
-            .deleteGraph(graphId, project.id, user.id)
-            .pipe(
-              Effect.catchTags({
-                GraphNotFoundError: () => new HttpApiError.NotFound(),
-                PersistenceError: (error) => Effect.die(error),
-              }),
-            );
+            .deleteGraph(graphId, yield* ProjectCaller.identity(project.id, true))
+            .pipe(ProjectEditor.httpErrors.deleteGraph);
           return { deleted: true };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       searchSchemas: ({
@@ -271,76 +257,17 @@ export const make = (
       }) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
-          const editor = projectEditors.getByName(project.id);
-          const packages = yield* editor.getPackages();
-          const resources = yield* editor.listResources().pipe(Effect.orDie);
-          const searches = [...(query === undefined ? [] : [query]), ...(queries ?? [])]
-            .map((value) => value.trim().toLowerCase())
-            .filter(Boolean);
-          const schemas = packages.flatMap((pkg) =>
-            pkg.schemas
-              .map((schema) => {
-                const fields = [
-                  schema.id,
-                  schema.name,
-                  pkg.id,
-                  pkg.name,
-                  schema.description ?? "",
-                ].map((value) => value.toLowerCase());
-                const text = fields.join(" ");
-                const scores = searches
-                  .filter((search) => search.split(/\s+/).every((term) => text.includes(term)))
-                  .map((search) => {
-                    const exact = fields.findIndex((field) => field === search);
-                    if (exact !== -1) return exact;
-                    const prefix = fields.findIndex((field) => field.startsWith(search));
-                    if (prefix !== -1) return fields.length + prefix;
-                    const substring = fields.findIndex((field) => field.includes(search));
-                    if (substring !== -1) return fields.length * 2 + substring;
-                    return fields.length * 3;
-                  });
-                if (searches.length > 0 && scores.length === 0) return undefined;
-
-                const matchingResources: Record<
-                  string,
-                  { id: ResourceConstant.Id; name: string }[]
-                > = {};
-                for (const property of schema.properties) {
-                  if (!("resource" in property)) continue;
-                  matchingResources[property.id] = resources
-                    .filter(
-                      (resource) =>
-                        resource.resource.package === pkg.id &&
-                        resource.resource.resource === property.resource,
-                    )
-                    .map(({ id, name }) => ({ id, name }));
-                }
-
-                return {
-                  package: pkg.id,
-                  schema,
-                  resources: matchingResources,
-                  score: scores.length === 0 ? 0 : Math.min(...scores),
-                };
-              })
-              .filter((schema) => schema !== undefined),
-          );
-          schemas.sort(
-            (left, right) =>
-              left.score - right.score ||
-              left.package.localeCompare(right.package) ||
-              left.schema.id.localeCompare(right.schema.id),
-          );
-          return {
-            schemas: schemas.slice(0, limit ?? 20).map(({ score: _, ...schema }) => schema),
-          };
+          return yield* projectEditors
+            .getByName(project.id)
+            .searchSchemas({ query, queries, limit }, yield* readerIdentity(project.id))
+            .pipe(Effect.orDie);
         }).pipe(Policy.withPolicy(projectPolicy.canView(projectId))),
       listResources: ({ projectId }: { readonly projectId: string }) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
           const resources = yield* projectEditors
             .getByName(project.id)
-            .listResources()
+            .listResources(yield* readerIdentity(project.id))
             .pipe(Effect.orDie);
           return { resources };
         }).pipe(Policy.withPolicy(projectPolicy.canView(projectId))),
@@ -353,22 +280,11 @@ export const make = (
         readonly graphId: string;
       }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
           const project = yield* load(projectId);
           const event = yield* projectEditors
             .getByName(project.id)
-            .createNode(graphId, payload, user.id)
-            .pipe(
-              Effect.catchTags({
-                GraphNotFoundError: () => new HttpApiError.NotFound(),
-                SchemaNotFoundError: () => new HttpApiError.BadRequest(),
-                InvalidPropertyError: () => new HttpApiError.BadRequest(),
-                InvalidInputDefaultError: () => new HttpApiError.BadRequest(),
-                FunctionEventNodeNotAllowedError: () => new HttpApiError.BadRequest(),
-                ProjectNotFoundError: () => Effect.die("Editor project was not found"),
-                PersistenceError: (error) => Effect.die(error),
-              }),
-            );
+            .createNode(graphId, payload, yield* ProjectCaller.identity(project.id, true))
+            .pipe(ProjectEditor.httpErrors.createNode);
           return { node: event.node, io: event.io };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       createConnection: ({
@@ -380,21 +296,11 @@ export const make = (
         readonly graphId: string;
       }) =>
         Effect.gen(function* () {
-          const user = yield* CurrentUser;
           const project = yield* load(projectId);
           const event = yield* projectEditors
             .getByName(project.id)
-            .createConnection(graphId, payload, user.id)
-            .pipe(
-              Effect.catchTags({
-                GraphNotFoundError: () => new HttpApiError.NotFound(),
-                NodeNotFoundError: () => new HttpApiError.NotFound(),
-                SchemaNotFoundError: () => new HttpApiError.BadRequest(),
-                InvalidConnectionError: () => new HttpApiError.BadRequest(),
-                ProjectNotFoundError: () => Effect.die("Editor project was not found"),
-                PersistenceError: (error) => Effect.die(error),
-              }),
-            );
+            .createConnection(graphId, payload, yield* ProjectCaller.identity(project.id, true))
+            .pipe(ProjectEditor.httpErrors.createConnection);
           return { connection: event.connection };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       remove: (projectId: string) =>

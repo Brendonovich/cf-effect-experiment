@@ -11,11 +11,13 @@
     "start": "node --env-file-if-exists=.env dist/esm/index.js",
     "test": "vitest run",
     "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
-    "dev": "vite"
+    "dev": "vite",
+    "agent:rest": "node scripts/rest-agent.mjs"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@macrograph/cloud-api": "workspace:*",
     "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",
     "@macrograph/editor": "workspace:*",
@@ -51,6 +53,7 @@
     "@macrograph/module-websocket-server": "workspace:*",
     "@macrograph/persistence": "workspace:*",
     "@macrograph/persistence-sqlite": "workspace:*",
+    "@macrograph/project-api": "workspace:*",
     "@macrograph/project-host": "workspace:*",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",

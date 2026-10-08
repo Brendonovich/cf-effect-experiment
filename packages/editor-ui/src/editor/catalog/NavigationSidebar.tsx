@@ -244,6 +244,14 @@ const styles = stylex.create({
   noShrink: { flexShrink: 0 },
   muted: { color: colors.gray9 },
   truncate: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  packageLink: {
+    backgroundColor: "transparent",
+    borderRadius: 2,
+    color: { default: "inherit", ":hover": colors.gray12 },
+    cursor: "pointer",
+    textAlign: "left",
+    textDecorationLine: { default: "none", ":hover": "underline" },
+  },
   constantList: { display: "flex", flexDirection: "column", gap: 6, marginInline: -4 },
   constantCard: {
     backgroundColor: colors.gray2,
@@ -815,12 +823,25 @@ export function NavigationSidebar(props: {
                             {data()?.definition.name ?? group.resource.resource}
                           </span>
                           <span sx={[styles.noShrink, styles.muted]}>·</span>
-                          <span
-                            sx={styles.truncate}
-                            title={data()?.pkg.name ?? group.resource.package}
+                          <Show
+                            when={data()}
+                            fallback={
+                              <span sx={styles.truncate} title={group.resource.package}>
+                                {group.resource.package}
+                              </span>
+                            }
                           >
-                            {data()?.pkg.name ?? group.resource.package}
-                          </span>
+                            {(resolved) => (
+                              <button
+                                type="button"
+                                sx={[styles.focus, styles.truncate, styles.packageLink]}
+                                title={`Open ${resolved().pkg.name}`}
+                                onClick={() => props.onOpenPackage(resolved().pkg.id)}
+                              >
+                                {resolved().pkg.name}
+                              </button>
+                            )}
+                          </Show>
                         </div>
                         <div sx={styles.constantList}>
                           <For each={group.constants}>
