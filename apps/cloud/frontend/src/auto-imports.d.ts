@@ -18,8 +18,8 @@ declare global {
   const IconTablerCheck: typeof import('~icons/tabler/check.jsx').default
   const IconTablerChevronDown: typeof import("~icons/tabler/chevron-down.jsx").default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
-  const IconTablerExternalLink: typeof import("~icons/tabler/external-link.jsx").default
-  const IconTablerEye: typeof import("~icons/tabler/eye.jsx").default
+  const IconTablerExternalLink: typeof import('~icons/tabler/external-link.jsx').default
+  const IconTablerEye: typeof import('~icons/tabler/eye.jsx').default
   const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
   const IconTablerPackage: typeof import('~icons/tabler/package.jsx').default
   const IconTablerPlug: typeof import('~icons/tabler/plug.jsx').default
