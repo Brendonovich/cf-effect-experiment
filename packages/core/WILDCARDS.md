@@ -82,18 +82,26 @@ reuse the completed cache without recalculating fields.
 
 ## Implicit conversions
 
-`Conversion.registry([...])` (from `@macrograph/module`) holds consumer-provided,
-directional scalar conversions. The core ships none. Without a registry, matching is
-exactly as described above. A registry is passed to `Executor.make({ conversions })`,
-and the editor reads it from an optional `Conversion.Service` layer.
+Conversions are directional and come from two places:
+
+- **Core defaults** (`Conversion.defaults`): `Int -> Float`, `Int -> String`,
+  `Float -> String` and `Bool -> String`. They always apply and cannot be disabled.
+- **Modules**, through `context.conversion.register(Conversion.make({ from, to, convert }))`.
+  Like Rust's orphan rule, at least one endpoint must be a struct or enum the module
+  declares. Module type IDs must be namespaced as `<module id>/<name>`.
+
+Mounting fails (`Effect.die`) if a module declares a type outside its namespace,
+registers a conversion between types it does not declare, or registers a pair that
+the core defaults or another mounted module already registered.
 
 - Only data pins convert. Scope and exit fields keep their existing rules.
-- `List` and `Option` conversions are lifted from the scalar rule automatically.
-- A registered conversion runs when a connected value is read. A failure fails the
-  whole run with `ConversionFailed`; consumers cannot supply a fallback.
-- Conversions never determine a wildcard's type, and a conversion does not chain.
-- `Wildcards.Cache` takes its registry at construction; a different registry needs a
-  new cache.
+- `List` and `Option` conversions are lifted from the element rule automatically.
+- A conversion runs in the executor when a connected value is read. A failure fails
+  the whole run with `ConversionFailed`; there is no fallback.
+- Conversions never determine a wildcard's type, and conversions do not chain.
+- Package models carry their conversion pairs (not implementations). The editor and
+  browser build `Conversion.Rules` from the defaults plus mounted packages' pairs.
+  `Wildcards.Cache` takes rules at construction; the editor rebuilds caches on mount.
 
 ## Integration and storage
 

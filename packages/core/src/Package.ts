@@ -1,4 +1,4 @@
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import { DataPort, ExecutionPort } from "./IO.ts";
@@ -70,6 +70,8 @@ export const Model = Schema.Struct({
     Schema.withDecodingDefaultKey(Effect.succeed([])),
   ),
   types: Schema.optional(t.Definitions),
+  /** Conversions this package registers; implementations stay with the executor. */
+  conversions: Schema.optional(Schema.Array(Conversion.Pair)),
 });
 export type Model = typeof Model.Type;
 

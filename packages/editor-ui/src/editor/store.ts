@@ -47,11 +47,25 @@ type MutableEditorStore = {
 export const resourceValuesKey = (packageId: string, resourceId: string) =>
   JSON.stringify([packageId, resourceId]);
 
-export function createEditorStore(
-  authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
-  conversions: Conversion.Registry = Conversion.empty,
-) {
+export type ConversionRules = Conversion.Rules;
+
+export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry) {
   const resolvers = new Map<string, SchemaAuthoring.GraphResolver>();
+  // Packages carry their conversion pairs; core defaults always apply. Reuse rules per catalog.
+  let conversionCache:
+    | { readonly packages: ReadonlyArray<Package.Model>; readonly rules: ConversionRules }
+    | undefined;
+  const conversionsFor = (packages: ReadonlyArray<Package.Model>): ConversionRules => {
+    if (conversionCache?.packages !== packages)
+      conversionCache = {
+        packages,
+        rules: Conversion.rules([
+          ...Conversion.defaults,
+          ...packages.flatMap((pkg) => pkg.conversions ?? []),
+        ]),
+      };
+    return conversionCache.rules;
+  };
   const [store, setStoreValue] = createStore<MutableEditorStore>({
     project: null,
     packages: [],
@@ -106,15 +120,19 @@ export function createEditorStore(
       next.nodeIO = {};
       for (const id of resolvers.keys()) if (!next.project?.graphs[id]) resolvers.delete(id);
       for (const graph of Object.values(next.project?.graphs ?? {})) {
-        const resolver =
-          resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring, conversions);
+        const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
         resolvers.set(graph.id, resolver);
         const declarations = next.declaredNodeIO[graph.id] ?? {};
         const definitions = {
           ...next.project!.types,
           ...Object.fromEntries(next.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
         };
-        const result = resolver.resolve(graph, declarations, definitions);
+        const result = resolver.resolve(
+          graph,
+          declarations,
+          definitions,
+          conversionsFor(next.packages),
+        );
         next.nodeIO[graph.id] = { ...result.io };
         for (const projection of Object.values(graph.scopeProjections ?? {}))
           next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(
@@ -565,7 +583,7 @@ export function createEditorStore(
   return {
     store,
     authoring,
-    conversions,
+    conversions: () => conversionsFor(store.packages),
     applyEvent,
     updateNodePosition,
     setProject,

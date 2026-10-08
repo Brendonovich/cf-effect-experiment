@@ -8,7 +8,6 @@ import {
   type NodeIO,
 } from "@macrograph/core";
 import { Conversion, t } from "@macrograph/module";
-import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { graphConnections, wireSegments } from "../../../src/editor/graph/graphPresentation";
@@ -58,31 +57,33 @@ const io = (outputType: t.Type, inputType: t.Type): Record<string, NodeIO> => ({
   },
 });
 
-const intToFloat = Conversion.make({
-  from: t.Int,
-  to: t.Float,
-  convert: (value) => Effect.succeed(value),
-});
+const Code = t.defineStruct("chat/Code", "Code", {});
+const moduleRules = Conversion.rules([
+  ...Conversion.defaults,
+  { from: t.Struct(Code), to: t.String },
+]);
 
 const points = (path: string) =>
   [...path.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
 
 describe("converted wires", () => {
-  it("omits a wire between Int and Float without a registered conversion", () => {
-    const ioByNode = io(t.Int, t.Float);
+  it("omits a wire with no conversion in that direction", () => {
+    const ioByNode = io(t.Float, t.Int);
     expect(graphConnections(graph, (id) => ioByNode[id])).toEqual([]);
   });
 
-  it("shows a registered Int to Float wire with its destination type", () => {
+  it("shows a core default Int to Float wire with its destination type", () => {
     const ioByNode = io(t.Int, t.Float);
-    const [edge] = graphConnections(
-      graph,
-      (id) => ioByNode[id],
-      undefined,
-      Conversion.registry([intToFloat]),
-    );
+    const [edge] = graphConnections(graph, (id) => ioByNode[id]);
     expect(edge?.type).toEqual(t.Int);
     expect(edge?.targetType).toEqual(t.Float);
+  });
+
+  it("shows a wire only when the rules include a module's pair", () => {
+    const ioByNode = io(t.Struct(Code), t.String);
+    expect(graphConnections(graph, (id) => ioByNode[id])).toEqual([]);
+    const [edge] = graphConnections(graph, (id) => ioByNode[id], undefined, moduleRules);
+    expect(edge?.targetType).toEqual(t.String);
   });
 
   it("omits targetType when the endpoint types are equal", () => {
@@ -94,12 +95,7 @@ describe("converted wires", () => {
 
   it("draws a converted wire as two halves that meet at the same point", () => {
     const ioByNode = io(t.Int, t.Float);
-    const [edge] = graphConnections(
-      graph,
-      (id) => ioByNode[id],
-      undefined,
-      Conversion.registry([intToFloat]),
-    );
+    const [edge] = graphConnections(graph, (id) => ioByNode[id]);
     const segments = wireSegments(edge!);
     expect(segments.map((segment) => segment.stroke)).toEqual(["#30f3db", "#00ae75"]);
     const first = points(segments[0]!.path);

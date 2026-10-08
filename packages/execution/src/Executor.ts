@@ -149,6 +149,7 @@ interface RegisteredModule {
   readonly schemas: ReadonlyMap<string, Registration.RegisteredSchema>;
   readonly engineClient: unknown;
   readonly types: t.Definitions;
+  readonly conversions: ReadonlyArray<Conversion.Conversion>;
 }
 
 interface ExecutionState {
@@ -311,7 +312,6 @@ export interface MakeOptions {
   readonly projectId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
-  readonly conversions?: Conversion.Registry;
   readonly resourceValues?: (
     resource: ResourceConstant.ResourceRef,
   ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
@@ -325,7 +325,6 @@ export const make = Effect.fnUntraced(function* (
   options?: MakeOptions,
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
-  const conversions = options?.conversions ?? Conversion.empty;
   const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
   const customTypeSchemas = yield* Registration.collect(CustomTypes.module.effect);
   yield* Ref.set(
@@ -337,6 +336,7 @@ export const make = Effect.fnUntraced(function* (
           schemas: new Map(customTypeSchemas.map((schema) => [schema.id, schema])),
           engineClient: undefined,
           types: {},
+          conversions: [],
         },
       ],
     ]),
@@ -371,7 +371,20 @@ export const make = Effect.fnUntraced(function* (
         deployment.definition !== definition.engine)
     )
       return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-    const registered = yield* Registration.collect(definition.effect);
+    const { schemas: registered, conversions } = yield* Registration.collectModule(
+      definition.effect,
+    );
+    const types = definition.types ?? {};
+    const invalid =
+      Conversion.validateModule(definition.id, types, conversions) ??
+      Conversion.duplicate([
+        { owner: "core", pairs: Conversion.defaults },
+        ...[...(yield* Ref.get(modules))]
+          .filter(([id]) => id !== definition.id)
+          .map(([owner, module]) => ({ owner, pairs: module.conversions })),
+        { owner: definition.id, pairs: conversions },
+      ]);
+    if (invalid !== undefined) return yield* Effect.die(invalid);
     const engineClient =
       definition.engine === undefined
         ? undefined
@@ -389,7 +402,8 @@ export const make = Effect.fnUntraced(function* (
       next.set(definition.id, {
         schemas: new Map(registered.map((schema) => [schema.id, schema])),
         engineClient,
-        types: definition.types ?? {},
+        types,
+        conversions,
       });
       return next;
     });
@@ -615,6 +629,10 @@ export const make = Effect.fnUntraced(function* (
       invocation?.options?.stack ?? (invocation === undefined ? [] : [invocation.canvasId]);
     const invocationResult: Record<string, unknown> = {};
     const registeredModules = new Map(yield* Ref.get(modules));
+    const conversions = Conversion.registry([
+      ...Conversion.defaults,
+      ...[...registeredModules.values()].flatMap((registered) => registered.conversions),
+    ]);
     const definitions: t.Definitions = {
       ...currentProject.types,
       ...Object.fromEntries(

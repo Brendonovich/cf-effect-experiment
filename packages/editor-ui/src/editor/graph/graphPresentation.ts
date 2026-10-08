@@ -260,7 +260,7 @@ export const graphConnections = (
   graph: Canvas.Model,
   ioForNode: NodeIOFor,
   widthForNode?: NodeWidthFor,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ) => {
   // Index once per pass; scanning all connections for each endpoint is quadratic.
   const connected = new Map<string, Record<PortDirection, Set<string>>>();

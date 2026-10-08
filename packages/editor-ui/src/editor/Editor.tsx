@@ -736,7 +736,7 @@ function EditorContent(
                           value,
                           ioForNode,
                           (nodeId) => nodeWidths().get(nodeId),
-                          controller.editor.conversions,
+                          controller.editor.conversions(),
                         );
                   });
                   const remotePresence = () =>
@@ -1109,7 +1109,7 @@ function EditorContent(
                                         packageId,
                                         runtimeDefinitions(),
                                         controller.editor.authoring,
-                                        controller.editor.conversions,
+                                        controller.editor.conversions(),
                                       ).length > 0
                               }
                               screenPosition={menu().screen}

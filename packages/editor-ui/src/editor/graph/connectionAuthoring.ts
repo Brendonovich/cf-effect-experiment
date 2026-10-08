@@ -21,7 +21,7 @@ export interface PortEndpoint {
 export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): boolean => {
   return Conversion.connectable(left, right, conversions);
 };
@@ -29,7 +29,7 @@ export const dataTypesEqual = (
 export const portsCompatible = (
   left: GraphPort,
   right: GraphPort,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): boolean =>
   (left.kind === "data" && left.invalid) || (right.kind === "data" && right.invalid)
     ? false
@@ -42,6 +42,17 @@ export const portsCompatible = (
         : left.kind === "data" &&
           right.kind === "data" &&
           dataTypesEqual(left.type, right.type, conversions);
+
+/** Like `portsCompatible`, but data conversions are checked from the output to the input. */
+export const endpointsCompatible = (
+  source: GraphPort,
+  direction: PortDirection,
+  target: GraphPort,
+  conversions: Conversion.Rules = Conversion.defaultRules,
+): boolean =>
+  direction === "input" && source.kind === "data" && target.kind === "data"
+    ? portsCompatible(target, source, conversions)
+    : portsCompatible(source, target, conversions);
 
 export const visiblePorts = (
   ports: ReadonlyArray<GraphPort>,
@@ -68,19 +79,19 @@ export const foldSelectedPins = (states: ReadonlyArray<boolean>): boolean =>
 export const isCompatibleTarget = (
   source: PortEndpoint,
   target: PortEndpoint,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): boolean =>
   source.nodeId !== target.nodeId &&
   source.direction !== target.direction &&
   target.occupied !== true &&
-  portsCompatible(source.port, target.port, conversions);
+  endpointsCompatible(source.port, source.direction, target.port, conversions);
 
 export const findSnapTarget = (
   source: PortEndpoint,
   targets: ReadonlyArray<PortEndpoint>,
   pointer: { readonly x: number; readonly y: number },
   maxDistance: number,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): PortEndpoint | undefined => {
   let nearest: { readonly endpoint: PortEndpoint; readonly distance: number } | undefined;
   for (const target of targets) {
@@ -99,7 +110,7 @@ export const compatibleSchemaPorts = (
   packageId?: string,
   definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): ReadonlyArray<GraphPort> => {
   if (schema.internal === true) return [];
   const behavior =
@@ -124,7 +135,7 @@ export const compatibleSchemaPorts = (
   ];
   return (source.direction === "input" ? ports.map((port) => asOutputPort(port)) : ports).filter(
     (port) =>
-      portsCompatible(source.port, port, conversions) &&
+      endpointsCompatible(source.port, source.direction, port, conversions) &&
       (source.direction !== "output" ||
         source.port.kind !== "data" ||
         behavior?.acceptsInput?.(port.id, source.port.type, definitions) !== false) &&
@@ -139,7 +150,7 @@ export const singleCompatibleSchema = (
   source: Pick<PortEndpoint, "direction" | "port">,
   definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
-  conversions: Conversion.Registry = Conversion.empty,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): { readonly ref: SchemaRef; readonly name: string } | undefined => {
   let match: { ref: SchemaRef; name: string } | undefined;
   for (const pkg of packages) {

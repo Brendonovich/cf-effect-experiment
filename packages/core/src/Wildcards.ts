@@ -83,7 +83,7 @@ const solve = (
   nodes: ReadonlySet<string>,
   connections: ReadonlyArray<Connection.Model>,
   io: ReadonlyMap<string, IO>,
-  conversions: Conversion.Registry,
+  conversions: Conversion.Rules,
 ): Result.Result<Group, ReadonlyArray<Conflict>> => {
   const bindings = new Map<string, Term>();
   const bound: string[] = [];
@@ -193,7 +193,7 @@ const solve = (
   for (const pending of unresolved) attempt(pending, () => unify(pending.source, pending.target));
   for (const pending of outgoing)
     if (!unresolved.has(pending)) {
-      if (conversions.find(current(pending.source), pending.target.type) === undefined)
+      if (!conversions.has(current(pending.source), pending.target.type))
         conflicts.push({
           nodes,
           connectionId: pending.wire.id,
@@ -232,8 +232,8 @@ export class Cache {
   private incident = new Map<string, ReadonlyMap<string, Connection.Model>>();
   private byNode = new Map<string, Group>();
 
-  /** The registry is fixed per cache: a different registry needs a new cache. */
-  constructor(private readonly conversions: Conversion.Registry = Conversion.empty) {}
+  /** Rules are fixed per cache: different rules (e.g. after a module mounts) need a new cache. */
+  constructor(private readonly conversions: Conversion.Rules = Conversion.defaultRules) {}
 
   get groups(): ReadonlySet<Group> {
     return new Set(this.byNode.values());

@@ -329,7 +329,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
       portEndpoints(),
       pointer,
       32 / canvasScale(),
-      options.editor.conversions,
+      options.editor.conversions(),
     );
 
   const onConnectionMove = (event: PointerEvent) => {
@@ -411,7 +411,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
           ...Object.fromEntries(store.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
         },
         editor.authoring,
-        editor.conversions,
+        editor.conversions(),
       );
       if (match === undefined) setNodeMenu(menu);
       else

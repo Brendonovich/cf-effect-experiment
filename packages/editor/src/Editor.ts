@@ -35,7 +35,6 @@ import {
   Effect,
   Fiber,
   Layer,
-  Option,
   Ref,
   Result,
   Schema,
@@ -451,10 +450,9 @@ export const layer = Layer.effect(Service)(
     const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
-    const conversions = Option.getOrElse(
-      yield* Effect.serviceOption(Conversion.Service),
-      () => Conversion.empty,
-    );
+    // Core defaults plus every mounted module's pairs; replaced (and caches cleared) on mount.
+    const modulePairs = new Map<string, ReadonlyArray<Conversion.Pair>>();
+    let conversions = Conversion.defaultRules;
     const lock = yield* Semaphore.make(1);
     const initialProject = yield* persistence.loadProject().pipe(
       Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(undefined)),
@@ -2313,7 +2311,19 @@ export const layer = Layer.effect(Service)(
             deployment.definition !== definition.engine)
         )
           return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-        const schemas = yield* Registration.collect(definition.effect);
+        const collected = yield* Registration.collectModule(definition.effect);
+        const schemas = collected.schemas;
+        const pairs = collected.conversions.map(({ from, to }) => ({ from, to }));
+        const invalidConversion =
+          Conversion.validateModule(definition.id, definition.types ?? {}, pairs) ??
+          Conversion.duplicate([
+            { owner: "core", pairs: Conversion.defaults },
+            ...[...modulePairs]
+              .filter(([id]) => id !== definition.id)
+              .map(([owner, pairs]) => ({ owner, pairs })),
+            { owner: definition.id, pairs },
+          ]);
+        if (invalidConversion !== undefined) return yield* Effect.die(invalidConversion);
         const resources = definition.engine?.Resource ?? [];
         const resourceIds = new Set<string>();
         for (const resource of resources) {
@@ -2351,6 +2361,7 @@ export const layer = Layer.effect(Service)(
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
           types: definition.types ?? {},
+          ...(pairs.length === 0 ? {} : { conversions: pairs }),
           ...(definition.description === undefined ? {} : { description: definition.description }),
           resources: resources.map((resource) => ({
             id: resource.key,
@@ -2413,6 +2424,13 @@ export const layer = Layer.effect(Service)(
             executionOutputs: schema.executionOutputs.map(Scopes.executionPort),
           })),
         };
+        modulePairs.set(definition.id, pairs);
+        conversions = Conversion.rules([
+          ...Conversion.defaults,
+          ...[...modulePairs.values()].flat(),
+        ]);
+        // Inference depends on the rules, so cached groups from before this mount are stale.
+        wildcardCaches.clear();
         yield* packages.loadPackage(
           pkg,
           new Map(

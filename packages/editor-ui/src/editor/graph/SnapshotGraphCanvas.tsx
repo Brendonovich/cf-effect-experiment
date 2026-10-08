@@ -12,7 +12,7 @@ import { connectedPortIds, graphConnections, wireSegments } from "./graphPresent
 interface SnapshotGraphCanvasProps {
   readonly graph: Canvas.Model | RenderedGraph.Model;
   readonly definitions?: t.Definitions;
-  readonly conversions?: Conversion.Registry;
+  readonly conversions?: Conversion.Rules;
 }
 
 const noop = () => {};

@@ -608,7 +608,8 @@ describe("type authoring preserve-invalid", () => {
       const editor = yield* Editor.Service;
       const event = yield* mutate(editor, {
         _tag: "Upsert",
-        definition: { ...person, fields: [{ name: "name", type: t.Int }] },
+        // List<Int> has no conversion to the String input, unlike Int.
+        definition: { ...person, fields: [{ name: "name", type: t.List(t.Int) }] },
       });
       expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
         anchoredConnections,
@@ -624,13 +625,13 @@ describe("type authoring preserve-invalid", () => {
         graphID: "first",
         nodeID: "make",
         input: field,
-        value: Option.some(42),
+        value: Option.some([42]),
       });
       yield* editor.node.setInputDefault({
         graphID: "first",
         nodeID: "break",
         input: "value",
-        value: { _type: "person", name: 42 },
+        value: { _type: "person", name: [42] },
       });
       const repaired = yield* editor.project.snapshot();
       expect(
