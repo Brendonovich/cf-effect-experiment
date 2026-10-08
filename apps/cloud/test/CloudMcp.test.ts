@@ -163,6 +163,11 @@ describe("Cloud MCP toolkit", () => {
 
         const rejected = yield* send(initialize);
         assert.strictEqual(rejected.status, 401);
+        assert.include(
+          rejected.headers["www-authenticate"],
+          'resource_metadata="https://cloud.macrograph.app/.well-known/oauth-protected-resource/api/mcp"',
+        );
+        assert.include(rejected.headers["www-authenticate"], 'scope="mcp"');
         const invalidKey = yield* send(initialize, "Bearer invalid");
         assert.strictEqual(invalidKey.status, 401);
 
