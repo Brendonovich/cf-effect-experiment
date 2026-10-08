@@ -33,6 +33,7 @@ vi.mock("@macrograph/editor-ui", async () => {
   return {
     ...actual,
     AccountMenu: () => null,
+    PresenceList: () => null,
     Editor: () => <div data-editor />,
     LoadingState: (props: { label: string }) => <div role="status">{props.label}</div>,
     macrographLogo: "",

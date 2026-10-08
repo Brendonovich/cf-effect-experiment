@@ -15,7 +15,7 @@ import {
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Engine } from "@macrograph/module";
+import { Credential, Engine } from "@macrograph/module";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Effect, Layer } from "effect";
 import {
@@ -26,14 +26,16 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import Deployments from "virtual:macrograph-module-deployments";
 
+import { ApiKeys } from "./ApiKeys.ts";
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
 import { ModuleHost } from "./ModuleHost.ts";
 import { Observability } from "./Observability.ts";
+import { ProjectApi } from "./ProjectApi.ts";
 import { ServerConfig } from "./ServerConfig.ts";
 import { ServerSetup } from "./ServerSetup.ts";
 import { StaticRoutes } from "./StaticRoutes.ts";
@@ -63,10 +65,29 @@ const setup = ServerSetup.make({
   store: makeAtomicFileStore(config.ownerPath),
   legacyAuthStore: authFile,
   auth: cloudCredentials.auth,
+  pollOwner: cloudCredentials.pollOwner,
   sessions: clientSessions,
+  onKeyIssued: (key, reason) =>
+    Effect.gen(function* () {
+      yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
+      yield* Effect.logInfo(
+        reason === "unclaimed"
+          ? "Open the server in your browser and enter the setup key to configure its administrator."
+          : "This server is not connected to MacroGraph. Open the server in your browser and enter the setup key to reconnect it.",
+      );
+    }),
 });
 const serverOwnerId = setup.ownerId;
-const accessPolicy = clientSessions.policy(serverOwnerId, config.adminIds);
+// Fresh, because layers are memoized by reference and each transport needs its own policy.
+const connectionMiddlewareFor = (transport: ClientSessions.Transport) =>
+  Layer.fresh(EditorRpc.connectionMiddlewareLayer).pipe(
+    Layer.provideMerge(
+      Layer.succeed(
+        EditorAccess.Policy,
+        clientSessions.policy(serverOwnerId, config.adminIds, transport),
+      ),
+    ),
+  );
 const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {
     const authorization = request.headers.authorization;
@@ -102,7 +123,7 @@ const WsEndpoints = Layer.effectDiscard(
     );
     yield* (yield* HttpRouter.HttpRouter).prefixed(config.basePath).add("*", "/rpc-ws", httpEffect);
   }),
-);
+).pipe(Layer.provide(connectionMiddlewareFor("ws")));
 
 const EditorHttpRpc = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -123,10 +144,14 @@ const ClientAuthRoutes = Layer.effectDiscard(
         : undefined;
     };
     const responseFor = Effect.fnUntraced(function* (token: string | undefined) {
-      const [session, ownerId] = yield* Effect.all([clientSessions.resolve(token), serverOwnerId]);
+      const [session, { ownerId, setupRequired }] = yield* Effect.all([
+        clientSessions.resolve(token),
+        setup.status,
+      ]);
       return {
         user: session ?? null,
-        setupRequired: ownerId === undefined,
+        setupRequired,
+        hasOwner: ownerId !== undefined,
         canEdit:
           session !== undefined &&
           (session.userId === ownerId || config.adminIds.has(session.userId)),
@@ -189,7 +214,12 @@ const ClientAuthRoutes = Layer.effectDiscard(
           ),
         ),
         Effect.catch((error) =>
-          Effect.succeed(HttpServerResponse.jsonUnsafe({ error: error.reason }, { status: 409 })),
+          Effect.succeed(
+            HttpServerResponse.jsonUnsafe(
+              { error: error.reason, code: error.code },
+              { status: 409, headers: { "cache-control": "no-store" } },
+            ),
+          ),
         ),
       ),
     );
@@ -267,9 +297,26 @@ const HealthRoute = Layer.effectDiscard(
   }),
 );
 
+const RemoteApiRoutes = ProjectApi.layer({
+  basePath: config.basePath,
+  apiKeys: ApiKeys.make(makeAtomicFileStore(config.apiKeysPath)),
+  sessions: clientSessions,
+  ownerId: serverOwnerId,
+  adminIds: config.adminIds,
+  projectTimestamps: Effect.sync(() => {
+    const stats = statSync(config.databasePath, { throwIfNoEntry: false });
+    const now = new Date().toISOString();
+    return {
+      createdAt: stats?.birthtime.toISOString() ?? now,
+      updatedAt: stats?.mtime.toISOString() ?? now,
+    };
+  }),
+});
+
 const ApiRoutes = Layer.mergeAll(
   EditorHttpRoutes,
   ClientAuthRoutes,
+  RemoteApiRoutes,
   ModuleHost.rpcRoute(config.basePath, canEditRequest),
   HealthRoute,
 );
@@ -296,8 +343,8 @@ const AppLayer = HttpRoutes.pipe(
   Layer.provideMerge(MountedModules),
   Layer.provide(EditorRpc.handlerLayer),
   Layer.provide(RuntimeActivity.handlerLayer),
-  Layer.provide(EditorRpc.connectionMiddlewareLayer),
-  Layer.provide(Layer.succeed(EditorAccess.Policy, accessPolicy)),
+  // HTTP RPC servers (editor and module routes) share this; the WebSocket server has its own.
+  Layer.provide(connectionMiddlewareFor("http")),
   Layer.provide(RpcSerialization.layerJsonRpc()),
   Layer.provide(LiveRuntimeLayer),
   Layer.provide(RuntimeActivity.layer),
@@ -315,6 +362,16 @@ const AppLayer = HttpRoutes.pipe(
               : cloudCredentials.auth.status,
           ),
         ),
+        // Only the owner's account may connect the server, even when started from settings.
+        poll: serverOwnerId.pipe(
+          Effect.flatMap((ownerId) =>
+            ownerId === undefined
+              ? Effect.fail(
+                  new Credential.AuthError({ reason: "Set up this server before connecting it" }),
+                )
+              : cloudCredentials.pollOwner(ownerId),
+          ),
+        ),
       },
     }),
   ),
@@ -326,16 +383,16 @@ const AppLayer = HttpRoutes.pipe(
       NodeServices.layer,
     ),
   ),
+  // Issues and logs a setup key whenever the server is unclaimed or loses its MacroGraph connection.
   Layer.provide(
     Layer.effectDiscard(
       Effect.gen(function* () {
-        const key = yield* setup.setupKey;
-        if (key !== undefined) {
-          yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
-          yield* Effect.logInfo(
-            "Open the server in your browser and enter the setup key to configure its administrator.",
-          );
-        }
+        const scope = yield* Effect.scope;
+        yield* setup.status;
+        // Forked because notifications can arrive while setup holds its lock.
+        yield* cloudCredentials.credentials.subscribe(() =>
+          setup.status.pipe(Effect.forkIn(scope), Effect.asVoid),
+        );
       }),
     ),
   ),

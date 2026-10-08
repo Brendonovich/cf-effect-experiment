@@ -14,14 +14,18 @@ declare global {
   const IconPhSquareSplitHorizontal: typeof import('~icons/ph/square-split-horizontal.jsx').default
   const IconTablerArrowsDiagonal: typeof import('~icons/tabler/arrows-diagonal.jsx').default
   const IconTablerArrowsDiagonalMinimize2: typeof import('~icons/tabler/arrows-diagonal-minimize2.jsx').default
+  const IconTablerBrowser: typeof import('~icons/tabler/browser.jsx').default
   const IconTablerCheck: typeof import('~icons/tabler/check.jsx').default
-  const IconTablerChevronDown: typeof import('~icons/tabler/chevron-down.jsx').default
+  const IconTablerChevronDown: typeof import("~icons/tabler/chevron-down.jsx").default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerExternalLink: typeof import('~icons/tabler/external-link.jsx').default
+  const IconTablerEye: typeof import('~icons/tabler/eye.jsx').default
   const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
   const IconTablerPackage: typeof import('~icons/tabler/package.jsx').default
+  const IconTablerPlug: typeof import('~icons/tabler/plug.jsx').default
+  const IconTablerRobot: typeof import('~icons/tabler/robot.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
   const IconTablerTrash: typeof import('~icons/tabler/trash.jsx').default
-  const IconTablerX: typeof import("~icons/tabler/x.jsx").default
+  const IconTablerX: typeof import('~icons/tabler/x.jsx').default
 }

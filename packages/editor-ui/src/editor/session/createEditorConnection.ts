@@ -1,5 +1,5 @@
 import type { Package, Queue } from "@macrograph/core";
-import type { Presence } from "@macrograph/editor";
+import type { EditorEvent, Presence } from "@macrograph/editor";
 
 import { Effect, Fiber, Schedule, Stream } from "effect";
 import { createMemo, createSignal, onSettled } from "solid-js";
@@ -36,6 +36,8 @@ export function createEditorConnection(
   editor: EditorStore,
   onProjectSnapshot: (project: Parameters<EditorStore["setProject"]>[0]) => void,
   onDispose: () => void,
+  /** Receives each event from other clients after it has been applied to the store. */
+  onRemoteEvent: (event: EditorEvent.EditorEvent) => void = () => {},
 ): {
   client: () => EditorRpcClient | null;
   activeConnection: () => EditorConnection | null;
@@ -45,7 +47,7 @@ export function createEditorConnection(
   moduleData: ReturnType<typeof createModuleData>;
   refreshModuleData: ReturnType<typeof createModuleData>["refresh"];
   presenceClients: () => ReadonlyArray<Presence.Client>;
-  selfConnectionId: () => string | undefined;
+  selfId: () => string | undefined;
   selfPresence: () => Presence.Client | undefined;
   canEdit: () => boolean;
   editorReady: () => boolean;
@@ -105,10 +107,9 @@ export function createEditorConnection(
   };
   const moduleSettingsById = () => connectionState.context.moduleSettings;
   const [presenceClients, setPresenceClients] = createSignal<ReadonlyArray<Presence.Client>>([]);
-  const [selfConnectionId, setSelfConnectionId] = createSignal<string>();
+  const [selfId, setSelfId] = createSignal<string>();
   const [queueStates, setQueueStates] = createSignal<ReadonlyArray<Queue.State>>([]);
-  const selfPresence = () =>
-    presenceClients().find((entry) => entry.connectionId === selfConnectionId());
+  const selfPresence = () => presenceClients().find((entry) => entry.id === selfId());
   const canEdit = createMemo(
     () => connectionState.mode.status === "ready" && (selfPresence()?.canEdit ?? false),
   );
@@ -127,7 +128,7 @@ export function createEditorConnection(
           Effect.sync(() => {
             setPresenceClients([]);
             setQueueStates([]);
-            setSelfConnectionId(undefined);
+            setSelfId(undefined);
             moduleData.disconnect(props.reconnect === true);
             connectionActions.disconnected(props.reconnect === true);
           }),
@@ -142,7 +143,7 @@ export function createEditorConnection(
               Stream.runForEach((event) =>
                 Effect.sync(() => {
                   if (event._tag === "PresenceSnapshot") {
-                    setSelfConnectionId(event.selfConnectionId);
+                    setSelfId(event.selfId);
                   }
                   setPresenceClients(event.clients);
                 }),
@@ -165,6 +166,7 @@ export function createEditorConnection(
                     return;
                   }
                   applyEvent(event);
+                  onRemoteEvent(event);
                 }).pipe(
                   Effect.andThen(
                     event._tag === "EngineStateChanged" || event._tag === "ModuleClientStateDirty"
@@ -226,7 +228,7 @@ export function createEditorConnection(
     moduleData,
     refreshModuleData,
     presenceClients,
-    selfConnectionId,
+    selfId,
     selfPresence,
     canEdit,
     editorReady,

@@ -54,6 +54,18 @@ Cloud authorization expiry or disconnection does not reopen setup or remove the 
 Existing registered installations retain their owner automatically when upgrading. Keep the owner
 file along with the authorization files when backing up or moving the server.
 
+### REST API and MCP
+
+The server exposes the same project editing REST API as MacroGraph Cloud under `/api` (the
+OpenAPI document is at `/api/openapi.json`) and an MCP server at `/api/mcp`. The server's single
+project has the ID `local`. Both authenticate with `Authorization: Bearer <api key>`.
+
+The owner and admins create and revoke API keys under **Settings → API keys**, which also shows
+the endpoints and an MCP client configuration snippet. A key is shown once, acts as the person who
+created it, and can only edit while that person is the owner or an admin. Edits appear live in
+connected editors. Keys are stored as SHA-256 hashes in `MACROGRAPH_DATA_DIR/macrograph-api-keys.json`,
+with the same file protections as the authorization files.
+
 ### Environment
 
 - `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.

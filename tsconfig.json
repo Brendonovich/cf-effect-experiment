@@ -50,6 +50,9 @@
       "path": "packages/editor-ui"
     },
     {
+      "path": "packages/project-api"
+    },
+    {
       "path": "packages/http-ingress"
     },
     {

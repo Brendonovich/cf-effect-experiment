@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CurrentUser } from "@macrograph/cloud-api";
+import { ApiCaller } from "@macrograph/project-api";
 import { Context, Effect, Option, Ref } from "effect";
 import { Tool } from "effect/unstable/ai";
 import {
@@ -83,14 +84,14 @@ describe("Cloud MCP toolkit", () => {
       Effect.gen(function* () {
         const handlers = toolkit.of({
           listProjects: () =>
-            Effect.map(CurrentUser, (user) => ({
+            Effect.map(Effect.all([CurrentUser, ApiCaller.Current]), ([user, caller]) => ({
               projects: [
                 {
                   id: "project-1",
                   teamId: "team-1",
                   createdBy: user.id,
                   access: "team" as const,
-                  name: user.id,
+                  name: JSON.stringify(caller),
                   currentDeploymentId: null,
                   createdAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -114,7 +115,11 @@ describe("Cloud MCP toolkit", () => {
           const authorization = request.headers.authorization;
           if (authorization !== "Bearer alice" && authorization !== "Bearer bob")
             return yield* new HttpApiError.Unauthorized();
-          return { id: authorization.slice("Bearer ".length), sessionId: undefined };
+          const id = authorization.slice("Bearer ".length);
+          return {
+            user: { id, sessionId: undefined },
+            caller: ApiCaller.forApiKey({ id: `key-${id}`, name: `${id}'s key` }, null),
+          };
         });
         const send = (body: object, authorization?: string, sessionId?: string) =>
           Effect.gen(function* () {
@@ -201,6 +206,15 @@ describe("Cloud MCP toolkit", () => {
         const calledBody = yield* Effect.promise(() => HttpServerResponse.toWeb(called).json());
         assert.strictEqual(calledBody.result.isError, false);
         assert.strictEqual(calledBody.result.structuredContent.projects[0].createdBy, "bob");
+        // MCP calls are attributed to the MCP session and client, not just the API key.
+        assert.deepStrictEqual(JSON.parse(calledBody.result.structuredContent.projects[0].name), {
+          kind: "mcp",
+          id: sessionId,
+          email: null,
+          apiKey: { id: "key-bob", name: "bob's key" },
+          mcpSessionId: sessionId,
+          mcpClient: { name: "test-client", version: "1.0.0" },
+        });
 
         const calledAgain = yield* send({ ...callRequest, id: 4 }, "Bearer alice", sessionId);
         const calledAgainBody = yield* Effect.promise(() =>

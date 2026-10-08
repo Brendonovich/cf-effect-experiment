@@ -1,15 +1,19 @@
+import type { ApiKeyClient, ApiKeySummary, CreatedApiKey } from "@macrograph/editor-ui";
+
 import { randomUUID } from "@macrograph/editor";
 import {
   AccountMenu,
+  ApiKeySettings,
   Button,
   createEditorController,
   CredentialSettings,
   RealtimeWorkspace,
   macrographLogo,
+  PresenceList,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { createSignal, For, onCleanup, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
 import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { editorConnection } from "./editorConnection";
@@ -25,6 +29,38 @@ type AuthUser = {
 type AuthContext =
   | { readonly session: null; readonly user: null }
   | { readonly session: string; readonly user: AuthUser | null };
+
+const apiKeyClient = (session: string): ApiKeyClient => {
+  const request = async (path: string, init: RequestInit = {}) => {
+    const response = await fetch(new URL(path, baseUrl()), {
+      ...init,
+      headers: {
+        authorization: `Bearer ${session}`,
+        ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+      },
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { readonly error?: string };
+      throw new Error(body.error ?? "The API key request failed");
+    }
+    return response;
+  };
+  return {
+    list: async () => {
+      const body = (await (await request("auth/api-keys")).json()) as {
+        readonly keys: ReadonlyArray<ApiKeySummary>;
+      };
+      return body.keys;
+    },
+    create: async (name) =>
+      (await (
+        await request("auth/api-keys", { method: "POST", body: JSON.stringify({ name }) })
+      ).json()) as CreatedApiKey,
+    revoke: async (id) => {
+      await request(`auth/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+  };
+};
 
 const localUserId = () => {
   const stored = localStorage.getItem("macrograph:self-hosted:user");
@@ -138,6 +174,8 @@ export function App() {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const [auth, setAuth] = createSignal<AuthContext>({ session: null, user: null });
   const [setupRequired, setSetupRequired] = createSignal<boolean | null>(null);
+  const [hasOwner, setHasOwner] = createSignal(false);
+  const [canEdit, setCanEdit] = createSignal(false);
   const [sessionError, setSessionError] = createSignal<string | null>(null);
   const [setupKey, setSetupKey] = createSignal("");
   const [signingIn, setSigningIn] = createSignal(false);
@@ -172,12 +210,14 @@ export function App() {
         readonly user: AuthUser | null;
         readonly canEdit: boolean;
         readonly setupRequired: boolean;
+        readonly hasOwner: boolean;
         readonly error?: string;
       };
       if (signal.aborted) return;
       if (!response.ok) throw new Error(state.error ?? "Could not check server status");
       if (
         typeof state.setupRequired !== "boolean" ||
+        typeof state.hasOwner !== "boolean" ||
         typeof state.canEdit !== "boolean" ||
         (state.user !== null &&
           (typeof state.user?.userId !== "string" || typeof state.user?.email !== "string"))
@@ -190,6 +230,8 @@ export function App() {
       } else {
         setAuth({ session: token, user: state.user });
       }
+      setHasOwner(state.hasOwner);
+      setCanEdit(state.canEdit);
       setSetupRequired(state.setupRequired);
     } catch (error) {
       if (!signal.aborted)
@@ -197,6 +239,27 @@ export function App() {
     }
   };
   onSettled(() => void refreshSession());
+
+  // Switch to the setup guide if the server lost its MacroGraph connection while this page was open.
+  const recheckSetup = async () => {
+    if (setupRequired() !== false || signingIn()) return;
+    try {
+      const response = await fetch(new URL("auth/session", baseUrl()));
+      const state = (await response.json()) as { readonly setupRequired?: unknown };
+      if (response.ok && state.setupRequired === true && !signingIn()) void refreshSession();
+    } catch {
+      // Keep the current view; the next check or sign in attempt will update it.
+    }
+  };
+  const recheckWhenVisible = () => {
+    if (document.visibilityState === "visible") void recheckSetup();
+  };
+  window.addEventListener("focus", recheckWhenVisible);
+  document.addEventListener("visibilitychange", recheckWhenVisible);
+  onCleanup(() => {
+    window.removeEventListener("focus", recheckWhenVisible);
+    document.removeEventListener("visibilitychange", recheckWhenVisible);
+  });
 
   const cancelSignIn = () => {
     operation?.abort();
@@ -233,8 +296,16 @@ export function App() {
         readonly deviceCode?: string;
         readonly verificationUrl?: string;
         readonly error?: string;
+        readonly code?: string;
       };
       if (signal.aborted) return;
+      if (!setup && authorization.code === "not-connected") {
+        // The server lost its MacroGraph connection since the last status check.
+        setSigningIn(false);
+        setVerificationUrl(null);
+        void refreshSession();
+        return;
+      }
       if (
         !started.ok ||
         (setup ? authorization.state !== "pending" : !authorization.deviceCode) ||
@@ -320,6 +391,12 @@ export function App() {
     }
   };
 
+  // Only the owner and admins may manage API keys; the server enforces this too.
+  const keyClient = createMemo(() => {
+    const session = auth().session;
+    return session !== null && canEdit() ? apiKeyClient(session) : null;
+  });
+
   const rootAttrs = stylex.attrs(styles.root);
   const ApprovalStatus = () => (
     <div sx={styles.form}>
@@ -388,12 +465,22 @@ export function App() {
                 }
               >
                 <h1 id="setup-title" sx={styles.setupTitle}>
-                  Set up your server
+                  {hasOwner() ? "Reconnect your server" : "Set up your server"}
                 </h1>
-                <p sx={styles.description}>
-                  The MacroGraph account that approves setup becomes this server's administrator and
-                  can edit its projects.
-                </p>
+                <Show
+                  when={hasOwner()}
+                  fallback={
+                    <p sx={styles.description}>
+                      The MacroGraph account that approves setup becomes this server's administrator
+                      and can edit its projects.
+                    </p>
+                  }
+                >
+                  <p sx={styles.description}>
+                    This server is no longer connected to MacroGraph. Only the server
+                    administrator's MacroGraph account can approve reconnecting it.
+                  </p>
+                </Show>
                 <p sx={styles.description}>
                   Approval also authorizes this server to use your cloud-managed credentials.
                   Provider tokens stay on the server, not in project data. Only continue if you
@@ -423,8 +510,8 @@ export function App() {
                   />
                   <p id="setup-key-help" sx={styles.description}>
                     Find <code>MACROGRAPH_SETUP_KEY &lt;key&gt;</code> in your server logs and enter
-                    only the key. It works only until an owner is configured and is not saved in
-                    this browser.
+                    only the key. It works only until setup completes and is not saved in this
+                    browser.
                   </p>
                   <Button type="submit" disabled={signingIn() || !setupKey().trim()}>
                     {signingIn()
@@ -472,6 +559,7 @@ export function App() {
                     </For>
                   </nav>
                   <div sx={styles.account}>
+                    <PresenceList controller={controller} onFollow={() => setView("editor")} />
                     <Button
                       type="button"
                       size="sm"
@@ -513,17 +601,25 @@ export function App() {
                     runtimeLabel="Server"
                     view={view()}
                     renderProjectSettings={(context) => (
-                      <CredentialSettings
-                        client={context.client}
-                        description={
-                          <>
-                            Authorize this server to use credentials managed by macrograph.app.
-                            Provider tokens remain on the server and are not stored in project data.
-                          </>
-                        }
-                        loadingLabel="Loading server authorization..."
-                        onChanged={context.refreshModuleData}
-                      />
+                      <>
+                        <CredentialSettings
+                          client={context.client}
+                          description={
+                            <>
+                              Authorize this server to use credentials managed by macrograph.app.
+                              Provider tokens remain on the server and are not stored in project
+                              data.
+                            </>
+                          }
+                          loadingLabel="Loading server authorization..."
+                          onChanged={context.refreshModuleData}
+                        />
+                        <ApiKeySettings
+                          client={keyClient()}
+                          mcpUrl={new URL("api/mcp", baseUrl()).href}
+                          restUrl={new URL("api", baseUrl()).href}
+                        />
+                      </>
                     )}
                   />
                 </main>

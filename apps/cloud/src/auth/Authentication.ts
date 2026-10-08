@@ -4,6 +4,7 @@ import {
   sessionCookieName,
   sessionSecurity,
 } from "@macrograph/cloud-api";
+import { ApiCaller, ApiKey, type ProjectMcp } from "@macrograph/project-api";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -37,19 +38,10 @@ export const make = Effect.gen(function* () {
       return { userId, sessionId };
     });
 
-  const hashApiKey = (key: string) =>
-    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(key))).pipe(
-      Effect.map((digest) =>
-        Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
-      ),
-    );
-
   const issueApiKey = (name: string, request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
       const { userId } = yield* authenticatedSession(request);
-      const bytes = crypto.getRandomValues(new Uint8Array(32));
-      const key = `mg_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
-      const keyHash = yield* hashApiKey(key);
+      const { key, keyHash } = yield* ApiKey.generate;
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       yield* database
@@ -68,21 +60,29 @@ export const make = Effect.gen(function* () {
         .pipe(Effect.orDie);
     });
 
-  const authenticateBearer = () =>
+  const authenticateBearer = (): Effect.Effect<
+    ProjectMcp.Principal,
+    HttpApiError.Unauthorized,
+    HttpServerRequest.HttpServerRequest
+  > =>
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
-      const match = /^Bearer ([^\s]+)$/i.exec(request.headers.authorization ?? "");
-      if (match === null) return yield* new HttpApiError.Unauthorized();
-      const keyHash = yield* hashApiKey(match[1]);
+      const key = ApiKey.fromAuthorization(request.headers.authorization);
+      if (key === undefined) return yield* new HttpApiError.Unauthorized();
+      const keyHash = yield* ApiKey.hash(key);
       const rows = yield* database
-        .select({ userId: apiKeys.userId })
+        .select({ id: apiKeys.id, name: apiKeys.name, userId: apiKeys.userId, email: users.email })
         .from(apiKeys)
+        .leftJoin(users, eq(users.id, apiKeys.userId))
         .where(eq(apiKeys.keyHash, keyHash))
         .limit(1)
         .pipe(Effect.orDie);
-      const userId = rows[0]?.userId;
-      if (userId === undefined) return yield* new HttpApiError.Unauthorized();
-      return { id: userId, sessionId: undefined };
+      const row = rows[0];
+      if (row === undefined) return yield* new HttpApiError.Unauthorized();
+      return {
+        user: { id: row.userId, sessionId: undefined },
+        caller: ApiCaller.forApiKey({ id: row.id, name: row.name }, row.email),
+      };
     });
 
   const setSessionCookie = (request: HttpServerRequest.HttpServerRequest, sessionId: string) =>
@@ -193,8 +193,11 @@ export const middleware = Layer.effect(Authentication)(
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           if (request.headers.authorization !== undefined) {
-            const user = yield* authentication.authenticateBearer();
-            return yield* effect.pipe(Effect.provideService(CurrentUser, user));
+            const { user, caller } = yield* authentication.authenticateBearer();
+            return yield* effect.pipe(
+              Effect.provideService(CurrentUser, user),
+              Effect.provideService(ApiCaller.Current, caller),
+            );
           }
           if (request.method !== "GET" && request.method !== "HEAD" && !hasTrustedOrigin(request))
             return yield* new HttpApiError.Unauthorized();

@@ -1,4 +1,5 @@
 import {
+  Actor,
   Clipboard,
   Connection,
   Function as GraphFunction,
@@ -73,8 +74,9 @@ export const authorize = (
       ? new EditorAccess.Forbidden({ operation })
       : Effect.void;
 
-export const isEventVisibleTo = (event: EditorEvent.EditorEvent, connectionId: string) =>
-  event.actor.type === "SYSTEM" || event.actor.id !== connectionId;
+// Clients apply their own mutations locally; other clients of the same user still see them.
+export const isEventVisibleTo = (event: EditorEvent.EditorEvent, viewer: Actor.Model) =>
+  !Actor.isSameClient(event.actor, viewer);
 
 // Persisted engine state may contain credentials; public updates only invalidate client state.
 export const publicEvent = (event: EditorEvent.EditorEvent): EditorEvent.EditorEvent =>
@@ -703,9 +705,12 @@ export const handlerLayer = EditorRpcs.toLayer(
           return identity.canEdit ? project : { ...project, engines: {} };
         }),
       DeleteGraph: (payload) =>
-        editor.graph
-          .delete({ graphID: payload.graphId })
-          .pipe(Effect.tap(() => presence.graphDeleted(payload.graphId))),
+        Effect.gen(function* () {
+          const identity = yield* EditorAccess.Connection;
+          const event = yield* editor.graph.delete({ graphID: payload.graphId });
+          yield* presence.graphDeleted(identity.projectId, payload.graphId);
+          return event;
+        }),
       SetGraphName: (payload) =>
         editor.graph.update({ graphID: payload.graphId, name: payload.name }),
       CreateFunction: ({ name }) => editor.function.create(name),
@@ -734,17 +739,27 @@ export const handlerLayer = EditorRpcs.toLayer(
         }),
       GetClipboardIdentity: () => editor.fragment.identity(),
       DeleteFragment: (payload) =>
-        editor.fragment
-          .delete({ graphID: payload.graphId, nodeIds: payload.nodeIds })
-          .pipe(
-            Effect.tap((event) =>
-              Effect.forEach(event.nodeIds, (id) => presence.nodeDeleted(event.graphId, id)),
-            ),
-          ),
+        Effect.gen(function* () {
+          const identity = yield* EditorAccess.Connection;
+          const event = yield* editor.fragment.delete({
+            graphID: payload.graphId,
+            nodeIds: payload.nodeIds,
+          });
+          yield* Effect.forEach(event.nodeIds, (id) =>
+            presence.nodeDeleted(identity.projectId, event.graphId, id),
+          );
+          return event;
+        }),
       DeleteNode: (payload) =>
-        editor.node
-          .delete({ graphID: payload.graphId, nodeID: payload.nodeId })
-          .pipe(Effect.tap(() => presence.nodeDeleted(payload.graphId, payload.nodeId))),
+        Effect.gen(function* () {
+          const identity = yield* EditorAccess.Connection;
+          const event = yield* editor.node.delete({
+            graphID: payload.graphId,
+            nodeID: payload.nodeId,
+          });
+          yield* presence.nodeDeleted(identity.projectId, payload.graphId, payload.nodeId);
+          return event;
+        }),
       SetNodeName: (payload) =>
         Effect.gen(function* () {
           const identity = yield* EditorAccess.Connection;
@@ -907,7 +922,7 @@ export const handlerLayer = EditorRpcs.toLayer(
             })),
             Stream.concat(
               Stream.fromSubscription(subscription).pipe(
-                Stream.filter((event) => isEventVisibleTo(event, identity.connectionId)),
+                Stream.filter((event) => isEventVisibleTo(event, identity.actor)),
                 Stream.map((event) => (identity.canEdit ? event : publicEvent(event))),
               ),
             ),

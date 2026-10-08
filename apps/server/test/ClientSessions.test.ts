@@ -19,7 +19,7 @@ describe("client sessions", () => {
       const ownerToken = yield* sessions.create({ userId: "owner", email: "owner@example.com" });
       const adminToken = yield* sessions.create({ userId: "admin", email: "admin@example.com" });
       const readerToken = yield* sessions.create({ userId: "reader", email: "reader@example.com" });
-      const policy = sessions.policy(Effect.succeed("owner"), new Set(["admin"]));
+      const policy = sessions.policy(Effect.succeed("owner"), new Set(["admin"]), "ws");
       const resolve = (token?: string) =>
         policy.resolve(
           Headers.fromInput(token === undefined ? {} : { "x-macrograph-session": token }),
@@ -42,6 +42,43 @@ describe("client sessions", () => {
     }),
   );
 
+  it.effect("attributes clients to their user and keeps HTTP and WebSocket IDs apart", () =>
+    Effect.gen(function* () {
+      const sessions = ClientSessions.make({
+        read: Effect.succeed(null),
+        write: () => Effect.void,
+        clear: Effect.void,
+      });
+      const token = yield* sessions.create({ userId: "owner", email: "ada.l@example.com" });
+      const headers = Headers.fromInput({ "x-macrograph-session": token });
+      const ws = sessions.policy(Effect.succeed("owner"), new Set(), "ws");
+      const http = sessions.policy(Effect.succeed("owner"), new Set(), "http");
+
+      const browser = yield* ws.resolve(headers, 0);
+      assert.deepStrictEqual(browser.actor, {
+        type: "CLIENT",
+        kind: "browser",
+        id: "self-hosted-ws-0",
+        userId: "owner",
+      });
+      assert.strictEqual(browser.displayName, "ada.l");
+      assert.strictEqual(browser.email, "ada.l@example.com");
+
+      // Every HTTP RPC server counts from zero, so client numbers must not decide the ID.
+      const first = yield* http.resolve(headers, 0);
+      const second = yield* http.resolve(headers, 0);
+      assert.strictEqual(first.actor.kind, "api");
+      assert.strictEqual(first.actor.userId, "owner");
+      assert.notStrictEqual(first.actor.id, browser.actor.id);
+      assert.notStrictEqual(first.actor.id, second.actor.id);
+      assert.isTrue(first.actor.id.startsWith("self-hosted-http-"));
+
+      const anonymous = yield* ws.resolve(Headers.empty, 1);
+      assert.isNull(anonymous.actor.userId);
+      assert.isNull(anonymous.email);
+    }),
+  );
+
   it.effect(
     "does not let anonymous clients edit or manage credentials on an unclaimed server",
     () =>
@@ -52,7 +89,7 @@ describe("client sessions", () => {
           clear: Effect.void,
         });
         const identity = yield* sessions
-          .policy(Effect.succeed(undefined), new Set())
+          .policy(Effect.succeed(undefined), new Set(), "ws")
           .resolve(Headers.empty, 0);
 
         assert.isFalse(identity.canEdit);
@@ -73,7 +110,7 @@ describe("client sessions", () => {
           clear: Effect.void,
         });
         for (const owner of [undefined, "owner"]) {
-          const policy = sessions.policy(Effect.succeed(owner), new Set(["admin"]));
+          const policy = sessions.policy(Effect.succeed(owner), new Set(["admin"]), "http");
           for (const token of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
             assert.isUndefined(yield* sessions.resolve(token));
             for (const headers of [

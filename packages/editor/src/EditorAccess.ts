@@ -7,13 +7,25 @@ export class Forbidden extends Schema.TaggedError<Forbidden>()("EditorForbidden"
   operation: Schema.String,
 }) {}
 
+/** How a REST or MCP client reached the project, such as "CI key" or "Claude Desktop". */
+export interface RemoteClient {
+  readonly apiKeyId: string | null;
+  readonly apiKeyName: string | null;
+  readonly mcpSessionId: string | null;
+  readonly mcpClientName: string | null;
+  readonly mcpClientVersion: string | null;
+}
+
 export interface ConnectionIdentity {
-  readonly actor: Actor.Model;
-  readonly connectionId: string;
+  /** The client acting on the project; `actor.id` identifies this connection or session. */
+  readonly actor: Actor.Client;
   readonly displayName: string;
+  readonly email: string | null;
   readonly projectId: string;
   readonly canEdit: boolean;
   readonly canManageCredentials: boolean;
+  /** Present for REST and MCP callers. */
+  readonly remote?: RemoteClient;
 }
 
 /** Provides the current editor connection's identity, project, and permissions. */
@@ -32,17 +44,14 @@ export class Policy extends Context.Service<
   }
 >()("macrograph/EditorAccessPolicy") {}
 
-const fallbackIdentity = (clientId: number, projectId: string): ConnectionIdentity => {
-  const connectionId = `local-${clientId}`;
-  return {
-    actor: { type: "CLIENT", id: connectionId },
-    connectionId,
-    displayName: `Local ${clientId + 1}`,
-    projectId,
-    canEdit: true,
-    canManageCredentials: true,
-  };
-};
+const fallbackIdentity = (clientId: number, projectId: string): ConnectionIdentity => ({
+  actor: Actor.client("browser", `local-${clientId}`),
+  displayName: `Local ${clientId + 1}`,
+  email: null,
+  projectId,
+  canEdit: true,
+  canManageCredentials: true,
+});
 
 export const permissivePolicy = (projectId = "local") =>
   Layer.succeed(

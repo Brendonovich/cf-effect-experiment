@@ -12,6 +12,8 @@ let dataDirectory = "";
 const basePath = "/macrograph";
 let setupKey = "";
 let approved = false;
+let ownerToken = "";
+let readerToken = "";
 const cloud = createServer((request, response) => {
   response.setHeader("content-type", "application/json");
   const path = request.url?.split("?")[0];
@@ -196,7 +198,12 @@ describe("built self-hosted server", () => {
     const response = await fetch(`${origin}${basePath}/auth/session`);
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ user: null, canEdit: false, setupRequired: true });
+    expect(await response.json()).toEqual({
+      user: null,
+      canEdit: false,
+      setupRequired: true,
+      hasOwner: false,
+    });
   });
 
   it("requires the private setup key for registration start and polling", async () => {
@@ -218,6 +225,13 @@ describe("built self-hosted server", () => {
       });
       expect(missing.status).toBe(400);
     }
+  });
+
+  it("reports that sign in is unavailable until the server is connected", async () => {
+    const signIn = await fetch(`${origin}${basePath}/auth/start`, { method: "POST" });
+    expect(signIn.status).toBe(409);
+    expect(signIn.headers.get("cache-control")).toBe("no-store");
+    expect(await signIn.json()).toMatchObject({ code: "not-connected" });
   });
 
   it("rejects inherited-property session tokens at the HTTP module gate", async () => {
@@ -305,6 +319,7 @@ describe("built self-hosted server", () => {
     const result = (await completed.json()) as { state: string; token: string };
     expect(result.state).toBe("connected");
     expect(result.token).toMatch(/^[\w-]{43}$/);
+    ownerToken = result.token;
     const session = await fetch(`${origin}${basePath}/auth/session`, {
       headers: { authorization: `Bearer ${result.token}` },
     });
@@ -312,6 +327,7 @@ describe("built self-hosted server", () => {
       user: { userId: "setup-owner", email: "setup-owner@example.com" },
       canEdit: true,
       setupRequired: false,
+      hasOwner: true,
     });
     expect(
       JSON.parse(await readFile(join(dataDirectory, "macrograph-owner.json"), "utf8")),
@@ -332,6 +348,7 @@ describe("built self-hosted server", () => {
       body: JSON.stringify({ deviceCode: "reader-device" }),
     });
     const readerSession = (await reader.json()) as { token: string };
+    readerToken = readerSession.token;
     const readerStatus = await fetch(`${origin}${basePath}/auth/session`, {
       headers: { authorization: `Bearer ${readerSession.token}` },
     });
@@ -339,7 +356,96 @@ describe("built self-hosted server", () => {
       user: { userId: "reader", email: "reader@example.com" },
       canEdit: false,
       setupRequired: false,
+      hasOwner: true,
     });
+  });
+
+  it("serves the REST API and MCP to API keys created by the owner", async () => {
+    const keys = `${origin}${basePath}/auth/api-keys`;
+    const json = { "content-type": "application/json" };
+    const denied = await fetch(keys, {
+      method: "POST",
+      headers: { ...json, authorization: `Bearer ${readerToken}` },
+      body: JSON.stringify({ name: "Reader" }),
+    });
+    expect(denied.status).toBe(403);
+    const created = await fetch(keys, {
+      method: "POST",
+      headers: { ...json, authorization: `Bearer ${ownerToken}` },
+      body: JSON.stringify({ name: "CI" }),
+    });
+    expect(created.status).toBe(201);
+    const key = (await created.json()) as { id: string; key: string };
+    expect(
+      JSON.parse(await readFile(join(dataDirectory, "macrograph-api-keys.json"), "utf8")),
+    ).not.toContain(key.key);
+    const auth = { authorization: `Bearer ${key.key}` };
+
+    expect((await fetch(`${origin}${basePath}/api/projects`)).status).toBe(401);
+    const projects = await fetch(`${origin}${basePath}/api/projects`, { headers: auth });
+    expect(projects.status).toBe(200);
+    expect(await projects.json()).toMatchObject({ projects: [{ id: "local" }] });
+    const graph = await fetch(`${origin}${basePath}/api/projects/local/graphs`, {
+      method: "POST",
+      headers: { ...json, ...auth },
+      body: JSON.stringify({ name: "From REST" }),
+    });
+    expect(graph.status).toBe(201);
+    expect(await graph.json()).toMatchObject({ graph: { name: "From REST" } });
+    expect((await fetch(`${origin}${basePath}/api/openapi.json`)).status).toBe(200);
+
+    const mcp = (body: object, sessionId?: string) =>
+      fetch(`${origin}${basePath}/api/mcp`, {
+        method: "POST",
+        headers: {
+          ...json,
+          ...auth,
+          accept: "application/json, text/event-stream",
+          ...(sessionId === undefined
+            ? {}
+            : { "mcp-session-id": sessionId, "mcp-protocol-version": "2025-06-18" }),
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", ...body }),
+      });
+    const initialized = await mcp({
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "integration", version: "1" },
+      },
+    });
+    expect(initialized.status).toBe(200);
+    const sessionId = initialized.headers.get("mcp-session-id") ?? undefined;
+    expect(sessionId).toBeDefined();
+    const listed = await mcp(
+      {
+        id: 2,
+        method: "tools/call",
+        params: { name: "listGraphs", arguments: { projectId: "local" } },
+      },
+      sessionId,
+    );
+    expect(await listed.json()).toMatchObject({
+      result: { isError: false, structuredContent: { graphs: [{ name: "From REST" }] } },
+    });
+
+    // The editor's HTTP RPC endpoint keeps working alongside the REST API.
+    const rpc = await fetch(`${origin}${basePath}/rpc`, {
+      method: "POST",
+      headers: { ...json, authorization: `Bearer ${ownerToken}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "GetPackages", params: {} }),
+    });
+    expect(rpc.status).toBe(200);
+    expect(await rpc.text()).toContain('"result"');
+
+    const revoked = await fetch(`${keys}/${key.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${ownerToken}` },
+    });
+    expect(revoked.status).toBe(204);
+    expect((await fetch(`${origin}${basePath}/api/projects`, { headers: auth })).status).toBe(401);
   });
 
   it("stops idempotently with an active WebSocket", async () => {

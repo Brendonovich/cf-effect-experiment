@@ -22,6 +22,23 @@ vi.mock(
 );
 
 let dispose = () => {};
+
+const presenceClient = (overrides: Partial<Presence.Client> & { id: string }): Presence.Client => ({
+  kind: "browser",
+  userId: null,
+  displayName: overrides.id,
+  email: null,
+  color: "#ffffff",
+  canEdit: true,
+  activeGraph: null,
+  cursor: null,
+  viewport: null,
+  selectedNodeIds: [],
+  remote: null,
+  lastActiveAt: 0,
+  expiresAt: null,
+  ...overrides,
+});
 afterEach(() => dispose());
 
 type TestClient<Keys extends keyof EditorRpcClient> = {
@@ -31,15 +48,7 @@ type TestClient<Keys extends keyof EditorRpcClient> = {
 describe("editor presence lifecycle", () => {
   it("exposes current edit permissions outside tracking and handles revocation", async () => {
     const events = Effect.runSync(PubSub.unbounded<Presence.Snapshot | Presence.Changed>());
-    const self: Presence.Client = {
-      connectionId: "self",
-      displayName: "Self",
-      color: "#ffffff",
-      canEdit: true,
-      activeGraph: null,
-      cursor: null,
-      selectedNodeIds: [],
-    };
+    const self = presenceClient({ id: "self", displayName: "Self" });
     const client = {
       GetPackages: () => Effect.succeed([]),
       GetIngressEndpoints: () => Effect.succeed([]),
@@ -80,7 +89,7 @@ describe("editor presence lifecycle", () => {
     await Effect.runPromise(
       PubSub.publish(events, {
         _tag: "PresenceSnapshot",
-        selfConnectionId: "self",
+        selfId: "self",
         clients: [self],
       }),
     );
@@ -107,17 +116,14 @@ describe("editor presence lifecycle", () => {
       PresenceStream: () =>
         Stream.succeed({
           _tag: "PresenceSnapshot",
-          selfConnectionId: `self-${attempts}`,
+          selfId: `self-${attempts}`,
           clients: [
-            {
-              connectionId: attempts === 1 ? "previous" : `self-${attempts}`,
+            presenceClient({
+              id: attempts === 1 ? "previous" : `self-${attempts}`,
               displayName: "Previous",
-              color: "#ffffff",
-              canEdit: true,
               activeGraph: "graph",
-              cursor: null,
               selectedNodeIds: attempts === 1 ? ["node"] : [],
-            },
+            }),
           ],
         } satisfies Presence.Snapshot).pipe(
           Stream.concat(
@@ -164,14 +170,14 @@ describe("editor presence lifecycle", () => {
     fail();
     await vi.waitFor(() => {
       expect(untrack(connection.presenceClients)).toEqual([]);
-      expect(untrack(connection.selfConnectionId)).toBeUndefined();
+      expect(untrack(connection.selfId)).toBeUndefined();
       expect(untrack(connection.client)).toBeNull();
       expect(closed).toHaveBeenCalledOnce();
     });
     await vi.waitFor(
       () => {
         expect(attempts).toBe(2);
-        expect(untrack(connection.selfConnectionId)).toBe("self-2");
+        expect(untrack(connection.selfId)).toBe("self-2");
         expect(untrack(connection.presenceClients).map((client) => client.selectedNodeIds)).toEqual(
           [[]],
         );
@@ -190,7 +196,7 @@ describe("editor presence lifecycle", () => {
     } satisfies TestClient<"UpdatePresence">;
     const state = createRoot((cleanup) => {
       dispose = cleanup;
-      const [selfConnectionId, setSelfConnectionId] = createSignal<string>();
+      const [selfId, setSelfId] = createSignal<string>();
       const editor = createEditorStore();
       const graph = Canvas.empty("graph");
       editor.setProject(
@@ -226,22 +232,25 @@ describe("editor presence lifecycle", () => {
           id: "tab",
           view: defaultGraphView(),
         }),
+        canvasOrigin: () => ({ x: 0, y: 0 }),
+        canvasScale: () => 1,
         presenceClients: () => [],
-        selfConnectionId,
+        selfId,
       });
-      return { presence, setSelfConnectionId };
+      return { presence, setSelfId };
     });
     flush();
     state.presence.publishPointer({ x: 1, y: 2 }, true);
     await Promise.resolve();
     expect(updates).toEqual([]);
-    state.setSelfConnectionId("connected");
+    state.setSelfId("connected");
     flush();
     await vi.waitFor(() =>
       expect(updates).toEqual([
         {
           activeGraph: "graph",
           cursor: { x: 1, y: 2 },
+          viewport: null,
           selectedNodeIds: ["node"],
         },
       ]),
@@ -249,5 +258,50 @@ describe("editor presence lifecycle", () => {
     state.presence.dispose();
     await Promise.resolve();
     expect(updates).toHaveLength(1);
+  });
+
+  it("shares the visible viewport in graph coordinates", async () => {
+    const updates: Presence.Update[] = [];
+    const client = {
+      UpdatePresence: (update: Presence.Update) =>
+        Effect.sync(() => {
+          updates.push(update);
+        }),
+    } satisfies TestClient<"UpdatePresence">;
+    const state = createRoot((cleanup) => {
+      dispose = cleanup;
+      const editor = createEditorStore();
+      editor.setProject({ ...Project.empty(), graphs: { graph: Canvas.empty("graph") } }, {});
+      const [scale, setScale] = createSignal(1);
+      const presence = createEditorPresence({
+        client: () => client as unknown as EditorRpcClient,
+        editor,
+        selectedGraphId: () => "graph",
+        selectedNodeIds: () => [],
+        activeWorkspaceView: () => ({
+          type: "graph",
+          graphId: "graph",
+          id: "tab",
+          view: defaultGraphView(),
+        }),
+        canvasOrigin: () => ({ x: 10, y: 20 }),
+        canvasScale: scale,
+        presenceClients: () => [],
+        selfId: () => "self",
+      });
+      return { presence, setScale };
+    });
+    flush();
+    state.presence.setCanvasSize({ width: 800, height: 400 });
+    flush();
+    await vi.waitFor(() =>
+      expect(updates.at(-1)?.viewport).toEqual({ x: 10, y: 20, width: 800, height: 400 }),
+    );
+    state.setScale(2);
+    flush();
+    await vi.waitFor(() =>
+      expect(updates.at(-1)?.viewport).toEqual({ x: 10, y: 20, width: 400, height: 200 }),
+    );
+    state.presence.dispose();
   });
 });

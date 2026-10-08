@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import {
+  Actor,
   Canvas,
   Clipboard,
   ConnectionId,
@@ -285,7 +286,7 @@ it.layer(TestLayer)((it) => {
         const subscription = yield* events.subscribe;
         const pasted = yield* events.withActor(
           editor.fragment.paste({ graphID: "destination", text, position: { x: 100, y: 200 } }),
-          { type: "CLIENT", id: "author" },
+          Actor.client("browser", "author"),
         );
         expect(yield* PubSub.take(subscription)).toEqual(pasted);
         expect(pasted.nodes.map((node) => node.position)).toEqual([
@@ -303,8 +304,10 @@ it.layer(TestLayer)((it) => {
           inNodeId: pasted.nodes[1]!.id,
         });
         expect(pasted.connections[0]!.id).not.toBe("edge");
-        expect(EditorRpc.isEventVisibleTo(pasted, "author")).toBe(false);
-        expect(EditorRpc.isEventVisibleTo(pasted, "collaborator")).toBe(true);
+        expect(EditorRpc.isEventVisibleTo(pasted, Actor.client("browser", "author"))).toBe(false);
+        expect(EditorRpc.isEventVisibleTo(pasted, Actor.client("browser", "collaborator"))).toBe(
+          true,
+        );
         expect(
           Schema.decodeUnknownSync(EditorEventsSchema)(
             Schema.encodeUnknownSync(EditorEventsSchema)(pasted),
