@@ -13,6 +13,7 @@ import {
   Scopes,
 } from "@macrograph/core";
 import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
+import { Conversion } from "@macrograph/module";
 import { createStore, runWithOwner } from "solid-js";
 
 type MutableGraph = {
@@ -46,7 +47,10 @@ type MutableEditorStore = {
 export const resourceValuesKey = (packageId: string, resourceId: string) =>
   JSON.stringify([packageId, resourceId]);
 
-export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry) {
+export function createEditorStore(
+  authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
+  conversions: Conversion.Registry = Conversion.empty,
+) {
   const resolvers = new Map<string, SchemaAuthoring.GraphResolver>();
   const [store, setStoreValue] = createStore<MutableEditorStore>({
     project: null,
@@ -102,7 +106,8 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
       next.nodeIO = {};
       for (const id of resolvers.keys()) if (!next.project?.graphs[id]) resolvers.delete(id);
       for (const graph of Object.values(next.project?.graphs ?? {})) {
-        const resolver = resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring);
+        const resolver =
+          resolvers.get(graph.id) ?? new SchemaAuthoring.GraphResolver(authoring, conversions);
         resolvers.set(graph.id, resolver);
         const declarations = next.declaredNodeIO[graph.id] ?? {};
         const definitions = {
@@ -557,5 +562,13 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     });
   }
 
-  return { store, authoring, applyEvent, updateNodePosition, setProject, setPackages };
+  return {
+    store,
+    authoring,
+    conversions,
+    applyEvent,
+    updateNodePosition,
+    setProject,
+    setPackages,
+  };
 }

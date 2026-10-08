@@ -29,6 +29,7 @@ import {
   connectionPath,
   graphConnections,
   wireColor,
+  wireSegments,
 } from "./graph/graphPresentation";
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Inspector } from "./inspector/Inspector";
@@ -731,7 +732,12 @@ function EditorContent(
                     const value = graph();
                     return value === undefined
                       ? []
-                      : graphConnections(value, ioForNode, (nodeId) => nodeWidths().get(nodeId));
+                      : graphConnections(
+                          value,
+                          ioForNode,
+                          (nodeId) => nodeWidths().get(nodeId),
+                          controller.editor.conversions,
+                        );
                   });
                   const remotePresence = () =>
                     controller.connection
@@ -870,18 +876,22 @@ function EditorContent(
                                           />
                                         )}
                                       </Show>
-                                      <path
-                                        sx={
-                                          !isNodeDragging(edge().connection.outNodeId) &&
-                                          !isNodeDragging(edge().connection.inNodeId) &&
-                                          styles.smoothWire
-                                        }
-                                        d={connectionPath(edge().from, edge().to)}
-                                        fill="none"
-                                        stroke={wireColor(edge().type, edge().scope)}
-                                        stroke-width="2"
-                                        opacity="0.75"
-                                      />
+                                      <For each={wireSegments(edge())}>
+                                        {(segment) => (
+                                          <path
+                                            sx={
+                                              !isNodeDragging(edge().connection.outNodeId) &&
+                                              !isNodeDragging(edge().connection.inNodeId) &&
+                                              styles.smoothWire
+                                            }
+                                            d={segment.path}
+                                            fill="none"
+                                            stroke={segment.stroke}
+                                            stroke-width="2"
+                                            opacity="0.75"
+                                          />
+                                        )}
+                                      </For>
                                     </>
                                   )}
                                 </For>
@@ -1099,6 +1109,7 @@ function EditorContent(
                                         packageId,
                                         runtimeDefinitions(),
                                         controller.editor.authoring,
+                                        controller.editor.conversions,
                                       ).length > 0
                               }
                               screenPosition={menu().screen}

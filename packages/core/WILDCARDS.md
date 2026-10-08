@@ -53,8 +53,15 @@ The executor supplies this context; direct low-level schema runners must supply
   wildcard IDs still have distinct unification variables within each group.
 - Unification supports whole-type wildcards and wildcards nested in `List` and
   `Option`, in either connection direction. Custom types remain nominal by ID.
+- A wildcard is **resolved** when wires give it one concrete type (its resolved
+  type); otherwise it is unresolved. Input-side wires and scope fields must agree
+  exactly, so mixed sources feeding one wildcard are rejected. Unresolved outputs
+  are bound by their targets, which must agree with each other.
+- A resolved wildcard behaves as its resolved type everywhere, including for
+  consumer-registered implicit conversions (see below). It stays resolved to that
+  type until its wires change.
 - An occurs check rejects infinite types such as `T = List<T>`. Conflicting
-  concrete anchors reject a proposed connection/paste. Errors are returned to the
+  resolved types reject a proposed connection/paste. Errors are returned to the
   caller, never stored on groups. For invalid saved graphs, readers use declarations
   rather than stale inference; execution reports an error if it reaches an invalid
   component, while independently valid components can still execute.
@@ -72,6 +79,21 @@ stable, and only commits the completed result. It starts without previous inferr
 to prevent stale Break chains from anchoring themselves after disconnection.
 `derivedOutputs(nodeId)` returns the completed output declarations. Unchanged snapshots
 reuse the completed cache without recalculating fields.
+
+## Implicit conversions
+
+`Conversion.registry([...])` (from `@macrograph/module`) holds consumer-provided,
+directional scalar conversions. The core ships none. Without a registry, matching is
+exactly as described above. A registry is passed to `Executor.make({ conversions })`,
+and the editor reads it from an optional `Conversion.Service` layer.
+
+- Only data pins convert. Scope and exit fields keep their existing rules.
+- `List` and `Option` conversions are lifted from the scalar rule automatically.
+- A registered conversion runs when a connected value is read. A failure fails the
+  whole run with `ConversionFailed`; consumers cannot supply a fallback.
+- Conversions never determine a wildcard's type, and a conversion does not chain.
+- `Wildcards.Cache` takes its registry at construction; a different registry needs a
+  new cache.
 
 ## Integration and storage
 

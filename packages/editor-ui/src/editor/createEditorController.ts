@@ -1,4 +1,5 @@
 import type { SchemaAuthoring } from "@macrograph/core";
+import type { Conversion } from "@macrograph/module";
 import type { Effect, Scope } from "effect";
 
 import type { EditorConnection, ModuleSettingsDescriptor } from "./Editor";
@@ -20,11 +21,12 @@ export interface EditorControllerOptions {
   readonly reconnect?: boolean;
   readonly projectSettings?: boolean;
   readonly authoring?: SchemaAuthoring.Registry;
+  readonly conversions?: Conversion.Registry;
 }
 
 /** Construct in the parent's Solid scope; that scope owns the connection and model. */
 export function createEditorController(options: EditorControllerOptions) {
-  const editor = createEditorStore(options.authoring);
+  const editor = createEditorStore(options.authoring, options.conversions);
   const layout = createEditorWorkspace(options, editor, () => presence.setLocalCursor(null));
   const connection = createEditorConnection(
     options,

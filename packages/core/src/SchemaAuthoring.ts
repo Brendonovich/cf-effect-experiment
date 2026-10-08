@@ -1,6 +1,6 @@
 import type * as Registration from "@macrograph/module/Registration";
 
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Canvas } from "./Canvas.ts";
@@ -106,7 +106,10 @@ export class GraphResolver {
   private key: string | undefined;
   private value: Resolution | undefined;
 
-  constructor(readonly registry: Registry) {}
+  constructor(
+    readonly registry: Registry,
+    readonly conversions: Conversion.Registry = Conversion.empty,
+  ) {}
 
   resolve(
     graph: Canvas.Model,
@@ -211,7 +214,7 @@ export class GraphResolver {
       );
     }
     let current = initial;
-    const cache = new Wildcards.Cache();
+    const cache = new Wildcards.Cache(this.conversions);
     for (let round = 0; round <= Object.keys(graph.nodes).length + 1; round++) {
       const solved = cache.update(new Map(Object.entries(current)), graph.connections);
       const invalid = new Set<string>();

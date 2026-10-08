@@ -25,7 +25,7 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import * as Registration from "@macrograph/module/Registration";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
@@ -35,6 +35,7 @@ import {
   Effect,
   Fiber,
   Layer,
+  Option,
   Ref,
   Result,
   Schema,
@@ -450,6 +451,10 @@ export const layer = Layer.effect(Service)(
     const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
+    const conversions = Option.getOrElse(
+      yield* Effect.serviceOption(Conversion.Service),
+      () => Conversion.empty,
+    );
     const lock = yield* Semaphore.make(1);
     const initialProject = yield* persistence.loadProject().pipe(
       Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(undefined)),
@@ -598,7 +603,7 @@ export const layer = Layer.effect(Service)(
     const graphWildcards = Effect.fnUntraced(function* (
       graph: Canvas.Model,
       overrides: Readonly<Record<string, NodeIO>> = {},
-      cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(),
+      cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(conversions),
       definitions?: t.Definitions,
     ): Effect.fn.Return<
       {
@@ -722,7 +727,7 @@ export const layer = Layer.effect(Service)(
       const dataInput = dataInputs[0];
       return dataOutput === undefined || dataInput === undefined
         ? dataOutput === undefined && dataInput === undefined
-        : t.compatible(dataOutput.type, dataInput.type);
+        : Conversion.connectable(dataOutput.type, dataInput.type, conversions);
     };
 
     const proposedTypes = Effect.fnUntraced(function* (
@@ -1973,7 +1978,7 @@ export const layer = Layer.effect(Service)(
       if (
         dataOutputs[0] !== undefined &&
         dataInputs[0] !== undefined &&
-        (!t.compatible(dataOutputs[0].type, dataInputs[0].type) ||
+        (!Conversion.connectable(dataOutputs[0].type, dataInputs[0].type, conversions) ||
           (outNode !== undefined &&
             !(yield* packages.acceptsOutput(
               outNode.schema,

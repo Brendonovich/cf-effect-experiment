@@ -12,7 +12,7 @@ import {
   TypeDefinition,
   Wildcards,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
@@ -60,6 +60,11 @@ export class InvalidInputValue extends Schema.TaggedError<InvalidInputValue>()(
   "InvalidInputValue",
   { nodeId: Schema.String, inputId: Schema.String, reason: Schema.String },
 ) {}
+
+export class ConversionFailed extends Schema.TaggedError<ConversionFailed>()("ConversionFailed", {
+  connectionId: Schema.String,
+  reason: Schema.String,
+}) {}
 
 export class InvalidOutputValue extends Schema.TaggedError<InvalidOutputValue>()(
   "InvalidOutputValue",
@@ -130,6 +135,7 @@ export type ExecutorError =
   | MissingOutput
   | ScopeNotActive
   | InvalidInputValue
+  | ConversionFailed
   | InvalidOutputValue
   | ExecutionCycle
   | ResourceResolutionError
@@ -305,6 +311,7 @@ export interface MakeOptions {
   readonly projectId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
+  readonly conversions?: Conversion.Registry;
   readonly resourceValues?: (
     resource: ResourceConstant.ResourceRef,
   ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
@@ -318,6 +325,7 @@ export const make = Effect.fnUntraced(function* (
   options?: MakeOptions,
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
+  const conversions = options?.conversions ?? Conversion.empty;
   const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
   const customTypeSchemas = yield* Registration.collect(CustomTypes.module.effect);
   yield* Ref.set(
@@ -798,7 +806,7 @@ export const make = Effect.fnUntraced(function* (
       const io = yield* generateUnresolvedNodeIO(graph, node, schema, properties);
       let cache = wildcardGraphs.get(graph.id);
       if (cache?.group(node.id) === undefined) {
-        cache ??= new Wildcards.Cache();
+        cache ??= new Wildcards.Cache(conversions);
         const currentCache = cache;
         const declarations = new Map<string, Registration.RegisteredNodeIO>();
         for (const candidate of Object.values(graph.nodes)) {
@@ -1070,7 +1078,8 @@ export const make = Effect.fnUntraced(function* (
           if (
             targetData.length + targetExec.length !== 1 ||
             (output.kind === "data"
-              ? targetData.length !== 1 || !t.equals(output.port.type, targetData[0]!.type)
+              ? targetData.length !== 1 ||
+                !Conversion.connectable(output.port.type, targetData[0]!.type, conversions)
               : targetExec.length !== 1 ||
                 !Registration.scopesCompatible(output.port.scope, targetExec[0]?.scope) ||
                 (target.schema.type !== "exec" && target.schema.type !== "base"))
@@ -1743,7 +1752,8 @@ export const make = Effect.fnUntraced(function* (
             reason: `Output ${OutputRef.key(connection.outIo)} is not a data output`,
           });
         const output = resolved.port;
-        if (!t.equals(output.type, input.type))
+        const conversion = conversions.find(output.type, input.type);
+        if (conversion === undefined)
           return yield* new InvalidConnection({
             connectionId: connection.id,
             reason: `Output ${OutputRef.key(connection.outIo)} is incompatible with input ${input.id}`,
@@ -1766,8 +1776,18 @@ export const make = Effect.fnUntraced(function* (
             });
           value = state.outputs.get(key);
         }
+        // Conversion failures are run failures: consumers cannot supply a fallback value.
+        const converted = yield* conversion.convert(value).pipe(
+          Effect.catchCause(
+            () =>
+              new ConversionFailed({
+                connectionId: connection.id,
+                reason: `Conversion from ${output.type._tag} to ${input.type._tag} failed`,
+              }),
+          ),
+        );
         return yield* Schema.decodeUnknownEffect(t.ValueSchema(input.type, definitions))(
-          value,
+          converted,
         ).pipe(
           Effect.catchCause(
             () =>

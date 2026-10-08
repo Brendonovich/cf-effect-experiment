@@ -443,7 +443,9 @@ export function createEditorCommands(
           if (source === undefined) return Effect.void;
           const targetPorts =
             source.direction === "output" ? graphNodeInputs(event.io) : graphNodeOutputs(event.io);
-          const targetPort = targetPorts.find((port) => portsCompatible(source.port, port));
+          const targetPort = targetPorts.find((port) =>
+            portsCompatible(source.port, port, editor.conversions),
+          );
           if (targetPort === undefined)
             return applyMutation(c.DeleteNode({ graphId, nodeId: event.node.id })).pipe(
               Effect.asVoid,
