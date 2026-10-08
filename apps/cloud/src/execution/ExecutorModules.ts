@@ -17,7 +17,7 @@ import { Schema } from "effect";
 
 import { apiDeployments, statelessModules } from "../modules/CloudModules.ts";
 
-const [openai, elevenlabs] = apiDeployments;
+const [openai, elevenlabs, discord] = apiDeployments;
 
 export const registry = ExecutorModules.make([
   ExecutorModules.entry(TwitchModule, SubscriptionEvent.Any, TwitchDeployment),
@@ -28,4 +28,5 @@ export const registry = ExecutorModules.make([
   ...statelessModules.map((module) => ExecutorModules.entry(module)),
   ExecutorModules.entry(openai.module, Schema.Never, openai),
   ExecutorModules.entry(elevenlabs.module, Schema.Never, elevenlabs),
+  ExecutorModules.entry(discord.module, Schema.Never, discord),
 ]);

@@ -122,6 +122,7 @@ describe("ExecutorModules", () => {
 
   it("registers the cloud-compatible catalog without local or persistent-socket modules", () => {
     assert.deepStrictEqual(ExecutorModules.registry.entries.map(({ id }) => id).sort(), [
+      "discord",
       "elevenlabs",
       "github",
       "http-client",

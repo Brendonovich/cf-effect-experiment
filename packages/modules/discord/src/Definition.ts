@@ -16,6 +16,7 @@ export const FailureReason = Schema.Literals([
   "http",
   "invalid-response",
   "storage-failed",
+  "gateway-unavailable",
 ]);
 export class DiscordFailure extends Schema.TaggedError<DiscordFailure>()("DiscordFailure", {
   reason: FailureReason,
@@ -40,6 +41,8 @@ export const RuntimeStorage = Schema.Struct({
 });
 export const ClientState = Schema.Struct({
   configured: Schema.Boolean,
+  /** False on hosts such as Cloud that run the REST actions without a gateway connection. */
+  gatewayAvailable: Schema.Boolean,
   gatewayEnabled: Schema.Boolean,
   messageContent: Schema.Boolean,
   status: ConnectionStatus,
@@ -47,6 +50,7 @@ export const ClientState = Schema.Struct({
 });
 export const initialClientState: typeof ClientState.Type = {
   configured: false,
+  gatewayAvailable: false,
   gatewayEnabled: false,
   messageContent: false,
   status: "disconnected",

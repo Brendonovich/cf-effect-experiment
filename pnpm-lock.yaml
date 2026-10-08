@@ -197,6 +197,9 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@macrograph/module-discord':
+        specifier: workspace:*
+        version: link:../../packages/modules/discord
       '@macrograph/module-elevenlabs':
         specifier: workspace:*
         version: link:../../packages/modules/elevenlabs
@@ -309,6 +312,9 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../../packages/module
+      '@macrograph/module-discord':
+        specifier: workspace:*
+        version: link:../../../packages/modules/discord
       '@macrograph/module-elevenlabs':
         specifier: workspace:*
         version: link:../../../packages/modules/elevenlabs

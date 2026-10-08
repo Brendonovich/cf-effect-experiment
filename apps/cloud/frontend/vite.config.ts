@@ -11,6 +11,7 @@ const cloudSettings = new Set([
   "@macrograph/module-twitch",
   "@macrograph/module-openai",
   "@macrograph/module-elevenlabs",
+  "@macrograph/module-discord",
 ]);
 const workerUrl =
   process.env.VITE_WORKER_URL ??
