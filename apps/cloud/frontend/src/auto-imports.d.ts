@@ -16,7 +16,7 @@ declare global {
   const IconTablerArrowsDiagonalMinimize2: typeof import('~icons/tabler/arrows-diagonal-minimize2.jsx').default
   const IconTablerBrowser: typeof import('~icons/tabler/browser.jsx').default
   const IconTablerCheck: typeof import('~icons/tabler/check.jsx').default
-  const IconTablerChevronDown: typeof import('~icons/tabler/chevron-down.jsx').default
+  const IconTablerChevronDown: typeof import("~icons/tabler/chevron-down.jsx").default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerExternalLink: typeof import('~icons/tabler/external-link.jsx').default
   const IconTablerEye: typeof import('~icons/tabler/eye.jsx').default
