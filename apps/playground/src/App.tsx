@@ -5,7 +5,6 @@ import {
   createEditorController,
   RealtimeWorkspace,
   macrographLogo,
-  PresenceList,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -203,7 +202,6 @@ export function App() {
   };
   const controls = () => (
     <div sx={styles.controls}>
-      <PresenceList controller={editor} onFollow={() => setView("editor")} />
       <Button
         type="button"
         size="sm"
