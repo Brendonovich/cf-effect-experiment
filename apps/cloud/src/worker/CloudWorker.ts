@@ -107,6 +107,7 @@ export default Layer.unwrap(
               directory,
               htmlHandling: "auto-trailing-slash",
               notFoundHandling: "single-page-application",
+              runWorkerFirst: ["/api/*", "/oauth/*", "/.well-known/*"],
             }))
           : undefined,
         dev: { port: 1337, strictPort: true },

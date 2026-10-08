@@ -1,6 +1,6 @@
 import { assert, describe, it } from "vitest";
 
-import { signInReturnPath, signInUrl } from "./authRedirect";
+import { isWorkerRoute, signInReturnPath, signInUrl } from "./authRedirect";
 
 describe("sign-in redirects", () => {
   it("preserves the complete destination through the sign-in URL", () => {
@@ -24,6 +24,17 @@ describe("sign-in redirects", () => {
     assert.strictEqual(signInReturnPath("/cloud/sign-in", "/cloud/"), "/cloud/");
     assert.strictEqual(signInReturnPath("/elsewhere", "/cloud/"), "/cloud/");
     assert.strictEqual(signInReturnPath("/cloud-other", "/cloud/"), "/cloud/");
+  });
+
+  it("returns to worker-served OAuth authorization requests", () => {
+    const destination =
+      "/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A65273%2Fcallback";
+    const url = new URL(signInUrl(destination), "https://cloud.macrograph.app");
+    const returnPath = signInReturnPath(url.searchParams.get("next"));
+    assert.strictEqual(returnPath, destination);
+    assert.isTrue(isWorkerRoute(returnPath));
+    assert.isFalse(isWorkerRoute("/teams/team"));
+    assert.isFalse(isWorkerRoute("/oauthish"));
   });
 
   it("rejects external destinations and sign-in loops", () => {

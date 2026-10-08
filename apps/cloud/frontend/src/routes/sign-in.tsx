@@ -5,12 +5,14 @@ import * as stylex from "@stylexjs/stylex";
 import { Loading, Show } from "solid-js";
 
 import { useAuth } from "../Auth";
-import { signInReturnPath } from "../authRedirect";
+import { isWorkerRoute, signInReturnPath } from "../authRedirect";
 import { Redirect } from "../Redirect";
 
 export function SignInRoute() {
   const auth = useAuth();
   const location = useLocation();
+  const returnPath = () =>
+    signInReturnPath(new URLSearchParams(location.search).get("next"), import.meta.env.BASE_URL);
   const logoutFailed = () => new URLSearchParams(location.search).get("logout") === "failed";
   const verificationUrl = () => {
     const status = auth.status();
@@ -40,12 +42,10 @@ export function SignInRoute() {
               when={auth.status().state !== "connected"}
               fallback={
                 <Redirect
-                  href={signInReturnPath(
-                    new URLSearchParams(location.search).get("next"),
-                    import.meta.env.BASE_URL,
-                  )}
+                  href={returnPath()}
                   replace
                   resolve={false}
+                  document={isWorkerRoute(returnPath())}
                 />
               }
             >
