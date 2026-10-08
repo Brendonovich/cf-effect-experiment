@@ -60,6 +60,9 @@ The executor supplies this context; direct low-level schema runners must supply
 - A resolved wildcard behaves as its resolved type everywhere, including for
   consumer-registered implicit conversions (see below). It stays resolved to that
   type until its wires change.
+- The reserved wildcard IDs `Struct`, `Enum` and `Type` constrain values to custom types.
+  A `Type` wildcard joined to a `Struct` or `Enum` wildcard narrows to that constraint;
+  `Struct` and `Enum` wildcards never unify with each other.
 - An occurs check rejects infinite types such as `T = List<T>`. Conflicting
   resolved types reject a proposed connection/paste. Errors are returned to the
   caller, never stored on groups. For invalid saved graphs, readers use declarations

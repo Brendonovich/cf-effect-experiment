@@ -121,8 +121,11 @@ const solve = (
         if (key({ ...b, type: b.type }) === id) return true;
         const aConstraint = constraint(a.type);
         const bConstraint = constraint(b.type);
-        if (aConstraint !== undefined && bConstraint !== undefined && aConstraint !== bConstraint)
-          return false;
+        if (aConstraint !== undefined && bConstraint !== undefined && aConstraint !== bConstraint) {
+          // `Type` accepts any Struct or Enum, so it narrows to the other constraint.
+          if (bConstraint === "Type") return unify(b, a);
+          if (aConstraint !== "Type") return false;
+        }
         if (aConstraint !== undefined && bConstraint === undefined) return unify(b, a);
       }
       if (!accepts(a.type, b.type)) return false;
