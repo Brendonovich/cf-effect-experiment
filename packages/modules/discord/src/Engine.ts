@@ -1,4 +1,4 @@
-import { Effect, Layer, Queue, Schema, Semaphore, Stream } from "effect";
+import { Effect, Layer, Option, Queue, Schema, Semaphore, Stream } from "effect";
 
 import {
   API_ORIGIN,
@@ -33,7 +33,9 @@ const decode =
 export const layer = DiscordEngine.toLayer((mg) =>
   Effect.gen(function* () {
     const http = yield* Http;
-    const gateway = yield* Gateway;
+    // Hosts without a Gateway (such as Cloud) only run the REST actions and never connect.
+    const gateway = Option.getOrUndefined(yield* Effect.serviceOption(Gateway));
+    const gatewayAvailable = gateway !== undefined;
     const lock = yield* Semaphore.make(1);
     const callbacks = yield* Queue.dropping<Effect.Effect<void>>(1024);
     yield* Stream.runForEach(Stream.fromQueue(callbacks), (effect) => effect).pipe(
@@ -41,12 +43,14 @@ export const layer = DiscordEngine.toLayer((mg) =>
     );
     yield* Effect.addFinalizer(() => Queue.shutdown(callbacks).pipe(Effect.asVoid));
     let config = yield* mg.storage.get;
-    let state: typeof ClientState.Type = {
+    const idleState = (): typeof ClientState.Type => ({
       configured: config.token.length > 0,
-      gatewayEnabled: config.gatewayEnabled,
+      gatewayAvailable,
+      gatewayEnabled: gatewayAvailable && config.gatewayEnabled,
       messageContent: config.messageContent,
       status: "disconnected",
-    };
+    });
+    let state = idleState();
     let close: (() => void) | undefined;
     let generation = 0;
     const stop = () => {
@@ -58,13 +62,8 @@ export const layer = DiscordEngine.toLayer((mg) =>
 
     const start = Effect.fnUntraced(function* () {
       stop();
-      state = {
-        configured: config.token.length > 0,
-        gatewayEnabled: config.gatewayEnabled,
-        messageContent: config.messageContent,
-        status: "disconnected",
-      };
-      if (config.gatewayEnabled && config.token) {
+      state = idleState();
+      if (gateway !== undefined && config.gatewayEnabled && config.token) {
         const current = generation;
         yield* Effect.try({
           try: () => {
@@ -82,6 +81,7 @@ export const layer = DiscordEngine.toLayer((mg) =>
                 if (current !== generation) return;
                 state = {
                   configured: state.configured,
+                  gatewayAvailable,
                   gatewayEnabled: state.gatewayEnabled,
                   messageContent: state.messageContent,
                   status,
@@ -118,7 +118,7 @@ export const layer = DiscordEngine.toLayer((mg) =>
       const response = yield* http
         .request(`${API_ORIGIN}${path}`, {
           method,
-          redirect: "error",
+          redirect: "manual",
           headers: { Authorization: `Bot ${config.token}`, "Content-Type": "application/json" },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         })
@@ -126,7 +126,8 @@ export const layer = DiscordEngine.toLayer((mg) =>
       return yield* json(response);
     });
 
-    yield* start();
+    // Without a gateway there is nothing to start, and read-only hosts cannot refresh clients.
+    if (gatewayAvailable) yield* start();
     return DiscordEngine.of({
       resources: Layer.empty,
       rpcs: RuntimeRpcs.toLayer({
@@ -197,7 +198,7 @@ export const layer = DiscordEngine.toLayer((mg) =>
             const response = yield* http
               .request(url, {
                 method: "POST",
-                redirect: "error",
+                redirect: "manual",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   content,
@@ -218,10 +219,12 @@ export const layer = DiscordEngine.toLayer((mg) =>
             Effect.gen(function* () {
               if (!validateToken(input.token))
                 return yield* new DiscordFailure({ reason: "invalid-token" });
-              yield* save(input);
+              yield* save({ ...input, gatewayEnabled: gatewayAvailable && input.gatewayEnabled });
             }).pipe(lock.withPermit),
           DiscordSetGateway: ({ enabled, messageContent }) =>
             Effect.gen(function* () {
+              if (enabled && !gatewayAvailable)
+                return yield* new DiscordFailure({ reason: "gateway-unavailable" });
               if (enabled && !config.token)
                 return yield* new DiscordFailure({ reason: "not-configured" });
               yield* save({ ...config, gatewayEnabled: enabled, messageContent });
@@ -233,5 +236,8 @@ export const layer = DiscordEngine.toLayer((mg) =>
     });
   }),
 );
+
+/** The REST actions only, for hosts that must not hold a gateway connection. */
+export const restLayer = layer.pipe(Layer.provide(httpLayer));
 
 export default layer.pipe(Layer.provide(httpLayer), Layer.provide(gatewayLayer));

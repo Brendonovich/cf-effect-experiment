@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { GraphId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
 import { Engine } from "@macrograph/module";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
@@ -23,7 +24,14 @@ const services = Editor.layer.pipe(
 const http = Layer.succeed(HttpClient.HttpClient)(
   HttpClient.make(() => Effect.die("Editor startup must not call a provider")),
 );
-const newIds = ["elevenlabs", "json", "list", "logic", "math", "openai", "string"];
+const newIds = ["discord", "elevenlabs", "json", "list", "logic", "math", "openai", "string"];
+const discordState = (configured: boolean) => ({
+  configured,
+  gatewayAvailable: false,
+  gatewayEnabled: false,
+  messageContent: false,
+  status: "disconnected",
+});
 
 describe("Cloud modules", () => {
   it("shares supported modules with execution and keeps settings RPCs distinct and write-only", () => {
@@ -85,6 +93,20 @@ describe("Cloud modules", () => {
             assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
               configured: false,
             });
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("discord"),
+              discordState(false),
+            );
+            const discordPackage = (yield* packages.getPackages()).find(
+              (pkg) => pkg.id === "discord",
+            );
+            assert.deepStrictEqual(discordPackage?.schemas.map((schema) => schema.id).sort(), [
+              "DiscordGetGuildMember",
+              "DiscordGetRole",
+              "DiscordGetUser",
+              "DiscordSendMessage",
+              "DiscordSendWebhook",
+            ]);
             for (const module of CloudModules.statelessModules)
               assert.strictEqual(
                 (yield* editor.engine.getRuntimeClient(module.id).pipe(Effect.flip))._tag,
@@ -98,6 +120,20 @@ describe("Cloud modules", () => {
             );
             yield* openai.OpenAIUpdateKey({ apiKey: "openai-secret" });
             yield* elevenlabs.ElevenLabsUpdateKey({ apiKey: "elevenlabs-secret" });
+            const discord = yield* RpcTest.makeClient(DiscordEngine.ClientRpcs).pipe(
+              Effect.provide(context),
+            );
+            yield* discord.DiscordConfigure({
+              token: "discord-secret",
+              gatewayEnabled: true,
+              messageContent: true,
+            });
+            assert.strictEqual(
+              (yield* discord
+                .DiscordSetGateway({ enabled: true, messageContent: true })
+                .pipe(Effect.flip)).reason,
+              "gateway-unavailable",
+            );
             yield* editor.node.create({
               graphID: graphId,
               node: {
@@ -116,6 +152,11 @@ describe("Cloud modules", () => {
         assert.deepStrictEqual(saved.engines.twitch, original.engines.twitch);
         assert.deepStrictEqual(saved.engines.openai, { apiKey: "openai-secret" });
         assert.deepStrictEqual(saved.engines.elevenlabs, { apiKey: "elevenlabs-secret" });
+        assert.deepStrictEqual(saved.engines.discord, {
+          token: "discord-secret",
+          gatewayEnabled: false,
+          messageContent: true,
+        });
         yield* Effect.scoped(
           Effect.gen(function* () {
             yield* Layer.build(CloudModules.editorLayer);
@@ -137,6 +178,10 @@ describe("Cloud modules", () => {
             });
             assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
               configured: true,
+            });
+            assert.deepStrictEqual(yield* editor.engine.getClientState("discord"), {
+              ...discordState(true),
+              messageContent: true,
             });
           }).pipe(
             Effect.provide(services),

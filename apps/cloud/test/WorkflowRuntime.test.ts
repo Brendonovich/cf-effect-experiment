@@ -1,8 +1,9 @@
 import type * as Executor from "@macrograph/execution/Executor";
 
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Project } from "@macrograph/core";
 import { Engine } from "@macrograph/module";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
@@ -290,6 +291,61 @@ describe("WorkflowRuntime", () => {
       const unavailable = yield* Effect.flip(unknown.SomeRuntimeRpc!());
       assert.strictEqual(unavailable._tag, "EngineClientUnavailable");
       assert.strictEqual(unavailable.moduleId, "unknown-module");
+    }),
+  );
+
+  it.effect("sends Discord messages with the snapshot bot token and tolerates bad settings", () =>
+    Effect.gen(function* () {
+      const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        requests.push({ url: String(input), init });
+        return Response.json({ id: "message-1" });
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(() => fetchMock.mockRestore()));
+      const discordClient = (project: Project.Model) =>
+        setup(
+          project,
+          mock(() => new Response()),
+        ).pipe(
+          Effect.flatMap(({ engineClient }) => engineClient("discord")),
+          Effect.map((client) => client as Engine.RuntimeClientOf<typeof DiscordEngine>),
+        );
+
+      const discord = yield* discordClient({
+        ...Project.empty(),
+        engines: {
+          discord: { token: "snapshot-discord", gatewayEnabled: true, messageContent: false },
+        },
+      });
+      assert.sameMembers(Object.keys(discord), [
+        "DiscordSendMessage",
+        "DiscordGetUser",
+        "DiscordGetGuildMember",
+        "DiscordGetRole",
+        "DiscordSendWebhook",
+      ]);
+      const sent = yield* discord.DiscordSendMessage({
+        channelId: "123",
+        message: "Pushed to main",
+        everyone: false,
+      });
+      assert.strictEqual(sent.messageId, "message-1");
+      assert.strictEqual(requests[0]!.url, "https://discord.com/api/v10/channels/123/messages");
+      assert.strictEqual(
+        new globalThis.Headers(requests[0]!.init?.headers).get("authorization"),
+        "Bot snapshot-discord",
+      );
+      assert.strictEqual(requests[0]!.init?.redirect, "manual");
+
+      const malformed = yield* discordClient({
+        ...Project.empty(),
+        engines: { discord: { token: 42 } },
+      });
+      const failure = yield* Effect.flip(
+        malformed.DiscordSendMessage({ channelId: "123", message: "hi", everyone: false }),
+      );
+      assert.strictEqual(failure.reason, "not-configured");
+      assert.strictEqual(requests.length, 1);
     }),
   );
 });

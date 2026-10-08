@@ -1,6 +1,9 @@
 import type { Project } from "@macrograph/core";
 
 import * as Executor from "@macrograph/execution/Executor";
+import DiscordModule from "@macrograph/module-discord";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
+import { restLayer as discordLayer } from "@macrograph/module-discord/Engine";
 import ElevenLabsModule from "@macrograph/module-elevenlabs";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { layer as elevenLabsLayer } from "@macrograph/module-elevenlabs/Engine";
@@ -78,6 +81,34 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
   const elevenLabsClient = yield* RpcTest.makeClient(ElevenLabsEngine.Rpcs).pipe(
     Effect.provide(elevenLabs.rpcs),
   );
+  const discord = yield* DiscordEngine.pipe(
+    Effect.provide(discordLayer),
+    Effect.provide(
+      Layer.succeed(DiscordEngine.EngineContext)(
+        DiscordEngine.EngineContext.of({
+          ...context,
+          storage: {
+            // The Discord engine reads storage while constructing, so invalid settings must not
+            // fail every workflow; its actions then report that Discord is not configured.
+            get: Schema.decodeUnknownEffect(DiscordEngine.Storage)(
+              project.engines[DiscordModule.id] ?? DiscordEngine.InitialStorage,
+            ).pipe(
+              Effect.orElseSucceed(() => ({
+                token: "",
+                gatewayEnabled: false,
+                messageContent: false,
+              })),
+            ),
+            set: () => readOnly,
+            update: () => readOnly,
+          },
+        }),
+      ),
+    ),
+  );
+  const discordClient = yield* RpcTest.makeClient(DiscordEngine.Rpcs).pipe(
+    Effect.provide(discord.rpcs),
+  );
 
   const engineClient: NonNullable<Executor.MakeOptions["engineClient"]> = (moduleId) =>
     Effect.succeed(
@@ -87,17 +118,19 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
           ? openAIClient
           : moduleId === ElevenLabsModule.id
             ? elevenLabsClient
-            : moduleId === TwitchModule.id
-              ? unavailableTwitchRuntime
-              : moduleId === GitHubModule.id
-                ? unavailableGitHubRuntime
-                : new Proxy(
-                    {},
-                    {
-                      get: () => () =>
-                        Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
-                    },
-                  ),
+            : moduleId === DiscordModule.id
+              ? discordClient
+              : moduleId === TwitchModule.id
+                ? unavailableTwitchRuntime
+                : moduleId === GitHubModule.id
+                  ? unavailableGitHubRuntime
+                  : new Proxy(
+                      {},
+                      {
+                        get: () => () =>
+                          Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
+                      },
+                    ),
     );
   return engineClient;
 });

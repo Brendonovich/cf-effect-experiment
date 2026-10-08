@@ -16,6 +16,7 @@
     "@macrograph/editor": "workspace:*",
     "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/module-discord": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
     "@macrograph/module-github": "workspace:*",
     "@macrograph/module-kofi": "workspace:*",
