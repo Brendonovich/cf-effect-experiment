@@ -2,7 +2,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { IoId, Package, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages, Presence } from "@macrograph/editor";
-import { t } from "@macrograph/module";
+import { Module, t } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
@@ -42,6 +42,20 @@ const pkg: Package.Model = {
     },
   ],
 };
+
+const WildcardModule = Module.make({
+  id: "wildcard-api",
+  effect: (context) =>
+    context.schema.register({
+      id: "identity",
+      type: "pure",
+      io: (io) => {
+        const type = io.wildcard("T");
+        return { input: io.data.in("in", type), output: io.data.out("out", type) };
+      },
+      run: ({ io }) => Effect.sync(() => io.output(io.input)),
+    }),
+});
 
 const sessions = ClientSessions.make(memoryStore());
 const apiKeys = ApiKeys.make(memoryStore());
@@ -335,6 +349,49 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
         },
       });
       assert.strictEqual(connection.status, 201);
+
+      yield* send("DELETE", `/api/projects/local/graphs/${graphId}`, { token: key.key });
+      yield* send("DELETE", `/auth/api-keys/${key.id}`, { token: owner });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("returns inferred wildcard types from createGraph and getGraph", () =>
+    Effect.gen(function* () {
+      yield* (yield* Packages.Service).loadPackage(pkg);
+      yield* (yield* Editor.Service).module(WildcardModule);
+      const owner = yield* createSession("owner");
+      const { body: key } = yield* send("POST", "/auth/api-keys", {
+        token: owner,
+        body: { name: "Wildcard key" },
+      });
+
+      const created = yield* send("POST", "/api/projects/local/graphs", {
+        token: key.key,
+        body: {
+          name: "Wildcards",
+          nodes: {
+            source: { schema: { package: "test", schema: "text" } },
+            identity: { schema: { package: "wildcard-api", schema: "identity" } },
+          },
+          connections: [
+            {
+              outNodeId: "source",
+              outIo: { _tag: "Port", id: "out" },
+              inNodeId: "identity",
+              inIoId: "in",
+            },
+          ],
+        },
+      });
+      assert.strictEqual(created.status, 201);
+      const identityId = created.body.nodeIds.identity;
+      assert.deepStrictEqual(created.body.nodeIO[identityId].dataOutputs[0].type, t.String);
+
+      const graphId = created.body.graph.id;
+      const fetched = yield* send("GET", `/api/projects/local/graphs/${graphId}`, {
+        token: key.key,
+      });
+      assert.deepStrictEqual(fetched.body.nodeIO[identityId].dataOutputs[0].type, t.String);
 
       yield* send("DELETE", `/api/projects/local/graphs/${graphId}`, { token: key.key });
       yield* send("DELETE", `/auth/api-keys/${key.id}`, { token: owner });

@@ -6,7 +6,6 @@ import {
   GraphId,
   Node,
   NodeId,
-  NodeIO,
   Package,
   PackageId,
   Project,
@@ -93,7 +92,6 @@ export const make = Effect.gen(function* () {
 
         return yield* Effect.gen(function* () {
           const nodeIds = new Map<string, NodeId>();
-          const nodeIO: Record<string, NodeIO> = {};
 
           for (const [reference, node] of Object.entries(nodes)) {
             const event = yield* editor.node
@@ -104,7 +102,6 @@ export const make = Effect.gen(function* () {
                 ),
               );
             nodeIds.set(reference, event.node.id);
-            nodeIO[event.node.id] = event.io;
           }
 
           for (const connection of connections) {
@@ -123,6 +120,7 @@ export const make = Effect.gen(function* () {
           }
 
           const graph = yield* persistence.loadGraph(created.graph.id);
+          const nodeIO = yield* editor.graph.resolvedIO({ graphID: created.graph.id });
           return { graph, nodeIds: Object.fromEntries(nodeIds), nodeIO };
         }).pipe(
           Effect.tap(() => touch(identity, { activeGraph: created.graph.id, cursor: null })),
@@ -143,8 +141,9 @@ export const make = Effect.gen(function* () {
     const snapshot = yield* editor.project.snapshot();
     const graph = snapshot.project.graphs[graphId];
     if (graph === undefined) return yield* new Graph.NotFoundError({ id: graphId });
+    const nodeIO = yield* editor.graph.resolvedIO({ graphID: graphId });
     yield* touch(identity, { activeGraph: graphId });
-    return { graph, nodeIO: snapshot.nodeIO[graphId] ?? {} };
+    return { graph, nodeIO };
   });
 
   const deleteGraph = Effect.fnUntraced(function* (

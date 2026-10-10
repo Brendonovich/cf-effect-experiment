@@ -276,6 +276,13 @@ export interface Interface {
     readonly delete: (options: {
       readonly graphID: string;
     }) => Effect.Effect<EditorEvent.GraphDeleted, PersistenceError>;
+    /** Each node's IO with wildcard types inferred from the graph's connections. */
+    readonly resolvedIO: (options: {
+      readonly graphID: string;
+    }) => Effect.Effect<
+      Record<string, NodeIO>,
+      PersistenceError | Project.NotFoundError | Graph.NotFoundError
+    >;
   };
   readonly function: {
     readonly create: (
@@ -2067,6 +2074,24 @@ export const layer = Layer.effect(Service)(
       return { project: { ...project, graphs }, nodeIO: generated };
     }, lock.withPermit);
 
+    const graphResolvedIO = Effect.fn("Editor.graph.resolvedIO")(function* (options: {
+      readonly graphID: string;
+    }) {
+      const project = yield* persistence.loadProject();
+      yield* packages.setTypeDefinitions(project.types);
+      const graph = Project.canvases(project)[options.graphID];
+      if (graph === undefined) return yield* new Graph.NotFoundError({ id: options.graphID });
+      const { cache, declarations, result } = yield* graphWildcards(graph);
+      const io: Record<string, NodeIO> = {};
+      for (const [nodeId, declared] of declarations)
+        io[nodeId] = Result.isFailure(result) ? declared : cache.resolveIO(nodeId, declared);
+      const fn = project.functions[graph.id];
+      if (fn !== undefined)
+        for (const node of GraphFunction.boundaryNodes(fn))
+          io[node.id] = GraphFunction.boundaryIO(fn, node.id)!;
+      return io;
+    }, lock.withPermit);
+
     const projectRendered = Effect.fn("Editor.project.rendered")(function* () {
       const project = yield* persistence.loadProject();
       yield* packages.setTypeDefinitions(project.types);
@@ -2524,7 +2549,12 @@ export const layer = Layer.effect(Service)(
         rename: queueRename,
         delete: queueDelete,
       },
-      graph: { create: graphCreate, update: graphUpdate, delete: graphDelete },
+      graph: {
+        create: graphCreate,
+        update: graphUpdate,
+        delete: graphDelete,
+        resolvedIO: graphResolvedIO,
+      },
       function: {
         create: functionCreate,
         addField: functionAddField,

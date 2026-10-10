@@ -53,7 +53,7 @@ export const CreateGraphResponse = Schema.Struct({
   }),
   nodeIO: Schema.Record(Schema.String, NodeIO).annotate({
     description:
-      "Inputs and outputs of each created node, keyed by created node ID. Includes ports that depend on node properties, such as Format String placeholders.",
+      "Inputs and outputs of each created node, keyed by created node ID. Includes ports that depend on node properties, such as Format String placeholders, and wildcard types inferred from the created connections.",
   }),
 });
 export type CreateGraphResponse = typeof CreateGraphResponse.Type;
@@ -110,7 +110,10 @@ const getGraph = HttpApiEndpoint.get("getGraph", "/api/projects/:projectId/graph
   }),
   error: [ProjectNotFound, HttpApiError.NotFound],
 })
-  .annotate(OpenApi.Description, "Get a graph, its nodes and connections, and resolved node ports.")
+  .annotate(
+    OpenApi.Description,
+    "Get a graph, its nodes and connections, and node ports with wildcard types inferred from the graph's connections.",
+  )
   .middleware(Authentication);
 
 const deleteGraph = HttpApiEndpoint.delete(

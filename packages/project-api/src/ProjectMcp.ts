@@ -63,7 +63,7 @@ export const listGraphs = Tool.make("listGraphs", {
 
 export const getGraph = Tool.make("getGraph", {
   description:
-    "Inspect a graph, including all nodes, connections, and resolved node inputs and outputs.",
+    "Inspect a graph, including all nodes, connections, and node inputs and outputs. Wildcard port types show the types inferred from the graph's connections; wildcards that are not yet constrained remain wildcards.",
   parameters: Schema.Struct(graphParameters),
   success: Schema.Struct({ graph: Canvas.Model, nodeIO: Schema.Record(Schema.String, NodeIO) }),
   failure: Schema.Unknown,

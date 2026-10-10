@@ -94,6 +94,25 @@ it.effect(
     }).pipe(Effect.provide(TestLayer)),
 );
 
+it.effect("resolves a graph's IO with inferred wildcard types", () =>
+  Effect.gen(function* () {
+    const { editor, a, b, source, connect } = yield* setup;
+    const output = (id: string) =>
+      editor.graph
+        .resolvedIO({ graphID: "graph" })
+        .pipe(Effect.map((io) => io[id]!.dataOutputs[0]!.type));
+    yield* connect(a, b);
+    expect((yield* output(b))._tag).toBe("Wildcard");
+    yield* connect(source, a);
+    expect(yield* output(a)).toEqual(t.String);
+    expect(yield* output(b)).toEqual(t.String);
+    expect(yield* output(source)).toEqual(t.String);
+    expect((yield* Effect.flip(editor.graph.resolvedIO({ graphID: "missing" })))._tag).toBe(
+      "GraphNotFoundError",
+    );
+  }).pipe(Effect.provide(TestLayer)),
+);
+
 it.effect("checks the complete proposed group and leaves rejected connections unpersisted", () =>
   Effect.gen(function* () {
     const { editor, a, b, source, connect } = yield* setup;
