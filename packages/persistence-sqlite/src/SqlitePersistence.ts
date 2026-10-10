@@ -393,19 +393,17 @@ export const layer = Layer.effect(Persistence.Service)(
       connection: Connection.Model,
     ) {
       yield* exec((db) => {
-        db.transaction((tx) => {
-          tx.delete(schema.connections).where(eq(schema.connections.id, connection.id)).run();
-          tx.insert(schema.connections)
-            .values({
-              id: connection.id,
-              outNodeId: connection.outNodeId,
-              outIo: connection.outIo,
-              inNodeId: connection.inNodeId,
-              inIoId: connection.inIoId,
-              canvasId: graphId,
-            })
-            .run();
-        });
+        const values = {
+          outNodeId: connection.outNodeId,
+          outIo: connection.outIo,
+          inNodeId: connection.inNodeId,
+          inIoId: connection.inIoId,
+          canvasId: graphId,
+        };
+        db.insert(schema.connections)
+          .values({ id: connection.id, ...values })
+          .onConflictDoUpdate({ target: schema.connections.id, set: values })
+          .run();
       });
     });
 

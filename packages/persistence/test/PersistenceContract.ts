@@ -15,6 +15,7 @@ import {
 import { Effect, Layer } from "effect";
 
 import { Persistence } from "../src/index.ts";
+import { persistenceModelProperty } from "./PersistenceModel.ts";
 
 const node = (id: string, name = id): Node.Model => ({
   id: NodeId.make(id),
@@ -162,5 +163,7 @@ export const persistenceContract = <E>(
         }),
       ),
     );
+
+    persistenceModelProperty(layer);
   });
 };
