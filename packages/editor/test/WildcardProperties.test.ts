@@ -1,12 +1,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Connection, IoId, OutputRef, Wildcards } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { Result } from "effect";
 import { FastCheck as fc } from "effect/testing";
 
 // Property tests for `Wildcards.Cache`. Graphs are generated from a small palette of node
 // shapes. Chains are built around a chosen concrete type so the expected resolution of
 // every wildcard is known in advance; random graphs use invariants that need no oracle.
+// Caches use the core default conversions (Int -> Float, and Int/Float/Bool -> String).
 // Behaviour with a small, fixed input space is covered by exhaustive table tests instead.
 
 const fastCheck = {
@@ -84,6 +85,22 @@ const concreteType: fc.Arbitrary<t.Type> = fc.letrec<{ type: t.Type }>((tie) => 
     tie("type").map((inner) => t.Option(inner)),
   ),
 })).type;
+
+/** Source and sink types, favouring scalars so default conversions between them come up. */
+const endpointType = fc.oneof(
+  { arbitrary: fc.constantFrom<t.Type>(t.Int, t.Float, t.String, t.Bool), weight: 3 },
+  { arbitrary: concreteType, weight: 1 },
+);
+
+/** Replace every Int, Float and Bool with String, which each have a default conversion to. */
+const toString = (type: t.Type): t.Type =>
+  type._tag === "Int" || type._tag === "Float" || type._tag === "Bool"
+    ? t.String
+    : type._tag === "List"
+      ? t.List(toString(type.item))
+      : type._tag === "Option"
+        ? t.Option(toString(type.inner))
+        : type;
 
 /** Type flowing out of a hop, given the type flowing into it, or undefined if impossible. */
 const step = (
@@ -256,14 +273,21 @@ describe("wildcard resolution properties", () => {
   );
 
   it.prop(
-    "rejects a chain whose anchors disagree, in any connection order, without changing the cache",
-    [chainArb, fc.nat(), concreteType, fc.array(fc.double({ noNaN: true }))],
-    ([chain, at, wrong, keys]) => {
+    "accepts a mismatched tap only through a conversion, which never changes the wildcard",
+    [
+      chainArb,
+      fc.nat(),
+      fc.oneof(concreteType, fc.constant("converted" as const)),
+      fc.array(fc.double({ noNaN: true })),
+    ],
+    ([chain, at, target, keys]) => {
       const tap = at % chain.hops.length;
-      fc.pre(!t.equals(wrong, chain.expected[tap]!.out));
+      const out = chain.expected[tap]!.out;
+      const other = target === "converted" ? toString(out) : target;
+      fc.pre(!t.equals(other, out));
       const { declarations, wires } = anchorChain(chain, [{ kind: "source", at: 0 }]);
-      declarations.set("conflict", sinkIO(wrong));
-      wires.push(wire(hopId(tap), "conflict"));
+      declarations.set("tap", sinkIO(other));
+      wires.push(wire(hopId(tap), "tap"));
 
       const cache = new Wildcards.Cache();
       const valid = anchorChain(chain, [{ kind: "source", at: 0 }]);
@@ -271,9 +295,56 @@ describe("wildcard resolution properties", () => {
       const groups = [...cache.groups];
       const before = chain.hops.map((_, index) => cache.resolve(hopId(index), T));
 
-      expect(Result.isFailure(cache.update(declarations, shuffle(wires, keys)))).toBe(true);
-      expect([...cache.groups]).toEqual(groups);
+      const result = cache.update(declarations, shuffle(wires, keys));
+      expect(Result.isSuccess(result)).toBe(Conversion.defaultRules.has(out, other));
+      if (Result.isFailure(result)) expect([...cache.groups]).toEqual(groups);
       expect(chain.hops.map((_, index) => cache.resolve(hopId(index), T))).toEqual(before);
+    },
+    { fastCheck },
+  );
+
+  it.prop(
+    "resolves a wildcard from its source and converts it into each sink, or from agreeing sinks",
+    [
+      fc.option(endpointType, { nil: undefined }),
+      fc.integer({ min: 1, max: 4 }),
+      fc.array(
+        fc.record({
+          // Sinks may copy or convert the source type, so accepted cases come up often.
+          type: fc.oneof(endpointType, fc.constantFrom("same" as const, "converted" as const)),
+          at: fc.nat(),
+        }),
+        { minLength: 1, maxLength: 4 },
+      ),
+      fc.array(fc.double({ noNaN: true })),
+    ],
+    ([source, hops, sinkSpecs, keys]) => {
+      const base = source ?? t.Int;
+      const sinks = sinkSpecs.map(({ type, at }) => ({
+        at,
+        type: type === "same" ? base : type === "converted" ? toString(base) : type,
+      }));
+      // [source ->] pass -> pass ... with sinks tapped off random hops
+      const ids = Array.from({ length: hops }, (_, index) => hopId(index));
+      const declarations = new Map<string, Wildcards.IO>(ids.map((id) => [id, hopIO("pass")]));
+      const wires = ids.slice(1).map((id, index) => wire(ids[index]!, id));
+      if (source !== undefined) {
+        declarations.set("source", sourceIO(source));
+        wires.push(wire("source", ids[0]!));
+      }
+      for (const [index, sink] of sinks.entries()) {
+        declarations.set(`sink${index}`, sinkIO(sink.type));
+        wires.push(wire(ids[sink.at % hops]!, `sink${index}`));
+      }
+
+      const expected = source ?? sinks[0]!.type;
+      const accepted =
+        source !== undefined
+          ? sinks.every((sink) => Conversion.defaultRules.has(source, sink.type))
+          : sinks.every((sink) => t.equals(sink.type, expected));
+      const { cache, result } = solve(declarations, shuffle(wires, keys));
+      expect(Result.isSuccess(result)).toBe(accepted);
+      if (accepted) for (const id of ids) expect(cache.resolve(id, T)).toEqual(expected);
     },
     { fastCheck },
   );
@@ -347,8 +418,8 @@ describe("wildcard resolution properties", () => {
       nodes: fc.array(
         fc.oneof(
           hopArb.map((hop) => hopIO(hop)),
-          concreteType.map(sourceIO),
-          concreteType.map(sinkIO),
+          endpointType.map(sourceIO),
+          endpointType.map(sinkIO),
         ),
         { minLength: 2, maxLength: 7 },
       ),
@@ -383,7 +454,7 @@ describe("wildcard resolution properties", () => {
   );
 
   it.prop(
-    "resolves both ends of every accepted data connection to the same type",
+    "accepted data connections join equal types, or convert a resolved output",
     [graphArb],
     ([{ declarations, wires }]) => {
       const { cache, result } = solve(declarations, wires);
@@ -397,9 +468,11 @@ describe("wildcard resolution properties", () => {
           .dataInputs.find((port) => port.id === connection.inIoId);
         if (output === undefined || input === undefined) continue;
         if (!t.hasWildcard(output.type) && !t.hasWildcard(input.type)) continue;
-        expect(cache.resolve(connection.outNodeId, output.type)).toEqual(
-          cache.resolve(connection.inNodeId, input.type),
-        );
+        const from = cache.resolve(connection.outNodeId, output.type);
+        const to = cache.resolve(connection.inNodeId, input.type);
+        // Wildcard inputs must agree exactly; a concrete input may receive a conversion.
+        if (t.hasWildcard(input.type) || t.hasWildcard(from)) expect(from).toEqual(to);
+        else expect(Conversion.defaultRules.has(from, to)).toBe(true);
       }
     },
     { fastCheck },

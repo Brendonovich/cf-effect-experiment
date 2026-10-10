@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Module } from "@macrograph/module";
+import { Conversion, t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { FastCheck as fc } from "effect/testing";
@@ -9,9 +9,10 @@ import { Editor, Packages } from "../src/index.ts";
 
 // Tests for connection compatibility.
 //
-// Current policy: data connections require exactly matching types, except where a wildcard
-// is involved. There are no implicit conversions; values are converted with explicit
-// conversion nodes such as Math "Int To Float" or String "Int To String".
+// `t.compatible` is exact type matching, except where a wildcard is involved. On top of that,
+// the editor accepts directional implicit conversions; with no module-registered rules these
+// are the core defaults (Int -> Float, and Int/Float/Bool -> String), lifted through List and
+// Option. Conversion rules themselves are covered by the module and Conversions tests.
 
 const seed = process.env.FC_SEED === undefined ? 0xc0ec : Number(process.env.FC_SEED);
 const pureRuns = { numRuns: Number(process.env.FC_NUM_RUNS ?? 500), seed };
@@ -180,7 +181,7 @@ const sink = (index: number) => `sink${index}`;
 
 describe("editor connections", () => {
   it.effect(
-    "accepts a direct connection exactly when the types match, and persists only those",
+    "accepts a direct connection exactly when the types match or a default conversion applies",
     () =>
       Effect.gen(function* () {
         const { create, connect, connections } = yield* setup;
@@ -193,7 +194,9 @@ describe("editor connections", () => {
               yield* create(testModule.id, sink(to)),
               "in",
             );
-            expect(ok, `${from} -> ${to}`).toBe(t.equals(editorTypes[from]!, editorTypes[to]!));
+            expect(ok, `${from} -> ${to}`).toBe(
+              Conversion.connectable(editorTypes[from]!, editorTypes[to]!, Conversion.defaultRules),
+            );
             if (ok) accepted++;
           }
         expect(yield* connections).toHaveLength(accepted);
@@ -208,10 +211,17 @@ describe("editor connections", () => {
     "middle last": [0, 3, 1, 2],
   } as const;
   const chains = [
-    { name: "matching scalars", from: t.Int, to: t.Int },
-    { name: "mismatched scalars", from: t.Int, to: t.Float },
-    { name: "matching nested", from: t.List(t.Option(t.Bool)), to: t.List(t.Option(t.Bool)) },
-    { name: "mismatched nested", from: t.List(t.Int), to: t.List(t.Float) },
+    { name: "matching scalars", from: t.Int, to: t.Int, accepted: true },
+    { name: "converted scalars", from: t.Int, to: t.Float, accepted: true },
+    { name: "inconvertible scalars", from: t.Float, to: t.Int, accepted: false },
+    {
+      name: "matching nested",
+      from: t.List(t.Option(t.Bool)),
+      to: t.List(t.Option(t.Bool)),
+      accepted: true,
+    },
+    { name: "converted nested", from: t.List(t.Int), to: t.List(t.Float), accepted: true },
+    { name: "inconvertible nested", from: t.List(t.Float), to: t.List(t.Int), accepted: false },
   ];
 
   for (const chain of chains)
@@ -231,11 +241,11 @@ describe("editor connections", () => {
           for (const link of order)
             results.push(yield* connect(nodes[link]!, "out", nodes[link + 1]!, "in"));
 
-          const matching = t.equals(chain.from, chain.to);
           // Only the connection that completes the chain can conflict, and it is not persisted.
-          expect(results).toEqual([true, true, true, matching]);
-          expect(yield* connections).toHaveLength(matching ? 4 : 3);
-          if (matching)
+          expect(results).toEqual([true, true, true, chain.accepted]);
+          expect(yield* connections).toHaveLength(chain.accepted ? 4 : 3);
+          // A conversion into the sink never changes the wildcard: it resolves to the source.
+          if (chain.accepted)
             for (const node of nodes.slice(1, -1))
               expect((yield* io(node)).dataOutputs[0]!.type).toEqual(chain.from);
         }).pipe(Effect.provide(TestLayer)),
