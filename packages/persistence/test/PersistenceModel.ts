@@ -27,12 +27,11 @@ import { Persistence } from "../src/index.ts";
 // - Deleting a node does not delete its connections. Cascading is done by the editor,
 //   which rewrites the graph with `saveGraph`, so dangling connections are valid here.
 // - Connections may reference nodes that do not exist.
-// - Saving a node with an existing id replaces it.
+// - Saving a node or connection with an existing id replaces it in place.
 //
 // The generator stays within the domain the editor actually produces:
 // - Node and connection edits only target graphs that exist. Behaviour for missing
 //   graphs differs between backends and is not exercised.
-// - Connection ids are always fresh, because the editor mints a new id per connection.
 // - Node ids are unique across graphs, because SQLite keys nodes by id globally.
 // - Graphs carry no scope projections and nodes carry no split scope outputs.
 
@@ -75,6 +74,8 @@ type Command =
       readonly _tag: "SaveConnection";
       readonly graphId: GraphKey;
       readonly connection: ConnectionSpec;
+      /** Reuse an existing connection id in the graph instead of minting a fresh one. */
+      readonly reuse: number | null;
     }
   | {
       readonly _tag: "DeleteConnection";
@@ -129,6 +130,7 @@ const commandArb: fc.Arbitrary<Command> = fc.oneof(
       _tag: fc.constant("SaveConnection"),
       graphId: graphIdArb,
       connection: connectionSpecArb,
+      reuse: fc.option(fc.nat(), { nil: null, freq: 2 }),
     }),
     weight: 4,
   },
@@ -274,13 +276,22 @@ const resolve = (model: Model, command: Command, index: number): Step | undefine
     case "SaveConnection": {
       const graph = model.graphs.get(command.graphId);
       if (graph === undefined) return undefined;
-      const connection = makeConnection(command.graphId, `c${index}`, command.connection);
+      const reused =
+        command.reuse === null || graph.connections.length === 0
+          ? undefined
+          : graph.connections[command.reuse % graph.connections.length]!.id;
+      const connection = makeConnection(command.graphId, reused ?? `c${index}`, command.connection);
       return {
         run: (persistence) => persistence.saveConnection(command.graphId, connection),
         mutation: { _tag: "SaveConnection", graphId: command.graphId, connection },
         next: withGraph(model, command.graphId, {
           ...graph,
-          connections: [...graph.connections, connection],
+          connections:
+            reused === undefined
+              ? [...graph.connections, connection]
+              : graph.connections.map((existing) =>
+                  existing.id === reused ? connection : existing,
+                ),
         }),
       };
     }
