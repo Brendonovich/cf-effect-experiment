@@ -382,20 +382,20 @@ const connectionCurve = (from: Position, to: Position): Curve => {
 const curvePath = ([a, b, c, d]: Curve): string =>
   `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
 
-const midpoint = (a: Position, b: Position): Position => ({
-  x: (a.x + b.x) / 2,
-  y: (a.y + b.y) / 2,
+const interpolate = (a: Position, b: Position, t: number): Position => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
 });
 
-// De Casteljau split at t = 0.5: the two halves trace exactly the original curve.
-const splitCurve = (curve: Curve): readonly [Curve, Curve] => {
+// De Casteljau split: the two resulting curves trace exactly the original curve.
+const splitCurve = (curve: Curve, t: number): readonly [Curve, Curve] => {
   const [p0, p1, p2, p3] = curve;
-  const p01 = midpoint(p0, p1),
-    p12 = midpoint(p1, p2),
-    p23 = midpoint(p2, p3),
-    p012 = midpoint(p01, p12),
-    p123 = midpoint(p12, p23),
-    middle = midpoint(p012, p123);
+  const p01 = interpolate(p0, p1, t),
+    p12 = interpolate(p1, p2, t),
+    p23 = interpolate(p2, p3, t),
+    p012 = interpolate(p01, p12, t),
+    p123 = interpolate(p12, p23, t),
+    middle = interpolate(p012, p123, t);
   return [
     [p0, p01, p012, middle],
     [middle, p123, p23, p3],
@@ -406,11 +406,21 @@ export const connectionPath = (from: Position, to: Position): string =>
   curvePath(connectionCurve(from, to));
 
 export interface WireSegment {
+  readonly kind: "wire" | "conversion-marker";
   readonly path: string;
   readonly stroke: string;
 }
 
-/** A converted wire is drawn in its source color for the first half and its destination color after. */
+const markerPath = (point: Position): string =>
+  `M ${point.x} ${point.y - 4} L ${point.x} ${point.y + 4}`;
+
+const curveSpeedAtMidpoint = ([p0, p1, p2, p3]: Curve): number =>
+  Math.hypot(
+    0.75 * (p1.x - p0.x) + 1.5 * (p2.x - p1.x) + 0.75 * (p3.x - p2.x),
+    0.75 * (p1.y - p0.y) + 1.5 * (p2.y - p1.y) + 0.75 * (p3.y - p2.y),
+  );
+
+/** A converted wire changes color across two close vertical ticks at its midpoint. */
 export const wireSegments = (edge: {
   readonly from: Position;
   readonly to: Position;
@@ -421,11 +431,18 @@ export const wireSegments = (edge: {
   const source = wireColor(edge.type, edge.scope);
   const target = edge.targetType === undefined ? source : wireColor(edge.targetType);
   const curve = connectionCurve(edge.from, edge.to);
-  if (target === source) return [{ path: curvePath(curve), stroke: source }];
-  const [first, second] = splitCurve(curve);
+  if (target === source) return [{ kind: "wire", path: curvePath(curve), stroke: source }];
+  const speed = curveSpeedAtMidpoint(curve);
+  const offset = speed === 0 ? 0.02 : Math.min(0.1, 2 / speed);
+  const [first] = splitCurve(curve, 0.5 - offset);
+  const [, second] = splitCurve(curve, 0.5 + offset);
+  const sourceMarker = first[3];
+  const targetMarker = second[0];
   return [
-    { path: curvePath(first), stroke: source },
-    { path: curvePath(second), stroke: target },
+    { kind: "wire", path: curvePath(first), stroke: source },
+    { kind: "wire", path: curvePath(second), stroke: target },
+    { kind: "conversion-marker", path: markerPath(sourceMarker), stroke: source },
+    { kind: "conversion-marker", path: markerPath(targetMarker), stroke: target },
   ];
 };
 
