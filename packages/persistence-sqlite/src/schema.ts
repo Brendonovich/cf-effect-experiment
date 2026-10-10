@@ -67,6 +67,15 @@ export const nodes = sqliteTable("nodes", {
   canvasId: text("canvas_id").notNull(),
 });
 
+export const scopeProjections = sqliteTable("scope_projections", {
+  id: text("id").primaryKey(),
+  positionX: real("position_x").notNull(),
+  positionY: real("position_y").notNull(),
+  canvasId: text("canvas_id")
+    .notNull()
+    .references(() => canvases.id, { onDelete: "cascade" }),
+});
+
 export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
   outNodeId: text("out_node_id").notNull(),

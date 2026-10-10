@@ -12,6 +12,7 @@ import {
   IoId,
   Function as GraphFunction,
   Queue,
+  Scopes,
 } from "@macrograph/core";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { eq } from "drizzle-orm";
@@ -20,12 +21,26 @@ import { Effect, Layer, Schema } from "effect";
 import { DrizzleDriver, type DbDriver } from "./DrizzleDriver.ts";
 import * as schema from "./schema.ts";
 
+type Transaction = Parameters<Parameters<DbDriver["transaction"]>[0]>[0];
+
 export const layer = Layer.effect(Persistence.Service)(
   Effect.gen(function* () {
     const { driver: db } = yield* DrizzleDriver.Service;
 
     const exec = <A>(impl: (db: DbDriver) => A) =>
       Effect.sync(() => impl(db)).pipe(PersistenceError.refail);
+
+    const insertScopeProjections = (tx: Transaction, canvas: Canvas.Model) => {
+      for (const projection of Object.values(canvas.scopeProjections ?? {}))
+        tx.insert(schema.scopeProjections)
+          .values({
+            id: projection.id,
+            positionX: projection.position.x,
+            positionY: projection.position.y,
+            canvasId: canvas.id,
+          })
+          .run();
+    };
 
     const saveProject = Effect.fnUntraced(function* (project: Project.Model) {
       yield* Queue.validateProject(project).pipe(PersistenceError.refail);
@@ -43,6 +58,7 @@ export const layer = Layer.effect(Persistence.Service)(
             .run();
 
           tx.delete(schema.connections).run();
+          tx.delete(schema.scopeProjections).run();
           tx.delete(schema.nodes).run();
           tx.delete(schema.graphs).run();
           tx.delete(schema.functions).run();
@@ -70,6 +86,8 @@ export const layer = Layer.effect(Persistence.Service)(
                 })
                 .run();
             }
+
+            insertScopeProjections(tx, graph);
 
             for (const connection of graph.connections) {
               tx.insert(schema.connections)
@@ -103,8 +121,9 @@ export const layer = Layer.effect(Persistence.Service)(
     const loadGraphModel = (
       graphRow: typeof schema.canvases.$inferSelect,
       nodeRows: Array<typeof schema.nodes.$inferSelect>,
+      projectionRows: Array<typeof schema.scopeProjections.$inferSelect>,
       connectionRows: Array<typeof schema.connections.$inferSelect>,
-    ) => {
+    ): Canvas.Model => {
       const nodes: Record<string, Node.Model> = {};
       for (const nodeRow of nodeRows) {
         nodes[nodeRow.id] = {
@@ -138,10 +157,18 @@ export const layer = Layer.effect(Persistence.Service)(
         });
       }
 
+      const scopeProjections: Record<string, Scopes.Projection> = {};
+      for (const row of projectionRows)
+        scopeProjections[row.id] = {
+          id: NodeId.make(row.id),
+          position: { x: row.positionX, y: row.positionY },
+        };
+
       return {
         id: CanvasId.make(graphRow.id),
         name: graphRow.name,
         nodes,
+        ...(projectionRows.length === 0 ? {} : { scopeProjections }),
         connections,
       };
     };
@@ -154,6 +181,7 @@ export const layer = Layer.effect(Persistence.Service)(
         const canvasRows = db.select().from(schema.canvases).all();
         const graphRows = db.select().from(schema.graphs).all();
         const nodeRows = db.select().from(schema.nodes).all();
+        const projectionRows = db.select().from(schema.scopeProjections).all();
         const connectionRows = db.select().from(schema.connections).all();
         const functionRows = db.select().from(schema.functions).all();
 
@@ -162,6 +190,16 @@ export const layer = Layer.effect(Persistence.Service)(
           let rows = nodesByGraph.get(nodeRow.canvasId);
           if (!rows) nodesByGraph.set(nodeRow.canvasId, (rows = []));
           rows.push(nodeRow);
+        }
+
+        const projectionsByGraph = new Map<
+          string,
+          Array<typeof schema.scopeProjections.$inferSelect>
+        >();
+        for (const projectionRow of projectionRows) {
+          let rows = projectionsByGraph.get(projectionRow.canvasId);
+          if (!rows) projectionsByGraph.set(projectionRow.canvasId, (rows = []));
+          rows.push(projectionRow);
         }
 
         const connectionsByGraph = new Map<string, Array<typeof schema.connections.$inferSelect>>();
@@ -176,6 +214,7 @@ export const layer = Layer.effect(Persistence.Service)(
           canvases[canvasRow.id] = loadGraphModel(
             canvasRow,
             nodesByGraph.get(canvasRow.id) ?? [],
+            projectionsByGraph.get(canvasRow.id) ?? [],
             connectionsByGraph.get(canvasRow.id) ?? [],
           );
         }
@@ -255,13 +294,19 @@ export const layer = Layer.effect(Persistence.Service)(
           .where(eq(schema.nodes.canvasId, graphRow.id))
           .all();
 
+        const projectionRows = db
+          .select()
+          .from(schema.scopeProjections)
+          .where(eq(schema.scopeProjections.canvasId, graphRow.id))
+          .all();
+
         const connectionRows = db
           .select()
           .from(schema.connections)
           .where(eq(schema.connections.canvasId, graphRow.id))
           .all();
 
-        return loadGraphModel(graphRow, nodeRows, connectionRows);
+        return loadGraphModel(graphRow, nodeRows, projectionRows, connectionRows);
       });
 
       if (!result) return yield* new Graph.NotFoundError({ id: graphId });
@@ -300,6 +345,9 @@ export const layer = Layer.effect(Persistence.Service)(
       yield* exec((db) => {
         db.transaction((tx) => {
           tx.delete(schema.connections).where(eq(schema.connections.canvasId, graph.id)).run();
+          tx.delete(schema.scopeProjections)
+            .where(eq(schema.scopeProjections.canvasId, graph.id))
+            .run();
           tx.delete(schema.nodes).where(eq(schema.nodes.canvasId, graph.id)).run();
           tx.insert(schema.canvases)
             .values({ id: graph.id, name: graph.name })
@@ -331,6 +379,8 @@ export const layer = Layer.effect(Persistence.Service)(
               .run();
           }
 
+          insertScopeProjections(tx, graph);
+
           for (const connection of Object.values(graph.connections)) {
             tx.insert(schema.connections)
               .values({
@@ -351,6 +401,9 @@ export const layer = Layer.effect(Persistence.Service)(
       yield* exec((db) => {
         db.transaction((tx) => {
           tx.delete(schema.connections).where(eq(schema.connections.canvasId, graphId)).run();
+          tx.delete(schema.scopeProjections)
+            .where(eq(schema.scopeProjections.canvasId, graphId))
+            .run();
           tx.delete(schema.nodes).where(eq(schema.nodes.canvasId, graphId)).run();
           tx.delete(schema.graphs).where(eq(schema.graphs.canvasId, graphId)).run();
           tx.delete(schema.functions).where(eq(schema.functions.canvasId, graphId)).run();

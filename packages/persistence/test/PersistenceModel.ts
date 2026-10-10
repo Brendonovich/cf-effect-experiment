@@ -11,6 +11,7 @@ import {
   Project,
   SchemaId,
   type Canvas,
+  type Scopes,
   type Connection,
 } from "@macrograph/core";
 import { Effect, Layer, Option } from "effect";
@@ -33,14 +34,17 @@ import { Persistence } from "../src/index.ts";
 // - Node and connection edits only target graphs that exist. Behaviour for missing
 //   graphs differs between backends and is not exercised.
 // - Node ids are unique across graphs, because SQLite keys nodes by id globally.
-// - Graphs carry no scope projections and nodes carry no split scope outputs.
+// - Scope projection ids are unique across graphs too, and only `saveGraph` writes them,
+//   as in the editor.
 
 const graphIds = ["g1", "g2", "g3"] as const;
 const nodeSlots = ["a", "b", "c"] as const;
 const ports = ["exec", "value"] as const;
+const projectionSlots = ["p", "q"] as const;
 
 type GraphKey = (typeof graphIds)[number];
 type NodeSlot = (typeof nodeSlots)[number];
+type ProjectionSlot = (typeof projectionSlots)[number];
 
 interface NodeSpec {
   readonly slot: NodeSlot;
@@ -49,6 +53,13 @@ interface NodeSpec {
   readonly y: number;
   readonly foldPins: boolean;
   readonly label: string;
+  readonly split: ReadonlyArray<string> | null;
+}
+
+interface ProjectionSpec {
+  readonly slot: ProjectionSlot;
+  readonly x: number;
+  readonly y: number;
 }
 
 interface ConnectionSpec {
@@ -65,6 +76,7 @@ type Command =
       readonly graphId: GraphKey;
       readonly name: string;
       readonly nodes: ReadonlyArray<NodeSpec>;
+      readonly projections: ReadonlyArray<ProjectionSpec>;
       readonly connections: ReadonlyArray<ConnectionSpec>;
     }
   | { readonly _tag: "DeleteGraph"; readonly graphId: GraphKey }
@@ -95,6 +107,13 @@ const nodeSpecArb: fc.Arbitrary<NodeSpec> = fc.record({
   y: fc.integer({ min: -1000, max: 1000 }),
   foldPins: fc.boolean(),
   label: nameArb,
+  split: fc.option(fc.subarray([...ports]), { nil: null }),
+});
+
+const projectionSpecArb: fc.Arbitrary<ProjectionSpec> = fc.record({
+  slot: fc.constantFrom(...projectionSlots),
+  x: fc.integer({ min: -1000, max: 1000 }),
+  y: fc.integer({ min: -1000, max: 1000 }),
 });
 
 const connectionSpecArb: fc.Arbitrary<ConnectionSpec> = fc.record({
@@ -112,6 +131,7 @@ const commandArb: fc.Arbitrary<Command> = fc.oneof(
       graphId: graphIdArb,
       name: nameArb,
       nodes: fc.array(nodeSpecArb, { maxLength: 3 }),
+      projections: fc.array(projectionSpecArb, { maxLength: 2 }),
       connections: fc.array(connectionSpecArb, { maxLength: 3 }),
     }),
     weight: 3,
@@ -152,6 +172,7 @@ const makeNode = (graphId: string, spec: NodeSpec): Node.Model => ({
   properties: { label: spec.label },
   inputDefaults: {},
   foldPins: spec.foldPins,
+  ...(spec.split === null ? {} : { splitScopeOutputs: spec.split.map((id) => IoId.make(id)) }),
   schema: { package: PackageId.make("model-package"), schema: SchemaId.make("model-schema") },
   position: { x: spec.x, y: spec.y },
 });
@@ -164,9 +185,15 @@ const makeConnection = (graphId: string, id: string, spec: ConnectionSpec): Conn
   inIoId: IoId.make(spec.inPort),
 });
 
+const makeProjection = (graphId: string, spec: ProjectionSpec): Scopes.Projection => ({
+  id: NodeId.make(`${graphId}.${spec.slot}`),
+  position: { x: spec.x, y: spec.y },
+});
+
 interface ModelGraph {
   readonly name: string;
   readonly nodes: ReadonlyMap<string, Node.Model>;
+  readonly scopeProjections: ReadonlyMap<string, Scopes.Projection>;
   readonly connections: ReadonlyArray<Connection.Model>;
 }
 
@@ -179,6 +206,10 @@ const toCanvas = (graphId: string, graph: ModelGraph): Canvas.Model => ({
   id: GraphId.make(graphId),
   name: graph.name,
   nodes: Object.fromEntries(graph.nodes),
+  // Absent and empty are equivalent; backends return the key only when there are projections.
+  ...(graph.scopeProjections.size === 0
+    ? {}
+    : { scopeProjections: Object.fromEntries(graph.scopeProjections) }),
   connections: graph.connections,
 });
 
@@ -227,6 +258,12 @@ const resolve = (model: Model, command: Command, index: number): Step | undefine
             nodeId(command.graphId, spec.slot),
             makeNode(command.graphId, spec),
           ]),
+        ),
+        scopeProjections: new Map(
+          command.projections.map((spec) => {
+            const projection = makeProjection(command.graphId, spec);
+            return [projection.id, projection];
+          }),
         ),
         connections: command.connections.map((spec, k) =>
           makeConnection(command.graphId, `c${index}.${k}`, spec),
