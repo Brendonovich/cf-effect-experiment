@@ -3,6 +3,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { IoId, Package, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages, Presence } from "@macrograph/editor";
 import { t } from "@macrograph/module";
+import UtilitiesModule from "@macrograph/module-utilities";
+import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, PubSub } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http";
@@ -215,6 +217,9 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
       assert.strictEqual(graph.body.graph.name, "From CI");
       assert.lengthOf(Object.keys(graph.body.graph.nodes), 2);
       assert.lengthOf(graph.body.graph.connections, 1);
+      assert.deepStrictEqual(Object.keys(graph.body.nodeIds).sort(), ["a", "b"]);
+      assert.deepStrictEqual(graph.body.graph.connections[0].outNodeId, graph.body.nodeIds.a);
+      assert.deepStrictEqual(graph.body.graph.connections[0].inNodeId, graph.body.nodeIds.b);
 
       const created = yield* PubSub.take(events);
       assert.strictEqual(created._tag, "GraphCreated");
@@ -280,6 +285,59 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
       assert.isFalse(
         (yield* presence.snapshot("local")).some((client) => client.id === `api:${key.id}`),
       );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("returns property-dependent ports so they can be connected after createGraph", () =>
+    Effect.gen(function* () {
+      yield* (yield* Packages.Service).loadPackage(pkg);
+      yield* (yield* Editor.Service).module(UtilitiesModule, UtilitiesDeployment);
+      const owner = yield* createSession("owner");
+      const { body: key } = yield* send("POST", "/auth/api-keys", {
+        token: owner,
+        body: { name: "Format key" },
+      });
+
+      const created = yield* send("POST", "/api/projects/local/graphs", {
+        token: key.key,
+        body: {
+          name: "Format",
+          nodes: {
+            source: { schema: { package: "test", schema: "text" } },
+            hello: {
+              schema: { package: "util", schema: "FormatString" },
+              properties: { format: "Hello {name}" },
+            },
+          },
+        },
+      });
+      assert.strictEqual(created.status, 201);
+      const helloId = created.body.nodeIds.hello;
+      assert.deepStrictEqual(
+        created.body.nodeIO[helloId].dataInputs.map((port: { id: string }) => port.id),
+        ["name"],
+      );
+      assert.deepStrictEqual(
+        created.body.nodeIO[created.body.nodeIds.source].dataOutputs.map(
+          (port: { id: string }) => port.id,
+        ),
+        ["out"],
+      );
+
+      const graphId = created.body.graph.id;
+      const connection = yield* send("POST", `/api/projects/local/graphs/${graphId}/connections`, {
+        token: key.key,
+        body: {
+          outNodeId: created.body.nodeIds.source,
+          outIo: { _tag: "Port", id: "out" },
+          inNodeId: helloId,
+          inIoId: "name",
+        },
+      });
+      assert.strictEqual(connection.status, 201);
+
+      yield* send("DELETE", `/api/projects/local/graphs/${graphId}`, { token: key.key });
+      yield* send("DELETE", `/auth/api-keys/${key.id}`, { token: owner });
     }).pipe(Effect.scoped),
   );
 

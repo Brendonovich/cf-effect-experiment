@@ -3,6 +3,7 @@ import {
   Connection,
   GraphId,
   Node,
+  NodeId,
   NodeIO,
   Package,
   PackageId,
@@ -45,6 +46,18 @@ export const CreateGraphRequest = Schema.Struct({
 });
 export type CreateGraphRequest = typeof CreateGraphRequest.Type;
 
+export const CreateGraphResponse = Schema.Struct({
+  graph: Canvas.Model,
+  nodeIds: Schema.Record(Schema.String, NodeId).annotate({
+    description: "Created node IDs keyed by the temporary IDs used in the request.",
+  }),
+  nodeIO: Schema.Record(Schema.String, NodeIO).annotate({
+    description:
+      "Inputs and outputs of each created node, keyed by created node ID. Includes ports that depend on node properties, such as Format String placeholders.",
+  }),
+});
+export type CreateGraphResponse = typeof CreateGraphResponse.Type;
+
 const list = HttpApiEndpoint.get("list", "/api/projects", {
   success: Schema.Struct({ projects: Schema.Array(ProjectRecord) }),
 })
@@ -80,12 +93,12 @@ const listGraphs = HttpApiEndpoint.get("listGraphs", "/api/projects/:projectId/g
 const createGraph = HttpApiEndpoint.post("createGraph", "/api/projects/:projectId/graphs", {
   params: { projectId: Schema.String },
   payload: CreateGraphRequest,
-  success: Schema.Struct({ graph: Canvas.Model }).pipe(HttpApiSchema.status("Created")),
+  success: CreateGraphResponse.pipe(HttpApiSchema.status("Created")),
   error: [ProjectNotFound, HttpApiError.BadRequest, HttpApiError.Forbidden],
 })
   .annotate(
     OpenApi.Description,
-    "Create an empty graph or a complete connected graph in one request. The nodes object maps temporary client-defined node IDs to node definitions. Connections reference those temporary IDs through outNodeId and inNodeId. outIo is a structured output reference: { _tag: 'Port', id }, { _tag: 'ScopeExec', scope }, or { _tag: 'ScopeField', scope, field }; inIoId identifies the input. Node schemas use { package, schema }; resource properties use IDs returned by listResources.",
+    "Create an empty graph or a complete connected graph in one request. The nodes object maps temporary client-defined node IDs to node definitions. Connections reference those temporary IDs through outNodeId and inNodeId. outIo is a structured output reference: { _tag: 'Port', id }, { _tag: 'ScopeExec', scope }, or { _tag: 'ScopeField', scope, field }; inIoId identifies the input. Node schemas use { package, schema }; resource properties use IDs returned by listResources. The response maps each temporary node ID to its created node ID in nodeIds, and includes each created node's inputs and outputs in nodeIO.",
   )
   .middleware(Authentication);
 
@@ -138,7 +151,7 @@ const listSchemas = HttpApiEndpoint.get("listSchemas", "/api/projects/:projectId
 })
   .annotate(
     OpenApi.Description,
-    "List ranked node schemas, including their properties, input/output ports, and configured resources matching resource-backed properties. Optionally filter by a case-insensitive search across package and schema names, IDs, and descriptions. Returns at most 20 schemas by default.",
+    "List ranked node schemas, including their properties, input/output ports, and configured resources matching resource-backed properties. Optionally filter by a case-insensitive search across package and schema names, IDs, and descriptions. Returns at most 20 schemas by default and up to 100 with limit.",
   )
   .middleware(Authentication);
 

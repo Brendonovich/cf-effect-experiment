@@ -1,4 +1,9 @@
-import { CreateGraphRequest, CurrentUser, ProjectRecord } from "@macrograph/cloud-api";
+import {
+  CreateGraphRequest,
+  CreateGraphResponse,
+  CurrentUser,
+  ProjectRecord,
+} from "@macrograph/cloud-api";
 import {
   Canvas,
   Connection,
@@ -68,9 +73,9 @@ export const getGraph = Tool.make("getGraph", {
 
 export const createGraph = Tool.make("createGraph", {
   description:
-    "PREFERRED: Create an entire graph in one request, including its name, nodes, and connections. Nodes are keyed by temporary local IDs, and connections reference those IDs. Node schemas use { package, schema }; resource properties use matching resource IDs returned by searchSchemas. Use searchSchemas only if schema IDs, ports, or resources are unknown. Prefer this compound tool over separate createNode/createConnection calls.",
+    "PREFERRED: Create an entire graph in one request, including its name, nodes, and connections. Nodes are keyed by temporary local IDs, and connections reference those IDs. The response maps each temporary ID to its created node ID in nodeIds, and includes each created node's inputs and outputs in nodeIO. Ports that depend on node properties, such as Format String placeholders, are listed there and can be connected with createConnection in the same script. Node schemas use { package, schema }; resource properties use matching resource IDs returned by searchSchemas. Use searchSchemas only if schema IDs, ports, or resources are unknown. Prefer this compound tool over separate createNode/createConnection calls.",
   parameters: Schema.Struct({ ...projectParameters, ...CreateGraphRequest.fields }),
-  success: Schema.Struct({ graph: Canvas.Model }),
+  success: CreateGraphResponse,
   failure: Schema.Unknown,
 }).addDependency(CurrentUser);
 
@@ -85,7 +90,7 @@ export const deleteGraph = Tool.make("deleteGraph", {
 
 export const searchSchemas = Tool.make("searchSchemas", {
   description:
-    "Find ranked node schemas by package, name, ID, or description. Use queries to find multiple unrelated node types in one request. Results include ports, properties, and matching configured resource IDs for resource-backed properties. Returns at most 20 schemas by default.",
+    "Find ranked node schemas by package, name, ID, or description. Use queries to find multiple unrelated node types in one request. Results include ports, properties, and matching configured resource IDs for resource-backed properties. Returns at most 20 schemas by default and up to 100 with limit.",
   parameters: Schema.Struct({
     ...projectParameters,
     query: Schema.optionalKey(
@@ -101,7 +106,7 @@ export const searchSchemas = Tool.make("searchSchemas", {
     ),
     limit: Schema.optionalKey(
       Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })).annotate({
-        description: "Maximum number of ranked schemas to return; defaults to 20.",
+        description: "Maximum number of ranked schemas to return, from 1 to 100; defaults to 20.",
         default: 20,
       }),
     ),
@@ -138,7 +143,7 @@ export const listResources = Tool.make("listResources", {
 
 export const createNode = Tool.make("createNode", {
   description:
-    "Add one node to an existing graph. Prefer createGraph when building a complete graph.",
+    "Add one node to an existing graph and return its inputs and outputs, including ports that depend on its properties. Prefer createGraph when building a complete graph.",
   parameters: Schema.Struct({ ...graphParameters, ...Node.CreateInput.fields }),
   success: Schema.Struct({ node: Node.Model, io: NodeIO }),
   failure: Schema.Unknown,
