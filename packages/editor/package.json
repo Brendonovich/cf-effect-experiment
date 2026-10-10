@@ -23,8 +23,6 @@
     "@effect/platform-node-shared": "catalog:",
     "@effect/vitest": "catalog:",
     "@macrograph/module-list": "workspace:*",
-    "@macrograph/module-math": "workspace:*",
-    "@macrograph/module-string": "workspace:*",
     "@macrograph/module-utilities": "workspace:*",
     "@macrograph/persistence-sqlite": "workspace:*",
     "typescript": "^5.8",

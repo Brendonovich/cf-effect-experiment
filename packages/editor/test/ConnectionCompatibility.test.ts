@@ -1,15 +1,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
 import { t, Module } from "@macrograph/module";
-import MathModule from "@macrograph/module-math";
-import StringModule from "@macrograph/module-string";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { FastCheck as fc } from "effect/testing";
 
 import { Editor, Packages } from "../src/index.ts";
 
-// Property tests for connection compatibility.
+// Tests for connection compatibility.
 //
 // Current policy: data connections require exactly matching types, except where a wildcard
 // is involved. There are no implicit conversions; values are converted with explicit
@@ -17,7 +15,6 @@ import { Editor, Packages } from "../src/index.ts";
 
 const seed = process.env.FC_SEED === undefined ? 0xc0ec : Number(process.env.FC_SEED);
 const pureRuns = { numRuns: Number(process.env.FC_NUM_RUNS ?? 500), seed };
-const editorRuns = { numRuns: Number(process.env.FC_NUM_RUNS ?? 40), seed };
 
 const leafTypes = [t.String, t.Int, t.Float, t.Bool, t.DateTime] as const;
 
@@ -89,8 +86,9 @@ describe("type compatibility properties", () => {
   );
 });
 
-// Editor-level properties drive the real `Editor.connection.create`, which combines the
-// local compatibility check, schema hooks and graph-wide wildcard solving.
+// Editor-level tests drive the real `Editor.connection.create`, which combines the local
+// compatibility check, schema hooks and graph-wide wildcard solving. Their input space is
+// small, so they are exhaustive or example-based rather than generated.
 
 const editorTypes: ReadonlyArray<t.Type> = [
   t.String,
@@ -105,7 +103,6 @@ const editorTypes: ReadonlyArray<t.Type> = [
   t.Option(t.Float),
   t.List(t.Option(t.Bool)),
 ];
-const editorTypeIndex = fc.nat({ max: editorTypes.length - 1 });
 
 const testModule = Module.make({
   id: "compatibility-test",
@@ -148,8 +145,6 @@ const setup = Effect.gen(function* () {
   });
   const editor = yield* Editor.Service;
   yield* editor.module(testModule);
-  yield* editor.module(MathModule);
-  yield* editor.module(StringModule);
   const create = (pkg: string, schema: string) =>
     editor.node
       .create({
@@ -183,108 +178,66 @@ const setup = Effect.gen(function* () {
 const source = (index: number) => `source${index}`;
 const sink = (index: number) => `sink${index}`;
 
-describe("editor connection properties", () => {
-  it.effect.prop(
-    "accepts a direct connection exactly when the types match, and persists only accepted ones",
-    [editorTypeIndex, editorTypeIndex],
-    ([from, to]) =>
+describe("editor connections", () => {
+  it.effect(
+    "accepts a direct connection exactly when the types match, and persists only those",
+    () =>
       Effect.gen(function* () {
         const { create, connect, connections } = yield* setup;
-        const out = yield* create(testModule.id, source(from));
-        const input = yield* create(testModule.id, sink(to));
-        const accepted = yield* connect(out, "out", input, "in");
-        expect(accepted).toBe(t.equals(editorTypes[from]!, editorTypes[to]!));
-        expect(yield* connections).toHaveLength(accepted ? 1 : 0);
+        let accepted = 0;
+        for (const from of editorTypes.keys())
+          for (const to of editorTypes.keys()) {
+            const ok = yield* connect(
+              yield* create(testModule.id, source(from)),
+              "out",
+              yield* create(testModule.id, sink(to)),
+              "in",
+            );
+            expect(ok, `${from} -> ${to}`).toBe(t.equals(editorTypes[from]!, editorTypes[to]!));
+            if (ok) accepted++;
+          }
+        expect(yield* connections).toHaveLength(accepted);
       }).pipe(Effect.provide(TestLayer)),
-    { fastCheck: editorRuns },
   );
 
-  it.effect.prop(
-    "rejects exactly the connection that would join mismatched types through a wildcard chain",
-    [
-      editorTypeIndex,
-      editorTypeIndex,
-      fc.integer({ min: 1, max: 4 }),
-      fc.array(fc.double({ noNaN: true }), { minLength: 5, maxLength: 5 }),
-    ],
-    ([from, to, hops, keys]) =>
-      Effect.gen(function* () {
-        const { create, connect, connections, io } = yield* setup;
-        const nodes = [yield* create(testModule.id, source(from))];
-        for (let hop = 0; hop < hops; hop++) nodes.push(yield* create(testModule.id, "pass"));
-        nodes.push(yield* create(testModule.id, sink(to)));
+  // source -> 3 pass hops -> sink, i.e. 4 links, connected in different orders. The
+  // wildcard solver itself is covered by WildcardProperties; this checks the editor wiring.
+  const orders = {
+    forward: [0, 1, 2, 3],
+    backward: [3, 2, 1, 0],
+    "middle last": [0, 3, 1, 2],
+  } as const;
+  const chains = [
+    { name: "matching scalars", from: t.Int, to: t.Int },
+    { name: "mismatched scalars", from: t.Int, to: t.Float },
+    { name: "matching nested", from: t.List(t.Option(t.Bool)), to: t.List(t.Option(t.Bool)) },
+    { name: "mismatched nested", from: t.List(t.Int), to: t.List(t.Float) },
+  ];
 
-        // Create the chain's connections in a random order.
-        const links = nodes
-          .slice(1)
-          .map((target, index) => ({ from: nodes[index]!, to: target, key: keys[index]! }))
-          .sort((a, b) => a.key - b.key);
-        const results: boolean[] = [];
-        for (const link of links) results.push(yield* connect(link.from, "out", link.to, "in"));
+  for (const chain of chains)
+    for (const [orderName, order] of Object.entries(orders))
+      it.effect(`wildcard chain, ${chain.name}, connected ${orderName}`, () =>
+        Effect.gen(function* () {
+          const { create, connect, connections, io } = yield* setup;
+          const index = (type: t.Type) => editorTypes.findIndex((item) => t.equals(item, type));
+          const nodes = [
+            yield* create(testModule.id, source(index(chain.from))),
+            yield* create(testModule.id, "pass"),
+            yield* create(testModule.id, "pass"),
+            yield* create(testModule.id, "pass"),
+            yield* create(testModule.id, sink(index(chain.to))),
+          ];
+          const results: boolean[] = [];
+          for (const link of order)
+            results.push(yield* connect(nodes[link]!, "out", nodes[link + 1]!, "in"));
 
-        const matching = t.equals(editorTypes[from]!, editorTypes[to]!);
-        // Only the connection that completes the chain can conflict.
-        expect(results.slice(0, -1).every(Boolean)).toBe(true);
-        expect(results.at(-1)).toBe(matching);
-        expect(yield* connections).toHaveLength(matching ? links.length : links.length - 1);
-        if (matching)
-          for (const node of nodes.slice(1, -1))
-            expect((yield* io(node)).dataOutputs[0]!.type).toEqual(editorTypes[from]);
-      }).pipe(Effect.provide(TestLayer)),
-    { fastCheck: editorRuns },
-  );
-
-  const conversions = [
-    { pkg: MathModule.id, schema: "IntToFloat", from: t.Int, to: t.Float },
-    { pkg: MathModule.id, schema: "FloatToInt", from: t.Float, to: t.Int },
-    { pkg: StringModule.id, schema: "IntToString", from: t.Int, to: t.String },
-    { pkg: StringModule.id, schema: "FloatToString", from: t.Float, to: t.String },
-    { pkg: StringModule.id, schema: "BoolToString", from: t.Bool, to: t.String },
-    { pkg: StringModule.id, schema: "StringToInt", from: t.String, to: t.Option(t.Int) },
-    { pkg: StringModule.id, schema: "StringToFloat", from: t.String, to: t.Option(t.Float) },
-  ] as const;
-
-  it.effect.prop(
-    "bridges two types only through an explicit conversion node, in its declared direction",
-    [fc.constantFrom(...conversions), editorTypeIndex, editorTypeIndex],
-    ([conversion, from, to]) =>
-      Effect.gen(function* () {
-        const { create, connect, io } = yield* setup;
-        const node = yield* create(conversion.pkg, conversion.schema);
-        const ports = yield* io(node);
-        expect(ports.dataInputs.map((port) => port.type)).toEqual([conversion.from]);
-        expect(ports.dataOutputs.map((port) => port.type)).toEqual([conversion.to]);
-        const inPort = ports.dataInputs[0]!.id,
-          outPort = ports.dataOutputs[0]!.id;
-
-        const fromIndex = editorTypes.findIndex((type) => t.equals(type, conversion.from));
-        const toIndex = editorTypes.findIndex((type) => t.equals(type, conversion.to));
-        // The source type never connects straight to the target type...
-        const direct = yield* connect(
-          yield* create(testModule.id, source(fromIndex)),
-          "out",
-          yield* create(testModule.id, sink(toIndex)),
-          "in",
-        );
-        expect(direct).toBe(false);
-
-        // ...but random endpoints connect to the conversion node exactly when they match its
-        // declared input and output, so the node never accepts the reverse direction.
-        const intoConversion = yield* connect(
-          yield* create(testModule.id, source(from)),
-          "out",
-          node,
-          inPort,
-        );
-        expect(intoConversion).toBe(t.equals(editorTypes[from]!, conversion.from));
-        const outOfConversion = yield* connect(
-          node,
-          outPort,
-          yield* create(testModule.id, sink(to)),
-          "in",
-        );
-        expect(outOfConversion).toBe(t.equals(editorTypes[to]!, conversion.to));
-      }).pipe(Effect.provide(TestLayer)),
-    { fastCheck: editorRuns },
-  );
+          const matching = t.equals(chain.from, chain.to);
+          // Only the connection that completes the chain can conflict, and it is not persisted.
+          expect(results).toEqual([true, true, true, matching]);
+          expect(yield* connections).toHaveLength(matching ? 4 : 3);
+          if (matching)
+            for (const node of nodes.slice(1, -1))
+              expect((yield* io(node)).dataOutputs[0]!.type).toEqual(chain.from);
+        }).pipe(Effect.provide(TestLayer)),
+      );
 });

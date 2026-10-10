@@ -7,6 +7,7 @@ import { FastCheck as fc } from "effect/testing";
 // Property tests for `Wildcards.Cache`. Graphs are generated from a small palette of node
 // shapes. Chains are built around a chosen concrete type so the expected resolution of
 // every wildcard is known in advance; random graphs use invariants that need no oracle.
+// Behaviour with a small, fixed input space is covered by exhaustive table tests instead.
 
 const fastCheck = {
   numRuns: Number(process.env.FC_NUM_RUNS ?? 200),
@@ -277,70 +278,67 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
-    "rejects nominal mismatches and primitives reaching constrained custom-type wildcards",
-    [
-      chainArb,
-      fc.constantFrom<{
-        constraint: string;
-        accepted: ReadonlyArray<t.Type>;
-        rejected: ReadonlyArray<t.Type>;
-      }>(
-        { constraint: "Struct", accepted: [t.Struct("a")], rejected: [t.Enum("a"), t.Int] },
-        { constraint: "Enum", accepted: [t.Enum("a")], rejected: [t.Struct("a"), t.String] },
-        {
-          constraint: "Type",
-          accepted: [t.Struct("a"), t.Enum("a")],
-          rejected: [t.Bool, t.List(t.Struct("a"))],
-        },
-      ),
-    ],
-    ([chain, { constraint, accepted, rejected }]) => {
-      const passes = chainGraph({
-        ...chain,
-        hops: chain.hops.map(() => "pass"),
-      });
-      const last = chain.hops.length - 1;
-      passes.declarations.set("constrained", sinkIO(t.Wildcard(constraint)));
-      passes.wires.push(wire(hopId(last), "constrained"));
-      for (const type of [...accepted, ...rejected]) {
-        const declarations = new Map(passes.declarations).set("source", sourceIO(type));
-        const wires = [...passes.wires, wire("source", hopId(0))];
-        expect(Result.isSuccess(solve(declarations, wires).result)).toBe(accepted.includes(type));
+  it("rejects nominal mismatches and primitives reaching constrained custom-type wildcards", () => {
+    const cases: ReadonlyArray<{
+      constraint: string;
+      accepted: ReadonlyArray<t.Type>;
+      rejected: ReadonlyArray<t.Type>;
+    }> = [
+      { constraint: "Struct", accepted: [t.Struct("a")], rejected: [t.Enum("a"), t.Int] },
+      { constraint: "Enum", accepted: [t.Enum("a")], rejected: [t.Struct("a"), t.String] },
+      {
+        constraint: "Type",
+        accepted: [t.Struct("a"), t.Enum("a")],
+        rejected: [t.Bool, t.List(t.Struct("a"))],
+      },
+    ];
+    for (const { constraint, accepted, rejected } of cases)
+      for (const length of [0, 1, 3]) {
+        // source -> `length` pass hops -> constrained sink
+        const hops = Array.from({ length }, (_, index) => hopId(index));
+        const declarations = new Map<string, Wildcards.IO>([
+          ...hops.map((id) => [id, hopIO("pass")] as const),
+          ["constrained", sinkIO(t.Wildcard(constraint))],
+        ]);
+        const path = ["source", ...hops, "constrained"];
+        const wires = path.slice(1).map((to, index) => wire(path[index]!, to));
+        for (const type of [...accepted, ...rejected]) {
+          const result = solve(new Map(declarations).set("source", sourceIO(type)), wires).result;
+          expect(Result.isSuccess(result), `${constraint} via ${length} hops <- ${type._tag}`).toBe(
+            accepted.includes(type),
+          );
+        }
       }
-    },
-    { fastCheck },
-  );
+  });
 
-  it.prop(
-    "links a Type-constrained wildcard to a narrower Struct or Enum wildcard",
-    [fc.constantFrom("Struct", "Enum"), fc.boolean(), fc.boolean()],
-    ([narrow, typeFirst, viaPass]) => {
-      const declarations = new Map<string, Wildcards.IO>([
-        ["type", io([["in", t.Wildcard("Type")]], [["out", t.Wildcard("Type")]])],
-        ["narrow", io([["in", t.Wildcard(narrow)]], [["out", t.Wildcard(narrow)]])],
-        ["pass", hopIO("pass")],
-      ]);
-      const [first, second] = typeFirst ? ["type", "narrow"] : ["narrow", "type"];
-      const wires = viaPass
-        ? [wire(first!, "pass"), wire("pass", second!)]
-        : [wire(first!, second!)];
-      expect(Result.isSuccess(solve(declarations, wires).result)).toBe(true);
+  it("links a Type-constrained wildcard to a narrower Struct or Enum wildcard", () => {
+    for (const narrow of ["Struct", "Enum"] as const)
+      for (const typeFirst of [true, false])
+        for (const viaPass of [true, false]) {
+          const declarations = new Map<string, Wildcards.IO>([
+            ["type", io([["in", t.Wildcard("Type")]], [["out", t.Wildcard("Type")]])],
+            ["narrow", io([["in", t.Wildcard(narrow)]], [["out", t.Wildcard(narrow)]])],
+            ["pass", hopIO("pass")],
+          ]);
+          const [first, second] = typeFirst ? ["type", "narrow"] : ["narrow", "type"];
+          const wires = viaPass
+            ? [wire(first, "pass"), wire("pass", second)]
+            : [wire(first, second)];
+          expect(Result.isSuccess(solve(declarations, wires).result)).toBe(true);
 
-      const concrete = narrow === "Struct" ? t.Struct("a") : t.Enum("a");
-      const other = narrow === "Struct" ? t.Enum("a") : t.Struct("a");
-      for (const [type, ok] of [
-        [concrete, true],
-        [other, false],
-      ] as const) {
-        const anchored = new Map(declarations).set("source", sourceIO(type));
-        const { cache, result } = solve(anchored, [...wires, wire("source", first!)]);
-        expect(Result.isSuccess(result)).toBe(ok);
-        if (ok) expect(cache.resolve("type", t.Wildcard("Type"))).toEqual(type);
-      }
-    },
-    { fastCheck },
-  );
+          const concrete = narrow === "Struct" ? t.Struct("a") : t.Enum("a");
+          const other = narrow === "Struct" ? t.Enum("a") : t.Struct("a");
+          for (const [type, ok] of [
+            [concrete, true],
+            [other, false],
+          ] as const) {
+            const anchored = new Map(declarations).set("source", sourceIO(type));
+            const { cache, result } = solve(anchored, [...wires, wire("source", first)]);
+            expect(Result.isSuccess(result)).toBe(ok);
+            if (ok) expect(cache.resolve("type", t.Wildcard("Type"))).toEqual(type);
+          }
+        }
+  });
 
   // Random graphs mixing every node shape, sources and sinks, with arbitrary topology
   // (fan-in, fan-out, diamonds and cycles).
@@ -355,6 +353,7 @@ describe("wildcard resolution properties", () => {
         { minLength: 2, maxLength: 7 },
       ),
       edges: fc.array(fc.record({ from: fc.nat(), to: fc.nat(), side: fc.boolean() }), {
+        minLength: 1,
         maxLength: 10,
       }),
     })
