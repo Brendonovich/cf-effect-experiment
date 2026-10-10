@@ -1,0 +1,1 @@
+ALTER TABLE `canvases` ADD `scope_projections` text DEFAULT '{}' NOT NULL;

@@ -1,4 +1,4 @@
-import type { ResourceConstant, OutputRef, IoId, Queue } from "@macrograph/core";
+import type { ResourceConstant, OutputRef, IoId, Queue, Scopes } from "@macrograph/core";
 import type { t } from "@macrograph/module";
 import type { Schema } from "effect";
 
@@ -24,6 +24,10 @@ export const projectMeta = sqliteTable("project_meta", {
 export const canvases = sqliteTable("canvases", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  scopeProjections: text("scope_projections", { mode: "json" })
+    .notNull()
+    .$type<Scopes.Collection>()
+    .default({}),
 });
 
 export const graphs = sqliteTable("graphs", {
@@ -65,15 +69,6 @@ export const nodes = sqliteTable("nodes", {
   positionX: real("position_x").notNull(),
   positionY: real("position_y").notNull(),
   canvasId: text("canvas_id").notNull(),
-});
-
-export const scopeProjections = sqliteTable("scope_projections", {
-  id: text("id").primaryKey(),
-  positionX: real("position_x").notNull(),
-  positionY: real("position_y").notNull(),
-  canvasId: text("canvas_id")
-    .notNull()
-    .references(() => canvases.id, { onDelete: "cascade" }),
 });
 
 export const connections = sqliteTable("connections", {
