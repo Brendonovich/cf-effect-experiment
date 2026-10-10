@@ -10,6 +10,7 @@ import { colors } from "../tokens.stylex.ts";
 import {
   clientName,
   followCandidate,
+  groupName,
   groupPresence,
   type PresenceGroup,
 } from "./presenceGroups.ts";
@@ -65,7 +66,7 @@ const remoteDescription = (client: Presence.Client) => {
   ].join(" · ");
 };
 
-/** Shows who else is connected to the project, grouped by person, and lets you follow them. */
+/** Shows every other tab and agent connected to the project, and lets you follow them. */
 export function PresenceList(props: PresenceListProps) {
   const [open, setOpen] = createSignal(false);
   let root: HTMLDivElement | undefined;
@@ -177,7 +178,7 @@ export function PresenceList(props: PresenceListProps) {
           ref={trigger}
           type="button"
           sx={styles.trigger}
-          aria-label={`${groups().length} ${groups().length === 1 ? "person" : "people"} connected`}
+          aria-label={`${groups().length} other ${groups().length === 1 ? "connection" : "connections"}`}
           aria-expanded={open() ? "true" : "false"}
           aria-controls="presence-popover"
           onClick={() => setOpen((value) => !value)}
@@ -196,7 +197,7 @@ export function PresenceList(props: PresenceListProps) {
                   "z-index": stacked().length - index(),
                 }}
                 title={[
-                  group().displayName,
+                  groupName(group()),
                   ...group().remote.map(
                     (client) => `${clientName(client)} (${kindLabels[client.kind]})`,
                   ),
@@ -236,7 +237,7 @@ export function PresenceList(props: PresenceListProps) {
             <For each={groups()} keyed={(group) => group.key}>
               {(group) => {
                 const following = () => isFollowingGroup(group());
-                // A person's own row stands for their browser; agents have rows of their own.
+                // A tab's row follows that tab; agents have rows of their own.
                 const followedByPerson = () =>
                   group().clients.some(
                     (client) => client.kind === "browser" && client.id === followingId(),
@@ -248,7 +249,7 @@ export function PresenceList(props: PresenceListProps) {
                       sx={[styles.person, followedByPerson() && styles.followed]}
                       style={{ "--presence-color": group().color }}
                       aria-pressed={following() ? "true" : "false"}
-                      aria-label={`${following() ? "Stop following" : "Follow"} ${group().displayName}`}
+                      aria-label={`${following() ? "Stop following" : "Follow"} ${groupName(group())}`}
                       onClick={() => toggleFollowGroup(group())}
                       data-presence-person=""
                     >
@@ -261,7 +262,7 @@ export function PresenceList(props: PresenceListProps) {
                         />
                       </span>
                       <span sx={styles.personName}>
-                        <span sx={styles.truncate}>{group().displayName}</span>
+                        <span sx={styles.truncate}>{groupName(group())}</span>
                         <Show when={group().isSelf}>
                           <span sx={styles.you}>(you)</span>
                         </Show>

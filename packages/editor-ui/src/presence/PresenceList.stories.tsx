@@ -36,6 +36,15 @@ const collaborators: ReadonlyArray<Presence.Client> = [
     lastActiveAt: loadedAt,
   }),
   client({
+    id: "self-second-tab",
+    userId: "brendon",
+    displayName: "brendon",
+    email: "brendon@example.com",
+    color: "#6366f1",
+    activeGraph: "alerts",
+    lastActiveAt: loadedAt - 5_000,
+  }),
+  client({
     id: "streamer-tab",
     userId: "streamer",
     displayName: "streamer",
@@ -43,6 +52,15 @@ const collaborators: ReadonlyArray<Presence.Client> = [
     color: "#ec4899",
     activeGraph: "alerts",
     lastActiveAt: loadedAt - 2_000,
+  }),
+  client({
+    id: "streamer-tab-2",
+    userId: "streamer",
+    displayName: "streamer",
+    email: "streamer@macrograph.app",
+    color: "#ec4899",
+    activeGraph: "main",
+    lastActiveAt: loadedAt - 8_000,
   }),
   client({
     id: "mcp:streamer",

@@ -28,7 +28,7 @@ import {
 } from "../../src/editor/session/createEditorFollow";
 import { createEditorStore } from "../../src/editor/store";
 import { defaultGraphView } from "../../src/editor/workspace/workspace";
-import { followCandidate, groupPresence } from "../../src/presence/presenceGroups";
+import { followCandidate, groupName, groupPresence } from "../../src/presence/presenceGroups";
 
 vi.mock(
   "solid-js",
@@ -84,25 +84,36 @@ const storeWithGraphs = () => {
 };
 
 describe("presence groups", () => {
-  it("groups a user's tabs and agents, leaving out your own tabs", () => {
+  it("lists each other tab on its own, numbering tabs from the same account", () => {
     const groups = groupPresence(
       [
         client({ id: "zed-tab", userId: "zed", displayName: "zed", lastActiveAt: 1 }),
         client({ id: "mcp:ada", kind: "mcp", userId: "ada", displayName: "", lastActiveAt: 9 }),
-        client({ id: "ada-tab", userId: "ada", displayName: "ada", email: "ada@example.com" }),
+        client({ id: "ada-tab-1", userId: "ada", displayName: "ada", email: "ada@example.com" }),
+        client({ id: "ada-tab-2", userId: "ada", displayName: "ada", email: "ada@example.com" }),
         client({ id: "self", userId: "me", displayName: "me" }),
         client({ id: "self-other-tab", userId: "me", displayName: "me" }),
         client({ id: "anonymous", displayName: "Calm Fox", canEdit: false }),
       ],
       "self",
     );
-    expect(groups.map((group) => group.displayName)).toEqual(["ada", "Calm Fox", "zed"]);
-    const ada = groups[0]!;
-    expect(ada.clients.map((entry) => entry.id)).toEqual(["ada-tab", "mcp:ada"]);
-    expect(ada.email).toBe("ada@example.com");
-    expect(groups[1]!.canEdit).toBe(false);
-    // Choosing a person follows whichever of their clients acted most recently.
-    expect(followCandidate(ada)?.id).toBe("mcp:ada");
+    expect(groups.map(groupName)).toEqual(["ada (1)", "ada (2)", "ada", "Calm Fox", "me", "zed"]);
+    expect(groups.map((group) => group.key)).toEqual([
+      "tab:ada-tab-1",
+      "tab:ada-tab-2",
+      "agents:user:ada",
+      "tab:anonymous",
+      "tab:self-other-tab",
+      "tab:zed-tab",
+    ]);
+    // Your other tabs are listed and marked as yours; the current tab is not.
+    expect(groups[4]!.isSelf).toBe(true);
+    expect(groups[3]!.canEdit).toBe(false);
+    // Agents borrow their person's name and avatar from one of their tabs.
+    const agents = groups[2]!;
+    expect(agents.email).toBe("ada@example.com");
+    expect(followCandidate(agents)?.id).toBe("mcp:ada");
+    expect(followCandidate(groups[1]!)?.id).toBe("ada-tab-2");
   });
 
   it("keeps your own agents so they can be followed", () => {
