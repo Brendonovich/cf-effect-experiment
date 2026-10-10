@@ -58,6 +58,15 @@ export const CreateGraphResponse = Schema.Struct({
 });
 export type CreateGraphResponse = typeof CreateGraphResponse.Type;
 
+export const CreateConnectionResponse = Schema.Struct({
+  connection: Connection.Model,
+  nodeIO: Schema.Record(Schema.String, NodeIO).annotate({
+    description:
+      "Inputs and outputs of the connected nodes and of every other node whose inferred wildcard types changed, keyed by node ID.",
+  }),
+});
+export type CreateConnectionResponse = typeof CreateConnectionResponse.Type;
+
 const list = HttpApiEndpoint.get("list", "/api/projects", {
   success: Schema.Struct({ projects: Schema.Array(ProjectRecord) }),
 })
@@ -196,7 +205,7 @@ const createConnection = HttpApiEndpoint.post(
   {
     params: { projectId: Schema.String, graphId: Schema.String },
     payload: Connection.CreateInput,
-    success: Schema.Struct({ connection: Connection.Model }).pipe(HttpApiSchema.status("Created")),
+    success: CreateConnectionResponse.pipe(HttpApiSchema.status("Created")),
     error: [
       ProjectNotFound,
       HttpApiError.NotFound,
@@ -207,7 +216,7 @@ const createConnection = HttpApiEndpoint.post(
 )
   .annotate(
     OpenApi.Description,
-    "Connect an existing output port to an existing input port using node IDs and port IDs.",
+    "Connect an existing output port to an existing input port using node IDs and port IDs. The response includes nodeIO for the connected nodes and every other node whose inferred wildcard types changed.",
   )
   .middleware(Authentication);
 

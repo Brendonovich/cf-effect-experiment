@@ -6,6 +6,7 @@ import {
   GraphId,
   Node,
   NodeId,
+  NodeIO,
   Package,
   PackageId,
   Project,
@@ -192,9 +193,23 @@ export const make = Effect.gen(function* () {
     connection: Connection.CreateInput,
     identity: EditorAccess.ConnectionIdentity,
   ) =>
-    editorEvents
-      .withActor(editor.connection.create({ graphID: graphId, connection }), identity.actor)
-      .pipe(touched(identity, () => ({ activeGraph: graphId })));
+    Effect.gen(function* () {
+      const before = yield* editor.graph.resolvedIO({ graphID: graphId });
+      const event = yield* editorEvents.withActor(
+        editor.connection.create({ graphID: graphId, connection }),
+        identity.actor,
+      );
+      const after = yield* editor.graph.resolvedIO({ graphID: graphId });
+      const nodeIO: Record<string, NodeIO> = {};
+      for (const [nodeId, io] of Object.entries(after))
+        if (
+          nodeId === connection.outNodeId ||
+          nodeId === connection.inNodeId ||
+          JSON.stringify(io) !== JSON.stringify(before[nodeId])
+        )
+          nodeIO[nodeId] = io;
+      return { connection: event.connection, nodeIO };
+    }).pipe(touched(identity, () => ({ activeGraph: graphId })));
 
   return {
     listGraphs,

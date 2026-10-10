@@ -1,4 +1,5 @@
 import {
+  CreateConnectionResponse,
   CreateGraphRequest,
   CreateGraphResponse,
   CurrentUser,
@@ -151,9 +152,9 @@ export const createNode = Tool.make("createNode", {
 
 export const createConnection = Tool.make("createConnection", {
   description:
-    "Connect an output pin to an input pin in an existing graph. Prefer createGraph for complete graphs.",
+    "Connect an output pin to an input pin in an existing graph. Returns nodeIO for the connected nodes and every other node whose inferred wildcard types changed. Prefer createGraph for complete graphs.",
   parameters: Schema.Struct({ ...graphParameters, ...Connection.CreateInput.fields }),
-  success: Schema.Struct({ connection: Connection.Model }),
+  success: CreateConnectionResponse,
   failure: Schema.Unknown,
 }).addDependency(CurrentUser);
 

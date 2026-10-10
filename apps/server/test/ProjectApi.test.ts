@@ -398,6 +398,64 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("returns nodes whose inferred wildcard types change from createConnection", () =>
+    Effect.gen(function* () {
+      yield* (yield* Packages.Service).loadPackage(pkg);
+      yield* (yield* Editor.Service).module(WildcardModule);
+      const owner = yield* createSession("owner");
+      const { body: key } = yield* send("POST", "/auth/api-keys", {
+        token: owner,
+        body: { name: "Connection key" },
+      });
+
+      const identity = { schema: { package: "wildcard-api", schema: "identity" } };
+      const created = yield* send("POST", "/api/projects/local/graphs", {
+        token: key.key,
+        body: {
+          name: "Propagation",
+          nodes: {
+            source: { schema: { package: "test", schema: "text" } },
+            first: identity,
+            second: identity,
+            unrelated: { schema: { package: "test", schema: "text" } },
+          },
+          connections: [
+            {
+              outNodeId: "first",
+              outIo: { _tag: "Port", id: "out" },
+              inNodeId: "second",
+              inIoId: "in",
+            },
+          ],
+        },
+      });
+      const { nodeIds } = created.body;
+      assert.strictEqual(created.body.nodeIO[nodeIds.second].dataOutputs[0].type._tag, "Wildcard");
+
+      const graphId = created.body.graph.id;
+      const connected = yield* send("POST", `/api/projects/local/graphs/${graphId}/connections`, {
+        token: key.key,
+        body: {
+          outNodeId: nodeIds.source,
+          outIo: { _tag: "Port", id: "out" },
+          inNodeId: nodeIds.first,
+          inIoId: "in",
+        },
+      });
+      assert.strictEqual(connected.status, 201);
+      assert.isString(connected.body.connection.id);
+      assert.deepStrictEqual(
+        Object.keys(connected.body.nodeIO).sort(),
+        [nodeIds.source, nodeIds.first, nodeIds.second].sort(),
+      );
+      assert.deepStrictEqual(connected.body.nodeIO[nodeIds.first].dataOutputs[0].type, t.String);
+      assert.deepStrictEqual(connected.body.nodeIO[nodeIds.second].dataOutputs[0].type, t.String);
+
+      yield* send("DELETE", `/api/projects/local/graphs/${graphId}`, { token: key.key });
+      yield* send("DELETE", `/auth/api-keys/${key.id}`, { token: owner });
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("allows reads but not edits once a key's creator is no longer an admin", () =>
     Effect.gen(function* () {
       const admin = yield* createSession("admin");

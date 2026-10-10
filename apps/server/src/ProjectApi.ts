@@ -239,10 +239,9 @@ export const layer = (
           Effect.gen(function* () {
             yield* requireProject(id);
             const identity = yield* editorIdentity;
-            const event = yield* operations
+            return yield* operations
               .createConnection(graphId, payload, identity)
               .pipe(ProjectEditor.httpErrors.createConnection);
-            return { connection: event.connection };
           }),
       };
 

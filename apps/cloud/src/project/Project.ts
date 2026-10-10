@@ -297,11 +297,10 @@ export const make = (
       }) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
-          const event = yield* projectEditors
+          return yield* projectEditors
             .getByName(project.id)
             .createConnection(graphId, payload, yield* ProjectCaller.identity(project.id, true))
             .pipe(ProjectEditor.httpErrors.createConnection);
-          return { connection: event.connection };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       remove: (projectId: string) =>
         Effect.gen(function* () {
