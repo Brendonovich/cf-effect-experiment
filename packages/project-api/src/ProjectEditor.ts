@@ -5,6 +5,8 @@ import {
   Graph,
   GraphId,
   Node,
+  NodeId,
+  NodeIO,
   Package,
   PackageId,
   Project,
@@ -90,7 +92,8 @@ export const make = Effect.gen(function* () {
         );
 
         return yield* Effect.gen(function* () {
-          const nodeIds = new Map<string, string>();
+          const nodeIds = new Map<string, NodeId>();
+          const nodeIO: Record<string, NodeIO> = {};
 
           for (const [reference, node] of Object.entries(nodes)) {
             const event = yield* editor.node
@@ -101,6 +104,7 @@ export const make = Effect.gen(function* () {
                 ),
               );
             nodeIds.set(reference, event.node.id);
+            nodeIO[event.node.id] = event.io;
           }
 
           for (const connection of connections) {
@@ -118,7 +122,8 @@ export const make = Effect.gen(function* () {
             });
           }
 
-          return yield* persistence.loadGraph(created.graph.id);
+          const graph = yield* persistence.loadGraph(created.graph.id);
+          return { graph, nodeIds: Object.fromEntries(nodeIds), nodeIO };
         }).pipe(
           Effect.tap(() => touch(identity, { activeGraph: created.graph.id, cursor: null })),
           Effect.catchCause((cause) =>

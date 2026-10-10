@@ -208,12 +208,12 @@ export const make = (
       }: CreateGraphRequest & { readonly projectId: string }) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);
-          const graph = yield* projectEditors
+          const { graph, ...created } = yield* projectEditors
             .getByName(project.id)
             .createGraph(payload, yield* ProjectCaller.identity(project.id, true))
             .pipe(ProjectEditor.httpErrors.createGraph);
           if (graph === undefined) return yield* Effect.die("Created graph could not be loaded");
-          return { graph };
+          return { graph, ...created };
         }).pipe(Policy.withPolicy(projectPolicy.canEdit(projectId))),
       getGraph: ({
         projectId,

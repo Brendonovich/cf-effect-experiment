@@ -168,11 +168,11 @@ export const layer = (
           Effect.gen(function* () {
             yield* requireProject(id);
             const identity = yield* editorIdentity;
-            const graph = yield* operations
+            const { graph, ...created } = yield* operations
               .createGraph(payload, identity)
               .pipe(ProjectEditor.httpErrors.createGraph);
             if (graph === undefined) return yield* Effect.die("Created graph could not be loaded");
-            return { graph };
+            return { graph, ...created };
           }),
         getGraph: ({
           projectId: id,

@@ -79,7 +79,7 @@ describe("project editor presence", () => {
       assert.strictEqual(listed?.lastActiveAt, 0);
       assert.strictEqual(listed?.expiresAt, 90_000);
 
-      const graph = yield* operations.createGraph({ name: "Agent graph" }, mcp);
+      const { graph } = yield* operations.createGraph({ name: "Agent graph" }, mcp);
       assert.isDefined(graph);
       const graphId = graph!.id;
       assert.strictEqual((yield* entry(mcp))?.activeGraph, graphId);
@@ -98,7 +98,7 @@ describe("project editor presence", () => {
       assert.deepStrictEqual((yield* entry(mcp))?.cursor, { x: 120, y: 40 });
 
       // REST callers are separate entries labelled by their key.
-      const other = yield* operations.createGraph({ name: "CI graph" }, rest);
+      const { graph: other } = yield* operations.createGraph({ name: "CI graph" }, rest);
       yield* operations.getGraph(other!.id, rest);
       const api = yield* entry(rest);
       assert.strictEqual(api?.kind, "api");
