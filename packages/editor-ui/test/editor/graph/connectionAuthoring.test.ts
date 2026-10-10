@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   findSnapTarget,
   foldSelectedPins,
+  isCompatibleTarget,
   portsCompatible,
   singleCompatibleSchema,
   visiblePorts,
@@ -12,6 +13,7 @@ import {
 
 const stringPort = { kind: "data", id: "value", type: { _tag: "String" } } as const;
 const intPort = { kind: "data", id: "value", type: { _tag: "Int" } } as const;
+const dateTimePort = { kind: "data", id: "value", type: { _tag: "DateTime" } } as const;
 
 describe("connection authoring", () => {
   it("counts compatible schemas, not pins, across the available packages", () => {
@@ -36,7 +38,9 @@ describe("connection authoring", () => {
     };
     const source = { direction: "output" as const, port: stringPort };
     expect(singleCompatibleSchema([], source)).toBeUndefined();
-    expect(singleCompatibleSchema([pkg], { ...source, port: intPort })).toBeUndefined();
+    // DateTime has no conversion to String; Int does (core default).
+    expect(singleCompatibleSchema([pkg], { ...source, port: dateTimePort })).toBeUndefined();
+    expect(singleCompatibleSchema([pkg], { ...source, port: intPort })).toBeDefined();
     expect(singleCompatibleSchema([pkg], source)).toEqual({
       ref: { package: "pkg", schema: "target" },
       name: "Target",
@@ -131,5 +135,22 @@ describe("connection authoring", () => {
   it("folds a mixed selection together and expands an entirely folded selection", () => {
     expect(foldSelectedPins([true, false, true])).toBe(true);
     expect(foldSelectedPins([true, true])).toBe(false);
+  });
+  it("checks conversions from the output side whichever end the drag starts from", () => {
+    const endpoint = (
+      nodeId: string,
+      direction: "input" | "output",
+      port: typeof stringPort | typeof intPort,
+    ) => ({ nodeId, direction, port, position: { x: 0, y: 0 } });
+    // Int -> String is a core default; String -> Int is not.
+    expect(
+      isCompatibleTarget(endpoint("a", "output", intPort), endpoint("b", "input", stringPort)),
+    ).toBe(true);
+    expect(
+      isCompatibleTarget(endpoint("b", "input", stringPort), endpoint("a", "output", intPort)),
+    ).toBe(true);
+    expect(
+      isCompatibleTarget(endpoint("b", "input", intPort), endpoint("a", "output", stringPort)),
+    ).toBe(false);
   });
 });

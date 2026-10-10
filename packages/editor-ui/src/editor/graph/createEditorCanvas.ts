@@ -323,7 +323,14 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
   const snapTargetAt = (
     source: PortEndpoint,
     pointer: { readonly x: number; readonly y: number },
-  ) => findSnapTarget(source, portEndpoints(), pointer, 32 / canvasScale());
+  ) =>
+    findSnapTarget(
+      source,
+      portEndpoints(),
+      pointer,
+      32 / canvasScale(),
+      options.editor.conversions(),
+    );
 
   const onConnectionMove = (event: PointerEvent) => {
     const pointer = canvasPosition(event.clientX, event.clientY);
@@ -404,6 +411,7 @@ export function createEditorCanvas(options: EditorCanvasOptions) {
           ...Object.fromEntries(store.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
         },
         editor.authoring,
+        editor.conversions(),
       );
       if (match === undefined) setNodeMenu(menu);
       else

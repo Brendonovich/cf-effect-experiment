@@ -1,7 +1,7 @@
 import type { Package, SchemaRef } from "@macrograph/core";
 
 import { BuiltinAuthoring, type SchemaAuthoring } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { scopesCompatible } from "@macrograph/module/Registration";
 
 import type { GraphPort } from "./GraphNode";
@@ -21,11 +21,16 @@ export interface PortEndpoint {
 export const dataTypesEqual = (
   left: Extract<GraphPort, { readonly kind: "data" }>["type"],
   right: Extract<GraphPort, { readonly kind: "data" }>["type"],
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): boolean => {
-  return t.compatible(left, right);
+  return Conversion.connectable(left, right, conversions);
 };
 
-export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
+export const portsCompatible = (
+  left: GraphPort,
+  right: GraphPort,
+  conversions: Conversion.Rules = Conversion.defaultRules,
+): boolean =>
   (left.kind === "data" && left.invalid) || (right.kind === "data" && right.invalid)
     ? false
     : left.kind === "execution" && right.kind === "execution"
@@ -34,7 +39,20 @@ export const portsCompatible = (left: GraphPort, right: GraphPort): boolean =>
         ? left.scope === null
           ? scopesCompatible(right.scope, left.scope)
           : scopesCompatible(left.scope, right.scope)
-        : left.kind === "data" && right.kind === "data" && dataTypesEqual(left.type, right.type);
+        : left.kind === "data" &&
+          right.kind === "data" &&
+          dataTypesEqual(left.type, right.type, conversions);
+
+/** Like `portsCompatible`, but data conversions are checked from the output to the input. */
+export const endpointsCompatible = (
+  source: GraphPort,
+  direction: PortDirection,
+  target: GraphPort,
+  conversions: Conversion.Rules = Conversion.defaultRules,
+): boolean =>
+  direction === "input" && source.kind === "data" && target.kind === "data"
+    ? portsCompatible(target, source, conversions)
+    : portsCompatible(source, target, conversions);
 
 export const visiblePorts = (
   ports: ReadonlyArray<GraphPort>,
@@ -58,21 +76,26 @@ export const visiblePorts = (
 export const foldSelectedPins = (states: ReadonlyArray<boolean>): boolean =>
   states.some((folded) => !folded);
 
-export const isCompatibleTarget = (source: PortEndpoint, target: PortEndpoint): boolean =>
+export const isCompatibleTarget = (
+  source: PortEndpoint,
+  target: PortEndpoint,
+  conversions: Conversion.Rules = Conversion.defaultRules,
+): boolean =>
   source.nodeId !== target.nodeId &&
   source.direction !== target.direction &&
   target.occupied !== true &&
-  portsCompatible(source.port, target.port);
+  endpointsCompatible(source.port, source.direction, target.port, conversions);
 
 export const findSnapTarget = (
   source: PortEndpoint,
   targets: ReadonlyArray<PortEndpoint>,
   pointer: { readonly x: number; readonly y: number },
   maxDistance: number,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): PortEndpoint | undefined => {
   let nearest: { readonly endpoint: PortEndpoint; readonly distance: number } | undefined;
   for (const target of targets) {
-    if (!isCompatibleTarget(source, target)) continue;
+    if (!isCompatibleTarget(source, target, conversions)) continue;
     const distance = Math.hypot(target.position.x - pointer.x, target.position.y - pointer.y);
     if (distance <= maxDistance && (nearest === undefined || distance < nearest.distance)) {
       nearest = { endpoint: target, distance };
@@ -87,6 +110,7 @@ export const compatibleSchemaPorts = (
   packageId?: string,
   definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): ReadonlyArray<GraphPort> => {
   if (schema.internal === true) return [];
   const behavior =
@@ -111,7 +135,7 @@ export const compatibleSchemaPorts = (
   ];
   return (source.direction === "input" ? ports.map((port) => asOutputPort(port)) : ports).filter(
     (port) =>
-      portsCompatible(source.port, port) &&
+      endpointsCompatible(source.port, source.direction, port, conversions) &&
       (source.direction !== "output" ||
         source.port.kind !== "data" ||
         behavior?.acceptsInput?.(port.id, source.port.type, definitions) !== false) &&
@@ -126,11 +150,15 @@ export const singleCompatibleSchema = (
   source: Pick<PortEndpoint, "direction" | "port">,
   definitions?: t.Definitions,
   authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ): { readonly ref: SchemaRef; readonly name: string } | undefined => {
   let match: { ref: SchemaRef; name: string } | undefined;
   for (const pkg of packages) {
     for (const schema of pkg.schemas) {
-      if (compatibleSchemaPorts(schema, source, pkg.id, definitions, authoring).length === 0)
+      if (
+        compatibleSchemaPorts(schema, source, pkg.id, definitions, authoring, conversions)
+          .length === 0
+      )
         continue;
       if (match !== undefined) return undefined;
       match = { ref: { package: pkg.id, schema: schema.id }, name: schema.name };

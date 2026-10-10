@@ -1,4 +1,4 @@
-import type { t } from "@macrograph/module";
+import type { Conversion, t } from "@macrograph/module";
 
 import { OutputRef, type Canvas, type NodeIO, type RenderedGraph } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
@@ -7,11 +7,12 @@ import { For, createMemo, createSignal, type Component } from "solid-js";
 import { colors } from "../../tokens.stylex.ts";
 import { zoomOriginAt } from "../workspace/workspace";
 import { GraphNode } from "./GraphNode.tsx";
-import { connectedPortIds, connectionPath, graphConnections, wireColor } from "./graphPresentation";
+import { connectedPortIds, graphConnections, wireSegments } from "./graphPresentation";
 
 interface SnapshotGraphCanvasProps {
   readonly graph: Canvas.Model | RenderedGraph.Model;
   readonly definitions?: t.Definitions;
+  readonly conversions?: Conversion.Rules;
 }
 
 const noop = () => {};
@@ -77,7 +78,12 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
       : undefined;
   const ioForNode = (nodeId: string) => nodeIO().get(nodeId);
   const edges = createMemo(() =>
-    graphConnections(props.graph, ioForNode, (nodeId) => nodeWidths().get(nodeId)),
+    graphConnections(
+      props.graph,
+      ioForNode,
+      (nodeId) => nodeWidths().get(nodeId),
+      props.conversions,
+    ),
   );
 
   return (
@@ -110,12 +116,12 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
         style={{ transform: `scale(${scale()}) translate(${-origin().x}px, ${-origin().y}px)` }}
       >
         <svg sx={styles.wires} aria-hidden="true">
-          <For each={edges()}>
-            {(edge) => (
+          <For each={edges().flatMap((edge) => wireSegments(edge))}>
+            {(segment) => (
               <path
-                d={connectionPath(edge.from, edge.to)}
+                d={segment.path}
                 fill="none"
-                stroke={wireColor(edge.type, edge.scope)}
+                stroke={segment.stroke}
                 stroke-width="2"
                 opacity="0.75"
               />

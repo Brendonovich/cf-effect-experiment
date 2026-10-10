@@ -1,6 +1,6 @@
 import type * as Registration from "@macrograph/module/Registration";
 
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Canvas } from "./Canvas.ts";
@@ -112,12 +112,14 @@ export class GraphResolver {
     graph: Canvas.Model,
     declared: Readonly<Record<string, NodeIO>>,
     definitions: t.Definitions,
+    conversions: Conversion.Rules = Conversion.defaultRules,
   ): Resolution {
     const key = JSON.stringify([
       Object.values(graph.nodes).map((node) => [node.id, node.schema, node.properties]),
       graph.connections,
       declared,
       definitions,
+      conversions.pairs,
     ]);
     if (this.key === key && this.value !== undefined) return this.value;
     const diagnostics: Record<string, string[]> = {};
@@ -211,7 +213,7 @@ export class GraphResolver {
       );
     }
     let current = initial;
-    const cache = new Wildcards.Cache();
+    const cache = new Wildcards.Cache(conversions);
     for (let round = 0; round <= Object.keys(graph.nodes).length + 1; round++) {
       const solved = cache.update(new Map(Object.entries(current)), graph.connections);
       const invalid = new Set<string>();

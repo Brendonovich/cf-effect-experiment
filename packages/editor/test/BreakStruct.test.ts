@@ -17,11 +17,17 @@ import { Effect, Layer, Result } from "effect";
 
 import { Editor, Packages } from "../src/index.ts";
 
-const childId = t.DefinitionId.make("child"),
-  rootId = t.DefinitionId.make("root");
+// Namespaced by the module that owns them in the module-owned variant.
+const childId = t.DefinitionId.make("break-test/child"),
+  rootId = t.DefinitionId.make("break-test/root");
 const definitions: t.Definitions = {
-  child: { _tag: "Struct", id: childId, name: "Child", fields: [{ name: "text", type: t.String }] },
-  root: {
+  [childId]: {
+    _tag: "Struct",
+    id: childId,
+    name: "Child",
+    fields: [{ name: "text", type: t.String }],
+  },
+  [rootId]: {
     _tag: "Struct",
     id: rootId,
     name: "Root",

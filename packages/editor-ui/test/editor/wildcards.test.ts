@@ -138,10 +138,11 @@ it("never renders stale inference for invalid authoritative IO and recovers afte
       graphId: "graph",
       nodeId: "source",
       property: "type",
-      properties: { type: "Int" },
+      properties: { type: "DateTime" },
       inputDefaults: {},
       deletedConnectionIds: [],
-      io: io(t.Int),
+      // DateTime has no conversion to the String input (unlike Int), so the group is invalid.
+      io: io(t.DateTime),
     });
     expect(type()).toEqual(wildcard);
     editor.applyEvent({
@@ -150,6 +151,6 @@ it("never renders stale inference for invalid authoritative IO and recovers afte
       graphId: "graph",
       connectionId: downstream.id,
     });
-    expect(type()).toEqual(t.Int);
+    expect(type()).toEqual(t.DateTime);
     dispose();
   }));

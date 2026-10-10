@@ -1,4 +1,4 @@
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { Result } from "effect";
 
 import type { Connection } from "./Connection.ts";
@@ -55,6 +55,11 @@ interface Term {
   readonly node: string;
   readonly type: t.Type;
 }
+interface Pending {
+  readonly wire: Connection.Model;
+  readonly source: Term;
+  readonly target: Term;
+}
 const key = (term: Term & { type: t.Wildcard }) => JSON.stringify([term.node, term.type.id]);
 const child = (term: Term): Term | undefined =>
   term.type._tag === "List"
@@ -78,6 +83,7 @@ const solve = (
   nodes: ReadonlySet<string>,
   connections: ReadonlyArray<Connection.Model>,
   io: ReadonlyMap<string, IO>,
+  conversions: Conversion.Rules,
 ): Result.Result<Group, ReadonlyArray<Conflict>> => {
   const bindings = new Map<string, Term>();
   const bound: string[] = [];
@@ -131,39 +137,69 @@ const solve = (
       bc = child(b);
     return ac !== undefined && bc !== undefined ? unify(ac, bc) : t.equals(a.type, b.type);
   };
+  // Current value of a term, without caching: bindings may still change during solving.
+  const current = (term: Term): t.Type => {
+    const next = dereference(term);
+    if (next.type._tag === "List") return t.List(current({ ...next, type: next.type.item }));
+    if (next.type._tag === "Option") return t.Option(current({ ...next, type: next.type.inner }));
+    return next.type;
+  };
+  const attempt = (pending: Pending, check: () => boolean) => {
+    const bindingCount = bound.length;
+    if (check()) return;
+    while (bound.length > bindingCount) bindings.delete(bound.pop()!);
+    conflicts.push({
+      nodes,
+      connectionId: pending.wire.id,
+      reason: "Conflicting or recursive wildcard types",
+    });
+  };
+  // Input-side wires and scope fields must agree exactly. Outputs whose wildcard is still
+  // unresolved after that are bound by their targets and must agree with each other. Outputs
+  // already resolved may use a registered conversion, so the result is independent of wire order.
+  const equal: Pending[] = [];
+  const outgoing: Pending[] = [];
   for (const wire of connections) {
     if (!nodes.has(wire.outNodeId)) continue;
     const source = io.get(wire.outNodeId),
       target = io.get(wire.inNodeId);
     if (source === undefined || target === undefined) continue;
     const output = OutputRef.resolve(source, wire.outIo);
-    const bindingCount = bound.length;
-    const conflictCount = conflicts.length;
     const inputs = target.dataInputs.filter((port) => port.id === wire.inIoId);
-    const pair = (a: DataPort, b: DataPort) => {
+    const pair = (a: DataPort, b: DataPort, convertible: boolean) => {
       // Ordinary concrete incompatibilities are handled by endpoint validation.
       if (!t.hasWildcard(a.type) && !t.hasWildcard(b.type)) return;
-      if (!unify({ node: wire.outNodeId, type: a.type }, { node: wire.inNodeId, type: b.type }))
-        conflicts.push({
-          nodes,
-          connectionId: wire.id,
-          reason: "Conflicting or recursive wildcard types",
-        });
+      const pending: Pending = {
+        wire,
+        source: { node: wire.outNodeId, type: a.type },
+        target: { node: wire.inNodeId, type: b.type },
+      };
+      const isOutput = convertible && t.hasWildcard(a.type) && !t.hasWildcard(b.type);
+      (isOutput ? outgoing : equal).push(pending);
     };
-    if (output?.kind === "data" && inputs.length === 1) pair(output.port, inputs[0]!);
+    if (output?.kind === "data" && inputs.length === 1) pair(output.port, inputs[0]!, true);
     if (output?.kind === "execution" && output.port.scope != null) {
       const input = target.executionInputs.find((port) => port.id === wire.inIoId);
       // An inferred scope input exposes its fields as data outputs on a projection.
       const fields = input?.scope === null ? target.dataOutputs : input?.scope;
       for (const field of fields ?? []) {
         const source = output.port.scope.find((candidate) => candidate.id === field.id);
-        if (source !== undefined) pair(source, field);
+        if (source !== undefined) pair(source, field, false);
       }
     }
-    if (conflicts.length !== conflictCount) {
-      while (bound.length > bindingCount) bindings.delete(bound.pop()!);
-    }
   }
+  for (const pending of equal) attempt(pending, () => unify(pending.source, pending.target));
+  const unresolved = new Set(outgoing.filter((pending) => t.hasWildcard(current(pending.source))));
+  for (const pending of unresolved) attempt(pending, () => unify(pending.source, pending.target));
+  for (const pending of outgoing)
+    if (!unresolved.has(pending)) {
+      if (!conversions.has(current(pending.source), pending.target.type))
+        conflicts.push({
+          nodes,
+          connectionId: pending.wire.id,
+          reason: "Resolved wildcard type has no registered conversion to the connected input",
+        });
+    }
   if (conflicts.length > 0) return Result.fail(conflicts);
   const values = new Map<string, t.Type>();
   const resolve = (node: string, type: t.Type): t.Type => {
@@ -195,6 +231,9 @@ export class Cache {
   // Include non-data wires too: an IO change can turn an exec port into a data port.
   private incident = new Map<string, ReadonlyMap<string, Connection.Model>>();
   private byNode = new Map<string, Group>();
+
+  /** Rules are fixed per cache: different rules (e.g. after a module mounts) need a new cache. */
+  constructor(private readonly conversions: Conversion.Rules = Conversion.defaultRules) {}
 
   get groups(): ReadonlySet<Group> {
     return new Set(this.byNode.values());
@@ -287,7 +326,7 @@ export class Cache {
       }
       // Preserve wire order so invalid saved graphs report deterministic conflicts.
       const groupWires = [...direct.values()].sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-      const group = solve(members, groupWires, io);
+      const group = solve(members, groupWires, io, this.conversions);
       if (Result.isFailure(group)) conflicts.push(...group.failure);
       else completed.push(group.success);
     }
