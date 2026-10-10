@@ -411,14 +411,26 @@ export interface WireSegment {
   readonly stroke: string;
 }
 
-const markerPath = (point: Position): string =>
-  `M ${point.x} ${point.y - 4} L ${point.x} ${point.y + 4}`;
+const curveTangent = ([p0, p1, p2, p3]: Curve, t: number): Position => {
+  const inverse = 1 - t;
+  return {
+    x:
+      3 * inverse * inverse * (p1.x - p0.x) +
+      6 * inverse * t * (p2.x - p1.x) +
+      3 * t * t * (p3.x - p2.x),
+    y:
+      3 * inverse * inverse * (p1.y - p0.y) +
+      6 * inverse * t * (p2.y - p1.y) +
+      3 * t * t * (p3.y - p2.y),
+  };
+};
 
-const curveSpeedAtMidpoint = ([p0, p1, p2, p3]: Curve): number =>
-  Math.hypot(
-    0.75 * (p1.x - p0.x) + 1.5 * (p2.x - p1.x) + 0.75 * (p3.x - p2.x),
-    0.75 * (p1.y - p0.y) + 1.5 * (p2.y - p1.y) + 0.75 * (p3.y - p2.y),
-  );
+const markerPath = (point: Position, tangent: Position): string => {
+  const length = Math.hypot(tangent.x, tangent.y);
+  const normal =
+    length === 0 ? { x: 0, y: 4 } : { x: (-tangent.y / length) * 4, y: (tangent.x / length) * 4 };
+  return `M ${point.x - normal.x} ${point.y - normal.y} L ${point.x + normal.x} ${point.y + normal.y}`;
+};
 
 /** A converted wire changes color across two close vertical ticks at its midpoint. */
 export const wireSegments = (edge: {
@@ -432,7 +444,8 @@ export const wireSegments = (edge: {
   const target = edge.targetType === undefined ? source : wireColor(edge.targetType);
   const curve = connectionCurve(edge.from, edge.to);
   if (target === source) return [{ kind: "wire", path: curvePath(curve), stroke: source }];
-  const speed = curveSpeedAtMidpoint(curve);
+  const tangent = curveTangent(curve, 0.5);
+  const speed = Math.hypot(tangent.x, tangent.y);
   const offset = speed === 0 ? 0.02 : Math.min(0.1, 2 / speed);
   const [first] = splitCurve(curve, 0.5 - offset);
   const [, second] = splitCurve(curve, 0.5 + offset);
@@ -441,8 +454,8 @@ export const wireSegments = (edge: {
   return [
     { kind: "wire", path: curvePath(first), stroke: source },
     { kind: "wire", path: curvePath(second), stroke: target },
-    { kind: "conversion-marker", path: markerPath(sourceMarker), stroke: source },
-    { kind: "conversion-marker", path: markerPath(targetMarker), stroke: target },
+    { kind: "conversion-marker", path: markerPath(sourceMarker, tangent), stroke: source },
+    { kind: "conversion-marker", path: markerPath(targetMarker, tangent), stroke: target },
   ];
 };
 
