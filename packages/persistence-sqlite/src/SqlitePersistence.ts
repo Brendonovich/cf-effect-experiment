@@ -49,7 +49,13 @@ export const layer = Layer.effect(Persistence.Service)(
           tx.delete(schema.canvases).run();
 
           for (const [graphId, graph] of Object.entries(Project.canvases(project))) {
-            tx.insert(schema.canvases).values({ id: graphId, name: graph.name }).run();
+            tx.insert(schema.canvases)
+              .values({
+                id: graphId,
+                name: graph.name,
+                scopeProjections: graph.scopeProjections ?? {},
+              })
+              .run();
             if (project.graphs[graphId] !== undefined)
               tx.insert(schema.graphs).values({ canvasId: graphId }).run();
 
@@ -142,6 +148,10 @@ export const layer = Layer.effect(Persistence.Service)(
         id: CanvasId.make(graphRow.id),
         name: graphRow.name,
         nodes,
+        // Absent and empty are equivalent; only return the key when there are projections.
+        ...(Object.keys(graphRow.scopeProjections).length === 0
+          ? {}
+          : { scopeProjections: graphRow.scopeProjections }),
         connections,
       };
     };
@@ -301,9 +311,10 @@ export const layer = Layer.effect(Persistence.Service)(
         db.transaction((tx) => {
           tx.delete(schema.connections).where(eq(schema.connections.canvasId, graph.id)).run();
           tx.delete(schema.nodes).where(eq(schema.nodes.canvasId, graph.id)).run();
+          const canvas = { name: graph.name, scopeProjections: graph.scopeProjections ?? {} };
           tx.insert(schema.canvases)
-            .values({ id: graph.id, name: graph.name })
-            .onConflictDoUpdate({ target: schema.canvases.id, set: { name: graph.name } })
+            .values({ id: graph.id, ...canvas })
+            .onConflictDoUpdate({ target: schema.canvases.id, set: canvas })
             .run();
           const functionRow = tx
             .select({ canvasId: schema.functions.canvasId })
