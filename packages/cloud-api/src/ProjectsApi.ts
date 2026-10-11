@@ -16,7 +16,7 @@ import {
   HttpApiGroup,
   HttpApiSchema,
   OpenApi,
-} from "effect/unstable/httpapi";
+} from "effect/http-api";
 
 import { Authentication } from "./Authentication.ts";
 import { ProjectNotFound, TeamNotFound } from "./Errors.ts";

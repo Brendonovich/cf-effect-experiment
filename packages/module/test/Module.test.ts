@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Array, Effect, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 import { expectTypeOf } from "vitest";
 
 import { t, Engine, Module, Registration } from "../src/index.ts";

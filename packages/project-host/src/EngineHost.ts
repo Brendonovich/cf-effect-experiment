@@ -7,7 +7,7 @@ import { Editor } from "@macrograph/editor";
 import * as Engine from "@macrograph/module/Engine";
 import { Persistence } from "@macrograph/persistence";
 import { Context, Effect, Layer, Schema, Semaphore } from "effect";
-import { type Rpc, RpcTest } from "effect/unstable/rpc";
+import { type Rpc, RpcTest } from "effect/rpc";
 
 export const contextLayer = <
   ResourceType extends Resource.ResourceClass<any, any, any>,

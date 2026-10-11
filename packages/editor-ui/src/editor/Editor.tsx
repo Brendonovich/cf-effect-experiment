@@ -3,7 +3,7 @@ import type { RuntimeActivity } from "@macrograph/execution";
 import type { ClientSettings } from "@macrograph/module";
 import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
-import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
+import type { RpcClient, RpcClientError } from "effect/rpc";
 
 import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";

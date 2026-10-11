@@ -6,7 +6,7 @@ import {
 } from "@macrograph/module-websocket-client/Definition";
 import { localLayer } from "@macrograph/module-websocket-client/Engine";
 import { Effect, Layer, Result } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import { SpeakerBotEngine } from "../src/Definition.ts";
 import speakerLayer from "../src/Engine.ts";

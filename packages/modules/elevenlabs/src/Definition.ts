@@ -1,6 +1,6 @@
 import { Engine } from "@macrograph/module";
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const defaultModel = "eleven_multilingual_v2";
 const UnitInterval = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }));

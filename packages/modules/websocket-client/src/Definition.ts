@@ -1,7 +1,7 @@
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { Array, Effect, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const ConnectionId = Schema.String.pipe(Schema.brand("WebSocketConnectionId"));
 export type ConnectionId = typeof ConnectionId.Type;

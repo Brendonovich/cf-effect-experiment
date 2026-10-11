@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { CurrentUser, ProjectNotFound, TeamNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
 import { Effect, Layer, Ref } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 
 import * as CredentialPolicy from "../src/auth/CredentialPolicy.ts";
 import * as DeploymentPolicy from "../src/deployment/DeploymentPolicy.ts";

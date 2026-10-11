@@ -1,10 +1,5 @@
 import { Schema } from "effect";
-import {
-  HttpApiEndpoint,
-  HttpApiError,
-  HttpApiGroup,
-  HttpApiSchema,
-} from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 
 import { Authentication } from "./Authentication.ts";
 import { TeamNotFound, UserNotFound } from "./Errors.ts";

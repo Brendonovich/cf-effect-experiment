@@ -1,7 +1,7 @@
 import { Effect, Scope, Stream } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { type Rpc, RpcGroup, RpcServer } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import { type Rpc, RpcGroup, RpcServer } from "effect/rpc";
+import { Socket } from "effect/socket";
 
 import { makeDualServerProtocol } from "./DualProtocol.ts";
 import { EditorEvents } from "./EditorEvents.ts";

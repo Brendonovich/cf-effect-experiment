@@ -11,7 +11,7 @@ import {
 } from "@macrograph/core";
 import { t, Engine, Module, Resource } from "@macrograph/module";
 import { Array, Effect, Exit, Option, Ref, Schema, Tracer } from "effect";
-import { Rpc, RpcGroup, RpcTest } from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcTest } from "effect/rpc";
 
 import { Executor } from "../src/index.ts";
 

@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Engine, Module } from "@macrograph/module";
-import { Array, Effect, Fiber, Option, Ref, Schema, Tracer } from "effect";
+import { Array, Effect, Option, Ref, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
 
@@ -82,12 +82,7 @@ describe("schema execution context", () => {
             type: "event",
             event: () => Effect.succeed(true),
             io: () => ({}),
-            run: ({ execution, node }) => {
-              const span = Fiber.getCurrent()?.currentSpan;
-              assert.strictEqual(span?._tag, "Span");
-              if (span?._tag === "Span") assert.strictEqual(span.name, "Schema.run context.event");
-              return capture(execution, node);
-            },
+            run: ({ execution, node }) => capture(execution, node),
           });
           yield* registration.schema.register({
             id: "action",

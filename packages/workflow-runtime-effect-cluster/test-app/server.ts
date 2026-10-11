@@ -3,7 +3,7 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { EffectClusterRuntime } from "@macrograph/workflow-runtime-effect-cluster";
 import { input, makeModules, RunRequest } from "@macrograph/workflow-runtime-test/fixture";
 import { Cause, Effect, Exit, Layer, ManagedRuntime, Option, Schema } from "effect";
-import { SingleRunner } from "effect/unstable/cluster";
+import { SingleRunner } from "effect/cluster";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 

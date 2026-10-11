@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { Headers } from "effect/unstable/http";
+import { Headers } from "effect/http";
 
 import type { AtomicFileStore } from "../src/AtomicFileStore.ts";
 

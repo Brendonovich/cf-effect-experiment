@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { Socket } from "effect/unstable/socket";
 
 import {
   ConnectionId,

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { vi } from "vitest";
 
 import { MACROGRAPH_AUTH_SESSION_KEY, makeBrowserCredentialProvider } from "./BrowserCredentials";

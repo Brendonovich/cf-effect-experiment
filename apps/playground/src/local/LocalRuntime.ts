@@ -33,7 +33,7 @@ import * as Resource from "@macrograph/module/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { ModuleMount } from "@macrograph/project-host/ModuleMount";
 import { Context, Effect, Layer, type Scope } from "effect";
-import { RpcTest, type Rpc } from "effect/unstable/rpc";
+import { RpcTest, type Rpc } from "effect/rpc";
 
 import type { BrowserCredentialProvider } from "./BrowserCredentials";
 import type { LocalProjectStore } from "./LocalStoragePersistence";

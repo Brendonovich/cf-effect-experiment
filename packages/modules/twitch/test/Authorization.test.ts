@@ -1,11 +1,11 @@
 import type { Credential } from "@macrograph/module/Engine";
-import type { HttpClientRequest } from "effect/unstable/http";
+import type { HttpClientRequest } from "effect/http";
 
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Deferred, Effect, HashMap, Layer, Redacted } from "effect";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 
 import type { Context, Make } from "../src/EventSubImplementation.ts";
 

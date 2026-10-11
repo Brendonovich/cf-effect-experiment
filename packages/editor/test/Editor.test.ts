@@ -17,7 +17,7 @@ import UtilitiesModule from "@macrograph/module-utilities";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { Editor, EditorEvents, Packages } from "../src/index";
 

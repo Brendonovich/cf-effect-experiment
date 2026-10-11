@@ -2,14 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { CurrentUser } from "@macrograph/cloud-api";
 import { ApiCaller } from "@macrograph/project-api";
 import { Context, Effect, Option, Ref } from "effect";
-import { Tool } from "effect/unstable/ai";
-import {
-  HttpEffect,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { Tool } from "effect/ai";
+import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 
 import * as CloudMcp from "../src/api/CloudMcp.ts";
 

@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { HttpEndpoint } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Layer, Option, Redacted } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 import { AppCredentials } from "../src/AppApi.ts";
 import { AccountId, InstallationId, RepositoryId, WebhookId } from "../src/Definition.ts";
@@ -227,15 +227,13 @@ describe("GitHub repository webhook", () => {
       );
       const wrongTarget = yield* Effect.promise(() => request());
       assert.strictEqual(
-        (
-          yield* live.handle({
-            ...wrongTarget,
-            headers: {
-              ...wrongTarget.headers,
-              "x-github-hook-installation-target-id": "21",
-            },
-          })
-        ).status,
+        (yield* live.handle({
+          ...wrongTarget,
+          headers: {
+            ...wrongTarget.headers,
+            "x-github-hook-installation-target-id": "21",
+          },
+        })).status,
         400,
       );
     }),

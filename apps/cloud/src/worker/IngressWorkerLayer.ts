@@ -1,6 +1,5 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Layer } from "effect";
-import * as Path from "effect/Path";
 import {
   Etag,
   HttpMiddleware,
@@ -8,8 +7,9 @@ import {
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+} from "effect/http";
+import { HttpApiBuilder } from "effect/http-api";
+import * as Path from "effect/Path";
 
 import * as Database from "../database/Database.ts";
 import {

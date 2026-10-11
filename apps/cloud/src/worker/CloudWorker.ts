@@ -2,15 +2,9 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
+import { Etag, HttpMiddleware, HttpPlatform, HttpRouter, HttpServerRequest } from "effect/http";
+import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import * as Path from "effect/Path";
-import {
-  Etag,
-  HttpMiddleware,
-  HttpPlatform,
-  HttpRouter,
-  HttpServerRequest,
-} from "effect/unstable/http";
-import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 
 import { Api } from "../api/Api.ts";
 import * as CloudApiHandlers from "../api/CloudApiHandlers.ts";

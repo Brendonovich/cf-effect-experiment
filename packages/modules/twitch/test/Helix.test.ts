@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Clock, Effect, Fiber, Ref, Schema } from "effect";
-import * as TestClock from "effect/testing/TestClock";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
 
 import { Helix } from "../src/Helix.ts";
 

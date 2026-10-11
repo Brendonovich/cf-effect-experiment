@@ -1,6 +1,6 @@
 import { Effect, Layer, Stream } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { RpcTest } from "effect/unstable/rpc";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+import { RpcTest } from "effect/rpc";
 
 import {
   ClientRpcs,

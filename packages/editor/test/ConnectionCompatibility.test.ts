@@ -3,7 +3,7 @@ import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograp
 import { Conversion, t, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
-import { FastCheck as fc } from "effect/testing";
+import * as fc from "fast-check";
 
 import { Editor, Packages } from "../src/index.ts";
 
@@ -16,6 +16,19 @@ import { Editor, Packages } from "../src/index.ts";
 
 const seed = process.env.FC_SEED === undefined ? 0xc0ec : Number(process.env.FC_SEED);
 const pureRuns = { numRuns: Number(process.env.FC_NUM_RUNS ?? 500), seed };
+type ArbitraryValues<Arbs extends readonly fc.Arbitrary<unknown>[]> = {
+  [K in keyof Arbs]: Arbs[K] extends fc.Arbitrary<infer A> ? A : never;
+};
+
+const prop = <const Arbs extends readonly fc.Arbitrary<unknown>[]>(
+  name: string,
+  arbitraries: Arbs,
+  property: (values: ArbitraryValues<Arbs>) => void,
+  options?: { readonly fastCheck?: fc.Parameters<[ArbitraryValues<Arbs>]> },
+) => {
+  const tuple = fc.tuple(...arbitraries) as fc.Arbitrary<ArbitraryValues<Arbs>>;
+  it(name, () => fc.assert(fc.property(tuple, property), options?.fastCheck));
+};
 
 const leafTypes = [t.String, t.Int, t.Float, t.Bool, t.DateTime] as const;
 
@@ -45,7 +58,7 @@ const substitute = (type: t.Type, values: Readonly<Record<string, t.Type>>): t.T
         : type;
 
 describe("type compatibility properties", () => {
-  it.prop(
+  prop(
     "every type is compatible with itself",
     [anyTypeArb],
     ([type]) => {
@@ -54,7 +67,7 @@ describe("type compatibility properties", () => {
     { fastCheck: pureRuns },
   );
 
-  it.prop(
+  prop(
     "compatibility does not depend on which side is the output",
     [anyTypeArb, anyTypeArb],
     ([left, right]) => {
@@ -63,7 +76,7 @@ describe("type compatibility properties", () => {
     { fastCheck: pureRuns },
   );
 
-  it.prop(
+  prop(
     "concrete types are compatible only when they are exactly equal",
     [concreteArb, concreteArb],
     ([left, right]) => {
@@ -77,7 +90,7 @@ describe("type compatibility properties", () => {
       for (const right of leafTypes) expect(t.compatible(left, right)).toBe(left === right);
   });
 
-  it.prop(
+  prop(
     "a type containing wildcards is compatible with any concrete instantiation of it",
     [anyTypeArb, concreteArb, concreteArb],
     ([type, forT, forU]) => {
