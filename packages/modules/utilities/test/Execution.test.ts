@@ -95,10 +95,16 @@ describe("Utilities execution", () => {
         },
       };
       const messages: Array<unknown> = [];
-      const printSpans: Array<Tracer.AnySpan | undefined> = [];
+      const spans: Array<Tracer.Span> = [];
+      const tracer = Tracer.make({
+        span: (options) => {
+          const span = new Tracer.NativeSpan(options);
+          spans.push(span);
+          return span;
+        },
+      });
       const logger = Logger.make<unknown, void>((options) => {
         messages.push(options.message);
-        printSpans.push(options.fiber.currentSpan);
       });
       const executor = yield* Executor.make(project);
       yield* executor.module(UtilitiesModule, UtilitiesDeployment);
@@ -108,7 +114,7 @@ describe("Utilities execution", () => {
       assert.deepStrictEqual(messages, []);
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 2 }))
-        .pipe(Effect.provide(Logger.layer([logger])));
+        .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(messages, [
         ["Utilities Print", { value: "true" }],
         ["Utilities Print", { value: "also true" }],
@@ -130,12 +136,13 @@ describe("Utilities execution", () => {
       });
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 4 }))
-        .pipe(Effect.provide(Logger.layer([logger])));
+        .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
       assert.deepStrictEqual(messages, [
         ["Utilities Print", { value: "true" }],
         ["Utilities Print", { value: "also true" }],
         ["Utilities Print", { value: "false" }],
       ]);
+      const printSpans = spans.filter((span) => span.name === "Schema.run util.Print");
       assert.lengthOf(printSpans, 3);
       for (const [index, span] of printSpans.entries()) {
         assert.strictEqual(span?._tag, "Span");

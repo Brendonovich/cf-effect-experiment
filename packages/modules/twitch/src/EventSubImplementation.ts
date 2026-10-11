@@ -1,8 +1,8 @@
 import type { HttpEndpoint } from "@macrograph/module";
+import type { HttpClientError } from "effect/http";
+import type { HttpApiClient } from "effect/http-api";
 import type * as S from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import type { HttpClientError } from "effect/unstable/http";
-import type { HttpApiClient } from "effect/unstable/httpapi";
 
 import { HashMap } from "effect";
 import * as Effect from "effect/Effect";
@@ -66,9 +66,7 @@ export const definitionsFor = (subscriptions: ReadonlyArray<string>) =>
 export const listSubscriptions = Effect.fnUntraced(function* (
   helix: HttpApiClient.ForApi<typeof Helix.Api.HelixApi>,
 ) {
-  const subscriptions: Array<
-    Effect.Success<ReturnType<typeof helix.eventsub.listSubscriptions>>["data"][number]
-  > = [];
+  const subscriptions: Array<S.Schema.Type<typeof Helix.Api.EventSubSubscription>> = [];
   let after: string | undefined;
   do {
     const response = yield* helixError(

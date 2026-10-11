@@ -18,8 +18,8 @@ import {
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http";
-import { HttpApi, HttpApiBuilder, HttpApiError, OpenApi } from "effect/unstable/httpapi";
+} from "effect/http";
+import { HttpApi, HttpApiBuilder, HttpApiError, OpenApi } from "effect/http-api";
 
 import type { ApiKeys } from "./ApiKeys.ts";
 import type { ClientSessions } from "./ClientSessions.ts";

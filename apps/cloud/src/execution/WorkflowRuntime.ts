@@ -18,7 +18,7 @@ import { layer as openAILayer } from "@macrograph/module-openai/Engine";
 import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 export const make = Effect.fnUntraced(function* (project: Project.Model) {
   const readOnly = Effect.die("Workflow engine context is read-only");

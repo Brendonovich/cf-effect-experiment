@@ -1,4 +1,4 @@
-import type { Headers } from "effect/unstable/http";
+import type { Headers } from "effect/http";
 
 import { Actor } from "@macrograph/core";
 import { Context, Effect, Layer, Schema } from "effect";

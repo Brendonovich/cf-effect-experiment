@@ -10,7 +10,7 @@ import {
   Semaphore,
   Stream,
 } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import * as Executor from "./Executor.ts";
 

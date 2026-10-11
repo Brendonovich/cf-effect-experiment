@@ -15,7 +15,7 @@ import {
 import { Editor, EditorAccess, EditorEvents, Packages, Presence } from "@macrograph/editor";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { Duration, Effect } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 
 /** How long a REST or MCP caller stays in presence after its latest request. */
 export const presenceTtl = Duration.seconds(90);

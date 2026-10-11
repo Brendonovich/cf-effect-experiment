@@ -3,7 +3,7 @@ import { Policy } from "@macrograph/core";
 import { Presence } from "@macrograph/editor";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { Headers, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import { hasTrustedOrigin } from "../api/HttpOrigin.ts";
 import * as Authentication from "../auth/Authentication.ts";

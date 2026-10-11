@@ -8,7 +8,7 @@ import * as CloudflareRuntime from "@macrograph/workflow-runtime-cloudflare/Alch
 import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Schema, Tracer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 

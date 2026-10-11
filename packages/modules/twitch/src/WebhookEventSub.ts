@@ -17,7 +17,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 
 import { AppHelix } from "./AppHelix.ts";
 import { isCatalogEvent } from "./Catalog.ts";

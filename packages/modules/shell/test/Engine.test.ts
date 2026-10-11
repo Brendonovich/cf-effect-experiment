@@ -2,8 +2,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
 import { Effect, Fiber, Result } from "effect";
+import { ChildProcessSpawner, type ChildProcess } from "effect/process";
 import { TestClock } from "effect/testing";
-import { ChildProcessSpawner, type ChildProcess } from "effect/unstable/process";
 
 import { makeRuntimeClient } from "../src/Engine.ts";
 import module from "../src/Module.ts";

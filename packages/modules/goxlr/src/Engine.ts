@@ -16,7 +16,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import {
   ClientRpcs,
@@ -133,7 +133,7 @@ export const layer = GoXLREngine.toLayer((mg) =>
           pending: undefined,
           ready: yield* Deferred.make<void, GoXLRFailure>(),
           closed: yield* Deferred.make<void>(),
-          write,
+          write: write.write,
           lock: yield* Semaphore.make(1),
           close: Effect.void,
         };
@@ -216,23 +216,30 @@ export const layer = GoXLREngine.toLayer((mg) =>
           });
           yield* Deferred.succeed(session.closed, undefined);
         });
-        const fiber = yield* socket
-          .runRaw(receive, {
-            onOpen: write(statusRequest).pipe(
-              Effect.catchCause(() =>
-                Deferred.fail(
-                  session.ready,
-                  new GoXLRFailure({ reason: "Could not request GoXLR status" }),
-                ).pipe(Effect.asVoid),
-              ),
-            ),
-          })
-          .pipe(
-            Effect.catchCause(() => Effect.void),
-            Effect.ensuring(finish),
-            Effect.forkScoped,
-            Effect.provideContext(socketContext),
-          );
+        const fiber = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const reader = yield* socket.reader;
+            yield* write
+              .write(statusRequest)
+              .pipe(
+                Effect.catchCause(() =>
+                  Deferred.fail(
+                    session.ready,
+                    new GoXLRFailure({ reason: "Could not request GoXLR status" }),
+                  ).pipe(Effect.asVoid),
+                ),
+              );
+            while (true) {
+              const batch = yield* reader.pull;
+              yield* Effect.forEach(batch, receive, { discard: true });
+            }
+          }),
+        ).pipe(
+          Effect.catchCause(() => Effect.void),
+          Effect.ensuring(finish),
+          Effect.forkScoped,
+          Effect.provideContext(socketContext),
+        );
         session.close = Fiber.interrupt(fiber).pipe(Effect.asVoid);
         return session;
       }).pipe(lock.withPermit);

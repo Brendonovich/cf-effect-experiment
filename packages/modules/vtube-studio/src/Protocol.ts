@@ -1,5 +1,5 @@
 import { Cause, Deferred, Effect, Schema, Scope } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import { ConnectionFailed, RequestFailed, type Failure } from "./Definition.ts";
 
@@ -45,7 +45,7 @@ export const make = Effect.fnUntraced(function* (
   url: string,
 ): Effect.fn.Return<Client, Failure, Scope.Scope | Socket.WebSocketConstructor> {
   const address = yield* validateUrl(url);
-  const socket = yield* Socket.makeWebSocket(address, { closeCodeIsError: () => true });
+  const socket = yield* Socket.makeWebSocket(address);
   const write = yield* socket.writer;
   const opened = yield* Deferred.make<void, Failure>();
   const closed = yield* Deferred.make<void>();
@@ -73,45 +73,55 @@ export const make = Effect.fnUntraced(function* (
   yield* Effect.addFinalizer(() =>
     fail(new ConnectionFailed({ reason: "VTube Studio is disconnected." })),
   );
-  yield* socket
-    .runRaw(
-      (input) =>
-        decode(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
-          Effect.mapError(
-            () => new ConnectionFailed({ reason: "Invalid VTube Studio protocol message." }),
-          ),
-          Effect.flatMap((packet) => {
-            const request = pending.get(packet.requestID);
-            if (!request) return Effect.void;
-            if (packet.messageType === "APIError")
-              return Deferred.fail(
-                request.response,
-                new RequestFailed({
-                  requestType: request.type,
-                  reason: "VTube Studio rejected the request.",
-                  ...(typeof packet.data.errorID === "number" ? { code: packet.data.errorID } : {}),
-                }),
-              ).pipe(Effect.asVoid);
-            if (packet.messageType !== `${request.type}Response`)
-              return Deferred.fail(
-                request.response,
-                new RequestFailed({
-                  requestType: request.type,
-                  reason: "Unexpected response type.",
-                }),
-              ).pipe(Effect.asVoid);
-            return Deferred.succeed(request.response, packet.data).pipe(Effect.asVoid);
-          }),
-        ),
-      { onOpen: Deferred.succeed(opened, undefined).pipe(Effect.asVoid) },
-    )
-    .pipe(
-      Effect.catchCause(() =>
-        fail(new ConnectionFailed({ reason: "VTube Studio connection lost." })),
-      ),
-      Effect.ensuring(fail(new ConnectionFailed({ reason: "VTube Studio is disconnected." }))),
-      Effect.forkScoped,
-    );
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const socketReader = yield* socket.reader;
+      yield* Deferred.succeed(opened, undefined);
+      while (true) {
+        const batch = yield* socketReader.pull;
+        yield* Effect.forEach(
+          batch,
+          (input) =>
+            decode(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
+              Effect.mapError(
+                () => new ConnectionFailed({ reason: "Invalid VTube Studio protocol message." }),
+              ),
+              Effect.flatMap((packet) => {
+                const request = pending.get(packet.requestID);
+                if (!request) return Effect.void;
+                if (packet.messageType === "APIError")
+                  return Deferred.fail(
+                    request.response,
+                    new RequestFailed({
+                      requestType: request.type,
+                      reason: "VTube Studio rejected the request.",
+                      ...(typeof packet.data.errorID === "number"
+                        ? { code: packet.data.errorID }
+                        : {}),
+                    }),
+                  ).pipe(Effect.asVoid);
+                if (packet.messageType !== `${request.type}Response`)
+                  return Deferred.fail(
+                    request.response,
+                    new RequestFailed({
+                      requestType: request.type,
+                      reason: "Unexpected response type.",
+                    }),
+                  ).pipe(Effect.asVoid);
+                return Deferred.succeed(request.response, packet.data).pipe(Effect.asVoid);
+              }),
+            ),
+          { discard: true },
+        );
+      }
+    }),
+  ).pipe(
+    Effect.catchCause(() =>
+      fail(new ConnectionFailed({ reason: "VTube Studio connection lost." })),
+    ),
+    Effect.ensuring(fail(new ConnectionFailed({ reason: "VTube Studio is disconnected." }))),
+    Effect.forkScoped,
+  );
   yield* Deferred.await(opened);
   return {
     closed: Deferred.await(closed),
@@ -122,7 +132,7 @@ export const make = Effect.fnUntraced(function* (
       const response = yield* Deferred.make<Readonly<Record<string, unknown>>, Failure>();
       pending.set(requestID, { type: requestType, response });
       return yield* Effect.suspend(() =>
-        write(
+        write.write(
           JSON.stringify({
             apiName: "VTubeStudioPublicAPI",
             apiVersion: "1.0",
