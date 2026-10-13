@@ -186,9 +186,14 @@ describe("WorkflowRuntime", () => {
             return "Cloud response";
           }),
         listModels: () => Effect.succeed(["opencode/model"]),
-        clientState: () => Effect.succeed({ mode: "cloudflare", credentials: [] }),
+        clientState: () =>
+          Effect.succeed({ mode: "cloudflare", credentials: [], oauthMethods: [] }),
         connectKey: () => Effect.void,
         removeCredential: () => Effect.void,
+        startOAuth: () => Effect.die("unused"),
+        oauthStatus: () => Effect.die("unused"),
+        completeOAuth: () => Effect.die("unused"),
+        cancelOAuth: () => Effect.die("unused"),
       };
       const { opencode } = yield* setup(
         Project.empty(),

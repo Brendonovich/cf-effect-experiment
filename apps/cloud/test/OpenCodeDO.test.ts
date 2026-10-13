@@ -11,8 +11,27 @@ const makeHost = (): WorkerdService => ({
   listCredentials: async () => [
     { id: "credential", integrationID: "opencode", label: "Console", active: true },
   ],
+  listOAuthMethods: async () => [
+    {
+      integrationID: "opencode",
+      integrationName: "OpenCode Console",
+      methodID: "oauth",
+      label: "Sign in",
+    },
+  ],
   connectKey: async () => {},
   removeCredential: async () => {},
+  startOAuth: async ({ integrationID }) => ({
+    integrationID,
+    attemptID: "attempt",
+    url: "https://opencode.ai/auth",
+    instructions: "Authorize",
+    mode: "auto",
+    expires: 100,
+  }),
+  oauthStatus: async () => ({ status: "pending" }),
+  completeOAuth: async () => {},
+  cancelOAuth: async () => {},
 });
 
 describe("OpenCode Durable Object service", () => {
@@ -33,6 +52,14 @@ describe("OpenCode Durable Object service", () => {
         credentials: [
           { id: "credential", integrationID: "opencode", label: "Console", active: true },
         ],
+        oauthMethods: [
+          {
+            integrationID: "opencode",
+            integrationName: "OpenCode Console",
+            methodID: "oauth",
+            label: "Sign in",
+          },
+        ],
       });
     }),
   );
@@ -46,6 +73,7 @@ describe("OpenCode Durable Object service", () => {
           calls.push(["connect", input]);
         },
         listCredentials: async () => [],
+        listOAuthMethods: async () => [],
         removeCredential: async (credentialID) => {
           calls.push(["remove", credentialID]);
         },
@@ -60,6 +88,7 @@ describe("OpenCode Durable Object service", () => {
       assert.deepStrictEqual(yield* service.clientState(), {
         mode: "cloudflare",
         credentials: [],
+        oauthMethods: [],
       });
     }),
   );

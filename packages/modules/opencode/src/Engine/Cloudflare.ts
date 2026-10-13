@@ -3,6 +3,8 @@ import { Effect, Layer } from "effect";
 import {
   ClientRpcs,
   type ClientState,
+  type OAuthAttempt,
+  type OAuthStatus,
   OpenCodeEngine,
   RequestFailure,
   RuntimeRpcs,
@@ -20,6 +22,23 @@ export interface Service {
     readonly key: string;
   }) => Effect.Effect<void, unknown>;
   readonly removeCredential: (credentialID: string) => Effect.Effect<void, unknown>;
+  readonly startOAuth: (input: {
+    readonly integrationID: string;
+    readonly methodID: string;
+  }) => Effect.Effect<typeof OAuthAttempt.Type, unknown>;
+  readonly oauthStatus: (input: {
+    readonly integrationID: string;
+    readonly attemptID: string;
+  }) => Effect.Effect<typeof OAuthStatus.Type, unknown>;
+  readonly completeOAuth: (input: {
+    readonly integrationID: string;
+    readonly attemptID: string;
+    readonly code: string;
+  }) => Effect.Effect<void, unknown>;
+  readonly cancelOAuth: (input: {
+    readonly integrationID: string;
+    readonly attemptID: string;
+  }) => Effect.Effect<void, unknown>;
 }
 
 const reason = (cause: unknown) =>
@@ -45,7 +64,11 @@ export const makeLayer = (service: Service) =>
         }),
         client: {
           state: request(service.clientState()).pipe(
-            Effect.orElseSucceed(() => ({ mode: "cloudflare" as const, credentials: [] })),
+            Effect.orElseSucceed(() => ({
+              mode: "cloudflare" as const,
+              credentials: [],
+              oauthMethods: [],
+            })),
           ),
           rpcs: ClientRpcs.toLayer({
             OpenCodeConnectKey: ({ integrationID, key }) =>
@@ -56,6 +79,16 @@ export const makeLayer = (service: Service) =>
               request(service.removeCredential(credentialID)).pipe(
                 Effect.tap(() => context.client.refresh),
               ),
+            OpenCodeStartOAuth: (input) => request(service.startOAuth(input)),
+            OpenCodeOAuthStatus: (input) =>
+              request(service.oauthStatus(input)).pipe(
+                Effect.tap((status) =>
+                  status.status === "complete" ? context.client.refresh : Effect.void,
+                ),
+              ),
+            OpenCodeCompleteOAuth: (input) =>
+              request(service.completeOAuth(input)).pipe(Effect.tap(() => context.client.refresh)),
+            OpenCodeCancelOAuth: (input) => request(service.cancelOAuth(input)),
           }),
         },
       }),

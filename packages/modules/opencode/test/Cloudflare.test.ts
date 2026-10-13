@@ -34,9 +34,29 @@ const makeService = (): Service => ({
       credentials: [
         { id: "credential", integrationID: "opencode", label: "Console", active: true },
       ],
+      oauthMethods: [
+        {
+          integrationID: "opencode",
+          integrationName: "OpenCode Console",
+          methodID: "oauth",
+          label: "Sign in",
+        },
+      ],
     }),
   connectKey: () => Effect.void,
   removeCredential: () => Effect.void,
+  startOAuth: ({ integrationID }) =>
+    Effect.succeed({
+      integrationID,
+      attemptID: "attempt",
+      url: "https://opencode.ai/auth",
+      instructions: "Authorize",
+      mode: "auto",
+      expires: 100,
+    }),
+  oauthStatus: () => Effect.succeed({ status: "pending" }),
+  completeOAuth: () => Effect.void,
+  cancelOAuth: () => Effect.void,
 });
 
 const runtime = (service: Service) =>
@@ -74,6 +94,31 @@ describe("OpenCode Cloudflare deployment", () => {
           Effect.sync(() => {
             calls.push(["remove", id]);
           }),
+        startOAuth: (input) =>
+          Effect.sync(() => {
+            calls.push(["oauth-start", input]);
+            return {
+              integrationID: input.integrationID,
+              attemptID: "attempt",
+              url: "https://opencode.ai/auth",
+              instructions: "Authorize",
+              mode: "auto" as const,
+              expires: 100,
+            };
+          }),
+        oauthStatus: (input) =>
+          Effect.sync(() => {
+            calls.push(["oauth-status", input]);
+            return { status: "complete" as const };
+          }),
+        completeOAuth: (input) =>
+          Effect.sync(() => {
+            calls.push(["oauth-complete", input]);
+          }),
+        cancelOAuth: (input) =>
+          Effect.sync(() => {
+            calls.push(["oauth-cancel", input]);
+          }),
       };
       const { client, engine, settings } = yield* runtime(service);
       assert.strictEqual(
@@ -86,13 +131,48 @@ describe("OpenCode Cloudflare deployment", () => {
         credentials: [
           { id: "credential", integrationID: "opencode", label: "Console", active: true },
         ],
+        oauthMethods: [
+          {
+            integrationID: "opencode",
+            integrationName: "OpenCode Console",
+            methodID: "oauth",
+            label: "Sign in",
+          },
+        ],
       });
       yield* settings.OpenCodeConnectKey({ integrationID: "opencode", key: "secret" });
       yield* settings.OpenCodeRemoveCredential({ credentialID: "credential" });
+      assert.strictEqual(
+        (yield* settings.OpenCodeStartOAuth({
+          integrationID: "opencode",
+          methodID: "oauth",
+        })).attemptID,
+        "attempt",
+      );
+      assert.deepStrictEqual(
+        yield* settings.OpenCodeOAuthStatus({
+          integrationID: "opencode",
+          attemptID: "attempt",
+        }),
+        { status: "complete" },
+      );
+      yield* settings.OpenCodeCompleteOAuth({
+        integrationID: "opencode",
+        attemptID: "attempt",
+        code: "code",
+      });
+      yield* settings.OpenCodeCancelOAuth({
+        integrationID: "opencode",
+        attemptID: "attempt",
+      });
       assert.deepStrictEqual(calls, [
         ["generate", { prompt: "Hello", model: "opencode/model" }],
         ["connect", { integrationID: "opencode", key: "secret" }],
         ["remove", "credential"],
+        ["oauth-start", { integrationID: "opencode", methodID: "oauth" }],
+        ["oauth-status", { integrationID: "opencode", attemptID: "attempt" }],
+        ["oauth-complete", { integrationID: "opencode", attemptID: "attempt", code: "code" }],
+        ["oauth-cancel", { integrationID: "opencode", attemptID: "attempt" }],
       ]);
     }),
   );

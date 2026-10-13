@@ -32,6 +32,10 @@ const unavailableOpenCode = (): OpenCodeService => ({
   clientState: () => Effect.die("OpenCode runtime is unavailable"),
   connectKey: () => Effect.die("OpenCode runtime is unavailable"),
   removeCredential: () => Effect.die("OpenCode runtime is unavailable"),
+  startOAuth: () => Effect.die("OpenCode runtime is unavailable"),
+  oauthStatus: () => Effect.die("OpenCode runtime is unavailable"),
+  completeOAuth: () => Effect.die("OpenCode runtime is unavailable"),
+  cancelOAuth: () => Effect.die("OpenCode runtime is unavailable"),
 });
 
 export const make = Effect.fnUntraced(function* (

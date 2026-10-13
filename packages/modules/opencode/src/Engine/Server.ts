@@ -51,7 +51,7 @@ export const makeLayer = (connect: Connect = localClient) =>
           OpenCodeListModels: () => withClient(listModels),
         }),
         client: {
-          state: Effect.succeed({ mode: "server", credentials: [] }),
+          state: Effect.succeed({ mode: "server", credentials: [], oauthMethods: [] }),
           rpcs: ClientRpcs.toLayer({
             OpenCodeConnectKey: () =>
               Effect.fail(
@@ -60,6 +60,30 @@ export const makeLayer = (connect: Connect = localClient) =>
                 }),
               ),
             OpenCodeRemoveCredential: () =>
+              Effect.fail(
+                new RequestFailure({
+                  reason: "Manage credentials through the local OpenCode service",
+                }),
+              ),
+            OpenCodeStartOAuth: () =>
+              Effect.fail(
+                new RequestFailure({
+                  reason: "Manage credentials through the local OpenCode service",
+                }),
+              ),
+            OpenCodeOAuthStatus: () =>
+              Effect.fail(
+                new RequestFailure({
+                  reason: "Manage credentials through the local OpenCode service",
+                }),
+              ),
+            OpenCodeCompleteOAuth: () =>
+              Effect.fail(
+                new RequestFailure({
+                  reason: "Manage credentials through the local OpenCode service",
+                }),
+              ),
+            OpenCodeCancelOAuth: () =>
               Effect.fail(
                 new RequestFailure({
                   reason: "Manage credentials through the local OpenCode service",

@@ -27,6 +27,10 @@ const openCode = makeOpenCodeDeployment({
   clientState: unavailableOpenCode,
   connectKey: unavailableOpenCode,
   removeCredential: unavailableOpenCode,
+  startOAuth: unavailableOpenCode,
+  oauthStatus: unavailableOpenCode,
+  completeOAuth: unavailableOpenCode,
+  cancelOAuth: unavailableOpenCode,
 });
 
 export const registry = ExecutorModules.make([

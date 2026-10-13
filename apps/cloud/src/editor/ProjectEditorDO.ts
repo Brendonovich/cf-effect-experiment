@@ -148,6 +148,30 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
             ? Effect.fail(unavailableOpenCode())
             : openCodeDos.getByName(activeProjectId).removeCredential(credentialID),
         ),
+      startOAuth: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).startOAuth(input),
+        ),
+      oauthStatus: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).oauthStatus(input),
+        ),
+      completeOAuth: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).completeOAuth(input),
+        ),
+      cancelOAuth: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).cancelOAuth(input),
+        ),
     };
     const OpenCodeDeployment = makeOpenCodeDeployment(openCodeService);
 

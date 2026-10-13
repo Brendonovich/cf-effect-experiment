@@ -24,8 +24,8 @@ export const makeService = (service: WorkerdService) => {
       request(() => service.generateText(input)),
     listModels: () => request(() => service.listModels()),
     clientState: () =>
-      request(() => service.listCredentials()).pipe(
-        Effect.map((credentials) => ({
+      request(() => Promise.all([service.listCredentials(), service.listOAuthMethods()])).pipe(
+        Effect.map(([credentials, oauthMethods]) => ({
           mode: "cloudflare" as const,
           credentials: credentials.map(({ id, integrationID, label, active }) => ({
             id,
@@ -33,6 +33,7 @@ export const makeService = (service: WorkerdService) => {
             label,
             active,
           })),
+          oauthMethods,
         })),
       ),
     connectKey: (input: { readonly integrationID: string; readonly key: string }) => {
@@ -44,6 +45,17 @@ export const makeService = (service: WorkerdService) => {
     },
     removeCredential: (credentialID: string) =>
       request(() => service.removeCredential(credentialID)),
+    startOAuth: (input: { readonly integrationID: string; readonly methodID: string }) =>
+      request(() => service.startOAuth(input)),
+    oauthStatus: (input: { readonly integrationID: string; readonly attemptID: string }) =>
+      request(() => service.oauthStatus(input)),
+    completeOAuth: (input: {
+      readonly integrationID: string;
+      readonly attemptID: string;
+      readonly code: string;
+    }) => request(() => service.completeOAuth(input)),
+    cancelOAuth: (input: { readonly integrationID: string; readonly attemptID: string }) =>
+      request(() => service.cancelOAuth(input)),
   };
 };
 
