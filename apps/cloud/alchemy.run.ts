@@ -54,7 +54,10 @@ export default Alchemy.Stack(
 		);
 		yield* DatabaseHyperdrive;
 		yield* DeploymentObjectsBucket;
-		const legacyDatabase = !ctx.dev ? yield* LegacyLogicalDatabase : undefined;
+		const legacyDatabase =
+			!ctx.dev && process.env.PULL_REQUEST === undefined
+				? yield* LegacyLogicalDatabase
+				: undefined;
 
 		const frontendBuild = !ctx.dev
 			? yield* Command.Build("WebAppBuild", {

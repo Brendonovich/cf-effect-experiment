@@ -221,7 +221,7 @@ jobs:
             pnpm-lock.yaml
             apps/cloud/package.json
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter 'cloud...'
+        run: pnpm install --frozen-lockfile
       - name: Validate preview stage
         run: '[[ "$STAGE" =~ ^pr-[0-9]+$ ]]'
       - name: Deploy Cloud preview
