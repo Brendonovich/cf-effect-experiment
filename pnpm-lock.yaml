@@ -579,6 +579,9 @@ importers:
       '@macrograph/module-openai':
         specifier: workspace:*
         version: link:../../packages/modules/openai
+      '@macrograph/module-opencode':
+        specifier: workspace:*
+        version: link:../../packages/modules/opencode
       '@macrograph/module-shell':
         specifier: workspace:*
         version: link:../../packages/modules/shell
@@ -1636,6 +1639,9 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../module
+      '@opencode/client':
+        specifier: 2.0.27
+        version: 2.0.27(effect@4.0.0-beta.107)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-beta.107
@@ -4758,6 +4764,17 @@ packages:
     resolution: {integrity: sha512-da6KbdNCV5sr1/txD896V+6W0iamFWrvVl8cHkBSPT+YlvmT3DwXa4jxZnQc+gnuTEqSWbBeoSZYTayXH9wXcw==}
     engines: {node: '>= 20'}
 
+  '@opencode/client@2.0.27':
+    resolution: {integrity: sha512-RqJodg+QsUgqqJVo+b2PGk2w96l7424nM4BijUSb49Iep9IyUfjDH3zfii4OGfCsmZkNCYK83Mgk9e9EeRA1iQ==}
+    peerDependencies:
+      effect: 4.0.1
+      solid-js: '>=1.9.0'
+    peerDependenciesMeta:
+      effect:
+        optional: true
+      solid-js:
+        optional: true
+
   '@opencode/client@2.0.8':
     resolution: {integrity: sha512-JHyDdDkiKOtR/Psmai+CO+w0KQ/iObcVIYQpG2iYRrGDBOQDpK4Y/BO5tvo6TBqd4ztNYSYGrpn+ftDsf8Gvzg==}
     peerDependencies:
@@ -4769,8 +4786,14 @@ packages:
       solid-js:
         optional: true
 
+  '@opencode/protocol@2.0.27':
+    resolution: {integrity: sha512-t1j+m5T3TBusHaL58t6gSSQQEFoi+qjVyQ0Eta/4mLeZLJDqSV8BNN6N93GFpV2MJ1iBpGmrH0C02n2Q+nDHfw==}
+
   '@opencode/protocol@2.0.8':
     resolution: {integrity: sha512-X9aCZP91brEPFig5CInMzm4HUcC/dfMvI4IOF3OCY9xBk149oGA8PFKtb+TS/OFV1J37Wp+Pwb6HBANL37pMZQ==}
+
+  '@opencode/schema@2.0.27':
+    resolution: {integrity: sha512-BxGuiIFo503tW6UYxoBrrgjyczEvPiU3fDn45FxUHtmZgBC8kFE+ldI56ab8kV0Lu5C94ZKOniRb2bWqDu4tAg==}
 
   '@opencode/schema@2.0.8':
     resolution: {integrity: sha512-nZdh0zA1AGUT2Mp9s0zuWpIcQkBL6zuz52EY80Yxfk3VPq9UgMaJb3Y5bJUSaxsw6BijJm8/xosWdEz1+1votA==}
@@ -8006,6 +8029,9 @@ packages:
 
   effect@4.0.0-rc.112:
     resolution: {integrity: sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A==}
+
+  effect@4.0.1:
+    resolution: {integrity: sha512-b1VlQG9g8fwxE5QnIZuPoOP/0MsqHJSRKxUijjoM80E5q95FXrX5yWtY5XI8G+GJsBQAVSDbLS458z9a++uVvw==}
 
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
@@ -13247,15 +13273,32 @@ snapshots:
       '@octokit/request-error': 7.1.0
       '@octokit/webhooks-methods': 6.0.0
 
+  '@opencode/client@2.0.27(effect@4.0.0-beta.107)':
+    dependencies:
+      '@opencode/protocol': 2.0.27
+      '@opencode/schema': 2.0.27
+    optionalDependencies:
+      effect: 4.0.0-beta.107
+
   '@opencode/client@2.0.8':
     dependencies:
       '@opencode/protocol': 2.0.8
       '@opencode/schema': 2.0.8
 
+  '@opencode/protocol@2.0.27':
+    dependencies:
+      '@opencode/schema': 2.0.27
+      effect: 4.0.1
+
   '@opencode/protocol@2.0.8':
     dependencies:
       '@opencode/schema': 2.0.8
       effect: 4.0.0-rc.112
+
+  '@opencode/schema@2.0.27':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      effect: 4.0.1
 
   '@opencode/schema@2.0.8':
     dependencies:
@@ -16472,6 +16515,8 @@ snapshots:
     dependencies:
       fast-check: 4.9.0
       msgpackr: 2.1.0
+
+  effect@4.0.1: {}
 
   ejs@3.1.10:
     dependencies:

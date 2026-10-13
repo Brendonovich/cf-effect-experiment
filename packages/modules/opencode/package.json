@@ -5,7 +5,9 @@
   "main": "./src/Module.ts",
   "exports": {
     ".": "./src/Module.ts",
-    "./Definition": "./src/Definition.ts"
+    "./Definition": "./src/Definition.ts",
+    "./Deployment/Server": "./src/Deployment/Server.ts",
+    "./Engine/Server": "./src/Engine/Server.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -15,11 +17,15 @@
   },
   "dependencies": {
     "@macrograph/module": "workspace:*",
+    "@opencode/client": "2.0.27",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment/Server.ts"
   }
 }
