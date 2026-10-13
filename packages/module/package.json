@@ -14,6 +14,7 @@
     "./EngineTest": "./src/EngineTest.ts",
     "./HttpEndpoint": "./src/HttpEndpoint.ts",
     "./HttpIngress": "./src/HttpIngress.ts",
+    "./PollingIngress": "./src/PollingIngress.ts",
     "./Module": "./src/Module.ts",
     "./Registration": "./src/Registration.ts",
     "./Resource": "./src/Resource.ts",

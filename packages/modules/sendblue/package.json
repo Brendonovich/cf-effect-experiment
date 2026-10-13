@@ -9,6 +9,7 @@
     "./Deployment": "./src/Deployment.ts",
     "./Deployment/Webhook": "./src/Deployment/Webhook.ts",
     "./Engine": "./src/Engine.ts",
+    "./Polling": "./src/Polling.ts",
     "./Settings": "./src/Settings.tsx",
     "./Webhook": "./src/Webhook.ts"
   },
