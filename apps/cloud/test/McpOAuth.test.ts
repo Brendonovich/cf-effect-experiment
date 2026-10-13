@@ -1,17 +1,12 @@
-import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
+import type * as SqlConnection from "effect/sql/SqlConnection";
 
 import * as PgClient from "@effect/sql-pg/PgClient";
 import { assert, describe, it } from "@effect/vitest";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import { Effect, Layer, Option, Ref, Stream } from "effect";
-import {
-  HttpEffect,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Reactivity from "effect/reactivity/Reactivity";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import * as McpOAuth from "../src/auth/McpOAuth.ts";
 import * as Database from "../src/database/Database.ts";

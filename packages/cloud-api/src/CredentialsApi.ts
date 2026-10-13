@@ -1,6 +1,6 @@
 import { Credential } from "@macrograph/module";
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/http-api";
 
 import { Authentication } from "./Authentication.ts";
 

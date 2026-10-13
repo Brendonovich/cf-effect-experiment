@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Redacted } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { makeApi, prepare } from "../src/Api.ts";
 import { AccountId, GitHubFailure, InstallationId } from "../src/Definition.ts";

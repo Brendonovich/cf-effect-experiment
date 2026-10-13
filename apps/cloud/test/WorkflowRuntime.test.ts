@@ -16,7 +16,7 @@ import {
   HttpClient,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";

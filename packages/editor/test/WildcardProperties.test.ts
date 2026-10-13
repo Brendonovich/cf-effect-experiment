@@ -2,7 +2,21 @@ import { describe, expect, it } from "@effect/vitest";
 import { Connection, IoId, OutputRef, Wildcards } from "@macrograph/core";
 import { Conversion, t } from "@macrograph/module";
 import { Result } from "effect";
-import { FastCheck as fc } from "effect/testing";
+import * as fc from "fast-check";
+
+type ArbitraryValues<Arbs extends readonly fc.Arbitrary<unknown>[]> = {
+  [K in keyof Arbs]: Arbs[K] extends fc.Arbitrary<infer A> ? A : never;
+};
+
+const prop = <const Arbs extends readonly fc.Arbitrary<unknown>[]>(
+  name: string,
+  arbitraries: Arbs,
+  property: (values: ArbitraryValues<Arbs>) => void,
+  options?: { readonly fastCheck?: fc.Parameters<[ArbitraryValues<Arbs>]> },
+) => {
+  const tuple = fc.tuple(...arbitraries) as fc.Arbitrary<ArbitraryValues<Arbs>>;
+  it(name, () => fc.assert(fc.property(tuple, property), options?.fastCheck));
+};
 
 // Property tests for `Wildcards.Cache`. Graphs are generated from a small palette of node
 // shapes. Chains are built around a chosen concrete type so the expected resolution of
@@ -239,7 +253,7 @@ const shuffle = <A>(items: ReadonlyArray<A>, keys: ReadonlyArray<number>) =>
     .map(({ item }) => item);
 
 describe("wildcard resolution properties", () => {
-  it.prop(
+  prop(
     "propagates a concrete anchor through every hop of a chain, wherever the anchor sits",
     [chainArb, fc.array(anchorArb, { minLength: 1, maxLength: 3 })],
     ([chain, anchors]) => {
@@ -259,7 +273,7 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
+  prop(
     "accepts a chain without concrete anchors and leaves its wildcards unresolved",
     [chainArb],
     ([chain]) => {
@@ -272,7 +286,7 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
+  prop(
     "accepts a mismatched tap only through a conversion, which never changes the wildcard",
     [
       chainArb,
@@ -303,7 +317,7 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
+  prop(
     "resolves a wildcard from its source and converts it into each sink, or from agreeing sinks",
     [
       fc.option(endpointType, { nil: undefined }),
@@ -441,7 +455,7 @@ describe("wildcard resolution properties", () => {
       return { declarations, wires };
     });
 
-  it.prop(
+  prop(
     "gives the same verdict and resolution regardless of connection order",
     [graphArb, fc.array(fc.double({ noNaN: true }), { minLength: 1 })],
     ([{ declarations, wires }, keys]) => {
@@ -453,7 +467,7 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
+  prop(
     "accepted data connections join equal types, or convert a resolved output",
     [graphArb],
     ([{ declarations, wires }]) => {
@@ -478,7 +492,7 @@ describe("wildcard resolution properties", () => {
     { fastCheck },
   );
 
-  it.prop(
+  prop(
     "incremental updates agree with a fresh solve and rejected updates change nothing",
     [fc.array(graphArb, { minLength: 1, maxLength: 6 })],
     ([snapshots]) => {

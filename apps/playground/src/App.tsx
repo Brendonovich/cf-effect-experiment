@@ -9,7 +9,7 @@ import {
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import discoveredModuleSettings from "virtual:macrograph-module-settings";
 

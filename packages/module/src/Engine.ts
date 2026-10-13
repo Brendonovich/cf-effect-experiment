@@ -1,7 +1,7 @@
 import { Cause, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { RpcClient, RpcGroup, type Rpc } from "effect/rpc";
 import * as S from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { RpcClient, RpcGroup, type Rpc } from "effect/unstable/rpc";
 
 import type { Catalog } from "./Credential.ts";
 import type { Live, Requirement } from "./HttpIngress.ts";

@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpServerResponse } from "effect/http";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
 

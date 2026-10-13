@@ -1,7 +1,7 @@
 import { Schema, Stream } from "effect";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 export const SUBSCRIPTIONS = [
   ["channel.ban", 1, ["broadcaster_user_id"]],

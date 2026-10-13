@@ -10,7 +10,7 @@ import { TickEvent } from "@macrograph/module-utilities/Definition";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
@@ -632,4 +632,4 @@ export default class ProjectIngressDO extends Cloudflare.DurableObject<
   ProjectIngressShape
 >()("ProjectIngressDO", { transferredFrom: "CloudWorker" }) {}
 
-export const ProjectIngressDOLayer = ProjectIngressDO.make<never>(projectIngressImplementation);
+export const ProjectIngressDOLayer = ProjectIngressDO.make(projectIngressImplementation);

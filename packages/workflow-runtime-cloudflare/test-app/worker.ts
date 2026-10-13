@@ -3,7 +3,7 @@ import * as Runtime from "@macrograph/workflow-runtime-cloudflare/Alchemy";
 import { input, modules } from "@macrograph/workflow-runtime-test/fixture";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Cause, Effect } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 
 class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
   "TestWorkflow",

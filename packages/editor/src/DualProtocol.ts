@@ -1,6 +1,6 @@
-import { Cause, Effect, Queue, Result, Schedule, Scope, Stream, Types } from "effect";
-import { RpcClient, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { Cause, Effect, Queue, Result, Schedule, Scope, Types } from "effect";
+import { RpcClient, RpcMessage, RpcSerialization, RpcServer } from "effect/rpc";
+import { Socket } from "effect/socket";
 
 export const rpcFrameTag = 0;
 export const customFrameTag = 1;
@@ -16,6 +16,23 @@ const frame = (tag: number, payload: Uint8Array): Uint8Array => {
 
 const toBytes = (data: string | Uint8Array): Uint8Array =>
   typeof data === "string" ? enc.encode(data) : data;
+
+const runSocket = (
+  socket: Socket.Socket,
+  handler: (data: string | Uint8Array) => Effect.Effect<void>,
+): Effect.Effect<void, Socket.SocketError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const reader = yield* socket.reader;
+    while (true) {
+      const batch = yield* reader.pull;
+      yield* Effect.forEach(batch, handler, { discard: true });
+    }
+  });
+
+const writer = (write: Socket.Writer["write"]): Socket.Writer => ({
+  write,
+  writeAll: (chunks) => Effect.forEach(chunks, write, { discard: true }),
+});
 
 export const frameRpc = (payload: string | Uint8Array): Uint8Array =>
   frame(rpcFrameTag, toBytes(payload));
@@ -74,15 +91,15 @@ export const makeDualServerProtocol = (
             try {
               const encoded = parser.encode(response);
               if (encoded === undefined) return Effect.void;
-              return Effect.orDie(writeRaw(frameRpc(encoded)));
+              return Effect.orDie(writeRaw.write(frameRpc(encoded)));
             } catch (cause) {
               const defect = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
-              return Effect.orDie(writeRaw(frameRpc(defect ?? new Uint8Array())));
+              return Effect.orDie(writeRaw.write(frameRpc(defect ?? new Uint8Array())));
             }
           };
 
           const writeCustom = (data: Uint8Array): Effect.Effect<void> =>
-            Effect.orDie(writeRaw(frame(customFrameTag, data)));
+            Effect.orDie(writeRaw.write(frame(customFrameTag, data)));
 
           clients.set(id, { writeRpc, writeCustom });
           clientIds.add(id);
@@ -90,13 +107,14 @@ export const makeDualServerProtocol = (
           const customInput = yield* Queue.make<Uint8Array>();
 
           const customSocket = Socket.make({
-            runRaw: (handler) =>
-              Stream.fromQueue(customInput).pipe(
-                Stream.runForEach((data) => handler(data) ?? Effect.void),
+            reader: Effect.succeed({
+              pull: Queue.take(customInput).pipe(Effect.map((data) => [data] as const)),
+              upgrade: Socket.SocketUpgradeError.unsupported,
+            }),
+            writer: Effect.sync(() =>
+              writer((chunk) =>
+                Socket.isCloseEvent(chunk) ? writeRaw.write(chunk) : writeCustom(toBytes(chunk)),
               ),
-            writer: Effect.sync(
-              () => (chunk) =>
-                Socket.isCloseEvent(chunk) ? writeRaw(chunk) : writeCustom(toBytes(chunk)),
             ),
           });
 
@@ -104,56 +122,54 @@ export const makeDualServerProtocol = (
             yield* Effect.forkScoped(onCustom(customSocket));
           }
 
-          yield* socket
-            .runRaw((data) => {
-              const bytes = toBytes(data);
-              if (bytes.byteLength === 0) return Effect.void;
+          yield* runSocket(socket, (data) => {
+            const bytes = toBytes(data);
+            if (bytes.byteLength === 0) return Effect.void;
 
-              const tag = bytes[0];
-              const payload = bytes.subarray(1);
+            const tag = bytes[0];
+            const payload = bytes.subarray(1);
 
-              switch (tag) {
-                case rpcFrameTag:
-                  try {
-                    const decoded = parser.decode(
-                      payload,
-                    ) as ReadonlyArray<RpcMessage.FromClientEncoded>;
-                    if (decoded.length === 0) return Effect.void;
+            switch (tag) {
+              case rpcFrameTag:
+                try {
+                  const decoded = parser.decode(
+                    payload,
+                  ) as ReadonlyArray<RpcMessage.FromClientEncoded>;
+                  if (decoded.length === 0) return Effect.void;
 
-                    return Effect.forEach(
-                      decoded,
-                      (message) => {
-                        if (message._tag === "Request" && headers) {
-                          (message as Types.Mutable<RpcMessage.RequestEncoded>).headers =
-                            headers.concat(message.headers);
-                        }
-                        return writeRequest(id, message);
-                      },
-                      { discard: true },
-                    );
-                  } catch (cause) {
-                    const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
-                    return Effect.orDie(writeRaw(frameRpc(encoded ?? new Uint8Array())));
-                  }
-                case customFrameTag:
-                  return Queue.offer(customInput, payload);
-                default:
-                  return Effect.void;
-              }
-            })
-            .pipe(
-              Effect.catchCause((cause) => {
-                const failure = Cause.findFail(cause);
-                if (
-                  Result.isSuccess(failure) &&
-                  failure.success.error.reason._tag === "SocketCloseError"
-                ) {
-                  return Effect.void;
+                  return Effect.forEach(
+                    decoded,
+                    (message) => {
+                      if (message._tag === "Request" && headers) {
+                        (message as Types.Mutable<RpcMessage.RequestEncoded>).headers =
+                          headers.concat(message.headers);
+                      }
+                      return writeRequest(id, message);
+                    },
+                    { discard: true },
+                  );
+                } catch (cause) {
+                  const encoded = parser.encode(RpcMessage.ResponseDefectEncoded(cause));
+                  return Effect.orDie(writeRaw.write(frameRpc(encoded ?? new Uint8Array())));
                 }
-                return Effect.failCause(cause);
-              }),
-              Effect.orDie,
-            );
+              case customFrameTag:
+                return Queue.offer(customInput, payload);
+              default:
+                return Effect.void;
+            }
+          }).pipe(
+            Effect.catchCause((cause) => {
+              const failure = Cause.findFail(cause);
+              if (
+                Result.isSuccess(failure) &&
+                failure.success.error.reason._tag === "SocketCloseError"
+              ) {
+                return Effect.void;
+              }
+              return Effect.failCause(cause);
+            }),
+            Effect.orDie,
+          );
         }),
       );
 
@@ -173,9 +189,11 @@ export const makeDualServerProtocol = (
         end: (_cid: number): Effect.Effect<void> => Effect.void,
         clientIds: Effect.sync(() => clientIds),
         initialMessage: Effect.succeedNone,
-        supportsAck: false,
+        supportsAck: true,
+        supportsNotifications: true,
         supportsTransferables: false,
         supportsSpanPropagation: true,
+        codecFor: serialization.codecFor,
       });
     });
 
@@ -202,24 +220,42 @@ export const makeDualClientProtocol: Effect.Effect<
 > = Effect.gen(function* () {
   const socket = yield* Socket.Socket;
   const customMessages = yield* Queue.make<Uint8Array>();
+  const rpcMessages = yield* Queue.make<Uint8Array, Socket.SocketError>();
   const writeRaw = yield* socket.writer;
 
-  const rpcSocket = Socket.make({
-    runRaw: (handler, options) =>
-      socket.runRaw((data) => {
+  yield* Effect.gen(function* () {
+    const readRaw = yield* socket.reader;
+    while (true) {
+      const batch = yield* readRaw.pull;
+      for (const data of batch) {
         const bytes = toBytes(data);
-        if (bytes.byteLength === 0) return Effect.void;
+        if (bytes.byteLength === 0) continue;
         const payload = bytes.subarray(1);
         switch (bytes[0]) {
           case rpcFrameTag:
-            return handler(payload);
+            yield* Queue.offer(rpcMessages, payload);
+            break;
           case customFrameTag:
-            return Queue.offer(customMessages, payload);
-          default:
-            return Effect.void;
+            yield* Queue.offer(customMessages, payload);
+            break;
         }
-      }, options),
-    writer: Effect.succeed((data) => writeRaw(Socket.isCloseEvent(data) ? data : frameRpc(data))),
+      }
+    }
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Queue.failCause(rpcMessages, cause).pipe(Effect.andThen(Effect.failCause(cause))),
+    ),
+    Effect.forkScoped,
+  );
+
+  const rpcSocket = Socket.make({
+    reader: Effect.succeed({
+      pull: Queue.take(rpcMessages).pipe(Effect.map((message) => [message] as const)),
+      upgrade: Socket.SocketUpgradeError.unsupported,
+    }),
+    writer: Effect.succeed(
+      writer((data) => writeRaw.write(Socket.isCloseEvent(data) ? data : frameRpc(data))),
+    ),
   });
   // The editor reconnects the whole session, including its streams, after transport failure.
   const protocol = yield* RpcClient.makeProtocolSocket({ retryPolicy: Schedule.recurs(0) }).pipe(
@@ -227,7 +263,7 @@ export const makeDualClientProtocol: Effect.Effect<
   );
 
   const sendCustom = (data: Uint8Array): Effect.Effect<void> =>
-    Effect.orDie(writeRaw(frame(customFrameTag, data)));
+    Effect.orDie(writeRaw.write(frame(customFrameTag, data)));
 
   return {
     protocol,

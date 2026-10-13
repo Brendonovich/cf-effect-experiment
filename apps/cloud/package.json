@@ -14,7 +14,7 @@
   "dependencies": {
     "@effect/platform-browser": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": "4.0.0-beta.107",
+    "@effect/sql-pg": "4.0.3",
     "@macrograph/cloud-api": "workspace:*",
     "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",
@@ -43,7 +43,7 @@
     "@macrograph/project-host": "workspace:*",
     "@macrograph/workflow-runtime": "workspace:*",
     "@macrograph/workflow-runtime-cloudflare": "workspace:*",
-    "alchemy": "2.0.0-beta.72",
+    "alchemy": "2.0.0-beta.81",
     "drizzle-orm": "1.0.0-rc.5-ab785fc",
     "effect": "catalog:"
   },

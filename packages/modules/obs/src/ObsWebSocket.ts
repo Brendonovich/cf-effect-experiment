@@ -1,5 +1,5 @@
 import { Cause, Crypto, Deferred, Effect, Fiber, PubSub, Schema, Scope, Stream } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import {
   canvasRequests,
@@ -127,9 +127,7 @@ export const make = Effect.fnUntraced(function* (
   Crypto.Crypto | Scope.Scope | Socket.WebSocketConstructor
 > {
   const crypto = yield* Crypto.Crypto;
-  const socket = yield* Socket.makeWebSocket(address, {
-    closeCodeIsError: () => true,
-  });
+  const socket = yield* Socket.makeWebSocket(address);
   const write = yield* socket.writer;
   const identified = yield* Deferred.make<void, ConnectError>();
   const eventBus = yield* PubSub.unbounded<ObsEvent>();
@@ -146,9 +144,9 @@ export const make = Effect.fnUntraced(function* (
       readonly response: Deferred.Deferred<unknown, CallError>;
     }
   >();
-  const requestPrefix = yield* crypto.randomUUIDv4.pipe(
-    Effect.mapError((cause) => new ConnectionError({ reason: cause.message })),
-  );
+  const requestPrefix = yield* crypto
+    .randomUUIDv4()
+    .pipe(Effect.mapError((cause) => new ConnectionError({ reason: cause.message })));
   let requestSequence = 0;
   let helloReceived = false;
   let canvasesSupported = false;
@@ -188,7 +186,7 @@ export const make = Effect.fnUntraced(function* (
                     reason: "OBS requires a password, but none was provided",
                   })
                 : yield* authenticate(crypto, password, packet.d.authentication);
-          yield* write(
+          yield* write.write(
             JSON.stringify({
               op: 1,
               d: {
@@ -237,29 +235,37 @@ export const make = Effect.fnUntraced(function* (
     }
   };
 
-  const run = socket
-    .runRaw(
-      (input) =>
-        decodePacket(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProtocolError({
-                reason: `Invalid OBS WebSocket message: ${cause.message}`,
-              }),
-          ),
-          Effect.flatMap(handlePacket),
-        ),
-      { onOpen: options?.onOpen },
-    )
-    .pipe(
-      Effect.mapError((error) =>
-        error instanceof ProtocolError || error instanceof AuthenticationError
-          ? error
-          : new ConnectionError({ reason: error.message }),
-      ),
-      Effect.tapError((error) => Deferred.fail(identified, error)),
-      Effect.ensuring(failConnection("OBS WebSocket connection closed")),
-    );
+  const run = Effect.scoped(
+    Effect.gen(function* () {
+      const reader = yield* socket.reader;
+      if (options?.onOpen !== undefined) yield* options.onOpen;
+      while (true) {
+        const batch = yield* reader.pull;
+        yield* Effect.forEach(
+          batch,
+          (input) =>
+            decodePacket(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProtocolError({
+                    reason: `Invalid OBS WebSocket message: ${cause.message}`,
+                  }),
+              ),
+              Effect.flatMap(handlePacket),
+            ),
+          { discard: true },
+        );
+      }
+    }),
+  ).pipe(
+    Effect.mapError((error) =>
+      error instanceof ProtocolError || error instanceof AuthenticationError
+        ? error
+        : new ConnectionError({ reason: error.message }),
+    ),
+    Effect.tapError((error) => Deferred.fail(identified, error)),
+    Effect.ensuring(failConnection("OBS WebSocket connection closed")),
+  );
 
   const socketFiber = yield* Effect.forkScoped(run);
   yield* Deferred.await(identified);
@@ -312,7 +318,7 @@ export const make = Effect.fnUntraced(function* (
       },
     });
 
-    return yield* write(packet).pipe(
+    return yield* write.write(packet).pipe(
       Effect.mapError((error) => new ConnectionError({ reason: error.message })),
       Effect.andThen(Deferred.await(response)),
       Effect.ensuring(Effect.sync(() => pending.delete(requestId))),

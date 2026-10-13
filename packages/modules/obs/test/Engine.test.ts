@@ -1,7 +1,7 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { EngineTest, Registration } from "@macrograph/module";
 import { Crypto, Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import type * as ObsEvent from "../src/Events.ts";
 

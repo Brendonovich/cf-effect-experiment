@@ -1,7 +1,7 @@
 import { Engine, Resource } from "@macrograph/module";
 import * as WebSocket from "@macrograph/module-websocket-client/Definition";
 import { Array, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export {
   ConnectionId,

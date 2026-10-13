@@ -1,5 +1,5 @@
 import type * as Engine from "@macrograph/module/Engine";
-import type { HttpClient } from "effect/unstable/http";
+import type { HttpClient } from "effect/http";
 
 import { CloudCredentials, SessionStoreError } from "@macrograph/cloud-credentials";
 import { Effect } from "effect";
