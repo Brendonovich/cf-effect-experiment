@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Effect, Layer, Result } from "effect";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 
 import { SendblueEngine } from "../src/Definition.ts";
 import deployment from "../src/Deployment.ts";

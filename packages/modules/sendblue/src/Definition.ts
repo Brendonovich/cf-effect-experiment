@@ -1,6 +1,6 @@
 import { Engine } from "@macrograph/module";
 import { Array, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const MessageStatus = Schema.String;
 
