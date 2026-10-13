@@ -73,7 +73,7 @@ jobs:
           node-version: "24"
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter '@macrograph/playground...'
       - name: Run affected unit tests
         if: github.event_name == 'pull_request'
         run: pnpm test:affected
