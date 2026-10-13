@@ -262,7 +262,7 @@ importers:
         version: link:../../packages/workflow-runtime-cloudflare
       alchemy:
         specifier: 2.0.0-beta.81
-        version: 2.0.0-beta.81(fcd32683ccb2d10a5580b8c5fa1d237f)
+        version: 2.0.0-beta.81(ab5d915dd194c3aaa15b335dd5bf2e4d)
       drizzle-orm:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.3(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.0-beta.107(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
@@ -387,7 +387,7 @@ importers:
     dependencies:
       alchemy:
         specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(6c13624865808127e575cf383cd00b66)
+        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(29ae74ccc8bc64a8ee7e8292b114bead)
       effect:
         specifier: 'catalog:'
         version: 4.0.3
@@ -468,8 +468,8 @@ importers:
         specifier: 'catalog:'
         version: 0.19.0
       alchemy:
-        specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(c80f9556946da99bd5a2ef9c9aa96a7b)
+        specifier: 2.0.0-beta.81
+        version: 2.0.0-beta.81(@effect/vitest@4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/node@24.13.3)(drizzle-kit@1.0.0-rc.5-ab785fc)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(effect@4.0.3)(mongodb@6.21.0)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect:
         specifier: 'catalog:'
         version: 4.0.3
@@ -1641,11 +1641,11 @@ importers:
         version: link:../../module
       effect:
         specifier: 'catalog:'
-        version: 4.0.0-beta.107
+        version: 4.0.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.107(effect@4.0.0-beta.107)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+        version: 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
       typescript:
         specifier: ^5.8
         version: 5.9.3
@@ -2240,7 +2240,7 @@ importers:
         version: link:../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(c80f9556946da99bd5a2ef9c9aa96a7b)
+        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(2d3a7fb8f67005f688c62c3729b5a9a3)
       typescript:
         specifier: ^5.8
         version: 5.9.3
@@ -2261,7 +2261,7 @@ importers:
         version: link:../../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(c80f9556946da99bd5a2ef9c9aa96a7b)
+        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(ea9f155998e999060d181abd9dcf158e)
       effect:
         specifier: 'catalog:'
         version: 4.0.3
@@ -2320,7 +2320,7 @@ importers:
         version: link:../../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(47aa902bffe082e65cc6c83b86a5d1e5)
+        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(e1130666e3f1a9ca855fc95ca36fa4fe)
       effect:
         specifier: 'catalog:'
         version: 4.0.3
@@ -2395,7 +2395,7 @@ importers:
         version: 19.2.18
       alchemy:
         specifier: 2.0.0-beta.72
-        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(4114af7cfbe7aae08a4131c9058ae651)
+        version: 2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(7dc667c82c0672257d18caf777d14e24)
       typescript:
         specifier: ^5.8
         version: 5.9.3
@@ -11666,7 +11666,7 @@ snapshots:
       - supports-color
       - typescript
 
-  '@alchemy.run/cloudflare-runtime@2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.81
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260918.1)
@@ -11689,6 +11689,28 @@ snapshots:
       - proxy-agent
       - typescript
 
+  '@alchemy.run/cloudflare-runtime@2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+    dependencies:
+      '@alchemy.run/node-utils': 2.0.0-beta.81
+      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260918.1)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.13(effect@4.0.3)
+      '@puppeteer/browsers': 3.2.4(yauzl@3.4.0)
+      capnp-es: 0.0.16(typescript@5.9.3)
+      effect: 4.0.3
+      magic-string: 0.30.21
+      mime: 4.1.0
+      sharp: 0.35.4(@types/node@24.13.3)
+      unenv: 2.0.0-rc.24
+      workerd: 1.20260918.1
+      yauzl: 3.4.0
+    optionalDependencies:
+      rolldown: 1.2.5
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+    transitivePeerDependencies:
+      - '@types/node'
+      - proxy-agent
+      - typescript
+
   '@alchemy.run/floci@2.0.0-beta.81(effect@4.0.3)':
     dependencies:
       effect: 4.0.3
@@ -11700,9 +11722,7 @@ snapshots:
       chokidar: 5.0.0
       rolldown: 1.2.5
 
-  '@alchemy.run/sigil@0.1.0-alpha.1(@types/react@19.2.18)':
-    optionalDependencies:
-      '@types/react': 19.2.18
+  '@alchemy.run/sigil@0.1.0-alpha.1': {}
 
   '@ampproject/remapping@2.3.0':
     dependencies:
@@ -13681,9 +13701,7 @@ snapshots:
 
   '@neon-rs/load@0.0.4': {}
 
-  '@neon/functions@0.11.0(hono@4.11.4)':
-    optionalDependencies:
-      hono: 4.11.4
+  '@neon/functions@0.11.0': {}
 
   '@nestjs/common@12.0.4(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)':
     dependencies:
@@ -16316,125 +16334,7 @@ snapshots:
       require-from-string: 2.0.2
       uri-js: 4.4.1
 
-  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(4114af7cfbe7aae08a4131c9058ae651):
-    dependencies:
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.0-beta.107(effect@4.0.3))(effect@4.0.3)(rolldown@1.1.5)(supports-color@8.1.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@alchemy.run/node-utils': 0.0.5
-      '@aws-sdk/credential-providers': 3.1050.0
-      '@clack/prompts': 1.7.0
-      '@distilled.cloud/aws': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/axiom': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/core': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/neon': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/planetscale': 1.0.0-rc.4(effect@4.0.3)
-      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@8.1.1))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
-      '@libsql/client': 0.17.3
-      '@octokit/rest': 22.0.1
-      '@octokit/webhooks': 14.2.0
-      '@prisma/dev': 0.20.0(typescript@5.9.3)
-      '@smithy/node-config-provider': 4.4.3
-      '@smithy/shared-ini-file-loader': 4.5.3
-      '@smithy/types': 4.14.2
-      '@types/aws-lambda': 8.10.161
-      aws4fetch: 1.0.20
-      capnweb: 0.6.1
-      effect: 4.0.3
-      fast-glob: 3.3.3
-      fast-xml-parser: 5.8.0
-      ink: 6.8.0(@types/react@19.2.18)(react@19.2.6)
-      jszip: 3.10.1
-      libsodium-wrappers: 0.8.4
-      pathe: 2.0.3
-      picomatch: 4.0.7
-      react: 19.2.6
-      rolldown: 1.1.5
-      undici: 7.29.0
-      yaml: 2.9.0
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.107(effect@4.0.3)
-      '@effect/platform-node': 4.0.0-beta.107(effect@4.0.3)(ioredis@5.10.1(supports-color@10.2.2))
-      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
-      drizzle-kit: 1.0.0-rc.5-ab785fc
-      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
-      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
-      pg: 8.22.0
-      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
-      ws: 8.21.3
-    transitivePeerDependencies:
-      - '@types/react'
-      - bare-abort-controller
-      - bare-buffer
-      - bufferutil
-      - react-devtools-core
-      - react-native-b4a
-      - supports-color
-      - typescript
-      - utf-8-validate
-      - vitest
-
-  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(47aa902bffe082e65cc6c83b86a5d1e5):
-    dependencies:
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(effect@4.0.3)(rolldown@1.1.5)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@alchemy.run/node-utils': 0.0.5
-      '@aws-sdk/credential-providers': 3.1050.0
-      '@clack/prompts': 1.7.0
-      '@distilled.cloud/aws': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/axiom': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/core': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/neon': 1.0.0-rc.4(effect@4.0.3)
-      '@distilled.cloud/planetscale': 1.0.0-rc.4(effect@4.0.3)
-      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
-      '@libsql/client': 0.17.3
-      '@octokit/rest': 22.0.1
-      '@octokit/webhooks': 14.2.0
-      '@prisma/dev': 0.20.0(typescript@5.9.3)
-      '@smithy/node-config-provider': 4.4.3
-      '@smithy/shared-ini-file-loader': 4.5.3
-      '@smithy/types': 4.14.2
-      '@types/aws-lambda': 8.10.161
-      aws4fetch: 1.0.20
-      capnweb: 0.6.1
-      effect: 4.0.3
-      fast-glob: 3.3.3
-      fast-xml-parser: 5.8.0
-      ink: 6.8.0(@types/react@19.2.18)(react@19.2.6)
-      jszip: 3.10.1
-      libsodium-wrappers: 0.8.4
-      pathe: 2.0.3
-      picomatch: 4.0.7
-      react: 19.2.6
-      rolldown: 1.1.5
-      undici: 7.29.0
-      yaml: 2.9.0
-    optionalDependencies:
-      '@effect/platform-bun': 4.0.0-beta.107(effect@4.0.3)
-      '@effect/platform-node': 4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1))
-      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
-      drizzle-kit: 1.0.0-rc.5-ab785fc
-      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
-      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
-      pg: 8.22.0
-      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
-      ws: 8.21.3
-    transitivePeerDependencies:
-      - '@types/react'
-      - bare-abort-controller
-      - bare-buffer
-      - bufferutil
-      - react-devtools-core
-      - react-native-b4a
-      - supports-color
-      - typescript
-      - utf-8-validate
-      - vitest
-
-  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(6c13624865808127e575cf383cd00b66):
+  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(29ae74ccc8bc64a8ee7e8292b114bead):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.0-beta.107(effect@4.0.3))(effect@4.0.3)(rolldown@1.1.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@alchemy.run/node-utils': 0.0.5
@@ -16476,7 +16376,125 @@ snapshots:
       '@effect/platform-node': 4.0.0-beta.107(effect@4.0.3)(ioredis@5.10.1(supports-color@10.2.2))
       '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
       drizzle-kit: 1.0.0-rc.5-ab785fc
-      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
+      pg: 8.22.0
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@types/react'
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-devtools-core
+      - react-native-b4a
+      - supports-color
+      - typescript
+      - utf-8-validate
+      - vitest
+
+  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(2d3a7fb8f67005f688c62c3729b5a9a3):
+    dependencies:
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.0-beta.107(effect@4.0.3))(effect@4.0.3)(rolldown@1.1.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/node-utils': 0.0.5
+      '@aws-sdk/credential-providers': 3.1050.0
+      '@clack/prompts': 1.7.0
+      '@distilled.cloud/aws': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/axiom': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/core': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/neon': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/planetscale': 1.0.0-rc.4(effect@4.0.3)
+      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@libsql/client': 0.17.3
+      '@octokit/rest': 22.0.1
+      '@octokit/webhooks': 14.2.0
+      '@prisma/dev': 0.20.0(typescript@5.9.3)
+      '@smithy/node-config-provider': 4.4.3
+      '@smithy/shared-ini-file-loader': 4.5.3
+      '@smithy/types': 4.14.2
+      '@types/aws-lambda': 8.10.161
+      aws4fetch: 1.0.20
+      capnweb: 0.6.1
+      effect: 4.0.3
+      fast-glob: 3.3.3
+      fast-xml-parser: 5.8.0
+      ink: 6.8.0(@types/react@19.2.18)(react@19.2.6)
+      jszip: 3.10.1
+      libsodium-wrappers: 0.8.4
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      react: 19.2.6
+      rolldown: 1.1.5
+      undici: 7.29.0
+      yaml: 2.9.0
+    optionalDependencies:
+      '@effect/platform-bun': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/platform-node': 4.0.0-beta.107(effect@4.0.3)(ioredis@5.10.1(supports-color@10.2.2))
+      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
+      drizzle-kit: 1.0.0-rc.5-ab785fc
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
+      pg: 8.22.0
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@types/react'
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-devtools-core
+      - react-native-b4a
+      - supports-color
+      - typescript
+      - utf-8-validate
+      - vitest
+
+  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(7dc667c82c0672257d18caf777d14e24):
+    dependencies:
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.0-beta.107(effect@4.0.3))(effect@4.0.3)(rolldown@1.1.5)(supports-color@8.1.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/node-utils': 0.0.5
+      '@aws-sdk/credential-providers': 3.1050.0
+      '@clack/prompts': 1.7.0
+      '@distilled.cloud/aws': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/axiom': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/core': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/neon': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/planetscale': 1.0.0-rc.4(effect@4.0.3)
+      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@8.1.1))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@libsql/client': 0.17.3
+      '@octokit/rest': 22.0.1
+      '@octokit/webhooks': 14.2.0
+      '@prisma/dev': 0.20.0(typescript@5.9.3)
+      '@smithy/node-config-provider': 4.4.3
+      '@smithy/shared-ini-file-loader': 4.5.3
+      '@smithy/types': 4.14.2
+      '@types/aws-lambda': 8.10.161
+      aws4fetch: 1.0.20
+      capnweb: 0.6.1
+      effect: 4.0.3
+      fast-glob: 3.3.3
+      fast-xml-parser: 5.8.0
+      ink: 6.8.0(@types/react@19.2.18)(react@19.2.6)
+      jszip: 3.10.1
+      libsodium-wrappers: 0.8.4
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      react: 19.2.6
+      rolldown: 1.1.5
+      undici: 7.29.0
+      yaml: 2.9.0
+    optionalDependencies:
+      '@effect/platform-bun': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/platform-node': 4.0.0-beta.107(effect@4.0.3)(ioredis@5.10.1(supports-color@10.2.2))
+      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
+      drizzle-kit: 1.0.0-rc.5-ab785fc
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
       mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
       pg: 8.22.0
       vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
@@ -16552,7 +16570,66 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(c80f9556946da99bd5a2ef9c9aa96a7b):
+  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(e1130666e3f1a9ca855fc95ca36fa4fe):
+    dependencies:
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(effect@4.0.3)(rolldown@1.1.5)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/node-utils': 0.0.5
+      '@aws-sdk/credential-providers': 3.1050.0
+      '@clack/prompts': 1.7.0
+      '@distilled.cloud/aws': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/axiom': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/core': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/neon': 1.0.0-rc.4(effect@4.0.3)
+      '@distilled.cloud/planetscale': 1.0.0-rc.4(effect@4.0.3)
+      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
+      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@libsql/client': 0.17.3
+      '@octokit/rest': 22.0.1
+      '@octokit/webhooks': 14.2.0
+      '@prisma/dev': 0.20.0(typescript@5.9.3)
+      '@smithy/node-config-provider': 4.4.3
+      '@smithy/shared-ini-file-loader': 4.5.3
+      '@smithy/types': 4.14.2
+      '@types/aws-lambda': 8.10.161
+      aws4fetch: 1.0.20
+      capnweb: 0.6.1
+      effect: 4.0.3
+      fast-glob: 3.3.3
+      fast-xml-parser: 5.8.0
+      ink: 6.8.0(@types/react@19.2.18)(react@19.2.6)
+      jszip: 3.10.1
+      libsodium-wrappers: 0.8.4
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      react: 19.2.6
+      rolldown: 1.1.5
+      undici: 7.29.0
+      yaml: 2.9.0
+    optionalDependencies:
+      '@effect/platform-bun': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/platform-node': 4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
+      drizzle-kit: 1.0.0-rc.5-ab785fc
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
+      pg: 8.22.0
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@types/react'
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-devtools-core
+      - react-native-b4a
+      - supports-color
+      - typescript
+      - utf-8-validate
+      - vitest
+
+  alchemy@2.0.0-beta.72(patch_hash=f7511596696793590971222b52ffb9104789d4ba04dcbf1f3bfa6ce3bc515c01)(ea9f155998e999060d181abd9dcf158e):
     dependencies:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.72(@distilled.cloud/cloudflare@1.0.0-rc.4(effect@4.0.3))(@effect/platform-bun@4.0.0-beta.107(effect@4.0.3))(@effect/platform-node@4.0.0-beta.107(effect@4.0.3))(effect@4.0.3)(rolldown@1.1.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@alchemy.run/node-utils': 0.0.5
@@ -16594,7 +16671,7 @@ snapshots:
       '@effect/platform-node': 4.0.0-beta.107(effect@4.0.3)(ioredis@5.10.1(supports-color@10.2.2))
       '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
       drizzle-kit: 1.0.0-rc.5-ab785fc
-      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
       mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
       pg: 8.22.0
       vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
@@ -16611,12 +16688,12 @@ snapshots:
       - utf-8-validate
       - vitest
 
-  alchemy@2.0.0-beta.81(fcd32683ccb2d10a5580b8c5fa1d237f):
+  alchemy@2.0.0-beta.81(@effect/vitest@4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/node@24.13.3)(drizzle-kit@1.0.0-rc.5-ab785fc)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(effect@4.0.3)(mongodb@6.21.0)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3):
     dependencies:
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@alchemy.run/floci': 2.0.0-beta.81(effect@4.0.3)
       '@alchemy.run/node-utils': 2.0.0-beta.81
-      '@alchemy.run/sigil': 0.1.0-alpha.1(@types/react@19.2.18)
+      '@alchemy.run/sigil': 0.1.0-alpha.1
       '@distilled.cloud/acme': 1.0.0-rc.13(effect@4.0.3)
       '@distilled.cloud/aws': 1.0.0-rc.13(effect@4.0.3)
       '@distilled.cloud/axiom': 1.0.0-rc.13(effect@4.0.3)
@@ -16636,7 +16713,64 @@ snapshots:
       '@effect/sql-d1': 4.0.3(effect@4.0.3)
       '@effect/sql-sqlite-do': 4.0.3(effect@4.0.3)
       '@libsql/client': 0.17.3
-      '@neon/functions': 0.11.0(hono@4.11.4)
+      '@neon/functions': 0.11.0
+      '@octokit/rest': 22.0.1
+      '@octokit/webhooks': 14.2.0
+      '@prisma/dev': 0.20.0(typescript@5.9.3)
+      '@types/aws-lambda': 8.10.161
+      capnweb: 0.12.0
+      effect: 4.0.3
+      fflate: 0.8.3
+      libsodium-wrappers: 0.8.4
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      rolldown: 1.2.5
+      tinyglobby: 0.2.17
+      yaml: 2.9.0
+    optionalDependencies:
+      '@effect/vitest': 4.0.3(effect@4.0.3)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      drizzle-kit: 1.0.0-rc.5-ab785fc
+      drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
+      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1050.0)(socks@2.8.9)
+      pg: 8.22.0
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@types/node'
+      - '@types/react'
+      - bufferutil
+      - hono
+      - proxy-agent
+      - react-devtools-core
+      - typescript
+      - utf-8-validate
+
+  alchemy@2.0.0-beta.81(ab5d915dd194c3aaa15b335dd5bf2e4d):
+    dependencies:
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.81(@distilled.cloud/cloudflare@1.0.0-rc.13(effect@4.0.3))(@effect/platform-node@4.0.3(effect@4.0.3)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@24.13.3)(effect@4.0.3)(rolldown@1.2.5)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/floci': 2.0.0-beta.81(effect@4.0.3)
+      '@alchemy.run/node-utils': 2.0.0-beta.81
+      '@alchemy.run/sigil': 0.1.0-alpha.1
+      '@distilled.cloud/acme': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/aws': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/axiom': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/core': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/doppler': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/fly-io': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/gcp': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/hetzner': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/infisical': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/neon': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/planetscale': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/prisma': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/railway': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/stripe': 1.0.0-rc.13(effect@4.0.3)
+      '@distilled.cloud/zerossl': 1.0.0-rc.13(effect@4.0.3)
+      '@effect/sql-d1': 4.0.3(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.3(effect@4.0.3)
+      '@libsql/client': 0.17.3
+      '@neon/functions': 0.11.0
       '@octokit/rest': 22.0.1
       '@octokit/webhooks': 14.2.0
       '@prisma/dev': 0.20.0(typescript@5.9.3)
@@ -17256,25 +17390,6 @@ snapshots:
       zod: 4.3.6
     optional: true
 
-  drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6):
-    optionalDependencies:
-      '@cloudflare/workers-types': 5.20260825.1
-      '@effect/sql-d1': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
-      '@effect/sql-sqlite-bun': 4.0.0-beta.107(effect@4.0.3)
-      '@effect/sql-sqlite-do': 4.0.0-rc.112(effect@4.0.3)
-      '@effect/sql-sqlite-node': 4.0.3(effect@4.0.3)
-      '@electric-sql/pglite': 0.3.15
-      '@libsql/client': 0.17.3
-      '@opentelemetry/api': 1.9.1
-      '@types/pg': 8.23.1
-      bun-types: 1.4.2
-      effect: 4.0.3
-      pg: 8.22.0
-      valibot: 1.2.0(typescript@5.9.3)
-      zod: 4.3.6
-    optional: true
-
   drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.0-rc.112(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.0.3)(mysql2@3.22.3(@types/node@24.13.3))(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3)):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260825.1
@@ -17307,6 +17422,44 @@ snapshots:
       pg: 8.22.0
       valibot: 1.2.0(typescript@5.9.3)
       zod: 4.3.6
+
+  drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260825.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6):
+    optionalDependencies:
+      '@cloudflare/workers-types': 5.20260825.1
+      '@effect/sql-d1': 4.0.3(effect@4.0.3)
+      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/sql-sqlite-bun': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.3(effect@4.0.3)
+      '@effect/sql-sqlite-node': 4.0.3(effect@4.0.3)
+      '@electric-sql/pglite': 0.3.15
+      '@libsql/client': 0.17.3
+      '@opentelemetry/api': 1.9.1
+      '@types/pg': 8.23.1
+      bun-types: 1.4.2
+      effect: 4.0.3
+      pg: 8.22.0
+      valibot: 1.2.0(typescript@5.9.3)
+      zod: 4.3.6
+    optional: true
+
+  drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20261011.1)(@effect/sql-d1@4.0.3(effect@4.0.3))(@effect/sql-pg@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-bun@4.0.0-beta.107(effect@4.0.3))(@effect/sql-sqlite-do@4.0.3(effect@4.0.3))(@effect/sql-sqlite-node@4.0.3(effect@4.0.3))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.3)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(bun-types@1.4.2)(effect@4.0.3)(pg@8.22.0)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6):
+    optionalDependencies:
+      '@cloudflare/workers-types': 5.20261011.1
+      '@effect/sql-d1': 4.0.3(effect@4.0.3)
+      '@effect/sql-pg': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/sql-sqlite-bun': 4.0.0-beta.107(effect@4.0.3)
+      '@effect/sql-sqlite-do': 4.0.3(effect@4.0.3)
+      '@effect/sql-sqlite-node': 4.0.3(effect@4.0.3)
+      '@electric-sql/pglite': 0.3.15
+      '@libsql/client': 0.17.3
+      '@opentelemetry/api': 1.9.1
+      '@types/pg': 8.23.1
+      bun-types: 1.4.2
+      effect: 4.0.3
+      pg: 8.22.0
+      valibot: 1.2.0(typescript@5.9.3)
+      zod: 4.3.6
+    optional: true
 
   dunder-proto@1.0.1:
     dependencies:
