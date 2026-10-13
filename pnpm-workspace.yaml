@@ -6,11 +6,14 @@ packages:
   - "apps/cloud/frontend"
   - "apps/server/client"
 allowBuilds:
+  "@parcel/watcher": false
   "@swc/core": true
   cbor-extract: true
   esbuild: true
   msgpackr-extract: true
   sharp: false
+  tree-sitter-bash: false
+  tree-sitter-powershell: false
   workerd: true
 patchedDependencies:
   alchemy@2.0.0-beta.72: patches/alchemy@2.0.0-beta.72.patch

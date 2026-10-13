@@ -1,3 +1,4 @@
+import type { Service as OpenCodeService } from "@macrograph/module-opencode/Engine/Cloudflare";
 import type * as S from "effect/Schema";
 
 import { Actor, Connection, Graph, Node, Package, Project } from "@macrograph/core";
@@ -20,6 +21,12 @@ import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
 import KofiModule from "@macrograph/module-kofi";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
 import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import OpenCodeModule from "@macrograph/module-opencode";
+import {
+  OpenCodeEngine,
+  RequestFailure as OpenCodeFailure,
+} from "@macrograph/module-opencode/Definition";
+import { make as makeOpenCodeDeployment } from "@macrograph/module-opencode/Deployment/Cloudflare";
 import TwitchModule from "@macrograph/module-twitch";
 import { AccountId, TwitchEngine } from "@macrograph/module-twitch/Definition";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
@@ -47,6 +54,7 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
@@ -68,6 +76,7 @@ const HostedDeployments = [
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,
   ...HostedDeployments.map((deployment) => deployment.definition.ClientRpcs),
+  OpenCodeEngine.ClientRpcs,
 ).middleware(EditorRpc.ConnectionMiddleware);
 const editorIdentityKey = "editor-identity";
 
@@ -104,6 +113,43 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       workerEnvironment?.IngressWorker,
     );
     const cloudAuths = yield* CloudAuthDO;
+    const openCodeDos = yield* OpenCodeDO;
+    let activeProjectId: string | undefined;
+    const unavailableOpenCode = () =>
+      new OpenCodeFailure({ reason: "Project identity is unavailable" });
+    const openCodeService: OpenCodeService = {
+      generateText: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).generateText(input),
+        ),
+      listModels: () =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).listModels(),
+        ),
+      clientState: () =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).clientState(),
+        ),
+      connectKey: (input) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).connectKey(input),
+        ),
+      removeCredential: (credentialID) =>
+        Effect.suspend(() =>
+          activeProjectId === undefined
+            ? Effect.fail(unavailableOpenCode())
+            : openCodeDos.getByName(activeProjectId).removeCredential(credentialID),
+        ),
+    };
+    const OpenCodeDeployment = makeOpenCodeDeployment(openCodeService);
 
     const AppLayer = Editor.defaultLayer
       .pipe(Layer.provideMerge(Packages.defaultLayer))
@@ -131,7 +177,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           readonly publicOrigin?: string;
         }>(editorIdentityKey)
         .pipe(Effect.provide(runtimeContext));
-      let activeProjectId = storedIdentity?.projectId;
+      activeProjectId = storedIdentity?.projectId;
       let activeSessionId: string | undefined;
       let publicOrigin = storedIdentity?.publicOrigin ?? "http://localhost:1337";
       let persistedIdentity = storedIdentity;
@@ -443,6 +489,10 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           HttpClientDeployment,
           EngineHost.editorContextLayer(HttpClientDeployment, { emit: () => Effect.void }),
         ),
+        EngineHost.layer(
+          OpenCodeDeployment,
+          EngineHost.editorContextLayer(OpenCodeDeployment, { emit: () => Effect.void }),
+        ),
       ).pipe(Layer.provide(Layer.succeed(Engine.Credentials, credentials)));
       const MountModules = Layer.effectDiscard(
         Effect.gen(function* () {
@@ -451,11 +501,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           const utilities = yield* UtilitiesEngine;
           const httpClient = yield* HttpClientEngine;
           const github = yield* GitHubEngine;
+          const opencode = yield* OpenCodeEngine;
           yield* EngineHost.mount(KofiModule, KofiDeployment, kofi.client.state);
           yield* EngineHost.mount(TwitchModule, TwitchDeployment, twitch.client.state);
           yield* EngineHost.mount(UtilitiesModule, UtilitiesDeployment, utilities.client.state);
           yield* EngineHost.mount(HttpClientModule, HttpClientDeployment, httpClient.client.state);
           yield* EngineHost.mount(GitHubModule, GitHubDeployment, github.client.state);
+          yield* EngineHost.mount(OpenCodeModule, OpenCodeDeployment, opencode.client.state);
         }),
       ).pipe(Layer.provideMerge(EngineClientHandlersLayer));
       const RpcLayer = Layer.mergeAll(

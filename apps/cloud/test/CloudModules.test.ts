@@ -7,6 +7,7 @@ import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { TwitchEngine } from "@macrograph/module-twitch/Definition";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { Persistence } from "@macrograph/persistence";
@@ -24,7 +25,18 @@ const services = Editor.layer.pipe(
 const http = Layer.succeed(HttpClient.HttpClient)(
   HttpClient.make(() => Effect.die("Editor startup must not call a provider")),
 );
-const newIds = ["discord", "elevenlabs", "json", "list", "logic", "math", "openai", "string"];
+const newIds = [
+  "discord",
+  "elevenlabs",
+  "json",
+  "list",
+  "logic",
+  "math",
+  "openai",
+  "opencode",
+  "string",
+];
+const staticEditorIds = newIds.filter((id) => id !== "opencode");
 const discordState = (configured: boolean) => ({
   configured,
   gatewayAvailable: false,
@@ -38,6 +50,7 @@ describe("Cloud modules", () => {
     const ids = [
       ...CloudModules.statelessModules.map((module) => module.id),
       ...CloudModules.apiDeployments.map((deployment) => deployment.moduleId),
+      ...CloudModules.projectScopedModules.map((module) => module.id),
     ];
     assert.deepStrictEqual(ids.sort(), newIds);
     for (const id of ids)
@@ -52,12 +65,15 @@ describe("Cloud modules", () => {
         TwitchEngine.ClientRpcs,
         UtilitiesEngine.ClientRpcs,
         HttpClientEngine.ClientRpcs,
+        OpenCodeEngine.ClientRpcs,
         ...CloudModules.apiDeployments.map((deployment) => deployment.definition.ClientRpcs),
       ),
     );
     for (const deployment of CloudModules.apiDeployments)
       for (const tag of deployment.definition.ClientRpcs.requests.keys())
         assert.isTrue(EditorRpc.requiresWriteAccess(tag), tag);
+    for (const tag of OpenCodeEngine.ClientRpcs.requests.keys())
+      assert.isTrue(EditorRpc.requiresWriteAccess(tag), tag);
   });
 
   it.effect(
@@ -84,7 +100,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
             );
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
@@ -164,7 +180,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
             );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, {

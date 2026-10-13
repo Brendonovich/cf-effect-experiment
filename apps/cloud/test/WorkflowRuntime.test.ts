@@ -1,4 +1,5 @@
 import type * as Executor from "@macrograph/execution/Executor";
+import type { Service as OpenCodeService } from "@macrograph/module-opencode/Engine/Cloudflare";
 
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Project } from "@macrograph/core";
@@ -7,6 +8,7 @@ import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Cause, Effect, Option } from "effect";
@@ -39,8 +41,9 @@ const mock = (respond: (request: HttpClientRequest.HttpClientRequest) => Respons
 const setup = Effect.fnUntraced(function* (
   project: Project.Model,
   httpClient: HttpClient.HttpClient,
+  openCodeService?: OpenCodeService,
 ) {
-  const engineClient = yield* WorkflowRuntime.make(project).pipe(
+  const engineClient = yield* WorkflowRuntime.make(project, openCodeService).pipe(
     Effect.provideService(HttpClient.HttpClient, httpClient),
   );
   return {
@@ -50,6 +53,7 @@ const setup = Effect.fnUntraced(function* (
       typeof ElevenLabsEngine
     >,
     http: (yield* engineClient("http-client")) as Engine.RuntimeClientOf<typeof HttpClientEngine>,
+    opencode: (yield* engineClient("opencode")) as Engine.RuntimeClientOf<typeof OpenCodeEngine>,
   };
 });
 
@@ -169,6 +173,34 @@ describe("WorkflowRuntime", () => {
         "Bearer first-openai",
         "first-elevenlabs",
       ]);
+    }),
+  );
+
+  it.effect("routes OpenCode generation through the injected project service", () =>
+    Effect.gen(function* () {
+      const calls: Array<unknown> = [];
+      const service: OpenCodeService = {
+        generateText: (input) =>
+          Effect.sync(() => {
+            calls.push(input);
+            return "Cloud response";
+          }),
+        listModels: () => Effect.succeed(["opencode/model"]),
+        clientState: () => Effect.succeed({ mode: "cloudflare", credentials: [] }),
+        connectKey: () => Effect.void,
+        removeCredential: () => Effect.void,
+      };
+      const { opencode } = yield* setup(
+        Project.empty(),
+        mock(() => new Response()),
+        service,
+      );
+      assert.strictEqual(
+        yield* opencode.OpenCodeGenerateText({ prompt: "Hello", model: "opencode/model" }),
+        "Cloud response",
+      );
+      assert.deepStrictEqual(yield* opencode.OpenCodeListModels(), ["opencode/model"]);
+      assert.deepStrictEqual(calls, [{ prompt: "Hello", model: "opencode/model" }]);
     }),
   );
 

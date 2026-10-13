@@ -1,0 +1,22 @@
+{
+  "name": "@macrograph/opencode-workerd",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@opencode/sdk": "2.0.27",
+    "effect": "4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

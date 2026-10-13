@@ -15,12 +15,29 @@ import { secureLayer as secureHttpUrlPolicy } from "@macrograph/module-http-clie
 import OpenAIModule from "@macrograph/module-openai";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import { layer as openAILayer } from "@macrograph/module-openai/Engine";
+import OpenCodeModule from "@macrograph/module-opencode";
+import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
+import {
+  makeLayer as makeOpenCodeLayer,
+  type Service as OpenCodeService,
+} from "@macrograph/module-opencode/Engine/Cloudflare";
 import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/unstable/rpc";
 
-export const make = Effect.fnUntraced(function* (project: Project.Model) {
+const unavailableOpenCode = (): OpenCodeService => ({
+  generateText: () => Effect.die("OpenCode runtime is unavailable"),
+  listModels: () => Effect.die("OpenCode runtime is unavailable"),
+  clientState: () => Effect.die("OpenCode runtime is unavailable"),
+  connectKey: () => Effect.die("OpenCode runtime is unavailable"),
+  removeCredential: () => Effect.die("OpenCode runtime is unavailable"),
+});
+
+export const make = Effect.fnUntraced(function* (
+  project: Project.Model,
+  openCodeService: OpenCodeService = unavailableOpenCode(),
+) {
   const readOnly = Effect.die("Workflow engine context is read-only");
   const context = {
     resource: { refresh: () => readOnly },
@@ -109,6 +126,24 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
   const discordClient = yield* RpcTest.makeClient(DiscordEngine.Rpcs).pipe(
     Effect.provide(discord.rpcs),
   );
+  const opencode = yield* OpenCodeEngine.pipe(
+    Effect.provide(makeOpenCodeLayer(openCodeService)),
+    Effect.provide(
+      Layer.succeed(OpenCodeEngine.EngineContext)(
+        OpenCodeEngine.EngineContext.of({
+          ...context,
+          storage: {
+            get: readOnly,
+            set: () => readOnly,
+            update: () => readOnly,
+          },
+        }),
+      ),
+    ),
+  );
+  const openCodeClient = yield* RpcTest.makeClient(OpenCodeEngine.Rpcs).pipe(
+    Effect.provide(opencode.rpcs),
+  );
 
   const engineClient: NonNullable<Executor.MakeOptions["engineClient"]> = (moduleId) =>
     Effect.succeed(
@@ -116,21 +151,23 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
         ? httpClient
         : moduleId === OpenAIModule.id
           ? openAIClient
-          : moduleId === ElevenLabsModule.id
-            ? elevenLabsClient
-            : moduleId === DiscordModule.id
-              ? discordClient
-              : moduleId === TwitchModule.id
-                ? unavailableTwitchRuntime
-                : moduleId === GitHubModule.id
-                  ? unavailableGitHubRuntime
-                  : new Proxy(
-                      {},
-                      {
-                        get: () => () =>
-                          Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
-                      },
-                    ),
+          : moduleId === OpenCodeModule.id
+            ? openCodeClient
+            : moduleId === ElevenLabsModule.id
+              ? elevenLabsClient
+              : moduleId === DiscordModule.id
+                ? discordClient
+                : moduleId === TwitchModule.id
+                  ? unavailableTwitchRuntime
+                  : moduleId === GitHubModule.id
+                    ? unavailableGitHubRuntime
+                    : new Proxy(
+                        {},
+                        {
+                          get: () => () =>
+                            Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
+                        },
+                      ),
     );
   return engineClient;
 });

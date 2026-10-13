@@ -12,8 +12,27 @@ export class RequestFailure extends Schema.TaggedError<RequestFailure>()("OpenCo
   reason: Schema.String,
 }) {}
 
-export const ClientState = Schema.Struct({});
-export class ClientRpcs extends RpcGroup.make() {}
+export const CredentialSummary = Schema.Struct({
+  id: Schema.String,
+  integrationID: Schema.String,
+  label: Schema.String,
+  active: Schema.Boolean,
+});
+export const ClientState = Schema.Struct({
+  mode: Schema.Literals(["server", "cloudflare"]),
+  credentials: Schema.Array(CredentialSummary),
+});
+export const initialClientState: typeof ClientState.Type = { mode: "server", credentials: [] };
+export class ClientRpcs extends RpcGroup.make(
+  Rpc.make("OpenCodeConnectKey", {
+    payload: Schema.Struct({ integrationID: Schema.String, key: Schema.String }),
+    error: RequestFailure,
+  }),
+  Rpc.make("OpenCodeRemoveCredential", {
+    payload: Schema.Struct({ credentialID: Schema.String }),
+    error: RequestFailure,
+  }),
+) {}
 
 export class RuntimeRpcs extends RpcGroup.make(
   Rpc.make("OpenCodeGenerateText", {

@@ -21,6 +21,7 @@ import {
   projectExecutions,
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
@@ -52,6 +53,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
   Effect.gen(function* () {
     const deploymentObjectsResource = yield* DeploymentObjectsBucket;
     const database = yield* Database.Service;
+    const openCodeDos = yield* OpenCodeDO;
     const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
 
     const updateExecution = (
@@ -206,9 +208,10 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
               ),
             ),
         });
-        const engineClient = yield* WorkflowRuntime.make(project).pipe(
-          Effect.provide(FetchHttpClient.layer),
-        );
+        const engineClient = yield* WorkflowRuntime.make(
+          project,
+          openCodeDos.getByName(input.projectId),
+        ).pipe(Effect.provide(FetchHttpClient.layer));
         yield* GraphExecution.run(
           project,
           { projectId: input.projectId, moduleId: input.moduleId, event },
