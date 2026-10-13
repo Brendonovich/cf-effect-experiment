@@ -155,7 +155,7 @@ jobs:
             pnpm-lock.yaml
             apps/playground/package.json
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter '@macrograph/playground...'
+        run: pnpm install --frozen-lockfile
       - name: Validate preview stage
         run: '[[ "$STAGE" =~ ^pr-[0-9]+$ ]]'
       - name: Deploy playground preview
