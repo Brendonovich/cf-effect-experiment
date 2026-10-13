@@ -34,7 +34,7 @@
     "@macrograph/project-host": "workspace:*",
     "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
-    "alchemy": "2.0.0-beta.72",
+    "alchemy": "2.0.0-beta.81",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.9"
   },
