@@ -65,11 +65,11 @@ describe("Sendblue engine", () => {
       yield* client.SendblueUpdateSettings({
         apiKey: "key-id",
         apiSecret: "secret-key",
-        webhookSecret: "webhook-secret",
+        webhookSecret: "",
       });
       assert.deepStrictEqual(yield* engine.client.state, {
         apiConfigured: true,
-        webhookConfigured: true,
+        webhookConfigured: false,
       });
       assert.deepStrictEqual(
         yield* runtime.SendblueSendMessage({

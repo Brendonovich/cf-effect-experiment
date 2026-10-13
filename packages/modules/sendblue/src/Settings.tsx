@@ -68,7 +68,7 @@ const Settings: Component<SettingsProps> = (props) => {
       apiSecret: apiSecret().trim(),
       webhookSecret: webhookSecret().trim(),
     };
-    if (!clear && Object.values(payload).some((value) => value.length === 0)) return;
+    if (!clear && (payload.apiKey.length === 0 || payload.apiSecret.length === 0)) return;
     setPending(true);
     setStatus("");
     yield;
@@ -149,12 +149,7 @@ const Settings: Component<SettingsProps> = (props) => {
         <button
           type="button"
           sx={[styles.button, styles.focus]}
-          disabled={
-            pending() ||
-            apiKey().trim().length === 0 ||
-            apiSecret().trim().length === 0 ||
-            webhookSecret().trim().length === 0
-          }
+          disabled={pending() || apiKey().trim().length === 0 || apiSecret().trim().length === 0}
           onClick={() => void save(false)}
         >
           Save
@@ -176,8 +171,9 @@ const Settings: Component<SettingsProps> = (props) => {
         )}
       </Show>
       <p sx={styles.note}>
-        Configure a Sendblue <strong>receive</strong> webhook with this URL and the same signing
-        secret. Secrets are stored on the server and never returned to the browser.
+        Free accounts poll for received messages automatically. To use a paid Sendblue webhook
+        instead, enter its signing secret and configure the shown URL. Secrets are stored on the
+        server and never returned to the browser.
       </p>
       <p role="status" sx={styles.note}>
         {status()}

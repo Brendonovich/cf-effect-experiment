@@ -2,6 +2,8 @@ import { HttpIngressRuntime } from "@macrograph/http-ingress";
 import { HttpEndpoint } from "@macrograph/module";
 import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import SendblueModule from "@macrograph/module-sendblue";
+import { InboundMessage, SendblueEngine } from "@macrograph/module-sendblue/Definition";
 import sendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
@@ -10,7 +12,7 @@ import { TickEvent } from "@macrograph/module-utilities/Definition";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
-import { FetchHttpClient } from "effect/http";
+import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/http";
 
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
@@ -103,6 +105,33 @@ const appliedDeploymentKey = "active-deployment";
 const previewDeploymentKey = "preview-deployment";
 const utilitiesTickEventId = "utilities:tick";
 const utilitiesTickCountKey = "utilities:tick-count";
+const sendbluePollEventId = "sendblue:poll";
+const sendbluePollConfigurationKey = "sendblue:poll-configuration";
+const sendbluePollCursorKey = "sendblue:poll-cursor";
+
+const SendbluePollConfiguration = Schema.Struct({
+  apiKey: Schema.String,
+  apiSecret: Schema.String,
+});
+type SendbluePollConfiguration = typeof SendbluePollConfiguration.Type;
+const SendbluePollCursor = Schema.Struct({
+  sentAt: Schema.String,
+  handles: Schema.Array(Schema.String),
+});
+type SendbluePollCursor = typeof SendbluePollCursor.Type;
+const SendblueMessage = Schema.Struct({
+  message_handle: Schema.String,
+  from_number: Schema.String,
+  to_number: Schema.optionalKey(Schema.String),
+  sendblue_number: Schema.optionalKey(Schema.String),
+  content: Schema.optionalKey(Schema.String),
+  media_url: Schema.optionalKey(Schema.String),
+  service: Schema.optionalKey(Schema.String),
+  message_type: Schema.optionalKey(Schema.String),
+  group_id: Schema.optionalKey(Schema.String),
+  date_sent: Schema.String,
+});
+const SendblueMessagesResponse = Schema.Struct({ data: Schema.Array(SendblueMessage) });
 
 interface WorkflowBinding {
   readonly create: (options: {
@@ -130,6 +159,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
 
   return Effect.gen(function* () {
     const endpointHost = yield* HttpEndpoint.Host;
+    const httpClient = HttpClient.withScope(yield* HttpClient.HttpClient);
 
     const ingressRegistry = yield* HttpIngress.makeRegistry([
       ...twitchDeployment.httpIngress.handlers,
@@ -142,6 +172,51 @@ export const projectIngressImplementation = Effect.gen(function* () {
       ingressRegistry,
       endpointHost,
     ).pipe(Effect.orDie);
+
+    const sendblueConfiguration = (
+      engines: Readonly<Record<string, unknown>>,
+    ): Option.Option<SendbluePollConfiguration> => {
+      const storage = Schema.decodeUnknownOption(SendblueEngine.Storage)(
+        engines[SendblueModule.id] ?? SendblueEngine.InitialStorage,
+      );
+      return Option.flatMap(storage, ({ apiKey, apiSecret, webhookSecret }) =>
+        apiKey === null || apiSecret === null || webhookSecret !== null
+          ? Option.none()
+          : Option.some({ apiKey, apiSecret }),
+      );
+    };
+
+    const reconcileSendbluePolling = Effect.fnUntraced(function* (
+      engines: Readonly<Record<string, unknown>>,
+    ) {
+      const desired = sendblueConfiguration(engines);
+      if (Option.isNone(desired)) {
+        yield* durableState.storage.delete(sendbluePollConfigurationKey);
+        yield* durableState.storage.delete(sendbluePollCursorKey);
+        yield* Cloudflare.Workers.cancelEvent(sendbluePollEventId);
+        return;
+      }
+      const stored = yield* durableState.storage.get(sendbluePollConfigurationKey);
+      const current = Schema.decodeUnknownOption(SendbluePollConfiguration)(stored);
+      const changed =
+        Option.isNone(current) ||
+        current.value.apiKey !== desired.value.apiKey ||
+        current.value.apiSecret !== desired.value.apiSecret;
+      yield* durableState.storage.put(sendbluePollConfigurationKey, desired.value);
+      if (changed) {
+        yield* durableState.storage.put(sendbluePollCursorKey, {
+          sentAt: new Date(Date.now() - 10_000).toISOString(),
+          handles: [],
+        } satisfies SendbluePollCursor);
+      }
+      const now = yield* Clock.currentTimeMillis;
+      yield* Cloudflare.Workers.scheduleEvent(
+        sendbluePollEventId,
+        new Date(now + 5_000),
+        {},
+        5_000,
+      );
+    });
 
     const loadAppliedDeployment = Effect.fnUntraced(function* () {
       const stored = yield* durableState.storage.get(appliedDeploymentKey);
@@ -422,6 +497,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       } else {
         yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
       }
+      yield* reconcileSendbluePolling(request.engines);
       return { deploymentId: deployed.deploymentId, endpoints: deployed.endpoints };
     });
 
@@ -515,14 +591,15 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const preview = yield* loadPreview();
       const previousProvider = yield* providerManifest(previous, preview).pipe(Effect.orDie);
       yield* durableState.storage.delete(appliedDeploymentKey);
+      yield* durableState.storage.delete(sendbluePollConfigurationKey);
+      yield* durableState.storage.delete(sendbluePollCursorKey);
       const desiredProvider = yield* providerManifest(Option.none(), preview).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
       yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
+      yield* Cloudflare.Workers.cancelEvent(sendbluePollEventId);
     });
 
-    const alarm = Effect.gen(function* () {
-      const events = yield* Cloudflare.Workers.processScheduledEvents;
-      if (!events.some((event) => event.id === utilitiesTickEventId)) return;
+    const handleUtilitiesTick = Effect.gen(function* () {
       const deployment = yield* loadAppliedDeployment();
       if (Option.isNone(deployment) || deployment.value.projectId === undefined) {
         yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
@@ -557,6 +634,121 @@ export const projectIngressImplementation = Effect.gen(function* () {
           }),
         catch: (cause) => cause,
       });
+    });
+
+    const handleSendbluePoll = Effect.gen(function* () {
+      const deployment = yield* loadAppliedDeployment();
+      if (Option.isNone(deployment) || deployment.value.projectId === undefined) {
+        yield* Cloudflare.Workers.cancelEvent(sendbluePollEventId);
+        return;
+      }
+      const storedConfiguration = yield* durableState.storage.get(sendbluePollConfigurationKey);
+      const configuration =
+        Schema.decodeUnknownOption(SendbluePollConfiguration)(storedConfiguration);
+      if (Option.isNone(configuration)) {
+        yield* Cloudflare.Workers.cancelEvent(sendbluePollEventId);
+        return;
+      }
+      const storedCursor = yield* durableState.storage.get(sendbluePollCursorKey);
+      const decodedCursor = Schema.decodeUnknownOption(SendbluePollCursor)(storedCursor);
+      const cursor: SendbluePollCursor = Option.getOrElse(decodedCursor, () => ({
+        sentAt: new Date(Date.now() - 10_000).toISOString(),
+        handles: [],
+      }));
+      const query = new URLSearchParams({
+        is_outbound: "false",
+        status: "RECEIVED",
+        sent_at_gte: cursor.sentAt,
+        order_by: "sentAt",
+        order_direction: "asc",
+        limit: "1000",
+      });
+      const request = HttpClientRequest.get(
+        `https://api.sendblue.com/api/v2/messages?${query.toString()}`,
+      ).pipe(
+        HttpClientRequest.setHeader("sb-api-key-id", configuration.value.apiKey),
+        HttpClientRequest.setHeader("sb-api-secret-key", configuration.value.apiSecret),
+        HttpClientRequest.acceptJson,
+      );
+      const response = yield* httpClient.execute(request);
+      if (response.status < 200 || response.status >= 300) {
+        yield* Effect.logWarning("Sendblue polling request was rejected", {
+          status: response.status,
+        });
+        return;
+      }
+      const messages = yield* response.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(SendblueMessagesResponse)),
+      );
+      const sorted = [...messages.data].sort((left, right) =>
+        left.date_sent.localeCompare(right.date_sent),
+      );
+      const unseen = sorted.filter(
+        (message) =>
+          message.date_sent > cursor.sentAt ||
+          (message.date_sent === cursor.sentAt && !cursor.handles.includes(message.message_handle)),
+      );
+      const binding = workerEnvironment?.GraphExecutionWorkflow;
+      if (!isWorkflowBinding(binding))
+        return yield* Effect.die("GraphExecutionWorkflow binding is unavailable");
+      for (const message of unseen) {
+        const event: InboundMessage = {
+          _tag: "SendblueMessageReceived",
+          messageHandle: message.message_handle,
+          fromNumber: message.from_number,
+          toNumber: message.to_number ?? message.sendblue_number ?? "",
+          content: message.content ?? "",
+          mediaUrl: message.media_url ?? "",
+          service: message.service ?? "",
+          messageType: message.message_type ?? "message",
+          groupId: message.group_id ?? "",
+          dateSent: message.date_sent,
+        };
+        const executionId = `${deployment.value.projectId}:sendblue:${message.message_handle}`;
+        yield* Effect.tryPromise({
+          try: () =>
+            binding.create({
+              id: executionId,
+              params: {
+                executionId,
+                projectId: deployment.value.projectId,
+                projectEventId: executionId,
+                source: "ingress",
+                deploymentId: deployment.value.deploymentId,
+                r2Key: deployment.value.r2Key,
+                moduleId: SendblueModule.id,
+                eventType: event._tag,
+                providerEventId: event.messageHandle,
+                event: JSON.stringify(event),
+              },
+            }),
+          catch: (cause) => cause,
+        });
+      }
+      const nextCursor = sorted.reduce<SendbluePollCursor>((current, message) => {
+        if (message.date_sent > current.sentAt)
+          return { sentAt: message.date_sent, handles: [message.message_handle] };
+        if (
+          message.date_sent === current.sentAt &&
+          !current.handles.includes(message.message_handle)
+        )
+          return { ...current, handles: [...current.handles, message.message_handle] };
+        return current;
+      }, cursor);
+      yield* durableState.storage.put(sendbluePollCursorKey, nextCursor);
+    }).pipe(
+      Effect.updateService(Headers.CurrentRedactedNames, (names) => [
+        ...names,
+        "sb-api-key-id",
+        "sb-api-secret-key",
+      ]),
+      Effect.catchCause((cause) => Effect.logWarning("Sendblue polling failed", cause)),
+    );
+
+    const alarm = Effect.gen(function* () {
+      const events = yield* Cloudflare.Workers.processScheduledEvents;
+      if (events.some((event) => event.id === utilitiesTickEventId)) yield* handleUtilitiesTick;
+      if (events.some((event) => event.id === sendbluePollEventId)) yield* handleSendbluePoll;
     }).pipe(Effect.withSpan("ProjectIngressDO.alarm"), Effect.orDie);
 
     const getEndpoint = Effect.fn("ProjectIngressDO.getEndpoint")(

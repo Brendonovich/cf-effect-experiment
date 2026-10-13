@@ -123,12 +123,16 @@ export const layer = SendblueEngine.toLayer((mg) =>
             const key = apiKey.trim();
             const secret = apiSecret.trim();
             const signingSecret = webhookSecret.trim();
-            if (!validSecret(key) || !validSecret(secret) || !validSecret(signingSecret))
+            if (
+              !validSecret(key) ||
+              !validSecret(secret) ||
+              (signingSecret.length > 0 && !validSecret(signingSecret))
+            )
               return yield* new SendblueFailure({ operation: "settings", reason: "Invalid input" });
             yield* mg.storage.set({
               apiKey: key,
               apiSecret: secret,
-              webhookSecret: signingSecret,
+              webhookSecret: signingSecret.length === 0 ? null : signingSecret,
             });
             yield* mg.client.refresh;
           }),
