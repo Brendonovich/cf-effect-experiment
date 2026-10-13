@@ -1,12 +1,13 @@
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
 import { HttpEndpoint } from "@macrograph/module";
-import * as HttpIngress from "@macrograph/module/HttpIngress";
 import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import sendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
 import UtilitiesModule from "@macrograph/module-utilities";
 import { TickEvent } from "@macrograph/module-utilities/Definition";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -134,9 +135,10 @@ export const projectIngressImplementation = Effect.gen(function* () {
       ...twitchDeployment.httpIngress.handlers,
       ...kofiDeployment.httpIngress.handlers,
       ...githubDeployment.httpIngress.handlers,
+      ...sendblueDeployment.httpIngress.handlers,
     ]).pipe(Effect.provide(layerWebCrypto(globalThis.crypto)), Effect.orDie);
     const ingressRuntime = yield* HttpIngressRuntime.make(
-      [twitchDeployment, kofiDeployment, githubDeployment],
+      [twitchDeployment, kofiDeployment, githubDeployment, sendblueDeployment],
       ingressRegistry,
       endpointHost,
     ).pipe(Effect.orDie);

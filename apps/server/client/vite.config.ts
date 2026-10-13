@@ -25,6 +25,7 @@ export const serverModules = new Set([
   "@macrograph/module-logic",
   "@macrograph/module-math",
   "@macrograph/module-openai",
+  "@macrograph/module-sendblue",
   "@macrograph/module-shell",
   "@macrograph/module-speakerbot",
   "@macrograph/module-streamdeck",

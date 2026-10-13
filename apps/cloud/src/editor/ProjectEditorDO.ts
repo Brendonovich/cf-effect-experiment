@@ -20,6 +20,9 @@ import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
 import KofiModule from "@macrograph/module-kofi";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
 import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import SendblueModule from "@macrograph/module-sendblue";
+import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
+import SendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import TwitchModule from "@macrograph/module-twitch";
 import { AccountId, TwitchEngine } from "@macrograph/module-twitch/Definition";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
@@ -59,6 +62,7 @@ const UtilitiesDeployment = Engine.deployment(
 const sqliteSchemaPath = "../../packages/persistence-sqlite/src/schema.ts";
 const HostedDeployments = [
   KofiDeployment,
+  SendblueDeployment,
   TwitchDeployment,
   UtilitiesDeployment,
   HttpClientDeployment,
@@ -425,6 +429,10 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         CloudModules.editorLayer,
         hostDeployment(KofiDeployment),
         hostDeployment({
+          ...SendblueDeployment,
+          layer: SendblueDeployment.layer.pipe(Layer.provide(FetchHttpClient.layer)),
+        }),
+        hostDeployment({
           ...GitHubDeployment,
           layer: GitHubDeployment.layer.pipe(
             Layer.provide(endpointHostLayer),
@@ -447,11 +455,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       const MountModules = Layer.effectDiscard(
         Effect.gen(function* () {
           const kofi = yield* KofiEngine;
+          const sendblue = yield* SendblueEngine;
           const twitch = yield* TwitchEngine;
           const utilities = yield* UtilitiesEngine;
           const httpClient = yield* HttpClientEngine;
           const github = yield* GitHubEngine;
           yield* EngineHost.mount(KofiModule, KofiDeployment, kofi.client.state);
+          yield* EngineHost.mount(SendblueModule, SendblueDeployment, sendblue.client.state);
           yield* EngineHost.mount(TwitchModule, TwitchDeployment, twitch.client.state);
           yield* EngineHost.mount(UtilitiesModule, UtilitiesDeployment, utilities.client.state);
           yield* EngineHost.mount(HttpClientModule, HttpClientDeployment, httpClient.client.state);
