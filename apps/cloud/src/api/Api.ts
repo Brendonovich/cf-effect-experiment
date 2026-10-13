@@ -8,8 +8,8 @@ import {
   SessionApiGroup,
   TeamsApiGroup,
 } from "@macrograph/cloud-api";
-import { HttpApi } from "effect/unstable/httpapi";
-import { OpenApi } from "effect/unstable/httpapi";
+import { HttpApi } from "effect/http-api";
+import { OpenApi } from "effect/http-api";
 
 import { EditorRpcApiGroup } from "../editor/EditorRpcApi.ts";
 

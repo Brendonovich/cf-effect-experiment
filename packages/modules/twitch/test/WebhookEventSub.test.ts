@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Engine, EngineTest, HttpEndpoint } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 import { AccountId, TwitchEngine } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";

@@ -3,7 +3,7 @@ import type { EditorConnection, ModuleSettingsDescriptor } from "@macrograph/edi
 import { BrowserSocket } from "@effect/platform-browser";
 import { DualProtocol, EditorRpc } from "@macrograph/editor";
 import { Effect, type Scope } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 export const makeEditorConnection = (
   wsUrl: string,

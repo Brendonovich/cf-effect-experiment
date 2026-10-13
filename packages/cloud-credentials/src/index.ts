@@ -1,7 +1,7 @@
 import * as Credential from "@macrograph/module/Credential";
 import * as Engine from "@macrograph/module/Engine";
 import { Effect, Redacted, Schema, Scope, Semaphore } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/http";
 
 export const DEFAULT_BASE_URL = "https://www.macrograph.app/api";
 export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;

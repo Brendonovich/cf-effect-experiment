@@ -1,13 +1,13 @@
 import { assert, it as effectIt } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Redacted } from "effect";
-import { TestClock } from "effect/testing";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
+import { TestClock } from "effect/testing";
 import { describe, expect, it, vi } from "vitest";
 
 import { CloudCredentials, SessionStoreError } from "../src/index.ts";

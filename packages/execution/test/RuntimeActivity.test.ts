@@ -14,7 +14,7 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import { Executor, RuntimeActivity } from "../src/index.ts";
 

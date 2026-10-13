@@ -13,8 +13,8 @@ import { t, Engine, Module } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
 import StringModule from "@macrograph/module-string";
 import { Array, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { RpcGroup } from "effect/rpc";
 import { TestClock } from "effect/testing";
-import { RpcGroup } from "effect/unstable/rpc";
 
 import LogicModule from "../src/Module.ts";
 

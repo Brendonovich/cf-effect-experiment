@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Queue, Schema, Stream } from "effect";
+import { Rpc, RpcClient, RpcGroup, RpcSerialization } from "effect/rpc";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { Rpc, RpcClient, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
 
 import { frameRpc, makeDualClientProtocol } from "../src/DualProtocol.ts";
 
@@ -14,19 +14,40 @@ const setup = Effect.gen(function* () {
   const closed = yield* Deferred.make<void, Socket.SocketError>();
   let disconnected = false;
   const socket = Socket.make({
-    runRaw: (handler) =>
-      Stream.fromQueue(incoming).pipe(
-        Stream.runForEach((data) => handler(data) ?? Effect.void),
-        Effect.raceFirst(Deferred.await(closed)),
-        Effect.ensuring(
-          Effect.sync(() => {
-            disconnected = true;
-          }),
+    reader: Effect.acquireRelease(
+      Effect.succeed({
+        pull: Queue.take(incoming).pipe(
+          Effect.map((data) => [data] as const),
+          Effect.raceFirst(
+            Deferred.await(closed).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new Socket.SocketError({
+                    reason: new Socket.SocketCloseError({ code: 1000 }),
+                  }),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    writer: Effect.succeed((data) => {
-      if (disconnected) return Effect.never;
-      return data instanceof Uint8Array ? Queue.offer(outgoing, data) : Effect.void;
+        upgrade: Socket.SocketUpgradeError.unsupported,
+      }),
+      () =>
+        Effect.sync(() => {
+          disconnected = true;
+        }),
+    ),
+    writer: Effect.succeed({
+      write: (data) => {
+        if (disconnected) return Effect.never;
+        return data instanceof Uint8Array ? Queue.offer(outgoing, data) : Effect.void;
+      },
+      writeAll: (data) =>
+        Effect.forEach(
+          data,
+          (item) => (item instanceof Uint8Array ? Queue.offer(outgoing, item) : Effect.void),
+          { discard: true },
+        ),
     }),
   });
   const dual = yield* makeDualClientProtocol.pipe(Effect.provideService(Socket.Socket, socket));

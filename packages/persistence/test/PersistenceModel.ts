@@ -1,4 +1,3 @@
-import { expect, it } from "@effect/vitest";
 import {
   ConnectionId,
   Graph,
@@ -15,7 +14,8 @@ import {
   type Connection,
 } from "@macrograph/core";
 import { Effect, Layer, Option } from "effect";
-import { FastCheck as fc } from "effect/testing";
+import * as fc from "fast-check";
+import { expect, it } from "vitest";
 
 import { Persistence } from "../src/index.ts";
 
@@ -392,29 +392,35 @@ const numRuns = Number(process.env.FC_NUM_RUNS ?? 50);
 const seed = process.env.FC_SEED === undefined ? 0x6d67 : Number(process.env.FC_SEED);
 
 export const persistenceModelProperty = <E>(layer: Layer.Layer<Persistence.Service, E, never>) =>
-  it.effect.prop(
+  it(
     "agrees with an in-memory model across generated edit sequences",
-    [fc.array(commandArb, { maxLength: 25 })],
-    ([commands]) =>
-      Effect.gen(function* () {
-        const persistence = yield* Persistence.Service;
-        let model: Model = { name: "Model Project", graphs: new Map() };
-        yield* persistence.saveProject(toProject(model));
-        yield* checkAgreement(persistence, model);
+    () =>
+      fc.assert(
+        fc.asyncProperty(fc.array(commandArb, { maxLength: 25 }), (commands) =>
+          Effect.runPromise(
+            Effect.gen(function* () {
+              const persistence = yield* Persistence.Service;
+              let model: Model = { name: "Model Project", graphs: new Map() };
+              yield* persistence.saveProject(toProject(model));
+              yield* checkAgreement(persistence, model);
 
-        for (const [index, command] of commands.entries()) {
-          const step = resolve(model, command, index);
-          if (step === undefined) continue;
+              for (const [index, command] of commands.entries()) {
+                const step = resolve(model, command, index);
+                if (step === undefined) continue;
 
-          const before = toProject(model);
-          yield* step.run(persistence);
-          model = step.next;
+                const before = toProject(model);
+                yield* step.run(persistence);
+                model = step.next;
 
-          expect(Option.getOrUndefined(Persistence.applyMutation(before, step.mutation))).toEqual(
-            toProject(model),
-          );
-          yield* checkAgreement(persistence, model);
-        }
-      }).pipe(Effect.provide(layer)),
-    { timeout: 60_000, fastCheck: { numRuns, seed } },
+                expect(
+                  Option.getOrUndefined(Persistence.applyMutation(before, step.mutation)),
+                ).toEqual(toProject(model));
+                yield* checkAgreement(persistence, model);
+              }
+            }).pipe(Effect.provide(layer)),
+          ),
+        ),
+        { numRuns, seed },
+      ),
+    60_000,
   );

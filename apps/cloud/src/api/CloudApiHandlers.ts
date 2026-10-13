@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder } from "effect/http-api";
 
 import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";

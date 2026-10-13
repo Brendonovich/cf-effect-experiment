@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Effect, Exit, Fiber, Layer, Result } from "effect";
+import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
-import { FetchHttpClient } from "effect/unstable/http";
 
 import {
   DeviceId,

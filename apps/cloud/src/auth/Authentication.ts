@@ -7,8 +7,8 @@ import {
 import { ApiCaller, ApiKey, type ProjectMcp } from "@macrograph/project-api";
 import { and, eq, gt } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi";
+import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiBuilder, HttpApiError } from "effect/http-api";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";

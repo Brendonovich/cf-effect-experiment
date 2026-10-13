@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CloudCredentials, SESSION_LIFETIME_MS } from "@macrograph/cloud-credentials";
 import { Deferred, Effect, Exit, Fiber } from "effect";
-import { Headers, HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { Headers, HttpClient, HttpClientResponse } from "effect/http";
 
 import { type AtomicFileStore, AtomicFileStoreError } from "../src/AtomicFileStore.ts";
 import { ClientSessions } from "../src/ClientSessions.ts";

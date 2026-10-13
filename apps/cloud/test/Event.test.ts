@@ -1,4 +1,4 @@
-import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
+import type * as SqlConnection from "effect/sql/SqlConnection";
 
 import * as PgClient from "@effect/sql-pg/PgClient";
 import { assert, describe, it } from "@effect/vitest";
@@ -6,8 +6,8 @@ import { CurrentUser, ProjectNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import { Effect, Layer, Option, Stream } from "effect";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as Reactivity from "effect/reactivity/Reactivity";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import type { Service as WorkerOperations } from "../src/worker/CloudWorkerOperations.ts";
 

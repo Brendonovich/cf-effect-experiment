@@ -1,5 +1,5 @@
 import { Config, Effect, FileSystem, Layer, Path } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import {
   ClientRpcs,
@@ -65,7 +65,7 @@ export const make = Effect.fnUntraced(function* (writeEnabled = false) {
 
 export const layer = FilesystemEngine.toLayer(() =>
   Effect.gen(function* () {
-    const enabled = yield* Config.boolean("MACROGRAPH_ENABLE_FILE_WRITES").pipe(
+    const enabled = yield* Config.Boolean("MACROGRAPH_ENABLE_FILE_WRITES").pipe(
       Config.withDefault(false),
     );
     return yield* make(enabled);

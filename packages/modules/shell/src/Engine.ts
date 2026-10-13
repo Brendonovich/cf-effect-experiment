@@ -1,6 +1,6 @@
 import { Config, Effect, Layer } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { RpcTest } from "effect/unstable/rpc";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { RpcTest } from "effect/rpc";
 
 import { ClientRpcs, CommandFailure, RuntimeRpcs, ShellEngine } from "./Definition.ts";
 
@@ -47,7 +47,7 @@ export const make = Effect.fnUntraced(function* (enabled = false) {
 
 export const layer = ShellEngine.toLayer(() =>
   Effect.gen(function* () {
-    const enabled = yield* Config.boolean("MACROGRAPH_ENABLE_SHELL").pipe(
+    const enabled = yield* Config.Boolean("MACROGRAPH_ENABLE_SHELL").pipe(
       Config.withDefault(false),
     );
     return yield* make(enabled);

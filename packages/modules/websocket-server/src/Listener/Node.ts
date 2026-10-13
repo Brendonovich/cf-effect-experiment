@@ -1,6 +1,6 @@
 import { NodeSocketServer } from "@effect/platform-node";
-import { Cause, Context, Deferred, Effect, Layer, Queue } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Cause, Context, Deferred, Effect, Layer, Predicate, Queue } from "effect";
+import { Socket } from "effect/socket";
 
 import { Adapter, type Client, type Listener, ListenerError } from "../Listener.ts";
 
@@ -36,13 +36,18 @@ export const layer = Layer.succeed(Adapter, {
                             new ListenerError({ reason: "The WebSocket peer is not open" }),
                           );
                         const messageBytes = new TextEncoder().encode(message).byteLength;
-                        if (raw.bufferedAmount + messageBytes > maxBufferedBytes) {
+                        const bufferedAmount =
+                          Predicate.hasProperty(raw, "bufferedAmount") &&
+                          typeof raw.bufferedAmount === "number"
+                            ? raw.bufferedAmount
+                            : 0;
+                        if (bufferedAmount + messageBytes > maxBufferedBytes) {
                           raw.close(1013, "Outbound buffer limit exceeded");
                           return Effect.fail(
                             new ListenerError({ reason: "Outbound buffer limit exceeded" }),
                           );
                         }
-                        return writer(message).pipe(
+                        return writer.write(message).pipe(
                           Effect.catchCause((cause) =>
                             Cause.hasInterrupts(cause)
                               ? Effect.interrupt
@@ -55,36 +60,47 @@ export const layer = Layer.succeed(Adapter, {
                         );
                       }),
                     run: (onMessage: (message: unknown) => Effect.Effect<void>) =>
-                      Effect.gen(function* () {
-                        const messages = yield* Queue.dropping<string | Uint8Array>(
-                          maxPendingMessages,
-                        );
-                        const read = socket.runRaw((message) =>
-                          Queue.offer(messages, message).pipe(
-                            Effect.flatMap((accepted) =>
-                              accepted
-                                ? Effect.void
-                                : Effect.fail(
-                                    new ListenerError({
-                                      reason: "Inbound message queue limit exceeded",
-                                    }),
+                      Effect.scoped(
+                        Effect.gen(function* () {
+                          const messages = yield* Queue.dropping<string | Uint8Array>(
+                            maxPendingMessages,
+                          );
+                          const read = Effect.gen(function* () {
+                            const reader = yield* socket.reader;
+                            while (true) {
+                              const batch = yield* reader.pull;
+                              yield* Effect.forEach(
+                                batch,
+                                (message) =>
+                                  Queue.offer(messages, message).pipe(
+                                    Effect.flatMap((accepted) =>
+                                      accepted
+                                        ? Effect.void
+                                        : Effect.fail(
+                                            new ListenerError({
+                                              reason: "Inbound message queue limit exceeded",
+                                            }),
+                                          ),
+                                    ),
                                   ),
+                                { discard: true },
+                              );
+                            }
+                          });
+                          const consume = Effect.forever(
+                            Queue.take(messages).pipe(Effect.flatMap(onMessage)),
+                          );
+                          yield* Effect.raceFirst(read, consume).pipe(
+                            Effect.mapError((error) =>
+                              error instanceof ListenerError
+                                ? error
+                                : new ListenerError({
+                                    reason: reason(error, "WebSocket receive failed"),
+                                  }),
                             ),
-                          ),
-                        );
-                        const consume = Effect.forever(
-                          Queue.take(messages).pipe(Effect.flatMap(onMessage)),
-                        );
-                        yield* Effect.raceFirst(read, consume).pipe(
-                          Effect.mapError((error) =>
-                            error instanceof ListenerError
-                              ? error
-                              : new ListenerError({
-                                  reason: reason(error, "WebSocket receive failed"),
-                                }),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ),
                   });
                 }),
               )

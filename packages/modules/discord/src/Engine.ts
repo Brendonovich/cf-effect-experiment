@@ -26,7 +26,7 @@ import { Gateway, gatewayLayer } from "./Gateway.ts";
 const decode =
   <A, I>(schema: Schema.Codec<A, I>) =>
   (input: unknown) =>
-    Schema.decodeUnknownEffect(schema, { onExcessProperty: "preserve" })(input).pipe(
+    Schema.decodeUnknownEffect(schema, { onExcessProperty: "ignore" })(input).pipe(
       Effect.mapError(() => new DiscordFailure({ reason: "invalid-response" })),
     );
 

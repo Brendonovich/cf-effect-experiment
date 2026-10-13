@@ -1,7 +1,7 @@
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { Schema as S } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export class ConnectionFailed extends S.TaggedError<ConnectionFailed>()(
   "VTubeStudioConnectionFailed",

@@ -1,12 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 import { vi } from "vitest";
 
 import * as Protocol from "../src/Protocol.ts";
 
-vi.mock("effect/unstable/socket", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("effect/unstable/socket")>();
+vi.mock("effect/socket", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("effect/socket")>();
   return {
     ...actual,
     Socket: { ...actual.Socket, makeWebSocket: vi.fn(actual.Socket.makeWebSocket) },
@@ -46,14 +46,26 @@ describe("Voicemod transport boundaries", () => {
           const writing = yield* Deferred.make<void>();
           const stopped = yield* Deferred.make<void>();
           const socket = Socket.make({
-            runRaw: (_handler, options) =>
-              (options?.onOpen ?? Effect.void).pipe(Effect.andThen(Deferred.await(shutdown))),
-            writer: Effect.succeed(() =>
-              Deferred.succeed(writing, undefined).pipe(
-                Effect.andThen(Effect.never),
-                Effect.ensuring(Deferred.succeed(stopped, undefined)),
+            reader: Effect.succeed({
+              pull: Deferred.await(shutdown).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new Socket.SocketError({
+                      reason: new Socket.SocketCloseError({ code: 1000 }),
+                    }),
+                  ),
+                ),
               ),
-            ),
+              upgrade: Socket.SocketUpgradeError.unsupported,
+            }),
+            writer: Effect.succeed({
+              write: () =>
+                Deferred.succeed(writing, undefined).pipe(
+                  Effect.andThen(Effect.never),
+                  Effect.ensuring(Deferred.succeed(stopped, undefined)),
+                ),
+              writeAll: () => Effect.never,
+            }),
           });
           const spy = vi.spyOn(Socket, "makeWebSocket").mockReturnValue(Effect.succeed(socket));
           yield* Effect.gen(function* () {
@@ -83,10 +95,15 @@ describe("Voicemod transport boundaries", () => {
   it.effect("sanitizes writer defects as typed connection failures", () =>
     Effect.gen(function* () {
       const socket = Socket.make({
-        runRaw: (_handler, options) =>
-          (options?.onOpen ?? Effect.void).pipe(Effect.andThen(Effect.never)),
-        writer: Effect.succeed(() => {
-          throw new Error("secret-key");
+        reader: Effect.succeed({
+          pull: Effect.never,
+          upgrade: Socket.SocketUpgradeError.unsupported,
+        }),
+        writer: Effect.succeed({
+          write: () => {
+            throw new Error("secret-key");
+          },
+          writeAll: () => Effect.never,
         }),
       });
       const spy = vi.spyOn(Socket, "makeWebSocket").mockReturnValue(Effect.succeed(socket));

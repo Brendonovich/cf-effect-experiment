@@ -1,7 +1,7 @@
 import type * as S from "effect/Schema";
 
 import { Effect } from "effect";
-import { type Rpc, RpcTest } from "effect/unstable/rpc";
+import { type Rpc, RpcTest } from "effect/rpc";
 
 import type * as Engine from "./Engine.ts";
 import type { ResourceClass } from "./Resource.ts";
