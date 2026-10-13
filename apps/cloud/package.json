@@ -14,7 +14,9 @@
   "dependencies": {
     "@effect/platform-browser": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/sql-d1": "4.0.3",
     "@effect/sql-pg": "4.0.3",
+    "@effect/sql-sqlite-do": "4.0.3",
     "@macrograph/cloud-api": "workspace:*",
     "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",

@@ -7,6 +7,7 @@ import * as Drizzle from "alchemy/Drizzle";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
 import * as Planetscale from "alchemy/Planetscale";
+import type { StackServices } from "alchemy/Stack";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
@@ -26,6 +27,12 @@ import CloudWorkerLayer, {
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 
+const logicalDatabaseProviders = PlanetscaleLogicalDb.providers() as Layer.Layer<
+	PlanetscaleLogicalDb.Providers,
+	never,
+	StackServices
+>;
+
 export default Alchemy.Stack(
 	"MacroGraph",
 	{
@@ -35,7 +42,7 @@ export default Alchemy.Stack(
 			...(axiomConfigured() ? [Axiom.providers()] : []),
 			Drizzle.providers(),
 			Planetscale.providers(),
-			PlanetscaleLogicalDb.providers(),
+			logicalDatabaseProviders,
 			DurableObjectMigrationBundle.providers(),
 		),
 		state: Cloudflare.state(),
