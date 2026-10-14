@@ -10,9 +10,11 @@ import { TickEvent } from "@macrograph/module-utilities/Definition";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as PollingIngress from "@macrograph/module/PollingIngress";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
 import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/http";
 
+import { projectIngressEvents } from "../database/DatabaseSchema.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
@@ -89,14 +91,17 @@ const AppliedDeployment = Schema.Struct({
   deploymentId: Schema.String,
   r2Key: DeploymentObjectKey,
   manifest: HttpIngress.Manifest,
+  pollingManifest: PollingIngress.Manifest.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   endpoints: Schema.Array(MountedEndpoint),
 });
 type AppliedDeployment = typeof AppliedDeployment.Type;
 const PreviewDeployment = Schema.Struct({
+  projectId: Schema.optionalKey(Schema.String),
   generation: Schema.optionalKey(Schema.String),
   reconciliationPending: Schema.optionalKey(Schema.Boolean),
   previewIds: Schema.Array(Schema.String),
   manifest: HttpIngress.Manifest,
+  pollingManifest: PollingIngress.Manifest.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   endpoints: Schema.Array(MountedEndpoint),
 });
 type PreviewDeployment = typeof PreviewDeployment.Type;
@@ -127,6 +132,16 @@ const isWorkflowBinding = (value: unknown): value is WorkflowBinding =>
   "create" in value &&
   typeof value.create === "function";
 
+interface HyperdriveBinding {
+  readonly connectionString: string;
+}
+
+const isHyperdriveBinding = (value: unknown): value is HyperdriveBinding =>
+  typeof value === "object" &&
+  value !== null &&
+  "connectionString" in value &&
+  typeof value.connectionString === "string";
+
 export const projectIngressImplementation = Effect.gen(function* () {
   const durableState = yield* Cloudflare.DurableObjectState;
   const workerEnvironment = yield* Cloudflare.WorkerEnvironment;
@@ -140,6 +155,12 @@ export const projectIngressImplementation = Effect.gen(function* () {
 
   return Effect.gen(function* () {
     const endpointHost = yield* HttpEndpoint.Host;
+    const pollingDatabase = Effect.gen(function* () {
+      const hyperdrive = workerEnvironment?.AppDatabaseHyperdrive;
+      if (!isHyperdriveBinding(hyperdrive))
+        return yield* Effect.die("AppDatabaseHyperdrive binding is unavailable");
+      return yield* Drizzle.Postgres(Effect.succeed(Redacted.make(hyperdrive.connectionString)));
+    });
 
     const ingressRegistry = yield* HttpIngress.makeRegistry([
       ...twitchDeployment.httpIngress.handlers,
@@ -158,6 +179,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
       `${pollingEventPrefix}${pollingKey(requirement)}`;
     const pollingCursorKey = (requirement: PollingIngress.Requirement) =>
       `${pollingCursorPrefix}${pollingKey(requirement)}`;
+    const pollingEndpointId = (requirement: PollingIngress.Requirement) =>
+      HttpEndpoint.Id.make(`polling:${pollingKey(requirement)}`);
     const loadPollingManifest = durableState.storage.get(pollingManifestKey).pipe(
       Effect.flatMap((stored) =>
         stored === undefined
@@ -172,12 +195,26 @@ export const projectIngressImplementation = Effect.gen(function* () {
           engines[deployment.moduleId] ?? deployment.definition.InitialStorage,
         ),
       ).pipe(Effect.map((requirements) => requirements.flat()));
+    const providerPollingManifest = (
+      production: Option.Option<AppliedDeployment>,
+      preview: Option.Option<PreviewDeployment>,
+    ): PollingIngress.Manifest => [
+      ...new Map(
+        [
+          ...Option.match(production, {
+            onNone: () => [],
+            onSome: (value) => value.pollingManifest,
+          }),
+          ...Option.match(preview, {
+            onNone: () => [],
+            onSome: (value) => value.pollingManifest,
+          }),
+        ].map((requirement) => [pollingKey(requirement), requirement]),
+      ).values(),
+    ];
 
-    const reconcilePollingIngress = Effect.fnUntraced(function* (
-      engines: Readonly<Record<string, unknown>>,
-    ) {
+    const reconcilePollingIngress = Effect.fnUntraced(function* (desired: PollingIngress.Manifest) {
       const previous = yield* loadPollingManifest;
-      const desired = yield* resolvePollingManifest(engines).pipe(Effect.orDie);
       for (const requirement of previous) {
         if (desired.some((candidate) => pollingKey(candidate) === pollingKey(requirement)))
           continue;
@@ -435,6 +472,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       activeProjectId = request.projectId;
       publicOrigin = request.publicOrigin;
       const desired = yield* ingressRuntime.resolveManifest(request.engines).pipe(Effect.orDie);
+      const desiredPolling = yield* resolvePollingManifest(request.engines).pipe(Effect.orDie);
       const previous = yield* loadAppliedDeployment();
       const preview = yield* loadPreview();
       const previousProvider = yield* providerManifest(previous, preview).pipe(Effect.orDie);
@@ -443,6 +481,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
         deploymentId: request.deploymentId,
         r2Key: request.r2Key,
         manifest: desired,
+        pollingManifest: desiredPolling,
         endpoints: [],
       };
       yield* durableState.storage.put(appliedDeploymentKey, active);
@@ -490,7 +529,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       } else {
         yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
       }
-      yield* reconcilePollingIngress(request.engines);
+      yield* reconcilePollingIngress(providerPollingManifest(Option.some(deployed), preview));
       return { deploymentId: deployed.deploymentId, endpoints: deployed.endpoints };
     });
 
@@ -501,7 +540,9 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const previous = yield* loadPreview();
       const previousProvider = yield* providerManifest(production, previous).pipe(Effect.orDie);
       const manifest = yield* ingressRuntime.resolveManifest(request.engines).pipe(Effect.orDie);
+      const pollingManifest = yield* resolvePollingManifest(request.engines).pipe(Effect.orDie);
       const next: PreviewDeployment = {
+        projectId: request.projectId,
         generation: crypto.randomUUID(),
         reconciliationPending: true,
         previewIds: [
@@ -514,6 +555,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
           ]),
         ],
         manifest,
+        pollingManifest,
         endpoints: Option.match(previous, {
           onNone: () => [],
           onSome: (value) =>
@@ -556,6 +598,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
           ),
         } satisfies AppliedDeployment);
       }
+      yield* reconcilePollingIngress(providerPollingManifest(production, Option.some(active)));
       return { endpoints: active.endpoints };
     });
 
@@ -577,6 +620,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       yield* durableState.storage.delete(previewDeploymentKey);
       const desiredProvider = yield* providerManifest(production, Option.none()).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
+      yield* reconcilePollingIngress(providerPollingManifest(production, Option.none()));
     });
 
     const undeploy = Effect.fn("ProjectIngressDO.undeploy")(function* () {
@@ -587,7 +631,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const desiredProvider = yield* providerManifest(Option.none(), preview).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
       yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
-      yield* reconcilePollingIngress({});
+      yield* reconcilePollingIngress(providerPollingManifest(Option.none(), preview));
     });
 
     const handleUtilitiesTick = Effect.gen(function* () {
@@ -630,7 +674,14 @@ export const projectIngressImplementation = Effect.gen(function* () {
     const handlePollingIngress = Effect.fnUntraced(
       function* (requirement: PollingIngress.Requirement) {
         const deployment = yield* loadAppliedDeployment();
-        if (Option.isNone(deployment) || deployment.value.projectId === undefined) {
+        const preview = yield* loadPreview();
+        const projectId =
+          Option.isSome(deployment) && deployment.value.projectId !== undefined
+            ? deployment.value.projectId
+            : Option.isSome(preview)
+              ? preview.value.projectId
+              : undefined;
+        if (projectId === undefined) {
           yield* Cloudflare.Workers.cancelEvent(pollingEventId(requirement));
           return;
         }
@@ -645,30 +696,64 @@ export const projectIngressImplementation = Effect.gen(function* () {
             ? yield* handler.initialCursor(requirement.configuration)
             : storedCursor;
         const result = yield* handler.poll(requirement.configuration, cursor);
+        const productionAllowed =
+          Option.isSome(deployment) &&
+          deployment.value.pollingManifest.some(
+            (candidate) => pollingKey(candidate) === pollingKey(requirement),
+          );
+        const previewAllowed =
+          Option.isSome(preview) &&
+          preview.value.pollingManifest.some(
+            (candidate) => pollingKey(candidate) === pollingKey(requirement),
+          );
+        if (!productionAllowed && !previewAllowed) return;
         const binding = workerEnvironment?.GraphExecutionWorkflow;
-        if (!isWorkflowBinding(binding))
+        if (productionAllowed && !isWorkflowBinding(binding))
           return yield* Effect.die("GraphExecutionWorkflow binding is unavailable");
+        const database = yield* pollingDatabase;
         for (const event of result.events) {
-          const executionId = `${deployment.value.projectId}:polling:${event.moduleId}:${event.eventId ?? crypto.randomUUID()}`;
-          yield* Effect.tryPromise({
-            try: () =>
-              binding.create({
-                id: executionId,
-                params: {
-                  executionId,
-                  projectId: deployment.value.projectId,
-                  projectEventId: executionId,
-                  source: "ingress",
-                  deploymentId: deployment.value.deploymentId,
-                  r2Key: deployment.value.r2Key,
-                  moduleId: event.moduleId,
-                  eventType: event.eventType,
-                  ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
-                  event: JSON.stringify(event.payload),
-                },
-              }),
-            catch: (cause) => cause,
-          });
+          const stableId = event.eventId ?? crypto.randomUUID();
+          const ingressEventId = `${projectId}:polling:${event.moduleId}:${stableId}`;
+          const payloadJson = JSON.stringify(event.payload);
+          yield* database
+            .insert(projectIngressEvents)
+            .values({
+              id: ingressEventId,
+              projectId,
+              endpointId: pollingEndpointId(requirement),
+              moduleId: event.moduleId,
+              eventType: event.eventType,
+              eventId: event.eventId ?? null,
+              eventPayload: payloadJson,
+              previewOnly: !productionAllowed,
+              previewGeneration: Option.isSome(preview) ? (preview.value.generation ?? null) : null,
+              receivedAt: new Date().toISOString(),
+            })
+            .onConflictDoNothing()
+            .pipe(Effect.orDie);
+          if (productionAllowed && Option.isSome(deployment) && isWorkflowBinding(binding)) {
+            const executionId = ingressEventId;
+            yield* Effect.tryPromise({
+              try: () =>
+                binding.create({
+                  id: executionId,
+                  params: {
+                    executionId,
+                    projectId,
+                    projectEventId: executionId,
+                    source: "ingress",
+                    ingressEventId,
+                    deploymentId: deployment.value.deploymentId,
+                    r2Key: deployment.value.r2Key,
+                    moduleId: event.moduleId,
+                    eventType: event.eventType,
+                    ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
+                    event: payloadJson,
+                  },
+                }),
+              catch: (cause) => cause,
+            });
+          }
         }
         yield* durableState.storage.put(pollingCursorKey(requirement), result.cursor);
       },
@@ -705,6 +790,18 @@ export const projectIngressImplementation = Effect.gen(function* () {
         endpointHost.secret(endpointId).pipe(Effect.map(Redacted.value)),
     );
 
+    const pollingEndpoint = (requirement: PollingIngress.Requirement): HttpEndpoint.Routed => ({
+      id: pollingEndpointId(requirement),
+      url: "",
+      schema: {
+        id: HttpEndpoint.HandlerId.make(requirement.handlerId),
+        displayName: requirement.displayName,
+      },
+      instanceKey: HttpEndpoint.InstanceKey.make(requirement.instanceKey),
+      displayName: requirement.displayName,
+      metadata: { _tag: "PollingIngress" },
+    });
+
     const ingressState = Effect.fn("ProjectIngressDO.ingressState")(function* () {
       const deployment = yield* loadAppliedDeployment();
       const previewDeployment = yield* loadPreview();
@@ -713,17 +810,23 @@ export const projectIngressImplementation = Effect.gen(function* () {
           onNone: () => undefined,
           onSome: (active) => ({
             deploymentId: active.deploymentId,
-            endpoints: active.endpoints.filter(
-              (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
-            ),
+            endpoints: [
+              ...active.endpoints.filter(
+                (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
+              ),
+              ...active.pollingManifest.map(pollingEndpoint),
+            ],
           }),
         }),
         preview: Option.match(previewDeployment, {
           onNone: () => undefined,
           onSome: (active) => ({
-            endpoints: active.endpoints.filter(
-              (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
-            ),
+            endpoints: [
+              ...active.endpoints.filter(
+                (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
+              ),
+              ...active.pollingManifest.map(pollingEndpoint),
+            ],
           }),
         }),
       };

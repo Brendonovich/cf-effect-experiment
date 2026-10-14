@@ -19,6 +19,7 @@ import {
 import { styles } from "@macrograph/editor-ui/events.stylex";
 import GitHubModule from "@macrograph/module-github";
 import KofiModule from "@macrograph/module-kofi";
+import SendblueModule from "@macrograph/module-sendblue";
 import TwitchModule from "@macrograph/module-twitch";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery } from "@tanstack/solid-query";
@@ -289,7 +290,7 @@ export const Events: Component<EventsProps> = (props) => {
           </div>
           <div sx={styles.instance}>
             {endpointProps.ingress.schema.displayName} ·{" "}
-            {[KofiModule, TwitchModule, GitHubModule].find((module) =>
+            {[KofiModule, TwitchModule, GitHubModule, SendblueModule].find((module) =>
               endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
@@ -316,16 +317,16 @@ export const Events: Component<EventsProps> = (props) => {
           <header sx={styles.ingressPanelHeader}>
             <div sx={styles.timelineHeaderTitle}>
               <div sx={styles.titleRow}>
-                <h1 sx={[styles.panelTitle, styles.timelineHeading]}>Ingress endpoints</h1>
+                <h1 sx={[styles.panelTitle, styles.timelineHeading]}>Ingress sources</h1>
                 <Show when={eventQuery.data !== undefined}>
                   <span sx={styles.executionCount}>{ingresses().length}</span>
                 </Show>
               </div>
-              <p sx={styles.panelDescription}>Deployment and preview endpoint state</p>
+              <p sx={styles.panelDescription}>Deployment and preview ingress state</p>
             </div>
             <EventSearch
               ingress
-              placeholder="Search endpoints"
+              placeholder="Search ingress sources"
               value={ingressSearch()}
               onChange={setIngressSearch}
             />
@@ -347,7 +348,7 @@ export const Events: Component<EventsProps> = (props) => {
                   <div sx={styles.emptyIngress}>
                     {ingresses().length > 0
                       ? "No ingress endpoints match your search."
-                      : "No ingress endpoints are deployed or in preview."}
+                      : "No ingress sources are deployed or in preview."}
                   </div>
                 </Show>
               }
