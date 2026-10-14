@@ -11,7 +11,7 @@ export default Engine.withPollingIngress(
     handlers: [handler],
     requirements: (state) =>
       Effect.succeed(
-        state.webhookSecret === null
+        state.mode !== "webhook" || state.webhookSecret === null
           ? []
           : [
               WebhookIngress.require({

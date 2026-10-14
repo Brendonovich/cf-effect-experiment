@@ -13,6 +13,7 @@ const setup = Effect.fnUntraced(function* (
     apiKey: null,
     apiSecret: null,
     webhookSecret: null,
+    mode: "polling",
   };
   const context = Layer.succeed(SendblueEngine.EngineContext)(
     SendblueEngine.EngineContext.of({
@@ -66,10 +67,12 @@ describe("Sendblue engine", () => {
         apiKey: "key-id",
         apiSecret: "secret-key",
         webhookSecret: "",
+        mode: "polling",
       });
       assert.deepStrictEqual(yield* engine.client.state, {
         apiConfigured: true,
         webhookConfigured: false,
+        mode: "polling",
       });
       assert.deepStrictEqual(
         yield* runtime.SendblueSendMessage({
@@ -99,6 +102,7 @@ describe("Sendblue engine", () => {
         apiKey: "key-id",
         apiSecret: "secret-key",
         webhookSecret: "webhook-secret",
+        mode: "webhook",
       });
       const result = yield* Effect.result(
         runtime.SendblueSendMessage({

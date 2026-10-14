@@ -109,9 +109,10 @@ export const layer = SendblueEngine.toLayer((mg) =>
       }),
       client: {
         state: mg.storage.get.pipe(
-          Effect.map(({ apiKey, apiSecret, webhookSecret }) => ({
+          Effect.map(({ apiKey, apiSecret, webhookSecret, mode }) => ({
             apiConfigured: apiKey !== null && apiSecret !== null,
             webhookConfigured: webhookSecret !== null,
+            mode,
           })),
         ),
         rpcs: ClientRpcs.toLayer({
@@ -119,6 +120,7 @@ export const layer = SendblueEngine.toLayer((mg) =>
             apiKey,
             apiSecret,
             webhookSecret,
+            mode,
           }) {
             const key = apiKey.trim();
             const secret = apiSecret.trim();
@@ -126,18 +128,24 @@ export const layer = SendblueEngine.toLayer((mg) =>
             if (
               !validSecret(key) ||
               !validSecret(secret) ||
-              (signingSecret.length > 0 && !validSecret(signingSecret))
+              (mode === "webhook" && !validSecret(signingSecret))
             )
               return yield* new SendblueFailure({ operation: "settings", reason: "Invalid input" });
             yield* mg.storage.set({
               apiKey: key,
               apiSecret: secret,
-              webhookSecret: signingSecret.length === 0 ? null : signingSecret,
+              webhookSecret: mode === "webhook" ? signingSecret : null,
+              mode,
             });
             yield* mg.client.refresh;
           }),
           SendblueClearSettings: Effect.fnUntraced(function* () {
-            yield* mg.storage.set({ apiKey: null, apiSecret: null, webhookSecret: null });
+            yield* mg.storage.set({
+              apiKey: null,
+              apiSecret: null,
+              webhookSecret: null,
+              mode: "polling",
+            });
             yield* mg.client.refresh;
           }),
         }),

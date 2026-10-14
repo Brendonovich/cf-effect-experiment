@@ -1,5 +1,5 @@
 import { Engine } from "@macrograph/module";
-import { Array, Schema } from "effect";
+import { Array, Effect, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
 
 export const MessageStatus = Schema.String;
@@ -31,14 +31,19 @@ export class SendblueFailure extends Schema.TaggedError<SendblueFailure>()("Send
   status: Schema.optionalKey(Schema.Number),
 }) {}
 
+export const DeliveryMode = Schema.Literals(["polling", "webhook"]);
+export type DeliveryMode = typeof DeliveryMode.Type;
+
 export const RuntimeStorage = Schema.Struct({
   apiKey: Schema.NullOr(Schema.String),
   apiSecret: Schema.NullOr(Schema.String),
   webhookSecret: Schema.NullOr(Schema.String),
+  mode: DeliveryMode.pipe(Schema.withDecodingDefaultKey(Effect.succeed("polling"))),
 });
 export const ClientState = Schema.Struct({
   apiConfigured: Schema.Boolean,
   webhookConfigured: Schema.Boolean,
+  mode: DeliveryMode,
 });
 
 export class RuntimeRpcs extends RpcGroup.make(
@@ -65,6 +70,7 @@ export class ClientRpcs extends RpcGroup.make(
       apiKey: Schema.String,
       apiSecret: Schema.String,
       webhookSecret: Schema.String,
+      mode: DeliveryMode,
     }),
     error: SendblueFailure,
   }),
@@ -74,7 +80,7 @@ export class ClientRpcs extends RpcGroup.make(
 export class SendblueEngine extends Engine.make({
   events: Array.empty<InboundMessage>(),
   storage: RuntimeStorage,
-  initialStorage: { apiKey: null, apiSecret: null, webhookSecret: null },
+  initialStorage: { apiKey: null, apiSecret: null, webhookSecret: null, mode: "polling" },
   rpcs: RuntimeRpcs,
   client: { state: ClientState, rpcs: ClientRpcs },
 }) {}

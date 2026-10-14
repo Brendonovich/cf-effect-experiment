@@ -2,9 +2,22 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
-import { handler } from "../src/Polling.ts";
+import { handler, requirements } from "../src/Polling.ts";
 
 describe("Sendblue polling ingress", () => {
+  it.effect("is enabled only when polling mode is selected", () =>
+    Effect.gen(function* () {
+      const storage = {
+        apiKey: "key-id",
+        apiSecret: "secret-key",
+        webhookSecret: null,
+        mode: "polling" as const,
+      };
+      assert.strictEqual((yield* requirements(storage)).length, 1);
+      assert.deepStrictEqual(yield* requirements({ ...storage, mode: "webhook" }), []);
+    }),
+  );
+
   it.effect("polls inbound messages and advances a deduplicating cursor", () =>
     Effect.gen(function* () {
       const http = HttpClient.make((request) => {

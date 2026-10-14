@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
 import { Show, action, createMemo, createSignal, type Component } from "solid-js";
 
-import { ClientRpcs, ClientState } from "./Definition.ts";
+import { ClientRpcs, ClientState, type DeliveryMode } from "./Definition.ts";
 import SendblueModule from "./Module.ts";
 
 const styles = stylex.create({
@@ -45,6 +45,7 @@ interface SettingsProps {
       readonly apiKey: string;
       readonly apiSecret: string;
       readonly webhookSecret: string;
+      readonly mode: DeliveryMode;
     }) => Effect.Effect<void, unknown>;
     readonly SendblueClearSettings: () => Effect.Effect<void, unknown>;
   };
@@ -55,11 +56,13 @@ const Settings: Component<SettingsProps> = (props) => {
   const [apiKey, setApiKey] = createSignal("");
   const [apiSecret, setApiSecret] = createSignal("");
   const [webhookSecret, setWebhookSecret] = createSignal("");
+  const [selectedMode, setSelectedMode] = createSignal<DeliveryMode>();
   const [pending, setPending] = createSignal(false);
   const [status, setStatus] = createSignal("");
   const endpoint = createMemo(() =>
     props.endpoints.find((candidate) => candidate.schema.id === "sendblue:receive"),
   );
+  const mode = () => selectedMode() ?? props.state().mode;
 
   const save = action(async function* (clear: boolean) {
     if (pending()) return;
@@ -67,8 +70,15 @@ const Settings: Component<SettingsProps> = (props) => {
       apiKey: apiKey().trim(),
       apiSecret: apiSecret().trim(),
       webhookSecret: webhookSecret().trim(),
+      mode: mode(),
     };
-    if (!clear && (payload.apiKey.length === 0 || payload.apiSecret.length === 0)) return;
+    if (
+      !clear &&
+      (payload.apiKey.length === 0 ||
+        payload.apiSecret.length === 0 ||
+        (payload.mode === "webhook" && payload.webhookSecret.length === 0))
+    )
+      return;
     setPending(true);
     setStatus("");
     yield;
@@ -90,6 +100,7 @@ const Settings: Component<SettingsProps> = (props) => {
       setApiKey("");
       setApiSecret("");
       setWebhookSecret("");
+      setSelectedMode(undefined);
     }
     setStatus(
       !success
@@ -108,7 +119,7 @@ const Settings: Component<SettingsProps> = (props) => {
         {props.state().apiConfigured
           ? "API credentials configured."
           : "No API credentials configured."}{" "}
-        {props.state().webhookConfigured ? "Webhook enabled." : "Webhook disabled."}
+        Receiving via {props.state().mode}.
       </p>
       <div sx={styles.row}>
         <input
@@ -133,23 +144,40 @@ const Settings: Component<SettingsProps> = (props) => {
           placeholder="API secret"
           onInput={(event) => setApiSecret(event.currentTarget.value)}
         />
-        <input
-          type="password"
-          aria-label="Sendblue webhook signing secret"
-          autocomplete="off"
-          spellcheck={false}
+        <select
+          aria-label="Sendblue receive mode"
           sx={[styles.input, styles.focus]}
-          value={webhookSecret()}
+          value={mode()}
           disabled={pending()}
-          placeholder="Webhook signing secret"
-          onInput={(event) => setWebhookSecret(event.currentTarget.value)}
-        />
+          onChange={(event) => setSelectedMode(event.currentTarget.value as DeliveryMode)}
+        >
+          <option value="polling">Polling</option>
+          <option value="webhook">Webhook</option>
+        </select>
+        <Show when={mode() === "webhook"}>
+          <input
+            type="password"
+            aria-label="Sendblue webhook signing secret"
+            autocomplete="off"
+            spellcheck={false}
+            sx={[styles.input, styles.focus]}
+            value={webhookSecret()}
+            disabled={pending()}
+            placeholder="Webhook signing secret"
+            onInput={(event) => setWebhookSecret(event.currentTarget.value)}
+          />
+        </Show>
       </div>
       <div sx={styles.row}>
         <button
           type="button"
           sx={[styles.button, styles.focus]}
-          disabled={pending() || apiKey().trim().length === 0 || apiSecret().trim().length === 0}
+          disabled={
+            pending() ||
+            apiKey().trim().length === 0 ||
+            apiSecret().trim().length === 0 ||
+            (mode() === "webhook" && webhookSecret().trim().length === 0)
+          }
           onClick={() => void save(false)}
         >
           Save
@@ -163,7 +191,7 @@ const Settings: Component<SettingsProps> = (props) => {
           Clear
         </button>
       </div>
-      <Show when={endpoint()}>
+      <Show when={mode() === "webhook" ? endpoint() : undefined}>
         {(resolved) => (
           <p sx={styles.note}>
             Receive webhook URL: <span sx={styles.endpoint}>{resolved().url}</span>
@@ -171,9 +199,9 @@ const Settings: Component<SettingsProps> = (props) => {
         )}
       </Show>
       <p sx={styles.note}>
-        Free accounts poll for received messages automatically. To use a paid Sendblue webhook
-        instead, enter its signing secret and configure the shown URL. Secrets are stored on the
-        server and never returned to the browser.
+        Polling works on free accounts. Webhook mode requires a paid Sendblue plan and the
+        configured signing secret. Secrets are stored on the server and never returned to the
+        browser.
       </p>
       <p role="status" sx={styles.note}>
         {status()}
@@ -187,7 +215,7 @@ export default Settings;
 export const settings = ClientSettings.make({
   module: SendblueModule,
   state: ClientState,
-  initial: { apiConfigured: false, webhookConfigured: false },
+  initial: { apiConfigured: false, webhookConfigured: false, mode: "polling" },
   rpcs: ClientRpcs,
   render: (state, context) => (
     <Settings

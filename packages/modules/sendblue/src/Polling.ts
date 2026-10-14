@@ -118,7 +118,7 @@ export const handler = PollingIngress.make({
 
 export const requirements = (state: typeof SendblueEngine.Storage.Type) =>
   Effect.succeed(
-    state.apiKey === null || state.apiSecret === null || state.webhookSecret !== null
+    state.apiKey === null || state.apiSecret === null || state.mode !== "polling"
       ? []
       : [
           handler.require({

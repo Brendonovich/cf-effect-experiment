@@ -45,6 +45,7 @@ describe("Sendblue webhook", () => {
           apiKey: null,
           apiSecret: null,
           webhookSecret: null,
+          mode: "polling",
         }),
         [],
       );
@@ -52,6 +53,7 @@ describe("Sendblue webhook", () => {
         apiKey: "key",
         apiSecret: "api-secret",
         webhookSecret: "secret-token",
+        mode: "webhook",
       });
       assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
         {
