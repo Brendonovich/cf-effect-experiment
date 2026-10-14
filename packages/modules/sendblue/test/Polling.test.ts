@@ -35,7 +35,7 @@ describe("Sendblue polling ingress", () => {
         const url = new URL(request.url);
         assert.strictEqual(url.pathname, "/api/v2/messages");
         assert.strictEqual(url.searchParams.get("is_outbound"), "false");
-        assert.strictEqual(url.searchParams.get("sent_at_gte"), "2026-10-13T10:00:00Z");
+        assert.strictEqual(url.searchParams.get("updated_at_gte"), "2026-10-13T10:00:00Z");
         assert.strictEqual(request.headers["sb-api-key-id"], "key-id");
         return Effect.succeed(
           HttpClientResponse.fromWeb(
@@ -48,6 +48,7 @@ describe("Sendblue polling ingress", () => {
                   to_number: "+15125550100",
                   content: "Already seen",
                   date_sent: "2026-10-13T10:00:00Z",
+                  date_updated: "2026-10-13T10:00:00Z",
                 },
                 {
                   message_handle: "new",
@@ -56,6 +57,7 @@ describe("Sendblue polling ingress", () => {
                   content: "Hello",
                   service: "iMessage",
                   date_sent: "2026-10-13T10:00:01Z",
+                  date_updated: "2026-10-13T10:00:01Z",
                 },
               ],
             }),

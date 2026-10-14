@@ -26,7 +26,8 @@ const Message = Schema.Struct({
   service: Schema.optionalKey(Schema.String),
   message_type: Schema.optionalKey(Schema.String),
   group_id: Schema.optionalKey(Schema.String),
-  date_sent: Schema.String,
+  date_sent: Schema.optionalKey(Schema.String),
+  date_updated: Schema.optionalKey(Schema.String),
 });
 const MessagesResponse = Schema.Struct({ data: Schema.Array(Message) });
 
@@ -53,8 +54,8 @@ export const handler = PollingIngress.make({
       const query = new URLSearchParams({
         is_outbound: "false",
         status: "RECEIVED",
-        sent_at_gte: cursor.sentAt,
-        order_by: "sentAt",
+        updated_at_gte: cursor.sentAt,
+        order_by: "updatedAt",
         order_direction: "asc",
         limit: "1000",
       });
@@ -71,27 +72,27 @@ export const handler = PollingIngress.make({
       const messages = yield* response.json.pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(MessagesResponse)),
       );
-      const sorted = [...messages.data].sort((left, right) =>
-        left.date_sent.localeCompare(right.date_sent),
-      );
+      const sorted = messages.data
+        .flatMap((message) => {
+          const timestamp = message.date_updated ?? message.date_sent;
+          return timestamp === undefined ? [] : [{ message, timestamp }];
+        })
+        .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
       const unseen = sorted.filter(
-        (message) =>
-          message.date_sent > cursor.sentAt ||
-          (message.date_sent === cursor.sentAt && !cursor.handles.includes(message.message_handle)),
+        ({ message, timestamp }) =>
+          timestamp > cursor.sentAt ||
+          (timestamp === cursor.sentAt && !cursor.handles.includes(message.message_handle)),
       );
-      const nextCursor = sorted.reduce<Cursor>((current, message) => {
-        if (message.date_sent > current.sentAt)
-          return { sentAt: message.date_sent, handles: [message.message_handle] };
-        if (
-          message.date_sent === current.sentAt &&
-          !current.handles.includes(message.message_handle)
-        )
+      const nextCursor = sorted.reduce<Cursor>((current, { message, timestamp }) => {
+        if (timestamp > current.sentAt)
+          return { sentAt: timestamp, handles: [message.message_handle] };
+        if (timestamp === current.sentAt && !current.handles.includes(message.message_handle))
           return { ...current, handles: [...current.handles, message.message_handle] };
         return current;
       }, cursor);
       return {
         cursor: nextCursor,
-        events: unseen.map((message) => ({
+        events: unseen.map(({ message, timestamp }) => ({
           event: {
             _tag: "SendblueMessageReceived" as const,
             accountId: configuration.accountId,
@@ -103,7 +104,7 @@ export const handler = PollingIngress.make({
             service: message.service ?? "",
             messageType: message.message_type ?? "message",
             groupId: message.group_id ?? "",
-            dateSent: message.date_sent,
+            dateSent: message.date_sent ?? timestamp,
           },
           eventId: message.message_handle,
         })),

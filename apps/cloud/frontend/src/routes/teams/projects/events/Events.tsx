@@ -41,6 +41,18 @@ interface EventsProps {
   readonly onSelectionChange: (eventId?: string) => void;
 }
 
+const pollingError = (metadata: unknown): string | undefined =>
+  typeof metadata === "object" &&
+  metadata !== null &&
+  "_tag" in metadata &&
+  metadata._tag === "PollingIngress" &&
+  "status" in metadata &&
+  metadata.status === "error" &&
+  "error" in metadata &&
+  typeof metadata.error === "string"
+    ? metadata.error
+    : undefined;
+
 type TimelineItem =
   | { readonly kind: "ingress"; readonly record: ProjectIngressEventRecord }
   | {
@@ -294,6 +306,9 @@ export const Events: Component<EventsProps> = (props) => {
               endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
+          <Show when={pollingError(endpointProps.ingress.metadata)}>
+            {(error) => <div sx={styles.instance}>Poll error: {error()}</div>}
+          </Show>
         </div>
         <div sx={styles.badges}>
           <Show when={endpointProps.ingress.deployed}>
@@ -301,6 +316,9 @@ export const Events: Component<EventsProps> = (props) => {
           </Show>
           <Show when={endpointProps.ingress.preview}>
             <span sx={[styles.badge, styles.preview]}>Preview</span>
+          </Show>
+          <Show when={pollingError(endpointProps.ingress.metadata)}>
+            <span sx={styles.badge}>Poll error</span>
           </Show>
         </div>
       </div>

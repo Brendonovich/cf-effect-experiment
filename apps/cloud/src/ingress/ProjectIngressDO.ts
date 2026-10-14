@@ -11,10 +11,11 @@ import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as PollingIngress from "@macrograph/module/PollingIngress";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle/Postgres";
-import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
+import { and, eq } from "drizzle-orm";
+import { Clock, Effect, Option, Redacted, Result, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/http";
 
-import { projectIngressEvents } from "../database/DatabaseSchema.ts";
+import { projectIngressEndpoints, projectIngressEvents } from "../database/DatabaseSchema.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
@@ -695,7 +696,6 @@ export const projectIngressImplementation = Effect.gen(function* () {
           storedCursor === undefined
             ? yield* handler.initialCursor(requirement.configuration)
             : storedCursor;
-        const result = yield* handler.poll(requirement.configuration, cursor);
         const productionAllowed =
           Option.isSome(deployment) &&
           deployment.value.pollingManifest.some(
@@ -711,6 +711,47 @@ export const projectIngressImplementation = Effect.gen(function* () {
         if (productionAllowed && !isWorkflowBinding(binding))
           return yield* Effect.die("GraphExecutionWorkflow binding is unavailable");
         const database = yield* pollingDatabase;
+        const pollResult = yield* handler
+          .poll(requirement.configuration, cursor)
+          .pipe(Effect.result);
+        if (Result.isFailure(pollResult)) {
+          const reason =
+            typeof pollResult.failure === "object" &&
+            pollResult.failure !== null &&
+            "_tag" in pollResult.failure &&
+            typeof pollResult.failure._tag === "string"
+              ? pollResult.failure._tag
+              : "Polling failed";
+          yield* database
+            .update(projectIngressEndpoints)
+            .set({ metadata: { _tag: "PollingIngress", status: "error", error: reason } })
+            .where(
+              and(
+                eq(projectIngressEndpoints.projectId, projectId),
+                eq(projectIngressEndpoints.endpointId, pollingEndpointId(requirement)),
+              ),
+            )
+            .pipe(Effect.orDie);
+          yield* Effect.logWarning("Polling ingress request failed", pollResult.failure);
+          return;
+        }
+        const result = pollResult.success;
+        yield* database
+          .update(projectIngressEndpoints)
+          .set({
+            metadata: {
+              _tag: "PollingIngress",
+              status: "ok",
+              lastPolledAt: new Date().toISOString(),
+            },
+          })
+          .where(
+            and(
+              eq(projectIngressEndpoints.projectId, projectId),
+              eq(projectIngressEndpoints.endpointId, pollingEndpointId(requirement)),
+            ),
+          )
+          .pipe(Effect.orDie);
         for (const event of result.events) {
           const stableId = event.eventId ?? crypto.randomUUID();
           const ingressEventId = `${projectId}:polling:${event.moduleId}:${stableId}`;
