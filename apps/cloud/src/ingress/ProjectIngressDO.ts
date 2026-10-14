@@ -779,7 +779,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
             .onConflictDoNothing()
             .pipe(Effect.orDie);
           if (productionAllowed && Option.isSome(deployment) && isWorkflowBinding(binding)) {
-            const executionId = ingressEventId;
+            const executionId = crypto.randomUUID();
+            const projectEventId = crypto.randomUUID();
             yield* Effect.tryPromise({
               try: () =>
                 binding.create({
@@ -787,7 +788,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                   params: {
                     executionId,
                     projectId,
-                    projectEventId: executionId,
+                    projectEventId,
                     source: "ingress",
                     ingressEventId,
                     deploymentId: deployment.value.deploymentId,
