@@ -322,9 +322,6 @@ export const Events: Component<EventsProps> = (props) => {
           </Show>
         </div>
       </div>
-      <div sx={[styles.endpointId, styles.inlineEndpointId]} title={endpointProps.ingress.id}>
-        {endpointProps.ingress.id}
-      </div>
     </div>
   );
 
