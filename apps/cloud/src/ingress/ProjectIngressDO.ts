@@ -880,7 +880,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
     });
 
     return {
-      alarm,
+      alarm: () => alarm,
       httpIngress: handleIngress,
       deploy,
       preview,
