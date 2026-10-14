@@ -35,7 +35,7 @@ describe("Sendblue polling ingress", () => {
         const url = new URL(request.url);
         assert.strictEqual(url.pathname, "/api/v2/messages");
         assert.strictEqual(url.searchParams.get("is_outbound"), "false");
-        assert.strictEqual(url.searchParams.get("updated_at_gte"), "2026-10-13T10:00:00Z");
+        assert.strictEqual(url.searchParams.get("limit"), "100");
         assert.strictEqual(request.headers["sb-api-key-id"], "key-id");
         return Effect.succeed(
           HttpClientResponse.fromWeb(

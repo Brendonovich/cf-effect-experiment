@@ -53,11 +53,7 @@ export const handler = PollingIngress.make({
       const client = HttpClient.withScope(yield* HttpClient.HttpClient);
       const query = new URLSearchParams({
         is_outbound: "false",
-        status: "RECEIVED",
-        updated_at_gte: cursor.sentAt,
-        order_by: "updatedAt",
-        order_direction: "asc",
-        limit: "1000",
+        limit: "100",
       });
       const request = HttpClientRequest.get(
         `https://api.sendblue.com/api/v2/messages?${query.toString()}`,
