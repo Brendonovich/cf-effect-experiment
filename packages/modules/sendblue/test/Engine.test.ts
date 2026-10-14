@@ -10,10 +10,7 @@ const setup = Effect.fnUntraced(function* (
   respond: (request: HttpClientRequest.HttpClientRequest) => Response,
 ) {
   let storage: typeof SendblueEngine.Storage.Type = {
-    apiKey: null,
-    apiSecret: null,
-    webhookSecret: null,
-    mode: "polling",
+    accounts: {},
   };
   const context = Layer.succeed(SendblueEngine.EngineContext)(
     SendblueEngine.EngineContext.of({
@@ -63,19 +60,19 @@ describe("Sendblue engine", () => {
           was_downgraded: false,
         });
       });
-      yield* client.SendblueUpdateSettings({
+      const accountId = yield* client.SendblueCreateAccount({
+        name: "Primary",
         apiKey: "key-id",
         apiSecret: "secret-key",
         webhookSecret: "",
         mode: "polling",
       });
       assert.deepStrictEqual(yield* engine.client.state, {
-        apiConfigured: true,
-        webhookConfigured: false,
-        mode: "polling",
+        accounts: [{ id: accountId, name: "Primary", mode: "polling" }],
       });
       assert.deepStrictEqual(
         yield* runtime.SendblueSendMessage({
+          accountId,
           fromNumber: "+15125550100",
           number: "+15125550101",
           content: "Hello",
@@ -98,7 +95,8 @@ describe("Sendblue engine", () => {
         calls++;
         return Response.json({});
       });
-      yield* client.SendblueUpdateSettings({
+      const accountId = yield* client.SendblueCreateAccount({
+        name: "Primary",
         apiKey: "key-id",
         apiSecret: "secret-key",
         webhookSecret: "webhook-secret",
@@ -106,6 +104,7 @@ describe("Sendblue engine", () => {
       });
       const result = yield* Effect.result(
         runtime.SendblueSendMessage({
+          accountId,
           fromNumber: "not-a-number",
           number: "+15125550101",
           content: "",

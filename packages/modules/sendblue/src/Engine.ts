@@ -1,7 +1,14 @@
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/http";
 
-import { ClientRpcs, RuntimeRpcs, SendblueEngine, SendblueFailure } from "./Definition.ts";
+import {
+  AccountId,
+  ClientRpcs,
+  RuntimeRpcs,
+  SendblueAccount,
+  SendblueEngine,
+  SendblueFailure,
+} from "./Definition.ts";
 
 const SendMessageResponse = Schema.Struct({
   message_handle: Schema.String,
@@ -18,12 +25,21 @@ export const layer = SendblueEngine.toLayer((mg) =>
     const client = HttpClient.withScope(yield* HttpClient.HttpClient);
 
     return SendblueEngine.of({
-      resources: Layer.empty,
+      resources: SendblueAccount.toLayer(
+        mg.storage.get.pipe(
+          Effect.map(({ accounts }) =>
+            Object.entries(accounts).map(([id, account]) => ({
+              id: AccountId.make(id),
+              display: account.name,
+            })),
+          ),
+        ),
+      ),
       rpcs: RuntimeRpcs.toLayer({
         SendblueSendMessage: Effect.fnUntraced(
-          function* ({ fromNumber, number, content, mediaUrl }) {
-            const { apiKey, apiSecret } = yield* mg.storage.get;
-            if (apiKey === null || apiSecret === null)
+          function* ({ accountId, fromNumber, number, content, mediaUrl }) {
+            const account = (yield* mg.storage.get).accounts[accountId];
+            if (account === undefined)
               return yield* new SendblueFailure({
                 operation: "send",
                 reason: "API credentials are not configured",
@@ -42,8 +58,8 @@ export const layer = SendblueEngine.toLayer((mg) =>
             const request = yield* HttpClientRequest.post(
               "https://api.sendblue.com/api/send-message",
             ).pipe(
-              HttpClientRequest.setHeader("sb-api-key-id", apiKey),
-              HttpClientRequest.setHeader("sb-api-secret-key", apiSecret),
+              HttpClientRequest.setHeader("sb-api-key-id", account.apiKey),
+              HttpClientRequest.setHeader("sb-api-secret-key", account.apiSecret),
               HttpClientRequest.acceptJson,
               HttpClientRequest.bodyJson({
                 from_number: from,
@@ -109,43 +125,57 @@ export const layer = SendblueEngine.toLayer((mg) =>
       }),
       client: {
         state: mg.storage.get.pipe(
-          Effect.map(({ apiKey, apiSecret, webhookSecret, mode }) => ({
-            apiConfigured: apiKey !== null && apiSecret !== null,
-            webhookConfigured: webhookSecret !== null,
-            mode,
+          Effect.map(({ accounts }) => ({
+            accounts: Object.entries(accounts).map(([id, account]) => ({
+              id: AccountId.make(id),
+              name: account.name,
+              mode: account.mode,
+            })),
           })),
         ),
         rpcs: ClientRpcs.toLayer({
-          SendblueUpdateSettings: Effect.fnUntraced(function* ({
+          SendblueCreateAccount: Effect.fnUntraced(function* ({
+            name,
             apiKey,
             apiSecret,
             webhookSecret,
             mode,
           }) {
+            const accountName = name.trim();
             const key = apiKey.trim();
             const secret = apiSecret.trim();
             const signingSecret = webhookSecret.trim();
             if (
+              accountName.length === 0 ||
               !validSecret(key) ||
               !validSecret(secret) ||
               (mode === "webhook" && !validSecret(signingSecret))
             )
               return yield* new SendblueFailure({ operation: "settings", reason: "Invalid input" });
-            yield* mg.storage.set({
-              apiKey: key,
-              apiSecret: secret,
-              webhookSecret: mode === "webhook" ? signingSecret : null,
-              mode,
-            });
+            const accountId = AccountId.make(crypto.randomUUID());
+            yield* mg.storage.update((storage) => ({
+              accounts: {
+                ...storage.accounts,
+                [accountId]: {
+                  name: accountName,
+                  apiKey: key,
+                  apiSecret: secret,
+                  webhookSecret: mode === "webhook" ? signingSecret : null,
+                  mode,
+                },
+              },
+            }));
+            yield* mg.resource.refresh(SendblueAccount);
             yield* mg.client.refresh;
+            return accountId;
           }),
-          SendblueClearSettings: Effect.fnUntraced(function* () {
-            yield* mg.storage.set({
-              apiKey: null,
-              apiSecret: null,
-              webhookSecret: null,
-              mode: "polling",
-            });
+          SendblueRemoveAccount: Effect.fnUntraced(function* ({ accountId }) {
+            yield* mg.storage.update((storage) => ({
+              accounts: Object.fromEntries(
+                Object.entries(storage.accounts).filter(([id]) => id !== accountId),
+              ),
+            }));
+            yield* mg.resource.refresh(SendblueAccount);
             yield* mg.client.refresh;
           }),
         }),

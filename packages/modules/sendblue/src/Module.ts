@@ -1,7 +1,7 @@
 import { Module, t } from "@macrograph/module";
 import { Effect } from "effect";
 
-import { SendblueEngine } from "./Definition.ts";
+import { SendblueAccount, SendblueEngine } from "./Definition.ts";
 
 export default Module.make({
   id: "sendblue",
@@ -12,6 +12,7 @@ export default Module.make({
       id: "SendMessage",
       name: "Send Message",
       description: "Sends an iMessage or SMS through Sendblue.",
+      properties: { account: { name: "Account", resource: SendblueAccount } },
       io: (io) => ({
         fromNumber: io.data.in("fromNumber", t.String, { name: "From Number" }),
         number: io.data.in("number", t.String, { name: "To Number" }),
@@ -22,9 +23,10 @@ export default Module.make({
         service: io.data.out("service", t.String, { name: "Service" }),
         wasDowngraded: io.data.out("wasDowngraded", t.Bool, { name: "Was Downgraded" }),
       }),
-      run: ({ io, engine }) =>
+      run: ({ io, engine, properties }) =>
         engine
           .SendblueSendMessage({
+            accountId: properties.account,
             fromNumber: io.fromNumber,
             number: io.number,
             content: io.content,
@@ -48,7 +50,11 @@ export default Module.make({
       name: "Message Received",
       description: "Runs when Sendblue receives an iMessage or SMS.",
       type: "event",
-      event: (event) => Effect.succeed(event._tag === "SendblueMessageReceived"),
+      properties: { account: { name: "Account", resource: SendblueAccount } },
+      event: (event, { properties }) =>
+        Effect.succeed(
+          event._tag === "SendblueMessageReceived" && event.accountId === properties.account,
+        ),
       io: (io) => ({
         messageHandle: io.data.out("messageHandle", t.String, { name: "Message Handle" }),
         fromNumber: io.data.out("fromNumber", t.String, { name: "From Number" }),

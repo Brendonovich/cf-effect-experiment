@@ -2,19 +2,30 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
+import { AccountId } from "../src/Definition.ts";
 import { handler, requirements } from "../src/Polling.ts";
 
 describe("Sendblue polling ingress", () => {
   it.effect("is enabled only when polling mode is selected", () =>
     Effect.gen(function* () {
       const storage = {
-        apiKey: "key-id",
-        apiSecret: "secret-key",
-        webhookSecret: null,
-        mode: "polling" as const,
+        accounts: {
+          primary: {
+            name: "Primary",
+            apiKey: "key-id",
+            apiSecret: "secret-key",
+            webhookSecret: null,
+            mode: "polling" as const,
+          },
+        },
       };
       assert.strictEqual((yield* requirements(storage)).length, 1);
-      assert.deepStrictEqual(yield* requirements({ ...storage, mode: "webhook" }), []);
+      assert.deepStrictEqual(
+        yield* requirements({
+          accounts: { primary: { ...storage.accounts.primary, mode: "webhook" } },
+        }),
+        [],
+      );
     }),
   );
 
@@ -53,7 +64,7 @@ describe("Sendblue polling ingress", () => {
       });
       const result = yield* handler
         .poll(
-          { apiKey: "key-id", apiSecret: "secret-key" },
+          { accountId: AccountId.make("primary"), apiKey: "key-id", apiSecret: "secret-key" },
           { sentAt: "2026-10-13T10:00:00Z", handles: ["old"] },
         )
         .pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient)(http)));
@@ -67,6 +78,7 @@ describe("Sendblue polling ingress", () => {
         eventType: "SendblueMessageReceived",
         eventId: "new",
       });
+      assert.deepInclude(result.events[0]?.payload, { accountId: "primary" });
     }),
   );
 });

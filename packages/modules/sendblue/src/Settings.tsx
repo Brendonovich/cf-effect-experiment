@@ -2,9 +2,9 @@ import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { ClientSettings } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
-import { Show, action, createMemo, createSignal, type Component } from "solid-js";
+import { For, Show, action, createSignal, type Component } from "solid-js";
 
-import { ClientRpcs, ClientState, type DeliveryMode } from "./Definition.ts";
+import { type AccountId, ClientRpcs, ClientState, type DeliveryMode } from "./Definition.ts";
 import SendblueModule from "./Module.ts";
 
 const styles = stylex.create({
@@ -35,56 +35,62 @@ const styles = stylex.create({
 interface SettingsEndpoint {
   readonly url: string;
   readonly schema: { readonly id: string };
+  readonly instanceKey: string;
 }
 
 interface SettingsProps {
   readonly state: () => typeof ClientState.Type;
   readonly endpoints: ReadonlyArray<SettingsEndpoint>;
   readonly rpc: {
-    readonly SendblueUpdateSettings: (payload: {
+    readonly SendblueCreateAccount: (payload: {
+      readonly name: string;
       readonly apiKey: string;
       readonly apiSecret: string;
       readonly webhookSecret: string;
       readonly mode: DeliveryMode;
+    }) => Effect.Effect<AccountId, unknown>;
+    readonly SendblueRemoveAccount: (payload: {
+      readonly accountId: AccountId;
     }) => Effect.Effect<void, unknown>;
-    readonly SendblueClearSettings: () => Effect.Effect<void, unknown>;
   };
   readonly onChanged: () => Promise<void>;
 }
 
 const Settings: Component<SettingsProps> = (props) => {
+  const [name, setName] = createSignal("");
   const [apiKey, setApiKey] = createSignal("");
   const [apiSecret, setApiSecret] = createSignal("");
   const [webhookSecret, setWebhookSecret] = createSignal("");
   const [selectedMode, setSelectedMode] = createSignal<DeliveryMode>();
   const [pending, setPending] = createSignal(false);
   const [status, setStatus] = createSignal("");
-  const endpoint = createMemo(() =>
-    props.endpoints.find((candidate) => candidate.schema.id === "sendblue:receive"),
-  );
-  const mode = () => selectedMode() ?? props.state().mode;
+  const mode = () => selectedMode() ?? "polling";
+  const endpointFor = (accountId: AccountId) =>
+    props.endpoints.find(
+      (candidate) =>
+        candidate.schema.id === "sendblue:receive" && candidate.instanceKey === accountId,
+    );
 
-  const save = action(async function* (clear: boolean) {
+  const createAccount = action(async function* () {
     if (pending()) return;
     const payload = {
+      name: name().trim(),
       apiKey: apiKey().trim(),
       apiSecret: apiSecret().trim(),
       webhookSecret: webhookSecret().trim(),
       mode: mode(),
     };
     if (
-      !clear &&
-      (payload.apiKey.length === 0 ||
-        payload.apiSecret.length === 0 ||
-        (payload.mode === "webhook" && payload.webhookSecret.length === 0))
+      payload.name.length === 0 ||
+      payload.apiKey.length === 0 ||
+      payload.apiSecret.length === 0 ||
+      (payload.mode === "webhook" && payload.webhookSecret.length === 0)
     )
       return;
     setPending(true);
     setStatus("");
     yield;
-    const success = await Effect.runPromise(
-      clear ? props.rpc.SendblueClearSettings() : props.rpc.SendblueUpdateSettings(payload),
-    ).then(
+    const success = await Effect.runPromise(props.rpc.SendblueCreateAccount(payload)).then(
       () => true,
       () => false,
     );
@@ -100,6 +106,7 @@ const Settings: Component<SettingsProps> = (props) => {
       setApiKey("");
       setApiSecret("");
       setWebhookSecret("");
+      setName("");
       setSelectedMode(undefined);
     }
     setStatus(
@@ -107,21 +114,54 @@ const Settings: Component<SettingsProps> = (props) => {
         ? "Could not update Sendblue settings."
         : !refreshed
           ? "Settings saved; could not refresh settings."
-          : clear
-            ? "Sendblue settings cleared."
-            : "Sendblue settings saved.",
+          : "Sendblue account added.",
+    );
+  });
+
+  const removeAccount = action(async function* (accountId: AccountId) {
+    if (pending()) return;
+    setPending(true);
+    setStatus("");
+    yield;
+    const success = await Effect.runPromise(props.rpc.SendblueRemoveAccount({ accountId })).then(
+      () => true,
+      () => false,
+    );
+    const refreshed =
+      success &&
+      (await props.onChanged().then(
+        () => true,
+        () => false,
+      ));
+    yield;
+    setPending(false);
+    setStatus(
+      !success
+        ? "Could not remove Sendblue account."
+        : !refreshed
+          ? "Account removed; could not refresh settings."
+          : "Sendblue account removed.",
     );
   });
 
   return (
     <section sx={styles.root}>
       <p sx={styles.note}>
-        {props.state().apiConfigured
-          ? "API credentials configured."
-          : "No API credentials configured."}{" "}
-        Receiving via {props.state().mode}.
+        {props.state().accounts.length === 0
+          ? "No Sendblue accounts configured."
+          : `${props.state().accounts.length} Sendblue account${props.state().accounts.length === 1 ? "" : "s"} configured.`}
       </p>
       <div sx={styles.row}>
+        <input
+          type="text"
+          aria-label="Sendblue account name"
+          autocomplete="off"
+          sx={[styles.input, styles.focus]}
+          value={name()}
+          disabled={pending()}
+          placeholder="Account name"
+          onInput={(event) => setName(event.currentTarget.value)}
+        />
         <input
           type="password"
           aria-label="Sendblue API key ID"
@@ -174,30 +214,35 @@ const Settings: Component<SettingsProps> = (props) => {
           sx={[styles.button, styles.focus]}
           disabled={
             pending() ||
+            name().trim().length === 0 ||
             apiKey().trim().length === 0 ||
             apiSecret().trim().length === 0 ||
             (mode() === "webhook" && webhookSecret().trim().length === 0)
           }
-          onClick={() => void save(false)}
+          onClick={() => void createAccount()}
         >
-          Save
-        </button>
-        <button
-          type="button"
-          sx={[styles.button, styles.focus]}
-          disabled={pending() || (!props.state().apiConfigured && !props.state().webhookConfigured)}
-          onClick={() => void save(true)}
-        >
-          Clear
+          Add account
         </button>
       </div>
-      <Show when={mode() === "webhook" ? endpoint() : undefined}>
-        {(resolved) => (
-          <p sx={styles.note}>
-            Receive webhook URL: <span sx={styles.endpoint}>{resolved().url}</span>
-          </p>
+      <For each={props.state().accounts}>
+        {(account) => (
+          <div sx={styles.row}>
+            <span>{account.name}</span>
+            <span sx={styles.note}>{account.mode}</span>
+            <Show when={endpointFor(account.id)}>
+              {(endpoint) => <span sx={styles.endpoint}>{endpoint().url}</span>}
+            </Show>
+            <button
+              type="button"
+              sx={[styles.button, styles.focus]}
+              disabled={pending()}
+              onClick={() => void removeAccount(account.id)}
+            >
+              Remove
+            </button>
+          </div>
         )}
-      </Show>
+      </For>
       <p sx={styles.note}>
         Polling works on free accounts. Webhook mode requires a paid Sendblue plan and the
         configured signing secret. Secrets are stored on the server and never returned to the
@@ -215,7 +260,7 @@ export default Settings;
 export const settings = ClientSettings.make({
   module: SendblueModule,
   state: ClientState,
-  initial: { apiConfigured: false, webhookConfigured: false, mode: "polling" },
+  initial: { accounts: [] },
   rpcs: ClientRpcs,
   render: (state, context) => (
     <Settings

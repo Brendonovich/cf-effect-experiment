@@ -3,6 +3,7 @@ import { HttpEndpoint } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect } from "effect";
 
+import { AccountId } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
 import { handler as webhookHandler } from "../src/Webhook.ts";
 
@@ -28,8 +29,8 @@ const request = (signingSecret: string, payload: unknown = delivery) => ({
       id: HttpEndpoint.HandlerId.make("sendblue:receive"),
       displayName: "Receive Messages",
     },
-    instanceKey: HttpEndpoint.InstanceKey.make("receive"),
-    metadata: {},
+    instanceKey: HttpEndpoint.InstanceKey.make("primary"),
+    metadata: { accountId: AccountId.make("primary") },
   },
   configuration: { signingSecret: "secret-token" },
   method: "POST",
@@ -42,26 +43,28 @@ describe("Sendblue webhook", () => {
     Effect.gen(function* () {
       assert.deepStrictEqual(
         yield* deployment.httpIngress.requirements({
-          apiKey: null,
-          apiSecret: null,
-          webhookSecret: null,
-          mode: "polling",
+          accounts: {},
         }),
         [],
       );
       const requirements = yield* deployment.httpIngress.requirements({
-        apiKey: "key",
-        apiSecret: "api-secret",
-        webhookSecret: "secret-token",
-        mode: "webhook",
+        accounts: {
+          primary: {
+            name: "Primary",
+            apiKey: "key",
+            apiSecret: "api-secret",
+            webhookSecret: "secret-token",
+            mode: "webhook",
+          },
+        },
       });
       assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
         {
           handlerId: HttpEndpoint.HandlerId.make("sendblue:receive"),
           moduleId: "sendblue",
-          instanceKey: HttpEndpoint.InstanceKey.make("receive"),
-          displayName: "Receive Messages",
-          metadata: {},
+          instanceKey: HttpEndpoint.InstanceKey.make("primary"),
+          displayName: "Primary",
+          metadata: { accountId: "primary" },
           configuration: { signingSecret: "secret-token" },
         },
       ]);
@@ -76,6 +79,7 @@ describe("Sendblue webhook", () => {
       assert.strictEqual(response.events[0]?.eventType, "SendblueMessageReceived");
       assert.strictEqual(response.events[0]?.eventId, "message-1");
       assert.deepInclude(response.events[0]?.payload, {
+        accountId: "primary",
         fromNumber: "+15125550101",
         toNumber: "+15125550100",
         content: "Hello!",

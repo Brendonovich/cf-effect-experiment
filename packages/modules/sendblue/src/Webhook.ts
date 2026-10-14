@@ -1,14 +1,14 @@
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Option, Schema } from "effect";
 
-import { InboundMessage } from "./Definition.ts";
+import { AccountId, InboundMessage } from "./Definition.ts";
 
 export const WebhookIngress = HttpIngress.make({
   id: "sendblue:receive",
   moduleId: "sendblue",
   displayName: "Receive Messages",
   method: "POST",
-  metadata: Schema.Struct({}),
+  metadata: Schema.Struct({ accountId: AccountId }),
   event: InboundMessage,
   configuration: Schema.Struct({ signingSecret: Schema.String }),
 });
@@ -54,6 +54,7 @@ export const handler = WebhookIngress.implement(
         const value = delivery.value;
         const event: InboundMessage = {
           _tag: "SendblueMessageReceived",
+          accountId: request.endpoint.metadata.accountId,
           messageHandle: value.message_handle,
           fromNumber: value.from_number,
           toNumber: value.to_number ?? value.sendblue_number ?? "",

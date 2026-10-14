@@ -1,6 +1,7 @@
 import { Engine } from "@macrograph/module";
 import { Effect } from "effect";
 
+import { AccountId } from "../Definition.ts";
 import SendblueEngineLive from "../Engine.ts";
 import SendblueModule from "../Module.ts";
 import { handler as pollingHandler, requirements as pollingRequirements } from "../Polling.ts";
@@ -11,15 +12,18 @@ export default Engine.withPollingIngress(
     handlers: [handler],
     requirements: (state) =>
       Effect.succeed(
-        state.mode !== "webhook" || state.webhookSecret === null
-          ? []
-          : [
-              WebhookIngress.require({
-                instanceKey: "receive",
-                metadata: {},
-                configuration: { signingSecret: state.webhookSecret },
-              }),
-            ],
+        Object.entries(state.accounts).flatMap(([accountId, account]) =>
+          account.mode !== "webhook" || account.webhookSecret === null
+            ? []
+            : [
+                WebhookIngress.require({
+                  instanceKey: accountId,
+                  displayName: account.name,
+                  metadata: { accountId: AccountId.make(accountId) },
+                  configuration: { signingSecret: account.webhookSecret },
+                }),
+              ],
+        ),
       ),
   }),
   { handlers: [pollingHandler], requirements: pollingRequirements },

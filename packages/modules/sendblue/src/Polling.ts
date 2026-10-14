@@ -2,9 +2,13 @@ import * as PollingIngress from "@macrograph/module/PollingIngress";
 import { Clock, Effect, Schema } from "effect";
 import { Headers, HttpClient, HttpClientRequest } from "effect/http";
 
-import { InboundMessage, type SendblueEngine } from "./Definition.ts";
+import { AccountId, InboundMessage, type SendblueEngine } from "./Definition.ts";
 
-export const Configuration = Schema.Struct({ apiKey: Schema.String, apiSecret: Schema.String });
+export const Configuration = Schema.Struct({
+  accountId: AccountId,
+  apiKey: Schema.String,
+  apiSecret: Schema.String,
+});
 export type Configuration = typeof Configuration.Type;
 export const Cursor = Schema.Struct({
   sentAt: Schema.String,
@@ -90,6 +94,7 @@ export const handler = PollingIngress.make({
         events: unseen.map((message) => ({
           event: {
             _tag: "SendblueMessageReceived" as const,
+            accountId: configuration.accountId,
             messageHandle: message.message_handle,
             fromNumber: message.from_number,
             toNumber: message.to_number ?? message.sendblue_number ?? "",
@@ -118,12 +123,19 @@ export const handler = PollingIngress.make({
 
 export const requirements = (state: typeof SendblueEngine.Storage.Type) =>
   Effect.succeed(
-    state.apiKey === null || state.apiSecret === null || state.mode !== "polling"
-      ? []
-      : [
-          handler.require({
-            instanceKey: state.apiKey,
-            configuration: { apiKey: state.apiKey, apiSecret: state.apiSecret },
-          }),
-        ],
+    Object.entries(state.accounts).flatMap(([accountId, account]) =>
+      account.mode !== "polling"
+        ? []
+        : [
+            handler.require({
+              instanceKey: accountId,
+              displayName: account.name,
+              configuration: {
+                accountId: AccountId.make(accountId),
+                apiKey: account.apiKey,
+                apiSecret: account.apiSecret,
+              },
+            }),
+          ],
+    ),
   );
