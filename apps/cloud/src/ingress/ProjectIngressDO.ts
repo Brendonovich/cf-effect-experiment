@@ -843,7 +843,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
       url: "",
       schema: {
         id: HttpEndpoint.HandlerId.make(requirement.handlerId),
-        displayName: requirement.displayName,
+        displayName:
+          pollingHandlers.get(requirement.handlerId)?.displayName ?? requirement.handlerId,
       },
       instanceKey: HttpEndpoint.InstanceKey.make(requirement.instanceKey),
       displayName: requirement.displayName,
