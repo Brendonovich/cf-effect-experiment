@@ -736,6 +736,12 @@ export const projectIngressImplementation = Effect.gen(function* () {
           return;
         }
         const result = pollResult.success;
+        yield* Effect.logInfo("Polling ingress completed", {
+          projectId,
+          handlerId: requirement.handlerId,
+          instanceKey: requirement.instanceKey,
+          eventCount: result.events.length,
+        });
         yield* database
           .update(projectIngressEndpoints)
           .set({
