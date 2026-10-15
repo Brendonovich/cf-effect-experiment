@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 import { OpenCodeEngine, RequestFailure } from "../src/Definition.ts";
 import { make } from "../src/Deployment/Cloudflare.ts";
