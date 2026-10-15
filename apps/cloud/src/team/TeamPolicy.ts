@@ -2,7 +2,7 @@ import { CurrentUser, TeamNotFound } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 
 import * as Database from "../database/Database.ts";
 import { teamMemberships, type TeamRole } from "../database/DatabaseSchema.ts";

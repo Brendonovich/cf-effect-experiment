@@ -15,9 +15,9 @@ import {
   ResourceConstant,
 } from "@macrograph/core";
 import { Cause, Context, Effect, Layer, Option, Schema, Sink, Stream } from "effect";
-import { Tool, Toolkit } from "effect/unstable/ai";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { Tool, Toolkit } from "effect/ai";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 
 import { ApiCaller } from "./ApiCaller.ts";
 

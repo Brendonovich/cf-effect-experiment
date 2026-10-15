@@ -5,9 +5,9 @@ import { Config, Effect, Layer, Redacted } from "effect";
 
 import { processWorkflowRun, repositoryName, repositoryOwner } from "./workflow-run.ts";
 
-const DiscordWebhook = Config.redacted("DISCORD_AUTOFIX_WEBHOOK");
-const DiscordBotId = Config.string("DISCORD_AUTOFIX_BOT_ID");
-const GitHubToken = Config.redacted("GITHUB_API_TOKEN");
+const DiscordWebhook = Config.Redacted("DISCORD_AUTOFIX_WEBHOOK");
+const DiscordBotId = Config.String("DISCORD_AUTOFIX_BOT_ID");
+const GitHubToken = Config.Redacted("GITHUB_API_TOKEN");
 
 const boundString = (value: unknown): string | undefined => {
   let current = value;

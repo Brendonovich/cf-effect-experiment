@@ -24,7 +24,7 @@ import {
 import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 const unavailableOpenCode = (): OpenCodeService => ({
   generateText: () => Effect.die("OpenCode runtime is unavailable"),

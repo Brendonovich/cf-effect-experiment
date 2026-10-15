@@ -1,7 +1,7 @@
 import type * as S from "effect/Schema";
 
 import { Effect, Option, Schema, type Scope } from "effect";
-import { RpcClient, RpcClientError, RpcTest, type Rpc, type RpcGroup } from "effect/unstable/rpc";
+import { RpcClient, RpcClientError, RpcTest, type Rpc, type RpcGroup } from "effect/rpc";
 
 export interface Endpoint {
   readonly id: string;

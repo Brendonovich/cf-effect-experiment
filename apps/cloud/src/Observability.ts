@@ -47,17 +47,28 @@ const resourceTracer = (serviceName: ServiceName) =>
 
 const routedTracer = Layer.effect(Tracer.Tracer)(
   Effect.gen(function* () {
-    const entrypoint = yield* Alchemy.Telemetry.CurrentEventEntrypoint;
-    const serviceName: ServiceName =
-      entrypoint === "ProjectIngressDO"
-        ? "macrograph-project-ingress-do"
-        : entrypoint === "GraphExecutionWorkflow"
-          ? "macrograph-execution-workflow"
-          : "macrograph-cloud-worker";
-    const tracer = Context.get(yield* Layer.build(resourceTracer(serviceName)), Tracer.Tracer);
+    const workerTracer = Context.get(
+      yield* Layer.build(resourceTracer("macrograph-cloud-worker")),
+      Tracer.Tracer,
+    );
+    const ingressTracer = Context.get(
+      yield* Layer.build(resourceTracer("macrograph-project-ingress-do")),
+      Tracer.Tracer,
+    );
+    const workflowTracer = Context.get(
+      yield* Layer.build(resourceTracer("macrograph-execution-workflow")),
+      Tracer.Tracer,
+    );
     return Tracer.make({
-      context: tracer.context,
+      context: workerTracer.context,
       span(options) {
+        const serviceName = Context.get(options.annotations, TraceServiceName);
+        const tracer =
+          serviceName === "macrograph-project-ingress-do"
+            ? ingressTracer
+            : serviceName === "macrograph-execution-workflow"
+              ? workflowTracer
+              : workerTracer;
         const annotations = Context.add(options.annotations, TraceServiceName, serviceName);
         return tracer.span(
           options.kind === "server"

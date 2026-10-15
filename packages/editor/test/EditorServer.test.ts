@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Actor } from "@macrograph/core";
 import { Effect, Result, Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { EditorRpc, EditorServer } from "../src/index.ts";
 

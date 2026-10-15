@@ -12,12 +12,12 @@
     "catalog": {
       "@stylexjs/stylex": "0.19.0",
       "@stylexjs/unplugin": "0.19.0",
-      "effect": "4.0.0-beta.107",
-      "@effect/opentelemetry": "4.0.0-beta.107",
-      "@effect/platform-browser": "4.0.0-beta.107",
-      "@effect/platform-node": "4.0.0-beta.107",
-      "@effect/platform-node-shared": "4.0.0-beta.107",
-      "@effect/vitest": "4.0.0-beta.107"
+      "effect": "4.0.3",
+      "@effect/opentelemetry": "4.0.3",
+      "@effect/platform-browser": "4.0.3",
+      "@effect/platform-node": "4.0.3",
+      "@effect/platform-node-shared": "4.0.3",
+      "@effect/vitest": "4.0.3"
     }
   },
   "type": "module",
@@ -51,6 +51,7 @@
     "@brendonovich/vite-plugin-opencode": "^0.1.4",
     "@types/node": "^24",
     "@typescript/native-preview": "7.0.0-dev.20260514.1",
+    "fast-check": "4.9.0",
     "playwright": "1.63.0",
     "typescript": "^5.8",
     "vite": "^8.0.7",

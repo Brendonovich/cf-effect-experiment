@@ -3,13 +3,14 @@ import {
   CreateProjectRequest,
   CurrentUser,
   ProjectNotFound,
+  TeamNotFound,
 } from "@macrograph/cloud-api";
 import { Connection, Node, Policy } from "@macrograph/core";
 import { ProjectEditor } from "@macrograph/project-api";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 
 import type { Service as WorkerOperations } from "../worker/CloudWorkerOperations.ts";
 
@@ -93,8 +94,18 @@ export const make = (
               Effect.orDie,
             );
         }),
-      create: (payload: typeof CreateProjectRequest.Type) =>
-        Effect.gen(function* () {
+      create: (
+        payload: typeof CreateProjectRequest.Type,
+      ): Effect.Effect<
+        { readonly project: ProjectRecord },
+        HttpApiError.BadRequest | HttpApiError.Forbidden | TeamNotFound,
+        CurrentUser
+      > => {
+        const create: Effect.Effect<
+          { readonly project: ProjectRecord },
+          HttpApiError.BadRequest,
+          CurrentUser
+        > = Effect.gen(function* () {
           const user = yield* CurrentUser;
           const now = new Date().toISOString();
           const access = payload.access ?? "team";
@@ -178,16 +189,20 @@ export const make = (
               }),
             )
             .pipe(
-              Effect.catchTag("BadRequest", (error) => Effect.succeed({ error })),
-              Effect.orDie,
+              Effect.catch((error) =>
+                error instanceof HttpApiError.BadRequest
+                  ? Effect.succeed({ error })
+                  : Effect.die(error),
+              ),
             );
           if ("error" in result) return yield* result.error;
           return result;
-        }).pipe(
-          Policy.withPolicy(
-            payload.teamId === undefined ? Effect.void : teamPolicy.canEdit(payload.teamId),
-          ),
-        ),
+        });
+        return Effect.gen(function* () {
+          if (payload.teamId !== undefined) yield* teamPolicy.canEdit(payload.teamId);
+          return yield* create;
+        });
+      },
       get: ({ projectId }: { readonly projectId: string }) =>
         Effect.gen(function* () {
           const project = yield* load(projectId);

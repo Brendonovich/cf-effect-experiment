@@ -1,8 +1,8 @@
 import { assert, describe, it, vi } from "@effect/vitest";
 import { EngineTest, Registration } from "@macrograph/module";
 import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { Socket } from "effect/unstable/socket";
 
 import { RequestFailed, VoicemodEngine, initialStorage } from "../src/Definition.ts";
 import deployment from "../src/Deployment.ts";

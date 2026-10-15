@@ -1,6 +1,6 @@
 import { and, eq, gt } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as Database from "../database/Database.ts";
 import {

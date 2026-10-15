@@ -4,8 +4,8 @@ import type { Registry as ModuleRegistry } from "@macrograph/project-host/Execut
 import { Project } from "@macrograph/core";
 import { ExecutionStep, GraphExecution, NodeExecution } from "@macrograph/workflow-runtime";
 import { Effect, Layer, Schema } from "effect";
-import { ClusterWorkflowEngine } from "effect/unstable/cluster";
-import { Activity, Workflow, WorkflowEngine } from "effect/unstable/workflow";
+import { ClusterWorkflowEngine } from "effect/cluster";
+import { Activity, Workflow, WorkflowEngine } from "effect/workflow";
 
 export const ExecutionResult = Schema.Struct({
   executionId: Schema.String,

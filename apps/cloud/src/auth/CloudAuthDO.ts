@@ -7,7 +7,7 @@ import { type Engine } from "@macrograph/module";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 const stateKey = "macrograph-auth-v2";
 

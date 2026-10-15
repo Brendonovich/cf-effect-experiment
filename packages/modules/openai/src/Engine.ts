@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema } from "effect";
-import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/http";
 
 import {
   ChatHistory,

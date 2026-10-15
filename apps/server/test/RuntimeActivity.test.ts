@@ -12,7 +12,7 @@ import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Engine, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Array, Cause, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 const WorkspaceRpcs = EditorRpc.EditorRpcs.merge(RuntimeActivity.Rpcs).middleware(
   EditorRpc.ConnectionMiddleware,

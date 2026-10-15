@@ -46,8 +46,8 @@ import * as Drizzle from "alchemy/Drizzle";
 import { Cause, HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
-import { FetchHttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { Rpc, RpcGroup, RpcMessage, RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { FetchHttpClient, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { Rpc, RpcGroup, RpcMessage, RpcSerialization, RpcServer } from "effect/rpc";
 
 import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts";
 
@@ -847,9 +847,11 @@ const makeRpcServerHttpEffectWebsocket = Effect.fnUntraced(function* <Rpcs exten
         },
         clientIds: Effect.sync(() => clientIds),
         initialMessage: Effect.succeedNone,
-        supportsAck: false,
+        supportsAck: true,
+        supportsNotifications: true,
         supportsTransferables: false,
         supportsSpanPropagation: true,
+        codecFor: serialization.codecFor,
       });
     });
 

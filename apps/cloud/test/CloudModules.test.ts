@@ -12,8 +12,8 @@ import { TwitchEngine } from "@macrograph/module-twitch/Definition";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
-import { HttpClient } from "effect/unstable/http";
-import { RpcTest } from "effect/unstable/rpc";
+import { HttpClient } from "effect/http";
+import { RpcTest } from "effect/rpc";
 
 import { registry } from "../src/execution/ExecutorModules.ts";
 import * as CloudModules from "../src/modules/CloudModules.ts";

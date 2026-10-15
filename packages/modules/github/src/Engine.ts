@@ -1,6 +1,6 @@
 import { HttpEndpoint } from "@macrograph/module";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import { makeApi, prepare, type PreparedRequest } from "./Api.ts";
 import {

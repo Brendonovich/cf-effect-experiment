@@ -5,8 +5,8 @@ import {
   WebSocketClientEngine,
 } from "@macrograph/module-websocket-client/Definition";
 import { Deferred, Effect, Fiber, Function, Layer, Result, SubscriptionRef } from "effect";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { Socket } from "effect/unstable/socket";
 import { vi } from "vitest";
 
 import { ClientRpcs, ConnectionId, GoXLREngine, type GoXLREvent } from "../src/Definition.ts";
@@ -19,8 +19,8 @@ vi.mock("effect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("effect")>();
   return { ...actual, SubscriptionRef: { ...actual.SubscriptionRef } };
 });
-vi.mock("effect/unstable/socket", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("effect/unstable/socket")>();
+vi.mock("effect/socket", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("effect/socket")>();
   return { ...actual, Socket: { ...actual.Socket } };
 });
 
@@ -240,17 +240,18 @@ describe("GoXLR engine", () => {
                 Effect.map((socket) => ({
                   ...socket,
                   writer: socket.writer.pipe(
-                    Effect.map(
-                      (write) => (data) =>
+                    Effect.map((writer) => ({
+                      ...writer,
+                      write: (data) =>
                         data === statusRequest
-                          ? write(data)
+                          ? writer.write(data)
                           : Deferred.succeed(started, undefined).pipe(
                               Effect.andThen(Effect.never),
                               Effect.onInterrupt(() =>
                                 Deferred.succeed(interrupted, undefined).pipe(Effect.asVoid),
                               ),
                             ),
-                    ),
+                    })),
                   ),
                 })),
               ),
