@@ -1,6 +1,6 @@
 import * as Engine from "@macrograph/module/Engine";
 import { Schema as S } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export class ConnectionFailed extends S.TaggedError<ConnectionFailed>()(
   "VoicemodConnectionFailed",

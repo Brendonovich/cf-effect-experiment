@@ -1,8 +1,8 @@
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { Array, Effect, Schema } from "effect";
+import { Rpc, RpcGroup } from "effect/rpc";
 import * as S from "effect/Schema";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 import { EventSubSocket, SubscriptionEvent } from "./EventSub.ts";
 import { Helix } from "./Helix.ts";

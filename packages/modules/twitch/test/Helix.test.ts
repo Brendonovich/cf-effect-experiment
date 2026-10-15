@@ -1,16 +1,96 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Clock, Effect, Fiber, Ref, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
+import * as TestClock from "effect/testing/TestClock";
 
 import { Helix } from "../src/Helix.ts";
 
 describe("Twitch Helix errors", () => {
+  it.effect("queues requests until Twitch's reported rate limit resets", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0);
+      const httpClient = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          const attempt = yield* Ref.updateAndGet(attempts, (count) => count + 1);
+          const now = yield* Clock.currentTimeMillis;
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(JSON.stringify({ data: [] }), {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+                ...(attempt === 1
+                  ? {
+                      "ratelimit-limit": "800",
+                      "ratelimit-remaining": "0",
+                      "ratelimit-reset": String((now + 60_000) / 1_000),
+                    }
+                  : {}),
+              },
+            }),
+          );
+        }),
+      );
+      const client = yield* Helix.makeClient("credential", Effect.succeed("refreshed")).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      );
+
+      yield* client.users.getUsers({ query: {} });
+      const queued = yield* client.users.getUsers({ query: {} }).pipe(Effect.forkChild);
+
+      yield* TestClock.adjust("59 seconds");
+      assert.strictEqual(yield* Ref.get(attempts), 1);
+
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(queued);
+      assert.strictEqual(yield* Ref.get(attempts), 2);
+    }),
+  );
+
+  it.effect("retries 429 responses after Twitch's reset time", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0);
+      const httpClient = HttpClient.make((request) =>
+        Effect.gen(function* () {
+          const attempt = yield* Ref.updateAndGet(attempts, (count) => count + 1);
+          const now = yield* Clock.currentTimeMillis;
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(attempt === 1 ? null : JSON.stringify({ data: [] }), {
+              status: attempt === 1 ? 429 : 200,
+              headers: {
+                ...(attempt === 1
+                  ? {
+                      "ratelimit-limit": "800",
+                      "ratelimit-remaining": "0",
+                      "ratelimit-reset": String((now + 60_000) / 1_000),
+                    }
+                  : { "content-type": "application/json" }),
+              },
+            }),
+          );
+        }),
+      );
+      const client = yield* Helix.makeClient("credential", Effect.succeed("refreshed")).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      );
+      const request = yield* client.users.getUsers({ query: {} }).pipe(Effect.forkChild);
+
+      yield* TestClock.adjust("59 seconds");
+      assert.strictEqual(yield* Ref.get(attempts), 1);
+
+      yield* TestClock.adjust("1 second");
+      yield* Fiber.join(request);
+      assert.strictEqual(yield* Ref.get(attempts), 2);
+    }),
+  );
+
   it.effect("omits trace propagation headers from EventSub fetches and retries", () =>
     Effect.gen(function* () {
       const requests: Array<Headers> = [];

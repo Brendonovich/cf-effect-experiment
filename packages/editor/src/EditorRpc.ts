@@ -19,7 +19,7 @@ import * as Engine from "@macrograph/module/Engine";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import { PersistenceError } from "@macrograph/persistence";
 import { Effect, Layer, Option, Schema, Stream } from "effect";
-import { Rpc, RpcGroup, RpcMiddleware } from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcMiddleware } from "effect/rpc";
 
 import * as Editor from "./Editor.ts";
 import { EditorAccess } from "./EditorAccess.ts";

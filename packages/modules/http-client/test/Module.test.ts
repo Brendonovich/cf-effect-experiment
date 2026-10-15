@@ -11,7 +11,7 @@ import {
 import { Executor } from "@macrograph/execution";
 import { t, Engine, Module, Registration } from "@macrograph/module";
 import { Array, Cause, Effect, Layer, Result, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 import HttpClientDeployment from "../src/Deployment.ts";
 import { makeRuntimeClient } from "../src/Engine.ts";

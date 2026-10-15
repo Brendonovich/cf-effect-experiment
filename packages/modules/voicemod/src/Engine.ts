@@ -1,5 +1,5 @@
 import { Effect, Exit, Layer, Schema, Scope, Semaphore, SubscriptionRef } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import {
   ClientRpcs,

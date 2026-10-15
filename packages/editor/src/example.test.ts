@@ -1,6 +1,6 @@
 import { Graph, Project } from "@macrograph/core";
 import { Context, Data, Effect, Layer, Ref } from "effect";
-import { Rpc, RpcClient, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcClient, RpcGroup } from "effect/rpc";
 
 class DataInRef {}
 class ExecInRef {}

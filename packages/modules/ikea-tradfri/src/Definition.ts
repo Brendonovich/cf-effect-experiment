@@ -1,6 +1,6 @@
 import { Engine, Resource } from "@macrograph/module";
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const LightId = Schema.Int.pipe(Schema.brand("IkeaLightId"));
 export type LightId = typeof LightId.Type;

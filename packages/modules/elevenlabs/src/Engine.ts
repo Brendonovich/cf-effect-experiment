@@ -1,5 +1,6 @@
-import { Effect, Encoding, Layer, Schema } from "effect";
-import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Effect, Layer, Schema } from "effect";
+import { Base64 } from "effect/encoding";
+import { FetchHttpClient, Headers, HttpClient, HttpClientRequest } from "effect/http";
 
 import {
   ClientRpcs,
@@ -56,7 +57,7 @@ export const layer = ElevenLabsEngine.toLayer((mg) =>
             );
             if (buffer.byteLength === 0)
               return yield* new RequestFailure({ reason: "Invalid provider response" });
-            return { audio: Encoding.encodeBase64(new Uint8Array(buffer)), mime };
+            return { audio: Base64.encode(new Uint8Array(buffer)), mime };
           },
           (effect) =>
             effect.pipe(

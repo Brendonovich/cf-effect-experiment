@@ -4,8 +4,8 @@ import type { Presence } from "@macrograph/editor";
 
 import { Canvas, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Effect, PubSub, Stream } from "effect";
-import { RpcClientError } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { RpcClientError } from "effect/rpc";
+import { Socket } from "effect/socket";
 import { createMemo, createRoot, createSignal, flush, untrack } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

@@ -1,6 +1,6 @@
 import { Engine } from "@macrograph/module";
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const defaultChatModel = "gpt-4o-mini";
 export const defaultImageModel = "gpt-image-1";

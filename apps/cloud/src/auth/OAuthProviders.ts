@@ -302,8 +302,8 @@ const requestToken = (provider: Provider, values: Readonly<Record<string, string
 const make = Effect.gen(function* () {
   const configured = yield* Effect.forEach(definitions, (definition) =>
     Config.all({
-      clientId: Config.option(Config.string(`${definition.id.toUpperCase()}_CLIENT_ID`)),
-      clientSecret: Config.option(Config.redacted(`${definition.id.toUpperCase()}_CLIENT_SECRET`)),
+      clientId: Config.option(Config.String(`${definition.id.toUpperCase()}_CLIENT_ID`)),
+      clientSecret: Config.option(Config.Redacted(`${definition.id.toUpperCase()}_CLIENT_SECRET`)),
     }).pipe(
       Effect.map(({ clientId, clientSecret }) =>
         Option.all({ clientId, clientSecret }).pipe(

@@ -12,7 +12,7 @@ import { Executor } from "@macrograph/execution";
 import { unavailableRuntimeClient as unavailableTwitchRuntimeClient } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Result, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";

@@ -1,5 +1,5 @@
+import type { Rpc } from "effect/rpc";
 import type * as S from "effect/Schema";
-import type { Rpc } from "effect/unstable/rpc";
 
 import { Editor } from "@macrograph/editor";
 import { LiveRuntime } from "@macrograph/live-runtime";
@@ -7,8 +7,8 @@ import { Engine, Resource, type Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { EngineHost, ModuleMount } from "@macrograph/project-host";
 import { Context, Effect, Layer, Option, Ref, Scope } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 
 type RpcHttpEffect = Effect.Effect<
   HttpServerResponse.HttpServerResponse,

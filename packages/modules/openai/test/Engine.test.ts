@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Effect, Fiber, Layer, Option, Result } from "effect";
-import { TestClock } from "effect/testing";
 import {
   FetchHttpClient,
   Headers,
@@ -9,7 +8,8 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
+import { TestClock } from "effect/testing";
 
 import { OpenAIEngine } from "../src/Definition.ts";
 import deployment from "../src/Deployment.ts";

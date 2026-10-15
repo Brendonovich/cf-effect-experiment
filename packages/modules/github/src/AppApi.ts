@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Redacted, Schema } from "effect";
-import { Headers, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Headers, HttpClient, HttpClientRequest } from "effect/http";
 
 import { GitHubFailure, type InstallationId } from "./Definition.ts";
 

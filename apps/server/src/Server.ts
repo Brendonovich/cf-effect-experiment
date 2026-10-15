@@ -24,8 +24,8 @@ import {
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+} from "effect/http";
+import { RpcSerialization, RpcServer } from "effect/rpc";
 import { mkdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import Deployments from "virtual:macrograph-module-deployments";

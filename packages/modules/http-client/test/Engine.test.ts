@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Result } from "effect";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 
 import type { RequestMethod } from "../src/Definition.ts";
 

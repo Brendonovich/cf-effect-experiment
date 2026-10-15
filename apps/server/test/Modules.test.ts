@@ -34,8 +34,8 @@ import WebSocketClient from "@macrograph/module-websocket-client/Deployment/Loca
 import WebSocketServer from "@macrograph/module-websocket-server/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
-import { RpcSerialization } from "effect/unstable/rpc";
+import { FetchHttpClient } from "effect/http";
+import { RpcSerialization } from "effect/rpc";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
 

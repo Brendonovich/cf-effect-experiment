@@ -18,8 +18,8 @@ import { t } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
+import { RpcTest } from "effect/rpc";
 import { TestClock } from "effect/testing";
-import { RpcTest } from "effect/unstable/rpc";
 
 import {
   Editor,
