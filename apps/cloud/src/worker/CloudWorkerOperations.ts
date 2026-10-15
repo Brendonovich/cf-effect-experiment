@@ -4,6 +4,7 @@ import UtilitiesModule from "@macrograph/module-utilities";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Cause, Effect, Schema } from "effect";
+import { HttpClient } from "effect/http";
 
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 
@@ -55,7 +56,11 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
 
     // Durable object state is provided inside the remote object, not by its RPC caller.
     const callIngress = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      effect as Effect.Effect<A, E, Exclude<R, Cloudflare.DurableObjectState>>;
+      effect as Effect.Effect<
+        A,
+        E,
+        Exclude<R, Cloudflare.DurableObjectState | HttpClient.HttpClient>
+      >;
 
     const endpointFromRow = (
       row: typeof projectIngressEndpoints.$inferSelect,
@@ -72,7 +77,10 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
     });
 
     const updateActualEndpoints = Effect.fnUntraced(function* (projectId: string) {
-      const state = yield* projectIngressDos.getByName(projectId).ingressState().pipe(Effect.orDie);
+      const state = yield* projectIngressDos
+        .getByName(projectId)
+        .ingressState()
+        .pipe(callIngress, Effect.orDie);
       const deployed = state.deployment?.endpoints ?? [];
       const preview = state.preview?.endpoints ?? [];
       const endpoints = [
@@ -228,7 +236,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
           const result = yield* projectIngressDos
             .getByName(request.projectId)
             .preview(request)
-            .pipe(Effect.orDie);
+            .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(request.projectId);
           return result.endpoints;
         }),
@@ -292,7 +300,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             sampled: ingressSpan.sampled,
           },
         })
-        .pipe(Effect.orDie);
+        .pipe(callIngress, Effect.orDie);
       yield* Effect.logInfo("HttpIngress dispatch completed", {
         projectId: request.projectId,
         endpointId: request.endpointId,
@@ -429,7 +437,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
           yield* projectIngressDos
             .getByName(projectId)
             .stopPreview({ previewId })
-            .pipe(Effect.orDie);
+            .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(projectId);
         }),
       );

@@ -132,6 +132,7 @@ describe("ExecutorModules", () => {
       "logic",
       "math",
       "openai",
+      "sendblue",
       "string",
       "twitch",
       "util",
