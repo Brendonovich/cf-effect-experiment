@@ -6,6 +6,12 @@ import * as Planetscale from "alchemy/Planetscale";
 import { retain } from "alchemy/RemovalPolicy";
 import { Effect } from "effect";
 
+const pullRequest = process.env.PULL_REQUEST;
+const previewLogicalDatabaseName =
+  pullRequest !== undefined && /^\d+$/.test(pullRequest)
+    ? `macrograph_pr_${pullRequest}`
+    : undefined;
+
 export const Database = Planetscale.PostgresDatabase("AppPostgresDatabase", {
   name: "macrograph",
   clusterSize: "PS_5",
@@ -42,6 +48,7 @@ const LogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
     const appRole = yield* DatabaseRole;
 
     return {
+      ...(previewLogicalDatabaseName === undefined ? {} : { name: previewLogicalDatabaseName }),
       adminOrigin: adminRole.origin,
       appRoleName: Output.map(appRole.username, PlanetscaleLogicalDb.postgresRoleNameFromUsername),
       migrationsDir: "./migrations-postgres",

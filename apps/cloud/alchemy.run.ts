@@ -4,7 +4,10 @@ import * as Axiom from "alchemy/Axiom";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Command from "alchemy/Command";
 import * as Drizzle from "alchemy/Drizzle";
+import * as GitHub from "alchemy/GitHub";
+import * as Output from "alchemy/Output";
 import * as Planetscale from "alchemy/Planetscale";
+import type { StackServices } from "alchemy/Stack";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
@@ -24,15 +27,22 @@ import CloudWorkerLayer, {
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 
+const logicalDatabaseProviders = PlanetscaleLogicalDb.providers() as Layer.Layer<
+	PlanetscaleLogicalDb.Providers,
+	never,
+	StackServices
+>;
+
 export default Alchemy.Stack(
 	"MacroGraph",
 	{
 		providers: Layer.mergeAll(
 			Cloudflare.providers(),
+			GitHub.providers(),
 			...(axiomConfigured() ? [Axiom.providers()] : []),
 			Drizzle.providers(),
 			Planetscale.providers(),
-			PlanetscaleLogicalDb.providers(),
+			logicalDatabaseProviders,
 			DurableObjectMigrationBundle.providers(),
 		),
 		state: Cloudflare.state(),
@@ -44,7 +54,10 @@ export default Alchemy.Stack(
 		);
 		yield* DatabaseHyperdrive;
 		yield* DeploymentObjectsBucket;
-		const legacyDatabase = !ctx.dev ? yield* LegacyLogicalDatabase : undefined;
+		const legacyDatabase =
+			!ctx.dev && process.env.PULL_REQUEST === undefined
+				? yield* LegacyLogicalDatabase
+				: undefined;
 
 		const frontendBuild = !ctx.dev
 			? yield* Command.Build("WebAppBuild", {
@@ -74,6 +87,24 @@ export default Alchemy.Stack(
 			);
 			return { cloudWorker, ingressWorker };
 		}).pipe(Effect.provide(IngressWorkerLayer));
+
+		const github = yield* GitHub.GitHubEnv;
+		if (github?.pr !== undefined) {
+			yield* GitHub.Comment("CloudPreviewComment", {
+				owner: github.owner,
+				repository: github.repository,
+				issueNumber: github.pr,
+				body: Output.interpolate`
+					## MacroGraph Cloud preview
+
+					**App:** ${cloudWorker.url}
+					**Ingress:** ${ingressWorker.url}
+
+					Built from commit ${github.sha.slice(0, 7)}.
+				`,
+			});
+		}
+
 		return {
 			publicWorkerUrl: cloudWorker.url,
 			publicIngressUrl: ingressWorker.url,

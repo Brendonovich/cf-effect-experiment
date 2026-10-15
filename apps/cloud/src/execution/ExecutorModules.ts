@@ -6,6 +6,9 @@ import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
 import KofiModule from "@macrograph/module-kofi";
 import { Payment } from "@macrograph/module-kofi/Definition";
 import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import SendblueModule from "@macrograph/module-sendblue";
+import { InboundMessage } from "@macrograph/module-sendblue/Definition";
+import SendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import TwitchModule from "@macrograph/module-twitch";
 import { SubscriptionEvent } from "@macrograph/module-twitch/Definition";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
@@ -22,6 +25,7 @@ const [openai, elevenlabs, discord] = apiDeployments;
 export const registry = ExecutorModules.make([
   ExecutorModules.entry(TwitchModule, SubscriptionEvent.Any, TwitchDeployment),
   ExecutorModules.entry(KofiModule, Payment, KofiDeployment),
+  ExecutorModules.entry(SendblueModule, InboundMessage, SendblueDeployment),
   ExecutorModules.entry(HttpClientModule, Schema.Never, HttpClientDeployment),
   ExecutorModules.entry(GitHubModule, WebhookDeliveryEvent, GitHubDeployment),
   ExecutorModules.entry(UtilitiesModule, TickEvent, UtilitiesDeployment),

@@ -15,6 +15,9 @@ import { secureLayer as secureHttpUrlPolicy } from "@macrograph/module-http-clie
 import OpenAIModule from "@macrograph/module-openai";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import { layer as openAILayer } from "@macrograph/module-openai/Engine";
+import SendblueModule from "@macrograph/module-sendblue";
+import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
+import { layer as sendblueLayer } from "@macrograph/module-sendblue/Engine";
 import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
@@ -109,6 +112,29 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
   const discordClient = yield* RpcTest.makeClient(DiscordEngine.Rpcs).pipe(
     Effect.provide(discord.rpcs),
   );
+  const sendblue = yield* SendblueEngine.pipe(
+    Effect.provide(sendblueLayer),
+    Effect.provide(
+      Layer.succeed(SendblueEngine.EngineContext)(
+        SendblueEngine.EngineContext.of({
+          ...context,
+          storage: {
+            get: Schema.decodeUnknownEffect(SendblueEngine.Storage)(
+              project.engines[SendblueModule.id] ?? SendblueEngine.InitialStorage,
+            ).pipe(
+              Effect.mapError(() => "Invalid Sendblue deployment storage"),
+              Effect.orDie,
+            ),
+            set: () => readOnly,
+            update: () => readOnly,
+          },
+        }),
+      ),
+    ),
+  );
+  const sendblueClient = yield* RpcTest.makeClient(SendblueEngine.Rpcs).pipe(
+    Effect.provide(sendblue.rpcs),
+  );
 
   const engineClient: NonNullable<Executor.MakeOptions["engineClient"]> = (moduleId) =>
     Effect.succeed(
@@ -120,17 +146,19 @@ export const make = Effect.fnUntraced(function* (project: Project.Model) {
             ? elevenLabsClient
             : moduleId === DiscordModule.id
               ? discordClient
-              : moduleId === TwitchModule.id
-                ? unavailableTwitchRuntime
-                : moduleId === GitHubModule.id
-                  ? unavailableGitHubRuntime
-                  : new Proxy(
-                      {},
-                      {
-                        get: () => () =>
-                          Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
-                      },
-                    ),
+              : moduleId === SendblueModule.id
+                ? sendblueClient
+                : moduleId === TwitchModule.id
+                  ? unavailableTwitchRuntime
+                  : moduleId === GitHubModule.id
+                    ? unavailableGitHubRuntime
+                    : new Proxy(
+                        {},
+                        {
+                          get: () => () =>
+                            Effect.fail(new Executor.EngineClientUnavailable({ moduleId })),
+                        },
+                      ),
     );
   return engineClient;
 });

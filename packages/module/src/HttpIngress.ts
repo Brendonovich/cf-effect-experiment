@@ -426,6 +426,13 @@ export class Registry extends Context.Service<Registry, RegistryService>()(
   "macrograph/Module/HttpIngress/Registry",
 ) {}
 
+export function makeRegistry<RO1, RI1, RO2, RI2, RO3, RI3, RO4, RI4>(
+  lives: readonly [Live<RO1, RI1>, Live<RO2, RI2>, Live<RO3, RI3>, Live<RO4, RI4>],
+): Effect.Effect<
+  RegistryService,
+  InitializationError,
+  RO1 | RI1 | RO2 | RI2 | RO3 | RI3 | RO4 | RI4
+>;
 export function makeRegistry<RO1, RI1, RO2, RI2, RO3, RI3>(
   lives: readonly [Live<RO1, RI1>, Live<RO2, RI2>, Live<RO3, RI3>],
 ): Effect.Effect<RegistryService, InitializationError, RO1 | RI1 | RO2 | RI2 | RO3 | RI3>;
