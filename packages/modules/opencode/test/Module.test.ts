@@ -30,7 +30,7 @@ describe("OpenCode module", () => {
       assert.strictEqual(module.engine, OpenCodeEngine);
       const [schema] = yield* Registration.collect(module.effect);
       assert.isDefined(schema);
-      assert.strictEqual(schema!.id, "OpenCodeGenerateText");
+      assert.strictEqual(schema!.id, "GenerateText");
       assert.strictEqual(schema!.type, "exec");
       assert.strictEqual(schema!.replay, "unsafe");
       assert.deepStrictEqual(

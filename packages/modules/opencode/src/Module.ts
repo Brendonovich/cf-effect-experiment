@@ -11,7 +11,7 @@ export default Module.make({
   engine: OpenCodeEngine,
   effect: Effect.fnUntraced(function* (context) {
     yield* context.schema.register({
-      id: "OpenCodeGenerateText",
+      id: "GenerateText",
       name: "Generate Text",
       description:
         "Runs one stateless OpenCode generation. Leave Model empty to use OpenCode's default.",
