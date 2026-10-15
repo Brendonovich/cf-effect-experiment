@@ -53,6 +53,12 @@ const pollingError = (metadata: unknown): string | undefined =>
     ? metadata.error
     : undefined;
 
+const isPollingIngress = (metadata: unknown): boolean =>
+  typeof metadata === "object" &&
+  metadata !== null &&
+  "_tag" in metadata &&
+  metadata._tag === "PollingIngress";
+
 type TimelineItem =
   | { readonly kind: "ingress"; readonly record: ProjectIngressEventRecord }
   | {
@@ -301,7 +307,9 @@ export const Events: Component<EventsProps> = (props) => {
               endpointProps.ingress.schema.displayName}
           </div>
           <div sx={styles.instance}>
-            {endpointProps.ingress.schema.displayName} ·{" "}
+            {isPollingIngress(endpointProps.ingress.metadata)
+              ? ""
+              : `${endpointProps.ingress.schema.displayName} · `}
             {[KofiModule, TwitchModule, GitHubModule, SendblueModule].find((module) =>
               endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
@@ -464,7 +472,9 @@ export const Events: Component<EventsProps> = (props) => {
                 const ingressName =
                   endpoint === undefined
                     ? undefined
-                    : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
+                    : isPollingIngress(endpoint.metadata)
+                      ? endpoint.displayName
+                      : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
                 const moduleName =
                   [KofiModule, TwitchModule, GitHubModule].find(
                     (module) => module.id === selected.record.moduleId,
