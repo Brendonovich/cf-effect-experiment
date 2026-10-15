@@ -74,22 +74,33 @@ export const json = (response: Response) =>
     catch: () => new DiscordFailure({ reason: "invalid-response" }),
   });
 
-export const User = Schema.Struct({
-  id: Schema.String,
-  username: Schema.String,
-  global_name: Schema.optional(Schema.NullOr(Schema.String)),
-  avatar: Schema.optional(Schema.NullOr(Schema.String)),
-  banner: Schema.optional(Schema.NullOr(Schema.String)),
-});
-export const Member = Schema.Struct({
-  user: Schema.optional(User),
-  nick: Schema.optional(Schema.NullOr(Schema.String)),
-  roles: Schema.Array(Schema.String),
-});
-export const Role = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  position: Schema.Int,
-  mentionable: Schema.Boolean,
-  permissions: Schema.String,
-});
+const AdditionalProperties = [Schema.Record(Schema.String, Schema.Unknown)] as const;
+
+export const User = Schema.StructWithRest(
+  Schema.Struct({
+    id: Schema.String,
+    username: Schema.String,
+    global_name: Schema.optional(Schema.NullOr(Schema.String)),
+    avatar: Schema.optional(Schema.NullOr(Schema.String)),
+    banner: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+  AdditionalProperties,
+);
+export const Member = Schema.StructWithRest(
+  Schema.Struct({
+    user: Schema.optional(User),
+    nick: Schema.optional(Schema.NullOr(Schema.String)),
+    roles: Schema.Array(Schema.String),
+  }),
+  AdditionalProperties,
+);
+export const Role = Schema.StructWithRest(
+  Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    position: Schema.Int,
+    mentionable: Schema.Boolean,
+    permissions: Schema.String,
+  }),
+  AdditionalProperties,
+);

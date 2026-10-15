@@ -10,7 +10,7 @@ import {
 import { render } from "@solidjs/web";
 import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Effect } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 import { createSignal, flush } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
 

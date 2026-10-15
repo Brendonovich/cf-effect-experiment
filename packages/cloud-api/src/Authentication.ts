@@ -1,5 +1,5 @@
 import { Context } from "effect";
-import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi";
+import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
 
 export const sessionCookieName = "macrograph_session";
 export const sessionSecurity = HttpApiSecurity.apiKey({ key: sessionCookieName, in: "cookie" });

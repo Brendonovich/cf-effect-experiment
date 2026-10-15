@@ -3,7 +3,7 @@ import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core"
 import { t, Engine, Module } from "@macrograph/module";
 import { ExecutorModules } from "@macrograph/project-host";
 import { Array, Effect, Layer, Schema } from "effect";
-import { ClusterWorkflowEngine, TestRunner } from "effect/unstable/cluster";
+import { ClusterWorkflowEngine, TestRunner } from "effect/cluster";
 
 import { EffectClusterRuntime } from "../src/index.ts";
 

@@ -1,14 +1,13 @@
 import { Data, Option, Ref } from "effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
-import * as S from "effect/Schema";
 import {
   Headers,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   HttpApi,
   HttpApiClient,
@@ -16,7 +15,9 @@ import {
   HttpApiGroup,
   HttpApiSchema,
   OpenApi,
-} from "effect/unstable/httpapi";
+} from "effect/http-api";
+import { RateLimiter } from "effect/persistence";
+import * as S from "effect/Schema";
 
 export const DEFAULT_CLIENT_ID = "ldbp0fkq9yalf2lzsi146i0cip8y59";
 
@@ -245,7 +246,7 @@ export namespace Api {
     }),
   ) {}
 
-  const EventSubSubscription = S.Struct({
+  export const EventSubSubscription = S.Struct({
     id: S.String,
     type: S.String,
     version: S.String,
@@ -358,8 +359,23 @@ export const makeClient = (
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
     const tokenRef = yield* Ref.make(token);
+    const limiter = yield* RateLimiter.make.pipe(Effect.provide(RateLimiter.layerStoreMemory));
+    const helixClient = httpClient.pipe(
+      HttpClient.withRateLimiter({
+        limiter,
+        key: "twitch-helix",
+        limit: 800,
+        window: "1 minute",
+      }),
+      HttpClient.catchTag("RateLimiterError", Effect.die),
+    );
+    const selectedClient = HttpClient.make((request) =>
+      request.url.startsWith("https://api.twitch.tv/helix/")
+        ? helixClient.execute(request)
+        : httpClient.execute(request),
+    );
 
-    const authenticated = httpClient.pipe(
+    const authenticated = selectedClient.pipe(
       HttpClient.mapRequest((req) => ({
         ...req,
         headers: Headers.fromInput(

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest, Registration, Retry } from "@macrograph/module";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 import { actions, mapResponse, prepare } from "../src/Actions.ts";
 import { AccountId, TwitchEngine } from "../src/Definition.ts";
@@ -433,7 +433,7 @@ const setup = Effect.fnUntraced(function* (
             status,
             headers: {
               "content-type": "application/json",
-              "ratelimit-remaining": "0",
+              "ratelimit-remaining": "799",
               "ratelimit-reset": "123456",
             },
           }),
@@ -508,7 +508,7 @@ describe("Twitch authenticated action nodes", () => {
       for (const id of ["GetUsers", "GetChatters", "WarnUser", "ValidateToken"]) {
         const fixture = cases.find((fixture) => fixture.id === id);
         const schema = schemas.find((schema) => schema.id === id)!;
-        for (const status of ["transport", 400, 401, 403, 404, 408, 429, 503, 200] as const) {
+        for (const status of ["transport", 400, 401, 403, 404, 408, 503, 200] as const) {
           // OAuth validation has its own fixed response in this transport fixture.
           if (id === "ValidateToken" && status !== "transport") continue;
           const test = yield* setup({
@@ -533,8 +533,7 @@ describe("Twitch authenticated action nodes", () => {
               node,
             }),
           );
-          const transient =
-            status === "transport" || status === 408 || status === 429 || status === 503;
+          const transient = status === "transport" || status === 408 || status === 503;
           const shouldRetry = transient && id !== "WarnUser";
           assert.strictEqual(error instanceof Retry, shouldRetry, `${id}: ${status}`);
           const cause = error instanceof Retry ? error.cause : error;
@@ -544,7 +543,7 @@ describe("Twitch authenticated action nodes", () => {
             if (status !== "transport" && status !== 200) {
               assert.strictEqual(cause.status, status);
               assert.strictEqual(cause.reason, "Twitch rejected the request");
-              assert.strictEqual(cause.rateLimitRemaining, 0);
+              assert.strictEqual(cause.rateLimitRemaining, 799);
               assert.strictEqual(cause.rateLimitReset, 123456);
             }
           }
@@ -884,7 +883,7 @@ describe("Twitch authenticated action nodes", () => {
         yield* run;
         assert.strictEqual(test.refreshes(), 1);
         assert.strictEqual(test.calls.at(-1)!.headers.authorization, "Bearer refreshed-secret");
-        for (const status of [400, 401, 403, 404, 429, 503]) {
+        for (const status of [400, 401, 403, 404, 503]) {
           test.respond({ message: "Twitch action rejected", access_token: "response-secret" }, [
             status,
           ]);
@@ -893,7 +892,7 @@ describe("Twitch authenticated action nodes", () => {
           if (error._tag === "HelixError") {
             assert.strictEqual(error.status, status);
             assert.strictEqual(error.reason, "Twitch action rejected");
-            assert.strictEqual(error.rateLimitRemaining, 0);
+            assert.strictEqual(error.rateLimitRemaining, 799);
             assert.strictEqual(error.rateLimitReset, 123456);
             assert.notInclude(error.reason, "secret");
           }

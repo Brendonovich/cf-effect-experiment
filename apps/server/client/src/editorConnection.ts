@@ -4,7 +4,7 @@ import { BrowserSocket } from "@effect/platform-browser";
 import { DualProtocol, EditorRpc } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { Effect, type Scope } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { RpcClient, RpcSerialization } from "effect/rpc";
 
 export function editorConnection(
   url: string,

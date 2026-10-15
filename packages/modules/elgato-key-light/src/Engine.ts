@@ -1,10 +1,5 @@
 import { Effect, Layer, Schema, Semaphore, Stream } from "effect";
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 
 import {
   ClientRpcs,

@@ -1,6 +1,6 @@
 import { Engine, Resource } from "@macrograph/module";
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const DeviceId = Schema.String.pipe(Schema.brand("LIFXDeviceId"));
 export type DeviceId = typeof DeviceId.Type;

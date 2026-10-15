@@ -12,7 +12,7 @@ import {
   SubscriptionRef,
 } from "effect";
 import * as Effect from "effect/Effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import type { HighVolumeEvent } from "./Protocol.ts";
 

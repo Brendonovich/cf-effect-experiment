@@ -3,7 +3,7 @@ import type { Credential } from "@macrograph/module/Engine";
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Effect, HashMap, Layer, Redacted, Result } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 
 import type { Make as MakeEventSub, State } from "../src/EventSubImplementation.ts";
 

@@ -1,6 +1,6 @@
 import * as Engine from "@macrograph/module/Engine";
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export class DirectoryFailure extends Schema.TaggedError<DirectoryFailure>()(
   "FilesystemDirectoryFailure",

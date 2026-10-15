@@ -1,9 +1,9 @@
 import { CreateProjectRequest, CurrentUser, ProjectRecord } from "@macrograph/cloud-api";
 import { ApiCaller, ProjectMcp } from "@macrograph/project-api";
 import { Effect, Schema } from "effect";
-import { Tool, Toolkit } from "effect/unstable/ai";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { Tool, Toolkit } from "effect/ai";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 
 import * as McpOAuthConfig from "../auth/McpOAuthConfig.ts";
 

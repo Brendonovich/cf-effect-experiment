@@ -3,7 +3,7 @@ import { Credential } from "@macrograph/module";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { HttpApiError } from "effect/http-api";
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import { oauthCredentials, type OAuthToken } from "../database/AccountDatabaseSchema.ts";

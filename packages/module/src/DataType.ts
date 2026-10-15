@@ -1,7 +1,7 @@
 import type * as EffectDateTime from "effect/DateTime";
 import type * as EffectOption from "effect/Option";
 
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 
 declare const TypeId: unique symbol;
 
@@ -397,12 +397,16 @@ const valueSchema = (type: Type, definitions: Definitions): Schema.Codec<unknown
 // Guard both parse directions without hiding the runtime checks behind an Unknown schema.
 export const ValueSchema = (type: Type, definitions: Definitions = {}): Schema.Codec<unknown> => {
   const schema = valueSchema(type, definitions);
+  const isStrict = (value: unknown) =>
+    Result.isSuccess(
+      Schema.decodeUnknownResult(Schema.toType(schema), { onExcessProperty: "error" })(value),
+    );
   return finiteValue.pipe(
     Schema.decodeTo(schema),
     Schema.decodeTo(
       finiteValue.check(
         Schema.makeFilter(
-          (value: unknown) => Schema.is(schema)(value) || "Value does not match its data type",
+          (value: unknown) => isStrict(value) || "Value does not match its data type",
         ),
       ),
     ),
@@ -414,14 +418,27 @@ export const JsonValueSchema = (
   definitions: Definitions = {},
 ): Schema.Codec<unknown, Schema.Json> => {
   const schema = valueSchema(type, definitions);
+  const isStrict = (value: unknown) =>
+    Result.isSuccess(
+      Schema.decodeUnknownResult(Schema.toType(schema), { onExcessProperty: "error" })(value),
+    );
+  const jsonSchema = Schema.toCodecJson(schema);
+  const isStrictJson = (value: unknown) =>
+    Result.isSuccess(Schema.decodeUnknownResult(jsonSchema, { onExcessProperty: "error" })(value));
   // Derive JSON transformations from the unwrapped schema (not Unknown), especially for Option/DateTime.
   return Schema.Json.pipe(
-    Schema.decodeTo(finiteValue),
-    Schema.decodeTo(Schema.toCodecJson(schema)),
     Schema.decodeTo(
       finiteValue.check(
         Schema.makeFilter(
-          (value: unknown) => Schema.is(schema)(value) || "Value does not match its data type",
+          (value: unknown) => isStrictJson(value) || "Value does not match its data type",
+        ),
+      ),
+    ),
+    Schema.decodeTo(jsonSchema),
+    Schema.decodeTo(
+      finiteValue.check(
+        Schema.makeFilter(
+          (value: unknown) => isStrict(value) || "Value does not match its data type",
         ),
       ),
     ),
@@ -472,6 +489,11 @@ export const compatible = (left: Type, right: Type): boolean => {
 };
 
 export const isValue = (type: Type, value: unknown, definitions: Definitions = {}): boolean =>
-  Schema.is(finiteValue)(value) && Schema.is(valueSchema(type, definitions))(value);
+  Schema.is(finiteValue)(value) &&
+  Result.isSuccess(
+    Schema.decodeUnknownResult(Schema.toType(valueSchema(type, definitions)), {
+      onExcessProperty: "error",
+    })(value),
+  );
 
 export * as t from "./DataType.ts";

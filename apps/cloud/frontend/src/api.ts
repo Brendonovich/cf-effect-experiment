@@ -1,8 +1,8 @@
 import * as BrowserHttpClient from "@effect/platform-browser/BrowserHttpClient";
 import { CloudApi } from "@macrograph/cloud-api";
 import { Effect } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpClient, HttpClientRequest } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
 
 import { signInUrl } from "./authRedirect";
 
