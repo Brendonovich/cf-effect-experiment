@@ -7,10 +7,10 @@
     ".": "./src/Module.ts",
     "./Client": "./src/Client.ts",
     "./Definition": "./src/Definition.ts",
-    "./Deployment/Cloudflare": "./src/Deployment/Cloudflare.ts",
     "./Deployment/Server": "./src/Deployment/Server.ts",
-    "./Engine/Cloudflare": "./src/Engine/Cloudflare.ts",
+    "./Engine": "./src/Engine.ts",
     "./Engine/Server": "./src/Engine/Server.ts",
+    "./Instance": "./src/Instance.ts",
     "./Settings": "./src/Settings.tsx"
   },
   "scripts": {

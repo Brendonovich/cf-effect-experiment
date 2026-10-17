@@ -12,6 +12,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@opencode/client": "2.0.27",
+    "@opencode/schema": "2.0.27",
     "@opencode/sdk": "2.0.27",
     "effect": "4.0.1"
   },

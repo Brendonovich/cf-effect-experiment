@@ -1,3 +1,4 @@
+import { Engine } from "@macrograph/module";
 import GitHubModule from "@macrograph/module-github";
 import { WebhookDeliveryEvent } from "@macrograph/module-github/Definition";
 import GitHubDeployment from "@macrograph/module-github/Deployment/Webhook";
@@ -7,7 +8,11 @@ import KofiModule from "@macrograph/module-kofi";
 import { Payment } from "@macrograph/module-kofi/Definition";
 import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
 import OpenCodeModule from "@macrograph/module-opencode";
-import { make as makeOpenCodeDeployment } from "@macrograph/module-opencode/Deployment/Cloudflare";
+import { RequestFailure as OpenCodeFailure } from "@macrograph/module-opencode/Definition";
+import { makeLayer as makeOpenCodeLayer } from "@macrograph/module-opencode/Engine";
+import SendblueModule from "@macrograph/module-sendblue";
+import { InboundMessage } from "@macrograph/module-sendblue/Definition";
+import SendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import TwitchModule from "@macrograph/module-twitch";
 import { SubscriptionEvent } from "@macrograph/module-twitch/Definition";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
@@ -20,22 +25,19 @@ import { Effect, Schema } from "effect";
 import { apiDeployments, statelessModules } from "../modules/CloudModules.ts";
 
 const [openai, elevenlabs, discord] = apiDeployments;
-const unavailableOpenCode = () => Effect.die("OpenCode runtime is unavailable");
-const openCode = makeOpenCodeDeployment({
-  generateText: unavailableOpenCode,
-  listModels: unavailableOpenCode,
-  clientState: unavailableOpenCode,
-  connectKey: unavailableOpenCode,
-  removeCredential: unavailableOpenCode,
-  startOAuth: unavailableOpenCode,
-  oauthStatus: unavailableOpenCode,
-  completeOAuth: unavailableOpenCode,
-  cancelOAuth: unavailableOpenCode,
-});
+const openCode = Engine.deployment(
+  OpenCodeModule,
+  makeOpenCodeLayer({
+    defaultTarget: "managed",
+    availableTargets: ["managed", "remote"],
+    resolve: () => Effect.fail(new OpenCodeFailure({ reason: "OpenCode runtime is unavailable" })),
+  }),
+);
 
 export const registry = ExecutorModules.make([
   ExecutorModules.entry(TwitchModule, SubscriptionEvent.Any, TwitchDeployment),
   ExecutorModules.entry(KofiModule, Payment, KofiDeployment),
+  ExecutorModules.entry(SendblueModule, InboundMessage, SendblueDeployment),
   ExecutorModules.entry(HttpClientModule, Schema.Never, HttpClientDeployment),
   ExecutorModules.entry(GitHubModule, WebhookDeliveryEvent, GitHubDeployment),
   ExecutorModules.entry(UtilitiesModule, TickEvent, UtilitiesDeployment),

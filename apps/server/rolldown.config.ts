@@ -22,6 +22,7 @@ const serverDeployments = new Set([
   "@macrograph/module-math",
   "@macrograph/module-openai",
   "@macrograph/module-opencode",
+  "@macrograph/module-sendblue",
   "@macrograph/module-shell",
   "@macrograph/module-speakerbot",
   "@macrograph/module-streamdeck",

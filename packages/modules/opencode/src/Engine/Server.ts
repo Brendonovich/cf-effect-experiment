@@ -1,99 +1,77 @@
 import { OpenCode } from "@opencode/client";
 import { Service } from "@opencode/client/service";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 
-import { type Client, generateText, listModels } from "../Client.ts";
-import { ClientRpcs, OpenCodeEngine, RequestFailure, RuntimeRpcs } from "../Definition.ts";
+import type { Instances } from "../Instance.ts";
 
-export type Connect = () => Promise<Client | undefined>;
+import { type Client, fromClient } from "../Client.ts";
+import { RequestFailure, type Target } from "../Definition.ts";
+import { makeLayer } from "../Engine.ts";
 
-const localClient: Connect = async () => {
+export type Discover = () => Promise<Client | undefined>;
+
+const discover: Discover = async () => {
   const endpoint = await Service.discover();
   if (endpoint === undefined) return undefined;
   const service =
     endpoint.auth === undefined
       ? { url: endpoint.url }
       : { url: endpoint.url, auth: endpoint.auth };
-  return OpenCode.make({
-    baseUrl: endpoint.url,
-    headers: Service.headers(service),
-  });
+  return OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(service) });
 };
 
-const reason = (cause: unknown) =>
-  typeof cause === "object" &&
-  cause !== null &&
-  "reason" in cause &&
-  typeof cause.reason === "string"
-    ? cause.reason
-    : cause instanceof Error && cause.message.length > 0
-      ? cause.message
-      : "OpenCode request failed";
+const failure = (reason: string) => new RequestFailure({ reason });
 
-export const makeLayer = (connect: Connect = localClient) =>
-  OpenCodeEngine.toLayer(() => {
-    const withClient = <A>(run: (client: Client) => Promise<A>) =>
-      Effect.tryPromise({
-        try: async () => {
-          const client = await connect();
-          if (client === undefined)
-            throw new Error("No running local OpenCode service was discovered");
-          return run(client);
-        },
-        catch: (cause) => new RequestFailure({ reason: reason(cause) }),
-      });
-
-    return Effect.succeed(
-      OpenCodeEngine.of({
-        resources: Layer.empty,
-        rpcs: RuntimeRpcs.toLayer({
-          OpenCodeGenerateText: (input) => withClient((client) => generateText(client, input)),
-          OpenCodeListModels: () => withClient(listModels),
-        }),
-        client: {
-          state: Effect.succeed({ mode: "server", credentials: [], oauthMethods: [] }),
-          rpcs: ClientRpcs.toLayer({
-            OpenCodeConnectKey: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-            OpenCodeRemoveCredential: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-            OpenCodeStartOAuth: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-            OpenCodeOAuthStatus: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-            OpenCodeCompleteOAuth: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-            OpenCodeCancelOAuth: () =>
-              Effect.fail(
-                new RequestFailure({
-                  reason: "Manage credentials through the local OpenCode service",
-                }),
-              ),
-          }),
-        },
-      }),
-    );
+const remoteClient = (target: Extract<Target, { readonly type: "remote" }>) =>
+  Effect.gen(function* () {
+    const url = yield* Effect.try({
+      try: () => {
+        const parsed = new URL(target.url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error();
+        parsed.username = "";
+        parsed.password = "";
+        return parsed.href.replace(/\/$/, "");
+      },
+      catch: () => failure("OpenCode server URL must use HTTP or HTTPS"),
+    });
+    const endpoint =
+      target.password === ""
+        ? { url }
+        : {
+            url,
+            auth: { type: "basic" as const, username: "opencode", password: target.password },
+          };
+    const client = OpenCode.make({ baseUrl: url, headers: Service.headers(endpoint) });
+    yield* Effect.tryPromise({
+      try: () => client.server.info(),
+      catch: () => failure("Could not connect to the OpenCode server"),
+    });
+    return client;
   });
 
-export const layer = makeLayer();
+export const makeInstances = (find: Discover = discover): Instances => ({
+  defaultTarget: "remote",
+  availableTargets: ["remote"],
+  resolve: (target) => {
+    if (target.type === "managed")
+      return Effect.fail(failure("Managed OpenCode targets are unavailable on this server"));
+    const client =
+      target.type === "remote"
+        ? remoteClient(target)
+        : Effect.tryPromise({
+            try: find,
+            catch: () => failure("Could not discover the local OpenCode service"),
+          }).pipe(
+            Effect.flatMap((found) =>
+              found === undefined
+                ? Effect.fail(failure("No running local OpenCode service was discovered"))
+                : Effect.succeed(found),
+            ),
+          );
+    return client.pipe(Effect.map(fromClient));
+  },
+});
+
+export const instances = makeInstances();
+export const layer = makeLayer(instances);
 export default layer;
