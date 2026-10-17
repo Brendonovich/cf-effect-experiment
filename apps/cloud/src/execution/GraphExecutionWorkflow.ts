@@ -22,6 +22,7 @@ import {
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
+import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
@@ -210,7 +211,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
         });
         const engineClient = yield* WorkflowRuntime.make(
           project,
-          openCodeDos.getByName(input.projectId),
+          OpenCodeInstances.make(Effect.succeed(input.projectId), openCodeDos),
         ).pipe(Effect.provide(FetchHttpClient.layer));
         yield* GraphExecution.run(
           project,

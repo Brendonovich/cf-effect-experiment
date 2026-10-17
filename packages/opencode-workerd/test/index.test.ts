@@ -1,6 +1,6 @@
 import { assert, describe, expect, it } from "vitest";
 
-import { fromHost, type Host } from "../src/index.ts";
+import { decodeConfig, fromHost, type Host } from "../src/index.ts";
 
 const host = (calls: Array<unknown>): Host => ({
   generate: {
@@ -70,5 +70,13 @@ describe("OpenCode Workerd adapter", () => {
     await expect(
       fromHost(host([])).generateText({ prompt: "Hello", model: "invalid" }),
     ).rejects.toThrow(/provider\/model/);
+  });
+
+  it("validates managed OpenCode configuration", async () => {
+    assert.deepStrictEqual(await decodeConfig('{"model":"anthropic/claude"}'), {
+      model: { providerID: "anthropic", model: "claude" },
+    });
+    await expect(decodeConfig("[]")).rejects.toThrow();
+    await expect(decodeConfig('{"unknown":true}')).rejects.toThrow();
   });
 });

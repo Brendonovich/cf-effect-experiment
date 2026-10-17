@@ -1,60 +1,70 @@
 import { RequestFailure } from "@macrograph/module-opencode/Definition";
-import { create, type Service as WorkerdService } from "@macrograph/opencode-workerd";
+import { create, type Service } from "@macrograph/opencode-workerd";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 
+const configKey = "macrograph-opencode-config-v1";
 const reason = (cause: unknown) =>
-  typeof cause === "object" &&
-  cause !== null &&
-  "reason" in cause &&
-  typeof cause.reason === "string"
-    ? cause.reason
-    : cause instanceof Error && cause.message.length > 0
-      ? cause.message
-      : "OpenCode request failed";
+  cause instanceof Error && cause.message.length > 0 ? cause.message : "OpenCode request failed";
 
-export const makeService = (service: WorkerdService) => {
-  const request = <A>(run: () => Promise<A>) =>
-    Effect.tryPromise({
-      try: run,
-      catch: (cause) => new RequestFailure({ reason: reason(cause) }),
+export interface Storage {
+  readonly get: <T>(key: string) => Promise<T | undefined>;
+  readonly put: (key: string, value: string) => Promise<void>;
+}
+
+export const makeController = (storage: Storage, make: (config: string) => Promise<Service>) => {
+  let active: { readonly config: string; readonly service: Service } | undefined;
+  let transition = Promise.resolve();
+  const ensure = (config: string) => {
+    const result = transition.then(async () => {
+      if (active?.config === config) return;
+      await active?.service.close();
+      active = undefined;
+      const service = await make(config);
+      await storage.put(configKey, config);
+      active = { config, service };
     });
-  return {
-    generateText: (input: { readonly prompt: string; readonly model: string }) =>
-      request(() => service.generateText(input)),
-    listModels: () => request(() => service.listModels()),
-    clientState: () =>
-      request(() => service.listCredentials()).pipe(
-        Effect.map((credentials) => ({
-          mode: "cloudflare" as const,
-          credentials: credentials.map(({ id, integrationID, label, active }) => ({
-            id,
-            integrationID,
-            label,
-            active,
-          })),
-        })),
-      ),
-    connectKey: (input: { readonly integrationID: string; readonly key: string }) => {
-      const integrationID = input.integrationID.trim();
-      const key = input.key.trim();
-      if (integrationID.length === 0 || key.length === 0)
-        return Effect.fail(new RequestFailure({ reason: "Provider ID and API key are required" }));
-      return request(() => service.connectKey({ integrationID, key }));
-    },
-    removeCredential: (credentialID: string) =>
-      request(() => service.removeCredential(credentialID)),
+    transition = result.catch(() => {});
+    return result;
   };
+  const current = () => active;
+  const service = async () => {
+    if (active !== undefined) return active.service;
+    const persisted = await storage.get<string>(configKey);
+    await ensure(persisted ?? "{}");
+    const initialized = current();
+    if (initialized === undefined) throw new Error("OpenCode failed to initialize");
+    return initialized.service;
+  };
+  return { ensure, service };
 };
 
-/** Owns one embedded OpenCode host and credential database per MacroGraph project. */
+/** Lazily owns one embedded OpenCode host and credential database per MacroGraph project. */
 export default class OpenCodeDO extends Cloudflare.DurableObject<OpenCodeDO>()(
   "OpenCodeDO",
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
-    return Effect.gen(function* () {
-      const service = yield* Effect.tryPromise(() => create(state.raw.storage)).pipe(Effect.orDie);
-      return makeService(service);
+    return Effect.sync(() => {
+      const controller = makeController(state.raw.storage, (config) =>
+        create(state.raw.storage, config),
+      );
+      const request = <A>(run: () => Promise<A>) =>
+        Effect.tryPromise({
+          try: run,
+          catch: (cause) => new RequestFailure({ reason: reason(cause) }),
+        });
+
+      return {
+        ensure: (config: string) => request(() => controller.ensure(config)),
+        generateText: (input: { readonly prompt: string; readonly model: string }) =>
+          request(async () => (await controller.service()).generateText(input)),
+        listModels: () => request(async () => (await controller.service()).listModels()),
+        listCredentials: () => request(async () => (await controller.service()).listCredentials()),
+        connectKey: (input: { readonly integrationID: string; readonly key: string }) =>
+          request(async () => (await controller.service()).connectKey(input)),
+        removeCredential: (credentialID: string) =>
+          request(async () => (await controller.service()).removeCredential(credentialID)),
+      };
     });
   }),
 ) {}

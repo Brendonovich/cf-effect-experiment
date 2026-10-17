@@ -1,4 +1,7 @@
+import { OpenCode } from "@opencode/client";
+import { Config } from "@opencode/schema/config";
 import { OpenCodeWorkerd } from "@opencode/sdk/workerd";
+import { Schema } from "effect";
 
 export interface CredentialSummary {
   readonly id: string;
@@ -19,6 +22,7 @@ export interface Service {
     readonly key: string;
   }) => Promise<void>;
   readonly removeCredential: (credentialID: string) => Promise<void>;
+  readonly close: () => Promise<void>;
 }
 
 export interface Host {
@@ -87,8 +91,35 @@ export const fromHost = (host: Host): Service => ({
     })),
   connectKey: ({ integrationID, key }) => host.integration.connect.key({ integrationID, key }),
   removeCredential: (credentialID) => host.credential.remove({ credentialID }),
+  close: () => Promise.resolve(),
 });
 
+export const decodeConfig = async (input: string) => {
+  const parsed: unknown = JSON.parse(input);
+  const decoded = await Schema.decodeUnknownPromise(Config.Info)(parsed, {
+    onExcessProperty: "error",
+  });
+  return Schema.encodeUnknownPromise(Config.Info)(decoded);
+};
+
 /** Creates one retained OpenCode Workerd host for a project Durable Object. */
-export const create = async (storage: Storage): Promise<Service> =>
-  fromHost(await OpenCodeWorkerd.create({ storage }));
+export const create = async (storage: Storage, configText: string): Promise<Service> => {
+  const host = await OpenCodeWorkerd.create({ storage, config: await decodeConfig(configText) });
+  return { ...fromHost(host), close: () => host.close() };
+};
+
+/** Connects to an external OpenCode service without provisioning local state. */
+export const connectRemote = async (input: {
+  readonly url: string;
+  readonly password: string;
+}): Promise<Service> => {
+  const client = OpenCode.make({
+    baseUrl: input.url,
+    headers:
+      input.password === ""
+        ? undefined
+        : { authorization: `Basic ${btoa(`opencode:${input.password}`)}` },
+  });
+  await client.server.info();
+  return fromHost(client);
+};

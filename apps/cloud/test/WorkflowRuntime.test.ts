@@ -1,5 +1,5 @@
 import type * as Executor from "@macrograph/execution/Executor";
-import type { Service as OpenCodeService } from "@macrograph/module-opencode/Engine/Cloudflare";
+import type { Instances as OpenCodeInstances } from "@macrograph/module-opencode/Instance";
 
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Project } from "@macrograph/core";
@@ -41,9 +41,9 @@ const mock = (respond: (request: HttpClientRequest.HttpClientRequest) => Respons
 const setup = Effect.fnUntraced(function* (
   project: Project.Model,
   httpClient: HttpClient.HttpClient,
-  openCodeService?: OpenCodeService,
+  openCodeInstances?: OpenCodeInstances,
 ) {
-  const engineClient = yield* WorkflowRuntime.make(project, openCodeService).pipe(
+  const engineClient = yield* WorkflowRuntime.make(project, openCodeInstances).pipe(
     Effect.provideService(HttpClient.HttpClient, httpClient),
   );
   return {
@@ -179,28 +179,32 @@ describe("WorkflowRuntime", () => {
   it.effect("routes OpenCode generation through the injected project service", () =>
     Effect.gen(function* () {
       const calls: Array<unknown> = [];
-      const service: OpenCodeService = {
-        generateText: (input) =>
-          Effect.sync(() => {
-            calls.push(input);
-            return "Cloud response";
+      const instances: OpenCodeInstances = {
+        defaultTarget: "managed",
+        availableTargets: ["managed", "remote"],
+        resolve: (target) =>
+          Effect.succeed({
+            generateText: (input) =>
+              Effect.sync(() => {
+                calls.push([target, input]);
+                return "Cloud response";
+              }),
+            listModels: Effect.succeed(["opencode/model"]),
           }),
-        listModels: () => Effect.succeed(["opencode/model"]),
-        clientState: () => Effect.succeed({ mode: "cloudflare", credentials: [] }),
-        connectKey: () => Effect.void,
-        removeCredential: () => Effect.void,
       };
       const { opencode } = yield* setup(
         Project.empty(),
         mock(() => new Response()),
-        service,
+        instances,
       );
       assert.strictEqual(
         yield* opencode.OpenCodeGenerateText({ prompt: "Hello", model: "opencode/model" }),
         "Cloud response",
       );
       assert.deepStrictEqual(yield* opencode.OpenCodeListModels(), ["opencode/model"]);
-      assert.deepStrictEqual(calls, [{ prompt: "Hello", model: "opencode/model" }]);
+      assert.deepStrictEqual(calls, [
+        [{ type: "default" }, { prompt: "Hello", model: "opencode/model" }],
+      ]);
     }),
   );
 
