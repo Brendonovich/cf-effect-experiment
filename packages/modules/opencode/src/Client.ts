@@ -20,6 +20,70 @@ export interface Client {
       }>;
     }>;
   };
+  readonly credential: {
+    readonly list: () => Promise<
+      ReadonlyArray<{
+        readonly id: string;
+        readonly integrationID: string;
+        readonly label: string;
+        readonly active: boolean;
+      }>
+    >;
+    readonly remove: (input: { readonly credentialID: string }) => Promise<void>;
+  };
+  readonly integration: {
+    readonly list: () => Promise<{
+      readonly data: ReadonlyArray<{
+        readonly id: string;
+        readonly name: string;
+        readonly methods: ReadonlyArray<{
+          readonly type: string;
+          readonly id?: string;
+          readonly label?: string;
+          readonly form?: ReadonlyArray<unknown>;
+        }>;
+      }>;
+    }>;
+    readonly connect: {
+      readonly key: (input: {
+        readonly integrationID: string;
+        readonly key: string;
+      }) => Promise<void>;
+    };
+    readonly oauth: {
+      readonly connect: (input: {
+        readonly integrationID: string;
+        readonly methodID: string;
+      }) => Promise<{
+        readonly data: {
+          readonly attemptID: string;
+          readonly url: string;
+          readonly instructions: string;
+          readonly mode: "auto" | "code";
+          readonly time: { readonly expires: number };
+        };
+      }>;
+      readonly status: (input: {
+        readonly integrationID: string;
+        readonly attemptID: string;
+      }) => Promise<{
+        readonly data:
+          | { readonly status: "pending" }
+          | { readonly status: "complete" }
+          | { readonly status: "failed"; readonly message: string }
+          | { readonly status: "expired" };
+      }>;
+      readonly complete: (input: {
+        readonly integrationID: string;
+        readonly attemptID: string;
+        readonly code?: string;
+      }) => Promise<void>;
+      readonly cancel: (input: {
+        readonly integrationID: string;
+        readonly attemptID: string;
+      }) => Promise<void>;
+    };
+  };
 }
 
 const reason = (cause: unknown) =>
@@ -64,4 +128,65 @@ export const fromClient = (client: Client): Instance => ({
       ).sort(),
     ),
   ),
+  listCredentials: request(() => client.credential.list()).pipe(
+    Effect.map((credentials) =>
+      credentials.map(({ id, integrationID, label, active }) => ({
+        id,
+        integrationID,
+        label,
+        active,
+      })),
+    ),
+  ),
+  listOAuthMethods: request(() => client.integration.list()).pipe(
+    Effect.map(({ data }) =>
+      data.flatMap((integration) =>
+        integration.methods.flatMap((method) =>
+          method.type === "oauth" &&
+          method.id !== undefined &&
+          method.label !== undefined &&
+          (method.form === undefined || method.form.length === 0)
+            ? [
+                {
+                  integrationID: integration.id,
+                  integrationName: integration.name,
+                  methodID: method.id,
+                  label: method.label,
+                },
+              ]
+            : [],
+        ),
+      ),
+    ),
+  ),
+  connectKey: (input) => request(() => client.integration.connect.key(input)),
+  removeCredential: (credentialID) => request(() => client.credential.remove({ credentialID })),
+  startOAuth: ({ integrationID, methodID }) =>
+    request(() => client.integration.oauth.connect({ integrationID, methodID })).pipe(
+      Effect.map(({ data }) => ({
+        integrationID,
+        attemptID: data.attemptID,
+        url: data.url,
+        instructions: data.instructions,
+        mode: data.mode,
+        expires: data.time.expires,
+      })),
+    ),
+  oauthStatus: (input) =>
+    request(() => client.integration.oauth.status(input)).pipe(
+      Effect.map(({ data }) =>
+        data.status === "failed"
+          ? { status: "failed" as const, message: data.message }
+          : { status: data.status },
+      ),
+    ),
+  completeOAuth: ({ integrationID, attemptID, code }) =>
+    request(() =>
+      client.integration.oauth.complete({
+        integrationID,
+        attemptID,
+        ...(code.trim() === "" ? {} : { code: code.trim() }),
+      }),
+    ),
+  cancelOAuth: (input) => request(() => client.integration.oauth.cancel(input)),
 });

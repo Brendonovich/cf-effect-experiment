@@ -45,6 +45,17 @@ const client = (requests: Array<unknown> = []) => ({
     },
   },
   model: { list: async () => ({ data: [] }) },
+  credential: { list: async () => [], remove: async () => {} },
+  integration: {
+    list: async () => ({ data: [] }),
+    connect: { key: async () => {} },
+    oauth: {
+      connect: async () => assert.fail("unused"),
+      status: async () => assert.fail("unused"),
+      complete: async () => {},
+      cancel: async () => {},
+    },
+  },
 });
 
 describe("OpenCode server deployment", () => {
@@ -73,6 +84,8 @@ describe("OpenCode server deployment", () => {
         target: { type: "default" },
         defaultTarget: "remote",
         availableTargets: ["remote"],
+        credentials: [],
+        oauthMethods: [],
       });
     }),
   );
@@ -90,6 +103,17 @@ describe("OpenCode server deployment", () => {
               { providerID: "openai", id: "gpt", enabled: true },
             ],
           }),
+        },
+        credential: { list: async () => [], remove: async () => {} },
+        integration: {
+          list: async () => ({ data: [] }),
+          connect: { key: async () => {} },
+          oauth: {
+            connect: async () => assert.fail("unused"),
+            status: async () => assert.fail("unused"),
+            complete: async () => {},
+            cancel: async () => {},
+          },
         },
       }));
       assert.deepStrictEqual(yield* runtimeClient.OpenCodeListModels(), [

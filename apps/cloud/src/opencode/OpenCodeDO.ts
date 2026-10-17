@@ -60,10 +60,23 @@ export default class OpenCodeDO extends Cloudflare.DurableObject<OpenCodeDO>()(
           request(async () => (await controller.service()).generateText(input)),
         listModels: () => request(async () => (await controller.service()).listModels()),
         listCredentials: () => request(async () => (await controller.service()).listCredentials()),
+        listOAuthMethods: () =>
+          request(async () => (await controller.service()).listOAuthMethods()),
         connectKey: (input: { readonly integrationID: string; readonly key: string }) =>
           request(async () => (await controller.service()).connectKey(input)),
         removeCredential: (credentialID: string) =>
           request(async () => (await controller.service()).removeCredential(credentialID)),
+        startOAuth: (input: { readonly integrationID: string; readonly methodID: string }) =>
+          request(async () => (await controller.service()).startOAuth(input)),
+        oauthStatus: (input: { readonly integrationID: string; readonly attemptID: string }) =>
+          request(async () => (await controller.service()).oauthStatus(input)),
+        completeOAuth: (input: {
+          readonly integrationID: string;
+          readonly attemptID: string;
+          readonly code: string;
+        }) => request(async () => (await controller.service()).completeOAuth(input)),
+        cancelOAuth: (input: { readonly integrationID: string; readonly attemptID: string }) =>
+          request(async () => (await controller.service()).cancelOAuth(input)),
       };
     });
   }),

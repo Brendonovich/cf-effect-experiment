@@ -12,6 +12,14 @@ describe("Cloud OpenCode instances", () => {
           ensure: (config) => Effect.sync(() => calls.push(["ensure", name, config])),
           generateText: (input) => Effect.sync(() => (calls.push(["generate", input]), "text")),
           listModels: () => Effect.succeed(["provider/model"]),
+          listCredentials: () => Effect.succeed([]),
+          listOAuthMethods: () => Effect.succeed([]),
+          connectKey: () => Effect.void,
+          removeCredential: () => Effect.void,
+          startOAuth: () => Effect.die("unused"),
+          oauthStatus: () => Effect.die("unused"),
+          completeOAuth: () => Effect.die("unused"),
+          cancelOAuth: () => Effect.die("unused"),
         }),
       });
       assert.strictEqual(instances.defaultTarget, "managed");
@@ -41,8 +49,13 @@ describe("Cloud OpenCode instances", () => {
             generateText: async () => "remote",
             listModels: async () => ["remote/model"],
             listCredentials: async () => [],
+            listOAuthMethods: async () => [],
             connectKey: async () => {},
             removeCredential: async () => {},
+            startOAuth: async () => assert.fail("unused"),
+            oauthStatus: async () => assert.fail("unused"),
+            completeOAuth: async () => {},
+            cancelOAuth: async () => {},
             close: async () => {},
           };
         },

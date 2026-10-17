@@ -8,8 +8,13 @@ const service = (name: string, closed: Array<string>): Service => ({
   generateText: async () => name,
   listModels: async () => [],
   listCredentials: async () => [],
+  listOAuthMethods: async () => [],
   connectKey: async () => {},
   removeCredential: async () => {},
+  startOAuth: async () => assert.fail("unused"),
+  oauthStatus: async () => assert.fail("unused"),
+  completeOAuth: async () => {},
+  cancelOAuth: async () => {},
   close: async () => void closed.push(name),
 });
 
