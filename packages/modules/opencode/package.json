@@ -5,7 +5,13 @@
   "main": "./src/Module.ts",
   "exports": {
     ".": "./src/Module.ts",
-    "./Definition": "./src/Definition.ts"
+    "./Client": "./src/Client.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment/Server": "./src/Deployment/Server.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Engine/Server": "./src/Engine/Server.ts",
+    "./Instance": "./src/Instance.ts",
+    "./Settings": "./src/Settings.tsx"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -14,12 +20,20 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@opencode/client": "2.0.27",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/stylex": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "solid-js": "2.0.0-rc.9",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment/Server.ts"
   }
 }
