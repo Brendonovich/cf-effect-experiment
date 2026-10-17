@@ -15,29 +15,15 @@ import { secureLayer as secureHttpUrlPolicy } from "@macrograph/module-http-clie
 import OpenAIModule from "@macrograph/module-openai";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import { layer as openAILayer } from "@macrograph/module-openai/Engine";
-import OpenCodeModule from "@macrograph/module-opencode";
-import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
-import {
-  makeLayer as makeOpenCodeLayer,
-  type Service as OpenCodeService,
-} from "@macrograph/module-opencode/Engine/Cloudflare";
+import SendblueModule from "@macrograph/module-sendblue";
+import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
+import { layer as sendblueLayer } from "@macrograph/module-sendblue/Engine";
 import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/rpc";
 
-const unavailableOpenCode = (): OpenCodeService => ({
-  generateText: () => Effect.die("OpenCode runtime is unavailable"),
-  listModels: () => Effect.die("OpenCode runtime is unavailable"),
-  clientState: () => Effect.die("OpenCode runtime is unavailable"),
-  connectKey: () => Effect.die("OpenCode runtime is unavailable"),
-  removeCredential: () => Effect.die("OpenCode runtime is unavailable"),
-});
-
-export const make = Effect.fnUntraced(function* (
-  project: Project.Model,
-  openCodeService: OpenCodeService = unavailableOpenCode(),
-) {
+export const make = Effect.fnUntraced(function* (project: Project.Model) {
   const readOnly = Effect.die("Workflow engine context is read-only");
   const context = {
     resource: { refresh: () => readOnly },
@@ -126,14 +112,19 @@ export const make = Effect.fnUntraced(function* (
   const discordClient = yield* RpcTest.makeClient(DiscordEngine.Rpcs).pipe(
     Effect.provide(discord.rpcs),
   );
-  const opencode = yield* OpenCodeEngine.pipe(
-    Effect.provide(makeOpenCodeLayer(openCodeService)),
+  const sendblue = yield* SendblueEngine.pipe(
+    Effect.provide(sendblueLayer),
     Effect.provide(
-      Layer.succeed(OpenCodeEngine.EngineContext)(
-        OpenCodeEngine.EngineContext.of({
+      Layer.succeed(SendblueEngine.EngineContext)(
+        SendblueEngine.EngineContext.of({
           ...context,
           storage: {
-            get: readOnly,
+            get: Schema.decodeUnknownEffect(SendblueEngine.Storage)(
+              project.engines[SendblueModule.id] ?? SendblueEngine.InitialStorage,
+            ).pipe(
+              Effect.mapError(() => "Invalid Sendblue deployment storage"),
+              Effect.orDie,
+            ),
             set: () => readOnly,
             update: () => readOnly,
           },
@@ -141,8 +132,8 @@ export const make = Effect.fnUntraced(function* (
       ),
     ),
   );
-  const openCodeClient = yield* RpcTest.makeClient(OpenCodeEngine.Rpcs).pipe(
-    Effect.provide(opencode.rpcs),
+  const sendblueClient = yield* RpcTest.makeClient(SendblueEngine.Rpcs).pipe(
+    Effect.provide(sendblue.rpcs),
   );
 
   const engineClient: NonNullable<Executor.MakeOptions["engineClient"]> = (moduleId) =>
@@ -151,12 +142,12 @@ export const make = Effect.fnUntraced(function* (
         ? httpClient
         : moduleId === OpenAIModule.id
           ? openAIClient
-          : moduleId === OpenCodeModule.id
-            ? openCodeClient
-            : moduleId === ElevenLabsModule.id
-              ? elevenLabsClient
-              : moduleId === DiscordModule.id
-                ? discordClient
+          : moduleId === ElevenLabsModule.id
+            ? elevenLabsClient
+            : moduleId === DiscordModule.id
+              ? discordClient
+              : moduleId === SendblueModule.id
+                ? sendblueClient
                 : moduleId === TwitchModule.id
                   ? unavailableTwitchRuntime
                   : moduleId === GitHubModule.id

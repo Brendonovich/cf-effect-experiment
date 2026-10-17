@@ -1,3 +1,7 @@
+import { Effect } from "effect";
+
+import type { Instance } from "./Instance.ts";
+
 import { RequestFailure } from "./Definition.ts";
 
 export interface Client {
@@ -18,31 +22,46 @@ export interface Client {
   };
 }
 
-const parseModel = (value: string) => {
-  if (value === "") return undefined;
-  const separator = value.indexOf("/");
-  if (separator <= 0 || separator === value.length - 1)
-    throw new RequestFailure({ reason: "Model must use the provider/model format" });
-  return { providerID: value.slice(0, separator), id: value.slice(separator + 1) };
-};
+const reason = (cause: unknown) =>
+  typeof cause === "object" &&
+  cause !== null &&
+  "reason" in cause &&
+  typeof cause.reason === "string"
+    ? cause.reason
+    : cause instanceof Error && cause.message.length > 0
+      ? cause.message
+      : "OpenCode request failed";
 
-export const generateText = async (
-  client: Client,
-  input: { readonly prompt: string; readonly model: string },
-) => {
-  const model = parseModel(input.model);
-  const result = await client.generate.text({
-    prompt: input.prompt,
-    ...(model === undefined ? {} : { model }),
+const request = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new RequestFailure({ reason: reason(cause) }),
   });
-  return result.text;
-};
 
-export const listModels = async (client: Client) => {
-  const { data } = await client.model.list();
-  return Array.from(
-    new Set(
-      data.filter((model) => model.enabled).map((model) => `${model.providerID}/${model.id}`),
+export const fromClient = (client: Client): Instance => ({
+  generateText: ({ prompt, model }) =>
+    Effect.gen(function* () {
+      let selected: { readonly providerID: string; readonly id: string } | undefined;
+      if (model !== "") {
+        const separator = model.indexOf("/");
+        if (separator <= 0 || separator === model.length - 1)
+          return yield* new RequestFailure({ reason: "Model must use the provider/model format" });
+        selected = { providerID: model.slice(0, separator), id: model.slice(separator + 1) };
+      }
+      return yield* request(() =>
+        client.generate.text({
+          prompt,
+          ...(selected === undefined ? {} : { model: selected }),
+        }),
+      ).pipe(Effect.map(({ text }) => text));
+    }),
+  listModels: request(() => client.model.list()).pipe(
+    Effect.map(({ data }) =>
+      Array.from(
+        new Set(
+          data.filter((model) => model.enabled).map((model) => `${model.providerID}/${model.id}`),
+        ),
+      ).sort(),
     ),
-  ).sort();
-};
+  ),
+});

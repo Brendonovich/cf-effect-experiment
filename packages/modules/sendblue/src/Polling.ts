@@ -1,0 +1,138 @@
+import * as PollingIngress from "@macrograph/module/PollingIngress";
+import { Clock, Effect, Schema } from "effect";
+import { Headers, HttpClient, HttpClientRequest } from "effect/http";
+
+import { AccountId, InboundMessage, type SendblueEngine } from "./Definition.ts";
+
+export const Configuration = Schema.Struct({
+  accountId: AccountId,
+  apiKey: Schema.String,
+  apiSecret: Schema.String,
+});
+export type Configuration = typeof Configuration.Type;
+export const Cursor = Schema.Struct({
+  sentAt: Schema.String,
+  handles: Schema.Array(Schema.String),
+});
+export type Cursor = typeof Cursor.Type;
+
+const Message = Schema.Struct({
+  message_handle: Schema.String,
+  from_number: Schema.String,
+  to_number: Schema.optionalKey(Schema.String),
+  sendblue_number: Schema.optionalKey(Schema.String),
+  content: Schema.optionalKey(Schema.String),
+  media_url: Schema.optionalKey(Schema.String),
+  service: Schema.optionalKey(Schema.String),
+  message_type: Schema.optionalKey(Schema.String),
+  group_id: Schema.optionalKey(Schema.String),
+  date_sent: Schema.optionalKey(Schema.String),
+  date_updated: Schema.optionalKey(Schema.String),
+});
+const MessagesResponse = Schema.Struct({ data: Schema.Array(Message) });
+
+export class ProviderFailure extends Schema.TaggedError<ProviderFailure>()(
+  "SendbluePollingProviderFailure",
+  { status: Schema.Number },
+) {}
+
+export const handler = PollingIngress.make({
+  id: "sendblue:messages",
+  moduleId: "sendblue",
+  displayName: "Received Messages",
+  intervalMs: 5_000,
+  configuration: Configuration,
+  cursor: Cursor,
+  event: InboundMessage,
+  initialCursor: () =>
+    Clock.currentTimeMillis.pipe(
+      Effect.map((now) => ({ sentAt: new Date(now - 10_000).toISOString(), handles: [] })),
+    ),
+  poll: Effect.fnUntraced(
+    function* ({ configuration, cursor }) {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const query = new URLSearchParams({
+        is_outbound: "false",
+        limit: "100",
+      });
+      const request = HttpClientRequest.get(
+        `https://api.sendblue.com/api/v2/messages?${query.toString()}`,
+      ).pipe(
+        HttpClientRequest.setHeader("sb-api-key-id", configuration.apiKey),
+        HttpClientRequest.setHeader("sb-api-secret-key", configuration.apiSecret),
+        HttpClientRequest.acceptJson,
+      );
+      const response = yield* client.execute(request);
+      if (response.status < 200 || response.status >= 300)
+        return yield* new ProviderFailure({ status: response.status });
+      const messages = yield* response.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(MessagesResponse)),
+      );
+      const sorted = messages.data
+        .flatMap((message) => {
+          const timestamp = message.date_updated ?? message.date_sent;
+          return timestamp === undefined ? [] : [{ message, timestamp }];
+        })
+        .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+      const unseen = sorted.filter(
+        ({ message, timestamp }) =>
+          timestamp > cursor.sentAt ||
+          (timestamp === cursor.sentAt && !cursor.handles.includes(message.message_handle)),
+      );
+      const nextCursor = sorted.reduce<Cursor>((current, { message, timestamp }) => {
+        if (timestamp > current.sentAt)
+          return { sentAt: timestamp, handles: [message.message_handle] };
+        if (timestamp === current.sentAt && !current.handles.includes(message.message_handle))
+          return { ...current, handles: [...current.handles, message.message_handle] };
+        return current;
+      }, cursor);
+      return {
+        cursor: nextCursor,
+        events: unseen.map(({ message, timestamp }) => ({
+          event: {
+            _tag: "SendblueMessageReceived" as const,
+            accountId: configuration.accountId,
+            messageHandle: message.message_handle,
+            fromNumber: message.from_number,
+            toNumber: message.to_number ?? message.sendblue_number ?? "",
+            content: message.content ?? "",
+            mediaUrl: message.media_url ?? "",
+            service: message.service ?? "",
+            messageType: message.message_type ?? "message",
+            groupId: message.group_id ?? "",
+            dateSent: message.date_sent ?? timestamp,
+          },
+          eventId: message.message_handle,
+        })),
+      };
+    },
+    (effect) =>
+      effect.pipe(
+        Effect.scoped,
+        Effect.updateService(Headers.CurrentRedactedNames, (names) => [
+          ...names,
+          "sb-api-key-id",
+          "sb-api-secret-key",
+        ]),
+      ),
+  ),
+});
+
+export const requirements = (state: typeof SendblueEngine.Storage.Type) =>
+  Effect.succeed(
+    Object.entries(state.accounts).flatMap(([accountId, account]) =>
+      account.mode !== "polling"
+        ? []
+        : [
+            handler.require({
+              instanceKey: accountId,
+              displayName: account.name,
+              configuration: {
+                accountId: AccountId.make(accountId),
+                apiKey: account.apiKey,
+                apiSecret: account.apiSecret,
+              },
+            }),
+          ],
+    ),
+  );

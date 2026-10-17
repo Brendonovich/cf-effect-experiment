@@ -19,6 +19,7 @@ import {
 import { styles } from "@macrograph/editor-ui/events.stylex";
 import GitHubModule from "@macrograph/module-github";
 import KofiModule from "@macrograph/module-kofi";
+import SendblueModule from "@macrograph/module-sendblue";
 import TwitchModule from "@macrograph/module-twitch";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery } from "@tanstack/solid-query";
@@ -39,6 +40,24 @@ interface EventsProps {
   readonly credentialsApi: CredentialsApiClient;
   readonly onSelectionChange: (eventId?: string) => void;
 }
+
+const pollingError = (metadata: unknown): string | undefined =>
+  typeof metadata === "object" &&
+  metadata !== null &&
+  "_tag" in metadata &&
+  metadata._tag === "PollingIngress" &&
+  "status" in metadata &&
+  metadata.status === "error" &&
+  "error" in metadata &&
+  typeof metadata.error === "string"
+    ? metadata.error
+    : undefined;
+
+const isPollingIngress = (metadata: unknown): boolean =>
+  typeof metadata === "object" &&
+  metadata !== null &&
+  "_tag" in metadata &&
+  metadata._tag === "PollingIngress";
 
 type TimelineItem =
   | { readonly kind: "ingress"; readonly record: ProjectIngressEventRecord }
@@ -288,11 +307,16 @@ export const Events: Component<EventsProps> = (props) => {
               endpointProps.ingress.schema.displayName}
           </div>
           <div sx={styles.instance}>
-            {endpointProps.ingress.schema.displayName} ·{" "}
-            {[KofiModule, TwitchModule, GitHubModule].find((module) =>
+            {isPollingIngress(endpointProps.ingress.metadata)
+              ? ""
+              : `${endpointProps.ingress.schema.displayName} · `}
+            {[KofiModule, TwitchModule, GitHubModule, SendblueModule].find((module) =>
               endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
+          <Show when={pollingError(endpointProps.ingress.metadata)}>
+            {(error) => <div sx={styles.instance}>Poll error: {error()}</div>}
+          </Show>
         </div>
         <div sx={styles.badges}>
           <Show when={endpointProps.ingress.deployed}>
@@ -301,10 +325,10 @@ export const Events: Component<EventsProps> = (props) => {
           <Show when={endpointProps.ingress.preview}>
             <span sx={[styles.badge, styles.preview]}>Preview</span>
           </Show>
+          <Show when={pollingError(endpointProps.ingress.metadata)}>
+            <span sx={styles.badge}>Poll error</span>
+          </Show>
         </div>
-      </div>
-      <div sx={[styles.endpointId, styles.inlineEndpointId]} title={endpointProps.ingress.id}>
-        {endpointProps.ingress.id}
       </div>
     </div>
   );
@@ -316,16 +340,16 @@ export const Events: Component<EventsProps> = (props) => {
           <header sx={styles.ingressPanelHeader}>
             <div sx={styles.timelineHeaderTitle}>
               <div sx={styles.titleRow}>
-                <h1 sx={[styles.panelTitle, styles.timelineHeading]}>Ingress endpoints</h1>
+                <h1 sx={[styles.panelTitle, styles.timelineHeading]}>Ingress sources</h1>
                 <Show when={eventQuery.data !== undefined}>
                   <span sx={styles.executionCount}>{ingresses().length}</span>
                 </Show>
               </div>
-              <p sx={styles.panelDescription}>Deployment and preview endpoint state</p>
+              <p sx={styles.panelDescription}>Deployment and preview ingress state</p>
             </div>
             <EventSearch
               ingress
-              placeholder="Search endpoints"
+              placeholder="Search ingress sources"
               value={ingressSearch()}
               onChange={setIngressSearch}
             />
@@ -347,7 +371,7 @@ export const Events: Component<EventsProps> = (props) => {
                   <div sx={styles.emptyIngress}>
                     {ingresses().length > 0
                       ? "No ingress endpoints match your search."
-                      : "No ingress endpoints are deployed or in preview."}
+                      : "No ingress sources are deployed or in preview."}
                   </div>
                 </Show>
               }
@@ -448,7 +472,9 @@ export const Events: Component<EventsProps> = (props) => {
                 const ingressName =
                   endpoint === undefined
                     ? undefined
-                    : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
+                    : isPollingIngress(endpoint.metadata)
+                      ? endpoint.displayName
+                      : `${endpoint.schema.displayName} · ${endpoint.displayName}`;
                 const moduleName =
                   [KofiModule, TwitchModule, GitHubModule].find(
                     (module) => module.id === selected.record.moduleId,

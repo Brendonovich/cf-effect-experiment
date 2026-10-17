@@ -29,6 +29,8 @@
     "@macrograph/module-lifx": "workspace:*",
     "@macrograph/module-obs": "workspace:*",
     "@macrograph/module-openai": "workspace:*",
+    "@macrograph/module-opencode": "workspace:*",
+    "@macrograph/module-sendblue": "workspace:*",
     "@macrograph/module-speakerbot": "workspace:*",
     "@macrograph/module-streamdeck": "workspace:*",
     "@macrograph/module-streamlabs": "workspace:*",
