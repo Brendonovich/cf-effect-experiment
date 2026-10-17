@@ -1,4 +1,5 @@
 import type * as Executor from "@macrograph/execution/Executor";
+import type { Instances as OpenCodeInstances } from "@macrograph/module-opencode/Instance";
 
 import { assert, describe, it, vi } from "@effect/vitest";
 import { Project } from "@macrograph/core";
@@ -7,6 +8,7 @@ import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Cause, Effect, Option } from "effect";
@@ -39,8 +41,9 @@ const mock = (respond: (request: HttpClientRequest.HttpClientRequest) => Respons
 const setup = Effect.fnUntraced(function* (
   project: Project.Model,
   httpClient: HttpClient.HttpClient,
+  openCodeInstances?: OpenCodeInstances,
 ) {
-  const engineClient = yield* WorkflowRuntime.make(project).pipe(
+  const engineClient = yield* WorkflowRuntime.make(project, openCodeInstances).pipe(
     Effect.provideService(HttpClient.HttpClient, httpClient),
   );
   return {
@@ -50,6 +53,7 @@ const setup = Effect.fnUntraced(function* (
       typeof ElevenLabsEngine
     >,
     http: (yield* engineClient("http-client")) as Engine.RuntimeClientOf<typeof HttpClientEngine>,
+    opencode: (yield* engineClient("opencode")) as Engine.RuntimeClientOf<typeof OpenCodeEngine>,
   };
 });
 
@@ -168,6 +172,38 @@ describe("WorkflowRuntime", () => {
         "second-elevenlabs",
         "Bearer first-openai",
         "first-elevenlabs",
+      ]);
+    }),
+  );
+
+  it.effect("routes OpenCode generation through the injected project service", () =>
+    Effect.gen(function* () {
+      const calls: Array<unknown> = [];
+      const instances: OpenCodeInstances = {
+        defaultTarget: "managed",
+        availableTargets: ["managed", "remote"],
+        resolve: (target) =>
+          Effect.succeed({
+            generateText: (input) =>
+              Effect.sync(() => {
+                calls.push([target, input]);
+                return "Cloud response";
+              }),
+            listModels: Effect.succeed(["opencode/model"]),
+          }),
+      };
+      const { opencode } = yield* setup(
+        Project.empty(),
+        mock(() => new Response()),
+        instances,
+      );
+      assert.strictEqual(
+        yield* opencode.OpenCodeGenerateText({ prompt: "Hello", model: "opencode/model" }),
+        "Cloud response",
+      );
+      assert.deepStrictEqual(yield* opencode.OpenCodeListModels(), ["opencode/model"]);
+      assert.deepStrictEqual(calls, [
+        [{ type: "default" }, { prompt: "Hello", model: "opencode/model" }],
       ]);
     }),
   );

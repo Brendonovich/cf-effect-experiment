@@ -23,6 +23,9 @@
       "path": "packages/module"
     },
     {
+      "path": "packages/opencode-workerd"
+    },
+    {
       "path": "packages/cloud-credentials"
     },
     {
