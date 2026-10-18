@@ -9,6 +9,7 @@ import LogicModule from "@macrograph/module-logic";
 import MathModule from "@macrograph/module-math";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import OpenAIDeployment from "@macrograph/module-openai/Deployment";
+import OpenCodeModule from "@macrograph/module-opencode";
 import StringModule from "@macrograph/module-string";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { Effect, Layer } from "effect";
@@ -22,6 +23,8 @@ export const statelessModules = [
 ] as const;
 // Discord runs only its REST and webhook actions; gateway events need a long-lived connection.
 export const apiDeployments = [OpenAIDeployment, ElevenLabsDeployment, DiscordDeployment] as const;
+/** Engine modules whose deployment needs a project-scoped service supplied by ProjectEditorDO. */
+export const projectScopedModules = [OpenCodeModule] as const;
 
 export const editorLayer = Layer.effectDiscard(
   Effect.gen(function* () {
