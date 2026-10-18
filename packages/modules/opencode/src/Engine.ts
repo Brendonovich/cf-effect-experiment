@@ -28,11 +28,21 @@ export const makeLayer = (instances: Instances) =>
         }),
         client: {
           state: context.storage.get.pipe(
-            Effect.map(({ target }) => ({
-              target: summary(target),
-              defaultTarget: instances.defaultTarget,
-              availableTargets: instances.availableTargets,
-            })),
+            Effect.flatMap(({ target }) =>
+              instances.resolve(target).pipe(
+                Effect.flatMap((instance) =>
+                  Effect.all([instance.listCredentials, instance.listOAuthMethods]),
+                ),
+                Effect.orElseSucceed(() => [[], []] as const),
+                Effect.map(([credentials, oauthMethods]) => ({
+                  target: summary(target),
+                  defaultTarget: instances.defaultTarget,
+                  availableTargets: instances.availableTargets,
+                  credentials,
+                  oauthMethods,
+                })),
+              ),
+            ),
           ),
           rpcs: ClientRpcs.toLayer({
             OpenCodeSetTarget: (target) => {
@@ -51,6 +61,32 @@ export const makeLayer = (instances: Instances) =>
                   Effect.andThen(context.client.refresh),
                 );
             },
+            OpenCodeConnectKey: (input) =>
+              resolve.pipe(
+                Effect.flatMap((instance) => instance.connectKey(input)),
+                Effect.andThen(context.client.refresh),
+              ),
+            OpenCodeRemoveCredential: ({ credentialID }) =>
+              resolve.pipe(
+                Effect.flatMap((instance) => instance.removeCredential(credentialID)),
+                Effect.andThen(context.client.refresh),
+              ),
+            OpenCodeStartOAuth: (input) =>
+              resolve.pipe(Effect.flatMap((instance) => instance.startOAuth(input))),
+            OpenCodeOAuthStatus: (input) =>
+              resolve.pipe(
+                Effect.flatMap((instance) => instance.oauthStatus(input)),
+                Effect.tap((status) =>
+                  status.status === "complete" ? context.client.refresh : Effect.void,
+                ),
+              ),
+            OpenCodeCompleteOAuth: (input) =>
+              resolve.pipe(
+                Effect.flatMap((instance) => instance.completeOAuth(input)),
+                Effect.andThen(context.client.refresh),
+              ),
+            OpenCodeCancelOAuth: (input) =>
+              resolve.pipe(Effect.flatMap((instance) => instance.cancelOAuth(input))),
           }),
         },
       }),

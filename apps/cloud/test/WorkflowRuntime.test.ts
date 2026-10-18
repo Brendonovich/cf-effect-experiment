@@ -188,8 +188,16 @@ describe("WorkflowRuntime", () => {
               Effect.sync(() => {
                 calls.push([target, input]);
                 return "Cloud response";
-              }),
+            }),
             listModels: Effect.succeed(["opencode/model"]),
+            listCredentials: Effect.succeed([]),
+            listOAuthMethods: Effect.succeed([]),
+            connectKey: () => Effect.void,
+            removeCredential: () => Effect.void,
+            startOAuth: () => Effect.die("unused"),
+            oauthStatus: () => Effect.die("unused"),
+            completeOAuth: () => Effect.die("unused"),
+            cancelOAuth: () => Effect.die("unused"),
           }),
       };
       const { opencode } = yield* setup(
