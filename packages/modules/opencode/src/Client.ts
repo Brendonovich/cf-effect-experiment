@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import type { Instance } from "./Instance.ts";
 
-import { RequestFailure } from "./Definition.ts";
+import { describeFailure, RequestFailure } from "./Definition.ts";
 
 export interface Client {
   readonly generate: {
@@ -86,20 +86,10 @@ export interface Client {
   };
 }
 
-const reason = (cause: unknown) =>
-  typeof cause === "object" &&
-  cause !== null &&
-  "reason" in cause &&
-  typeof cause.reason === "string"
-    ? cause.reason
-    : cause instanceof Error && cause.message.length > 0
-      ? cause.message
-      : "OpenCode request failed";
-
 const request = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
-    catch: (cause) => new RequestFailure({ reason: reason(cause) }),
+    catch: (cause) => new RequestFailure({ reason: describeFailure(cause) }),
   });
 
 export const fromClient = (client: Client): Instance => ({

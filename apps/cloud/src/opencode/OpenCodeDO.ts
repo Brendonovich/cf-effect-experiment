@@ -1,12 +1,10 @@
 import type { Service } from "@macrograph/opencode-workerd";
 
-import { RequestFailure } from "@macrograph/module-opencode/Definition";
+import { describeFailure, RequestFailure } from "@macrograph/module-opencode/Definition";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 
 const configKey = "macrograph-opencode-config-v1";
-const reason = (cause: unknown) =>
-  cause instanceof Error && cause.message.length > 0 ? cause.message : "OpenCode request failed";
 
 export interface Storage {
   readonly get: <T>(key: string) => Promise<T | undefined>;
@@ -135,7 +133,7 @@ export const OpenCodeDOLayer = OpenCodeDO.make(
       const request = <A>(run: () => Promise<A>) =>
         Effect.tryPromise({
           try: run,
-          catch: (cause) => new RequestFailure({ reason: reason(cause) }),
+          catch: (cause) => new RequestFailure({ reason: describeFailure(cause) }),
         });
 
       return {
