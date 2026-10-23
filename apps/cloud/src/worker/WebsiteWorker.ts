@@ -43,7 +43,9 @@ export default Layer.unwrap(
         // `WEBSITE_`-prefixed values configure only this Worker, e.g. providers Cloud doesn't offer.
         const value = process.env[`WEBSITE_${name}`] || process.env[name] || undefined;
         if (value === undefined) return [];
-        return [[name, name.endsWith("_CLIENT_ID") ? value : Redacted.make(value)] as const];
+        // Alchemy JSON-decodes plain-text bindings at runtime, turning numeric client IDs (such as
+        // Discord's) into numbers; redacted values always arrive as strings.
+        return [[name, Redacted.make(value)] as const];
       }),
     );
 
