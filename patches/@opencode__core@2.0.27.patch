@@ -1,0 +1,24 @@
+diff --git a/dist/database/sqlite.workerd.js b/dist/database/sqlite.workerd.js
+index 68de131c8af10b84327bcd32d867c3524c862097..5596a578335f2cf5f4c75cb95c8757d6cf32ab79 100644
+--- a/dist/database/sqlite.workerd.js
++++ b/dist/database/sqlite.workerd.js
+@@ -4,7 +4,7 @@ import {
+ } from "../chunks/filesystem-tyytaxap.js";
+ 
+ // src/database/sqlite.workerd.ts
+-import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect";
++import { Context, Effect, Exit, Fiber, Layer, Scheduler, Scope, Semaphore } from "effect";
+ import { Reactivity } from "effect/reactivity";
+ import { SqlClient, Statement } from "effect/sql";
+ import { classifySqliteError, SqlError, UnknownError } from "effect/sql/SqlError";
+@@ -20,7 +20,9 @@ var makeWithTransaction = (storage, connection, semaphore) => (effect) => Effect
+   const services = fiber.context;
+   if (Context.getOption(services, WorkerdTransaction)._tag === "Some")
+     return Effect.fail(transactionError("Nested transactions are not supported by Cloudflare Durable Object SQLite storage"));
+-  const effectWithTxn = Effect.provideContext(effect, Context.add(services, WorkerdTransaction, [connection, 0]));
++  // Durable Object transactions hold the input gate, so timer callbacks cannot run until the
++  // transaction closure settles. Yield through microtasks to avoid deadlocking the fiber.
++  const effectWithTxn = Effect.provideContext(effect, Context.add(Context.add(services, WorkerdTransaction, [connection, 0]), Scheduler.Scheduler, new Scheduler.MixedScheduler("sync")));
+   return semaphore.withPermits(1)(Effect.callback((resume) => {
+     let interrupted = false;
+     const promise = storage.transaction((txn) => new Promise((resolve) => {

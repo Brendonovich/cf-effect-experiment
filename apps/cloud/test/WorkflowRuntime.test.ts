@@ -8,7 +8,7 @@ import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
-import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
+import { ConnectionId, OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Cause, Effect, Option } from "effect";
@@ -176,19 +176,19 @@ describe("WorkflowRuntime", () => {
     }),
   );
 
-  it.effect("routes OpenCode generation through the injected project service", () =>
+  it.effect("routes OpenCode generation to the deployed connection bound by the node", () =>
     Effect.gen(function* () {
       const calls: Array<unknown> = [];
+      const connectionId = ConnectionId.make("writer");
       const instances: OpenCodeInstances = {
-        defaultTarget: "managed",
-        availableTargets: ["managed", "remote"],
-        resolve: (target) =>
+        connectionTypes: ["managed", "remote"],
+        resolve: (connection) =>
           Effect.succeed({
             generateText: (input) =>
               Effect.sync(() => {
-                calls.push([target, input]);
+                calls.push([connection, input]);
                 return "Cloud response";
-            }),
+              }),
             listModels: Effect.succeed(["opencode/model"]),
             listCredentials: Effect.succeed([]),
             listOAuthMethods: Effect.succeed([]),
@@ -201,17 +201,38 @@ describe("WorkflowRuntime", () => {
           }),
       };
       const { opencode } = yield* setup(
-        Project.empty(),
+        {
+          ...Project.empty(),
+          engines: {
+            opencode: {
+              connections: {
+                [connectionId]: {
+                  name: "Writer",
+                  target: { type: "managed", config: '{"model":"p/m"}' },
+                },
+              },
+            },
+          },
+        },
         mock(() => new Response()),
         instances,
       );
       assert.strictEqual(
-        yield* opencode.OpenCodeGenerateText({ prompt: "Hello", model: "opencode/model" }),
+        yield* opencode.OpenCodeGenerateText({
+          connectionId,
+          prompt: "Hello",
+          model: "opencode/model",
+        }),
         "Cloud response",
       );
-      assert.deepStrictEqual(yield* opencode.OpenCodeListModels(), ["opencode/model"]);
+      assert.deepStrictEqual(yield* opencode.OpenCodeListModels({ connectionId }), [
+        "opencode/model",
+      ]);
       assert.deepStrictEqual(calls, [
-        [{ type: "default" }, { prompt: "Hello", model: "opencode/model" }],
+        [
+          { id: connectionId, target: { type: "managed", config: '{"model":"p/m"}' } },
+          { prompt: "Hello", model: "opencode/model" },
+        ],
       ]);
     }),
   );

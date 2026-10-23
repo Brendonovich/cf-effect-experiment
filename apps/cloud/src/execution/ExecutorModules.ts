@@ -28,8 +28,7 @@ const [openai, elevenlabs, discord] = apiDeployments;
 const openCode = Engine.deployment(
   OpenCodeModule,
   makeOpenCodeLayer({
-    defaultTarget: "managed",
-    availableTargets: ["managed", "remote"],
+    connectionTypes: ["managed", "remote"],
     resolve: () => Effect.fail(new OpenCodeFailure({ reason: "OpenCode runtime is unavailable" })),
   }),
 );

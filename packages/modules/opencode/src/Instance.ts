@@ -1,20 +1,23 @@
 import { Effect } from "effect";
 
 import type {
+  ConnectionId,
+  ConnectionTarget,
+  ConnectionType,
   CredentialSummary,
-  GenerateTextRequest,
   OAuthAttempt,
   OAuthMethodSummary,
   OAuthStatus,
   RequestFailure,
-  Target,
-  TargetType,
 } from "./Definition.ts";
 
 export interface Instance {
-  readonly generateText: (
-    input: typeof GenerateTextRequest.Type,
-  ) => Effect.Effect<string, RequestFailure>;
+  /** The config a managed instance is running, when the platform defers applying saved changes. */
+  readonly appliedConfig?: string;
+  readonly generateText: (input: {
+    readonly prompt: string;
+    readonly model: string;
+  }) => Effect.Effect<string, RequestFailure>;
   readonly listModels: Effect.Effect<ReadonlyArray<string>, RequestFailure>;
   readonly listCredentials: Effect.Effect<
     ReadonlyArray<typeof CredentialSummary.Type>,
@@ -48,9 +51,11 @@ export interface Instance {
   }) => Effect.Effect<void, RequestFailure>;
 }
 
-/** Resolves logical OpenCode targets without exposing platform provisioning details. */
+/** Resolves explicit OpenCode connections without exposing platform provisioning details. */
 export interface Instances {
-  readonly defaultTarget: TargetType;
-  readonly availableTargets: ReadonlyArray<TargetType>;
-  readonly resolve: (target: Target) => Effect.Effect<Instance, RequestFailure>;
+  readonly connectionTypes: ReadonlyArray<ConnectionType>;
+  readonly resolve: (connection: {
+    readonly id: ConnectionId;
+    readonly target: ConnectionTarget;
+  }) => Effect.Effect<Instance, RequestFailure>;
 }

@@ -211,7 +211,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
         });
         const engineClient = yield* WorkflowRuntime.make(
           project,
-          OpenCodeInstances.make(Effect.succeed(input.projectId), openCodeDos),
+          OpenCodeInstances.make(Effect.succeed(input.projectId), openCodeDos, "production"),
         ).pipe(Effect.provide(FetchHttpClient.layer));
         yield* GraphExecution.run(
           project,

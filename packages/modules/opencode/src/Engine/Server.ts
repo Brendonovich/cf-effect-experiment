@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import type { Instances } from "../Instance.ts";
 
 import { type Client, fromClient } from "../Client.ts";
-import { RequestFailure, type Target } from "../Definition.ts";
+import { type ConnectionTarget, RequestFailure } from "../Definition.ts";
 import { makeLayer } from "../Engine.ts";
 
 export type Discover = () => Promise<Client | undefined>;
@@ -22,7 +22,7 @@ const discover: Discover = async () => {
 
 const failure = (reason: string) => new RequestFailure({ reason });
 
-const remoteClient = (target: Extract<Target, { readonly type: "remote" }>) =>
+const remoteClient = (target: Extract<ConnectionTarget, { readonly type: "remote" }>) =>
   Effect.gen(function* () {
     const url = yield* Effect.try({
       try: () => {
@@ -50,11 +50,10 @@ const remoteClient = (target: Extract<Target, { readonly type: "remote" }>) =>
   });
 
 export const makeInstances = (find: Discover = discover): Instances => ({
-  defaultTarget: "remote",
-  availableTargets: ["remote"],
-  resolve: (target) => {
+  connectionTypes: ["local", "remote"],
+  resolve: ({ target }) => {
     if (target.type === "managed")
-      return Effect.fail(failure("Managed OpenCode targets are unavailable on this server"));
+      return Effect.fail(failure("Managed OpenCode connections are unavailable on this server"));
     const client =
       target.type === "remote"
         ? remoteClient(target)

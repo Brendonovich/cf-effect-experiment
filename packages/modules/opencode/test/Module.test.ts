@@ -2,11 +2,18 @@ import { assert, describe, it } from "@effect/vitest";
 import { Registration } from "@macrograph/module";
 import { Effect, Result } from "effect";
 
-import { GenerateTextRequest, OpenCodeEngine, RequestFailure } from "../src/Definition.ts";
+import {
+  ConnectionId,
+  GenerateTextRequest,
+  OpenCodeConnection,
+  OpenCodeEngine,
+  RequestFailure,
+} from "../src/Definition.ts";
 import module from "../src/Module.ts";
 
+const connectionId = ConnectionId.make("writer");
 const context = {
-  properties: {},
+  properties: { connection: connectionId },
   event: undefined,
   execution: {
     projectId: "project",
@@ -33,6 +40,14 @@ describe("OpenCode module", () => {
       assert.strictEqual(schema!.id, "GenerateText");
       assert.strictEqual(schema!.type, "exec");
       assert.strictEqual(schema!.replay, "unsafe");
+      assert.deepStrictEqual(
+        schema!.properties.map((property) =>
+          "resource" in property
+            ? { id: property.id, resource: property.resource, class: property.resourceClass }
+            : property,
+        ),
+        [{ id: "connection", resource: "OpenCodeConnection", class: OpenCodeConnection }],
+      );
       assert.deepStrictEqual(
         schema!.dataInputs.map(({ id, name, type, defaultValue }) => ({
           id,
@@ -62,19 +77,25 @@ describe("OpenCode module", () => {
       assert.isDefined(suggestions);
       assert.deepStrictEqual(
         yield* suggestions!({
-          properties: {},
+          properties: { connection: connectionId },
           inputDefaults: {},
-          engine: { OpenCodeListModels: () => Effect.succeed(["anthropic/sonnet", "openai/gpt"]) },
+          engine: {
+            OpenCodeListModels: (request: { readonly connectionId: ConnectionId }) => {
+              assert.deepStrictEqual(request, { connectionId });
+              return Effect.succeed(["anthropic/sonnet", "openai/gpt"]);
+            },
+          },
         }),
         ["anthropic/sonnet", "openai/gpt"],
       );
     }),
   );
 
-  it.effect("forwards the prompt and model and emits the response", () =>
+  it.effect("forwards the bound connection, prompt, and model and emits the response", () =>
     Effect.gen(function* () {
       const [schema] = yield* Registration.collect(module.effect);
       const input: typeof GenerateTextRequest.Type = {
+        connectionId,
         prompt: "Summarize this",
         model: "anthropic/claude",
       };
@@ -87,7 +108,7 @@ describe("OpenCode module", () => {
             return Effect.succeed("Summary");
           },
         },
-        input: (ref) => input[ref.id as keyof typeof input],
+        input: (ref) => (ref.id === "prompt" ? input.prompt : input.model),
         output: (ref, value) => {
           output[ref.id] = value;
         },
