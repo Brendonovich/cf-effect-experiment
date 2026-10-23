@@ -36,6 +36,12 @@ const host = (calls: Array<unknown>): Host => ({
           methods: [
             { type: "oauth", id: "workspace", label: "Sign in" },
             { type: "oauth", id: "configured", label: "Configured OAuth", form: [{}] },
+            {
+              type: "oauth",
+              id: "console",
+              label: "OpenCode Console account",
+              form: [{ hidden: true }],
+            },
             { type: "key" },
           ],
         },
@@ -112,6 +118,12 @@ describe("OpenCode Workerd adapter", () => {
         integrationName: "OpenCode Console",
         methodID: "workspace",
         label: "Sign in",
+      },
+      {
+        integrationID: "opencode",
+        integrationName: "OpenCode Console",
+        methodID: "console",
+        label: "OpenCode Console account",
       },
     ]);
     assert.deepStrictEqual(
