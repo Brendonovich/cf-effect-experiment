@@ -85,6 +85,10 @@ with the same file protections as the authorization files.
   may be percent-encoded, e.g. `Authorization=Bearer%20token`.
 - `OTEL_EXPORTER_OTLP_TRACES_HEADERS`: trace-specific headers, replacing the general headers.
 - `OTEL_SERVICE_NAME`: server trace service name, default `macrograph-server`.
+- `AXIOM_TOKEN`: optional Axiom API token with ingest permission. When set, traces are also sent
+  to Axiom, alongside any OTLP collector.
+- `AXIOM_DATASET`: Axiom traces dataset, default `macrograph-traces`.
+- `AXIOM_OTLP_ENDPOINT`: Axiom base URL for edge deployments, default `https://api.axiom.co`.
 - `VITE_OTEL_EXPORTER_OTLP_ENDPOINT`: optional browser OTLP/HTTP trace endpoint, set at build time.
 - `MACROGRAPH_BROWSER_OTLP_ENDPOINT`: browser collector URL used by the runtime CSP; the image sets
   this from the browser build argument.
@@ -118,6 +122,11 @@ hits that skip the callback do not produce a schema-run span. Input spans
 identify connections or default sources without recording input/output values. These boundaries
 apply to every runtime using the shared executor, not just Cloudflare workflows.
 
+Effect logs emitted inside a span, such as Print node output, are recorded as span events on that
+span (for example `Schema.run util.Print`). No separate OTLP log export is used. Each trace payload
+is serialized once and sent to every destination, so trace and span IDs match across the collector
+and Axiom. Each destination receives only its own headers.
+
 For example, set these in `apps/server/.env` for development or production startup:
 
 ```dotenv
@@ -125,6 +134,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=macrograph-server
 # Optional for authenticated collectors:
 # OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20your-token
+# Also send traces to Axiom:
+# AXIOM_TOKEN=xaat-...
 ```
 
 For Docker, pass these as container environment variables and use a collector address reachable

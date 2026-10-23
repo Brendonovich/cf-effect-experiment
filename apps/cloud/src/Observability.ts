@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Axiom from "alchemy/Axiom";
+import { retain } from "alchemy/RemovalPolicy";
 import { ConfigProvider, Context, Effect, Layer, Option, Tracer } from "effect";
 
 export const traceDatasetName = "macrograph-traces";
@@ -11,7 +12,9 @@ const traces = Axiom.Dataset("MacroGraphTraces", {
   kind: "otel:traces:v1",
   retentionDays: 30,
   useRetentionPeriod: true,
-}).pipe(adopt(true));
+  // Every stage adopts this shared dataset; retain it so destroying a preview
+  // stage never deletes production's traces.
+}).pipe(adopt(true), retain());
 
 const ingestToken = Axiom.ApiToken("MacroGraphTraceIngestToken", {
   name: "macrograph-trace-ingest",
