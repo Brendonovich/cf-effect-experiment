@@ -16,6 +16,8 @@ describe("Cloud MCP toolkit", () => {
       "listProjects",
       "getProject",
       "createProject",
+      "listExecutions",
+      "getExecution",
       "listGraphs",
       "getGraph",
       "createGraph",
@@ -42,6 +44,21 @@ describe("Cloud MCP toolkit", () => {
     assert.isTrue(Context.get(toolkit.tools.searchSchemas.annotations, Tool.Readonly));
     assert.isTrue(Context.get(toolkit.tools.listResources.annotations, Tool.Readonly));
     assert.isTrue(Context.get(toolkit.tools.deleteGraph.annotations, Tool.Destructive));
+    assert.isTrue(Context.get(toolkit.tools.listExecutions.annotations, Tool.Readonly));
+    assert.isTrue(Context.get(toolkit.tools.getExecution.annotations, Tool.Readonly));
+  });
+
+  it("looks up executions by ID and points at their trace", () => {
+    const schema = Tool.getJsonSchema(toolkit.tools.getExecution);
+
+    assert.containsAllKeys(schema.properties, ["projectId", "executionId"]);
+    assert.include(schema.required, "executionId");
+    assert.deepStrictEqual(CloudMcp.executionTrace("abc123"), {
+      traceId: "abc123",
+      dataset: "macrograph-traces",
+      query: `['macrograph-traces'] | where trace_id == "abc123" | order by _time asc`,
+    });
+    assert.isNull(CloudMcp.executionTrace(null));
   });
 
   it("exposes bounded multi-query schema discovery with required project context", () => {
@@ -95,6 +112,8 @@ describe("Cloud MCP toolkit", () => {
             })),
           getProject: () => Effect.die("unused"),
           createProject: () => Effect.die("unused"),
+          listExecutions: () => Effect.die("unused"),
+          getExecution: () => Effect.die("unused"),
           listGraphs: () => Effect.die("unused"),
           getGraph: () => Effect.die("unused"),
           createGraph: () => Effect.die("unused"),
@@ -177,7 +196,7 @@ describe("Cloud MCP toolkit", () => {
 
         const listed = yield* send(listRequest, "Bearer alice", sessionId);
         const listedBody = yield* Effect.promise(() => HttpServerResponse.toWeb(listed).json());
-        assert.lengthOf(listedBody.result.tools, 11);
+        assert.lengthOf(listedBody.result.tools, 13);
         assert.include(
           listedBody.result.tools.map((tool: { name: string }) => tool.name),
           "createGraph",

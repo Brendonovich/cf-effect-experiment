@@ -145,6 +145,7 @@ export default Layer.unwrap(
         return yield* Effect.gen(function* () {
           const authentication = yield* Authentication.Service;
           const project = yield* Project.Service;
+          const event = yield* Event.Service;
           const cloudHandlers = CloudApiHandlers.layer.pipe(
             Layer.provide(Authentication.middleware),
           );
@@ -168,6 +169,32 @@ export default Layer.unwrap(
             listProjects: project.list,
             getProject: project.get,
             createProject: project.create,
+            listExecutions: ({ projectId, deploymentId, status, limit }) =>
+              event.listExecutions(projectId, deploymentId).pipe(
+                Effect.map(({ executions, events }) => {
+                  const eventsById = new Map(events.map((record) => [record.id, record]));
+                  return {
+                    executions: executions
+                      .filter((execution) => status === undefined || execution.status === status)
+                      .slice(0, limit ?? 20)
+                      .map((execution) => {
+                        const record = eventsById.get(execution.projectEventId);
+                        return {
+                          ...execution,
+                          eventType: record?.eventType ?? null,
+                          traceId: record?.traceId ?? null,
+                        };
+                      }),
+                  };
+                }),
+              ),
+            getExecution: ({ projectId, executionId }) =>
+              event.getExecution(projectId, executionId).pipe(
+                Effect.map((result) => ({
+                  ...result,
+                  trace: CloudMcp.executionTrace(result.event.traceId),
+                })),
+              ),
             listGraphs: project.listGraphs,
             getGraph: project.getGraph,
             createGraph: project.createGraph,
