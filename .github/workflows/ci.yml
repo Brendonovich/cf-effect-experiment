@@ -358,7 +358,6 @@ jobs:
           WEBSITE_PATREON_CLIENT_SECRET: ${{ secrets.WEBSITE_PATREON_CLIENT_SECRET }}
           WEBSITE_STREAMLABS_CLIENT_ID: ${{ secrets.WEBSITE_STREAMLABS_CLIENT_ID }}
           WEBSITE_STREAMLABS_CLIENT_SECRET: ${{ secrets.WEBSITE_STREAMLABS_CLIENT_SECRET }}
-          WEBSITE_ANALYTICS: "true"
 
   deploy-opencode-bot:
     needs: [quality, unit-tests, e2e]
