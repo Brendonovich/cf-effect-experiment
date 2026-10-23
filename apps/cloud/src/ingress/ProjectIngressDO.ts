@@ -650,7 +650,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
       if (!Number.isSafeInteger(tick))
         return yield* Effect.die("Utilities tick counter exceeded the safe integer range");
       yield* durableState.storage.put(utilitiesTickCountKey, tick);
-      const executionId = `${deployment.value.projectId}:utilities:tick:${tick}`;
+      // Workflow instance IDs only allow letters, digits, "-" and "_".
+      const executionId = `${deployment.value.projectId}-utilities-tick-${tick}`;
       yield* Effect.tryPromise({
         try: () =>
           binding.create({
