@@ -538,8 +538,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         ),
       );
 
+      // Engines fork in-process runtime RPC servers, so the layer must outlive construction.
       const rpcWs = yield* makeRpcServerHttpEffectWebsocket(WorkspaceRpcs).pipe(
-        Effect.provide(RpcLayer),
+        Effect.provide(Layer.effectContext(Layer.buildWithScope(RpcLayer, Scope.makeUnsafe()))),
       );
 
       const disconnectUser = Effect.fnUntraced(function* (userId: string) {
