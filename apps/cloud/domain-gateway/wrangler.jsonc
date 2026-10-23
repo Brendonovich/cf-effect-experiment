@@ -5,7 +5,7 @@
   "compatibility_date": "2026-08-27",
   "services": [
     {
-      "binding": "CLOUD_WORKER",
+      "binding": "WORKER",
       "service": "macrograph-cloudworker-production-m32pwzigivmpg2as",
     },
   ],

@@ -104,3 +104,15 @@ export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
 );
 
 export const DeploymentObjectsBucket = Cloudflare.R2.Bucket("RevisionSnapshots");
+
+/**
+ * Shared projects from the original website's playground. Production adopts and retains the
+ * namespace the website has always used; other stages get their own.
+ */
+export const PlaygroundShares = (production: boolean) =>
+  production
+    ? Cloudflare.KV.Namespace("PlaygroundShares", { title: "macrograph-saved-shares" }).pipe(
+        adopt(true),
+        retain(),
+      )
+    : Cloudflare.KV.Namespace("PlaygroundShares");
