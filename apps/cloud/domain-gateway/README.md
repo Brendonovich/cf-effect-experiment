@@ -5,7 +5,7 @@
 standard Workers custom domain. DNS stays on Vercel; the existing website and
 other subdomains are unchanged.
 
-The gateway forwards every request through the `CLOUD_WORKER` service binding,
+The gateway forwards every request through the `WORKER` service binding,
 including static assets, APIs, streaming responses, and WebSocket upgrades.
 It does not redirect visitors to `workers.dev` or copy the frontend build.
 

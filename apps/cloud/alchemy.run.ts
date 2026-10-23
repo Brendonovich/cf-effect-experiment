@@ -26,6 +26,10 @@ import CloudWorkerLayer, {
 } from "./src/worker/CloudWorker.ts";
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
+import WebsiteWorkerLayer, {
+	WebsiteOAuthStateSecret,
+	WebsiteWorker,
+} from "./src/worker/WebsiteWorker.ts";
 
 const logicalDatabaseProviders = PlanetscaleLogicalDb.providers() as Layer.Layer<
 	PlanetscaleLogicalDb.Providers,
@@ -74,6 +78,14 @@ export default Alchemy.Stack(
 				})
 			: undefined;
 
+		const websiteOAuthStateSecret = yield* Alchemy.makeRandom(
+			"WebsiteOAuthStateSecret",
+		);
+		const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
+			Effect.provide(WebsiteWorkerLayer),
+			Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
+		);
+
 		const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
 			const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
 			const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
@@ -108,6 +120,7 @@ export default Alchemy.Stack(
 		return {
 			publicWorkerUrl: cloudWorker.url,
 			publicIngressUrl: ingressWorker.url,
+			websiteWorkerUrl: websiteWorker.url,
 		};
 	}),
 );

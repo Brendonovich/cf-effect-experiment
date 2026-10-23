@@ -16,7 +16,7 @@ describe("domain gateway", () => {
       });
       const response = new Response("response body");
       const result = gateway.fetch(request, {
-        CLOUD_WORKER: {
+        WORKER: {
           async fetch(forwarded) {
             assert.strictEqual(forwarded, request);
             return response;
