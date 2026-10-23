@@ -118,6 +118,7 @@
     { "path": "packages/modules/list" },
     { "path": "packages/modules/logic" },
     { "path": "packages/modules/math" },
+    { "path": "packages/modules/midi" },
     { "path": "packages/modules/openai" },
     { "path": "packages/modules/opencode" },
     { "path": "packages/modules/shell" },

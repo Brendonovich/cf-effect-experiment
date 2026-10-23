@@ -1,0 +1,39 @@
+{
+  "name": "@macrograph/module-midi",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Module.ts",
+  "exports": {
+    ".": "./src/Module.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment": "./src/Deployment.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Protocol": "./src/Protocol.ts",
+    "./Settings": "./src/Settings.tsx",
+    "./Transport": "./src/Transport.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@julusian/midi": "^3.8.1",
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.9"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "^22",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "standaloneDeployment": "./src/Deployment.ts"
+  }
+}

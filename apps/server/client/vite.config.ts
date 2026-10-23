@@ -24,6 +24,7 @@ export const serverModules = new Set([
   "@macrograph/module-list",
   "@macrograph/module-logic",
   "@macrograph/module-math",
+  "@macrograph/module-midi",
   "@macrograph/module-openai",
   "@macrograph/module-opencode",
   "@macrograph/module-sendblue",

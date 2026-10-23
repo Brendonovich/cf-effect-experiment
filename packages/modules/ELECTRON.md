@@ -84,7 +84,7 @@ streaming semantics. See each module README for exact current schemas and limits
 | Localstorage            |            5 | Deferred: the source uses browser-origin `value-` keys, not project-scoped server storage.                                                                                      |
 | Logic                   |           13 | Boolean/routing/waiting nodes covered; For Each, For Loop, and While require scope execution support.                                                                           |
 | Map                     |           11 | JSON object creation/editing/lookup/membership/keys/values/size/removal substitutes; no native typed Map pins.                                                                  |
-| MIDI                    |           13 | Deferred: seven receive/six send nodes need device discovery and an input/output capability bridge.                                                                             |
+| MIDI                    |           13 | Covered for server-connected devices: nine receive and nine send nodes, including SysEx and raw IO.                                                                             |
 | OBS Websocket           |          180 | Existing broad request/event catalog expanded for Electron gaps; version and high-frequency-event limits are documented by OBS.                                                 |
 | OpenAI                  |            2 | Existing chat/image nodes; chat is non-streaming with JSON history, not scoped streaming execution.                                                                             |
 | Shell                   |            1 | Existing opt-in host shell; PowerShell/cmd/pwsh engine selection remains absent.                                                                                                |
@@ -118,7 +118,7 @@ capabilities, not additional module menus.
 
 ## Remaining Work
 
-- Device/browser capabilities: Audio, Keyboard, global input, MIDI, Speech to Text,
+- Device/browser capabilities: Audio, Keyboard, global input, Speech to Text,
   and browser-origin Localstorage. Do not silently substitute the server's devices
   or project database for the editor user's devices/storage.
 - Project domains: typed custom events, variables, functions, queues, function
