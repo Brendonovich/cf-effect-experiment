@@ -29,9 +29,9 @@ import {
   connectionPath,
   graphConnections,
   wireColor,
-  wireSegments,
 } from "./graph/graphPresentation";
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Wire } from "./graph/Wire";
 import { Inspector } from "./inspector/Inspector";
 import { ModuleSettingsView } from "./modules/ModuleSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -290,11 +290,6 @@ const styles = stylex.create({
   },
   scaledLayer: { transformOrigin: "top left" },
   wires: { pointerEvents: "none", overflow: "visible" },
-  smoothWire: {
-    transitionDuration: { default: "40ms", "@media (prefers-reduced-motion: reduce)": "0ms" },
-    transitionProperty: "d",
-    transitionTimingFunction: "linear",
-  },
   remoteCursor: {
     pointerEvents: "none",
     position: "absolute",
@@ -876,22 +871,13 @@ function EditorContent(
                                           />
                                         )}
                                       </Show>
-                                      <For each={wireSegments(edge())}>
-                                        {(segment) => (
-                                          <path
-                                            sx={
-                                              !isNodeDragging(edge().connection.outNodeId) &&
-                                              !isNodeDragging(edge().connection.inNodeId) &&
-                                              styles.smoothWire
-                                            }
-                                            d={segment.path}
-                                            fill="none"
-                                            stroke={segment.stroke}
-                                            stroke-width="2"
-                                            opacity="0.75"
-                                          />
-                                        )}
-                                      </For>
+                                      <Wire
+                                        edge={edge()}
+                                        smooth={
+                                          !isNodeDragging(edge().connection.outNodeId) &&
+                                          !isNodeDragging(edge().connection.inNodeId)
+                                        }
+                                      />
                                     </>
                                   )}
                                 </For>

@@ -7,7 +7,8 @@ import { For, createMemo, createSignal, type Component } from "solid-js";
 import { colors } from "../../tokens.stylex.ts";
 import { zoomOriginAt } from "../workspace/workspace";
 import { GraphNode } from "./GraphNode.tsx";
-import { connectedPortIds, graphConnections, wireSegments } from "./graphPresentation";
+import { connectedPortIds, graphConnections } from "./graphPresentation";
+import { Wire } from "./Wire.tsx";
 
 interface SnapshotGraphCanvasProps {
   readonly graph: Canvas.Model | RenderedGraph.Model;
@@ -116,17 +117,7 @@ export const SnapshotGraphCanvas: Component<SnapshotGraphCanvasProps> = (props) 
         style={{ transform: `scale(${scale()}) translate(${-origin().x}px, ${-origin().y}px)` }}
       >
         <svg sx={styles.wires} aria-hidden="true">
-          <For each={edges().flatMap((edge) => wireSegments(edge))}>
-            {(segment) => (
-              <path
-                d={segment.path}
-                fill="none"
-                stroke={segment.stroke}
-                stroke-width="2"
-                opacity="0.75"
-              />
-            )}
-          </For>
+          <For each={edges()}>{(edge) => <Wire edge={edge} />}</For>
         </svg>
         <For each={Object.values(props.graph.nodes)}>
           {(node) => (
