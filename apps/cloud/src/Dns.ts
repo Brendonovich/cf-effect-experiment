@@ -35,17 +35,4 @@ export const records = Effect.gen(function* () {
     type: "TXT",
     content: "did=did:plc:4nujv54vmeuwqkxel24zqnbu",
   });
-
-  // Keep the current hosts reachable while nameservers move; replaced by Worker custom domains.
-  yield* record("TransitionApexRecord", { name: "@", type: "A", content: "76.76.21.21" });
-  yield* record("TransitionWwwRecord", {
-    name: "www",
-    type: "CNAME",
-    content: "cname.vercel-dns.com",
-  });
-  yield* record("TransitionCloudRecord", {
-    name: "cloud",
-    type: "CNAME",
-    content: "macrograph-cloud.pages.dev",
-  });
 });

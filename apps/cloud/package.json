@@ -8,9 +8,6 @@
     "db:migrate-accounts": "bash scripts/migrate-account-data.sh",
     "dev": "mprocs --names Alchemy,Frontend \"pnpm alchemy dev\" \"node --env-file-if-exists=.env dev-tunnel.ts\"",
     "deploy": "pnpm alchemy deploy",
-    "build:domain": "rolldown src/worker/DomainGateway.ts --platform browser --file .alchemy/domain-gateway/_worker.js",
-    "deploy:domain": "pnpm build:domain && wrangler pages deploy --cwd domain-gateway --branch main",
-    "deploy:website-domain": "pnpm build:domain && wrangler pages deploy --cwd website-gateway --branch main",
     "test": "vp test run"
   },
   "dependencies": {
