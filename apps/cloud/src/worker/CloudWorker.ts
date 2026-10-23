@@ -22,7 +22,6 @@ import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
 import * as EventPolicy from "../execution/EventPolicy.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as Project from "../project/Project.ts";
 import * as ProjectPolicy from "../project/ProjectPolicy.ts";
 import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
@@ -113,8 +112,6 @@ export default Layer.unwrap(
         if (credentialOAuthStateSecret !== undefined)
           yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
-        // Binds IngressWorker's OpenCodeDO namespace for ProjectEditorDO's managed connections.
-        yield* OpenCodeDO.from(IngressWorker);
         const mcpOAuthRegistrationRateLimit = yield* Cloudflare.RateLimit(
           "MCP_OAUTH_REGISTRATION_RATE_LIMIT",
           {
