@@ -6,7 +6,7 @@ import { HttpRouter } from "effect/http";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import { DatabaseHyperdrive } from "../Storage.ts";
+import { DatabaseHyperdrive, PlaygroundShares } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
@@ -20,11 +20,6 @@ export class WebsiteOAuthStateSecret extends Context.Service<
   Alchemy.Output<Redacted.Redacted<string>>
 >()("WebsiteOAuthStateSecret") {}
 
-export class PlaygroundSharesNamespace extends Context.Service<
-  PlaygroundSharesNamespace,
-  Cloudflare.KV.Namespace
->()("PlaygroundSharesNamespace") {}
-
 /** Serves the original MacroGraph website and the account APIs used by desktop and servers. */
 export class WebsiteWorker extends Cloudflare.Worker<WebsiteWorker, {}>()("WebsiteWorker") {}
 
@@ -34,8 +29,8 @@ export const productionWorkerName = "macrograph-website";
 export default Layer.unwrap(
   Effect.gen(function* () {
     const stateSecret = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteOAuthStateSecret));
-    const sharesNamespace = yield* PlaygroundSharesNamespace;
     const stage = yield* Alchemy.Stage;
+    const sharesNamespace = yield* PlaygroundShares(stage === "production");
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
       [
