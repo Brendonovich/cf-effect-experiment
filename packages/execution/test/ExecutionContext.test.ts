@@ -162,6 +162,7 @@ describe("schema execution context", () => {
       };
       const executor = yield* Executor.make(project, {
         projectId: "project-123",
+        executionId: "execution-123",
         executionEnvironment,
       });
       yield* executor.module(module, deployment);
@@ -179,6 +180,10 @@ describe("schema execution context", () => {
         ),
       );
       assert.lengthOf(spans, 12);
+      for (const span of spans.filter(
+        (span) => span.name.startsWith("Executor.") || span.name.startsWith("Schema.run "),
+      ))
+        assert.strictEqual(span.attributes.get("macrograph.execution.id"), "execution-123");
       const eventSpan = spans[0]!;
       assert.strictEqual(eventSpan.name, "Executor.handleEvent");
       const matchSpan = spans.find((span) => span.name === "Executor.matchEvent")!;
@@ -224,7 +229,7 @@ describe("schema execution context", () => {
       const seen = yield* Ref.get(contexts);
       assert.strictEqual(seen.length, 3);
       assert.strictEqual(
-        graphSpan.attributes.get("macrograph.execution.id"),
+        graphSpan.attributes.get("macrograph.execution.trace.id"),
         seen[0]?.executionTraceId,
       );
       for (const [index, span] of nodeSpans.entries()) {

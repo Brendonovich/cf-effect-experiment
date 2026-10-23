@@ -90,6 +90,40 @@ export class RequestFailure extends Schema.TaggedError<RequestFailure>()("OpenCo
   }
 }
 
+const field = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null && key in value ? Reflect.get(value, key) : undefined;
+const text = (value: unknown) => (typeof value === "string" && value !== "" ? value : undefined);
+const json = (value: unknown) => {
+  try {
+    return text(JSON.stringify(value)?.slice(0, 500));
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Describes an OpenCode client or host failure for error messages and traces. Declared API errors
+ * arrive as Errors carrying the response body (`_tag`, `data`) and often an empty message, so the
+ * tag and payload are kept instead of collapsing to a generic reason.
+ */
+export const describeFailure = (cause: unknown): string => {
+  if (cause instanceof RequestFailure) return cause.reason;
+  const tag =
+    text(field(cause, "_tag")) ??
+    (cause instanceof Error && cause.name !== "Error" ? cause.name : undefined);
+  const data = field(cause, "data");
+  const message =
+    text(field(cause, "message")) ??
+    text(field(data, "message")) ??
+    text(cause) ??
+    (data === undefined ? undefined : json(data));
+  const parts = [
+    message !== undefined && tag !== undefined && message.startsWith(tag) ? undefined : tag,
+    message,
+  ].filter((part) => part !== undefined);
+  return parts.length === 0 ? "OpenCode request failed" : parts.join(": ");
+};
+
 export const ConnectionTargetSummary = Schema.Union([
   Schema.Struct({ type: Schema.Literal("managed"), config: Schema.String }),
   Schema.Struct({ type: Schema.Literal("remote"), url: Schema.String }),

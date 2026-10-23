@@ -7,6 +7,7 @@ import { Effect } from "effect";
 
 export interface Input {
   readonly projectId: string;
+  readonly executionId?: string;
   readonly moduleId: string;
   readonly event: unknown;
 }
@@ -24,6 +25,7 @@ export const run = Effect.fnUntraced(function* (
 ) {
   const executor = yield* ProjectExecutor.make(project, {
     projectId: input.projectId,
+    ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
     executionEnvironment: options.executionEnvironment,
     modules: options.modules,
     ...(options.engineClient === undefined ? {} : { engineClient: options.engineClient }),

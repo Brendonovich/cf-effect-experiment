@@ -2,7 +2,11 @@ import type { Instance, Instances } from "@macrograph/module-opencode/Instance";
 import type { connectRemote, Service } from "@macrograph/opencode-workerd";
 
 import OpenCodeModule from "@macrograph/module-opencode";
-import { OpenCodeEngine, RequestFailure } from "@macrograph/module-opencode/Definition";
+import {
+  describeFailure,
+  OpenCodeEngine,
+  RequestFailure,
+} from "@macrograph/module-opencode/Definition";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Schema } from "effect";
 
@@ -93,13 +97,7 @@ export const bindNamespace = (binding: unknown): Namespace => ({
     ),
 });
 
-const failure = (cause: unknown) =>
-  new RequestFailure({
-    reason:
-      cause instanceof Error && cause.message.length > 0
-        ? cause.message
-        : "OpenCode request failed",
-  });
+const failure = (cause: unknown) => new RequestFailure({ reason: describeFailure(cause) });
 
 const remoteInstance = (service: Service): Instance => ({
   generateText: (input) =>

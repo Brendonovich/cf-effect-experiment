@@ -327,6 +327,8 @@ export interface MakeOptions {
     invocation: QueueInvocation,
   ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly projectId?: string;
+  /** Host-assigned execution ID (e.g. a workflow run), recorded as `macrograph.execution.id` on every span. */
+  readonly executionId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
   readonly resourceValues?: (
@@ -359,6 +361,8 @@ export const make = Effect.fnUntraced(function* (
     ]),
   );
   const projectId = options?.projectId ?? "local";
+  const executionIdAttributes =
+    options?.executionId === undefined ? {} : { "macrograph.execution.id": options.executionId };
   const pendingNodes = new Map<
     string,
     {
@@ -524,7 +528,8 @@ export const make = Effect.fnUntraced(function* (
         "macrograph.project.id": request.key.projectId,
         "macrograph.graph.id": request.key.graphId,
         "macrograph.event_node.id": request.key.eventNodeId,
-        "macrograph.execution.id": request.key.executionTraceId,
+        ...executionIdAttributes,
+        "macrograph.execution.trace.id": request.key.executionTraceId,
         "macrograph.trace.id": request.key.traceId,
         "macrograph.node.id": request.key.nodeId,
         "macrograph.node.kind": request.key.kind,
@@ -1190,7 +1195,8 @@ export const make = Effect.fnUntraced(function* (
         "macrograph.project.id": projectId,
         "macrograph.graph.id": graph.id,
         "macrograph.event_node.id": rootEventNodeId,
-        "macrograph.execution.id": executionTraceId,
+        ...executionIdAttributes,
+        "macrograph.execution.trace.id": executionTraceId,
       };
       yield* Effect.annotateCurrentSpan({
         ...executionAttributes,
@@ -2001,6 +2007,7 @@ export const make = Effect.fnUntraced(function* (
                 Effect.withSpan("Executor.matchEvent", {
                   attributes: {
                     "macrograph.project.id": projectId,
+                    ...executionIdAttributes,
                     "macrograph.graph.id": canvas.id,
                     "macrograph.node.id": node.id,
                     "macrograph.module.id": node.schema.package,
@@ -2031,6 +2038,7 @@ export const make = Effect.fnUntraced(function* (
           kind: "consumer",
           attributes: {
             "macrograph.project.id": projectId,
+            ...executionIdAttributes,
             "macrograph.module.id": module.id,
             "macrograph.event.type": emittedEvent._tag,
           },
