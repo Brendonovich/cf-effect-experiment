@@ -17,7 +17,7 @@ import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
 import { Retry } from "@macrograph/module/Retry";
-import { Cause, Effect, Ref, Result, Schema } from "effect";
+import { Cause, Effect, Logger, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
@@ -552,6 +552,9 @@ export const make = Effect.fnUntraced(function* (
           },
         }),
       ).pipe(
+        // Record node logs (e.g. Print) as span events even when a runtime replaces
+        // Effect's default loggers.
+        Effect.withLogger(Logger.tracerLogger),
         Effect.withSpan(`Schema.run ${request.moduleId}.${request.schemaId}`, {
           attributes: nodeAttributes,
         }),
@@ -1346,6 +1349,7 @@ export const make = Effect.fnUntraced(function* (
                 },
               }),
             ).pipe(
+              Effect.withLogger(Logger.tracerLogger),
               Effect.withSpan(`Schema.run ${node.schema.package}.${node.schema.schema}`, {
                 attributes: nodeAttributes,
               }),
