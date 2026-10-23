@@ -17,6 +17,7 @@ import LIFX from "@macrograph/module-lifx/Deployment";
 import List from "@macrograph/module-list";
 import Logic from "@macrograph/module-logic";
 import Math from "@macrograph/module-math";
+import Midi from "@macrograph/module-midi/Deployment";
 import OBS from "@macrograph/module-obs/Deployment/WebSocket";
 import OpenAI from "@macrograph/module-openai/Deployment";
 import OpenCode from "@macrograph/module-opencode/Deployment/Server";
@@ -49,6 +50,7 @@ const deployments = [
   HttpClient,
   IkeaTradfri,
   LIFX,
+  Midi,
   OBS,
   OpenAI,
   OpenCode,
@@ -77,6 +79,7 @@ const mounted = Layer.mergeAll(
   ModuleHost.deploymentLayer(HttpClient),
   ModuleHost.deploymentLayer(IkeaTradfri),
   ModuleHost.deploymentLayer(LIFX),
+  ModuleHost.deploymentLayer(Midi),
   ModuleHost.deploymentLayer(OBS),
   ModuleHost.deploymentLayer(OpenAI),
   ModuleHost.deploymentLayer(OpenCode),
@@ -163,6 +166,7 @@ describe("Self-hosted modules", () => {
         ["list", 11],
         ["logic", 18],
         ["math", 33],
+        ["midi", 18],
         ["obs", 209],
         ["openai", 2],
         ["opencode", 1],

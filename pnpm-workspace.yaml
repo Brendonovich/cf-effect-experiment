@@ -6,6 +6,7 @@ packages:
   - "apps/cloud/frontend"
   - "apps/server/client"
 allowBuilds:
+  "@julusian/midi": true
   "@parcel/watcher": false
   "@swc/core": true
   cbor-extract: true

@@ -15,6 +15,7 @@
     "agent:rest": "node scripts/rest-agent.mjs"
   },
   "dependencies": {
+    "@julusian/midi": "^3.8.1",
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@macrograph/cloud-api": "workspace:*",
@@ -37,6 +38,7 @@
     "@macrograph/module-list": "workspace:*",
     "@macrograph/module-logic": "workspace:*",
     "@macrograph/module-math": "workspace:*",
+    "@macrograph/module-midi": "workspace:*",
     "@macrograph/module-obs": "workspace:*",
     "@macrograph/module-openai": "workspace:*",
     "@macrograph/module-opencode": "workspace:*",

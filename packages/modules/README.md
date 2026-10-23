@@ -57,6 +57,7 @@ alone does not prevent a workflow backend from replaying an unfinished step.
 | `list`                | Explicitly typed list creation, editing, lookup, and joining            | Server, browser, and Cloudflare    |
 | `logic`               | Boolean operations, branching, waiting, and typed conditionals          | Server, browser, and Cloudflare    |
 | `math`                | Numeric operations and conversions                                      | Server, browser, and Cloudflare    |
+| `midi`                | Note, CC, program, aftertouch, pitch bend and SysEx send and receive    | Server with connected MIDI devices |
 | `openai`              | Chat completion and image generation with an API key                    | Server and Cloudflare              |
 | `shell`               | Opt-in shell command execution                                          | Server                             |
 | `speakerbot`          | Speech and queue controls                                               | Server with reachable SpeakerBot   |
@@ -148,8 +149,9 @@ through the Filesystem module on an opted-in server.
 
 ## Deferred catalog
 
-- Audio playback, browser keyboard input, global input emulation, and MIDI need
-  explicit browser/desktop capability bridges.
+- Audio playback, browser keyboard input, and global input emulation need explicit
+  browser/desktop capability bridges. MIDI uses devices connected to the server, not the
+  editor user's computer.
 - Localstorage needs a defined client-side storage scope rather than substituting
   server project storage.
 - Variables and custom events need project/graph domain models and event registries.
