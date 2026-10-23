@@ -59,7 +59,10 @@ export default Alchemy.Stack(
 		);
 		yield* DatabaseHyperdrive;
 		yield* DeploymentObjectsBucket;
-		if ((yield* Alchemy.Stage) === "production") yield* Dns.records;
+		if ((yield* Alchemy.Stage) === "production") {
+			yield* Dns.records;
+			yield* Dns.brendonovichDevRecordSet;
+		}
 		const legacyDatabase =
 			!ctx.dev && process.env.PULL_REQUEST === undefined
 				? yield* LegacyLogicalDatabase
