@@ -218,6 +218,84 @@ describe("Observability", () => {
     ),
   );
 
+  it.effect("mirrors traces, with logs as span events, to Axiom with identical identifiers", () =>
+    Effect.gen(function* () {
+      const requests: Array<{
+        url: string | undefined;
+        headers: IncomingHttpHeaders;
+        body: string;
+      }> = [];
+      const startCollector = Effect.acquireRelease(
+        Effect.callback<ReturnType<typeof createServer>, Error>((resume) => {
+          const server = createServer((request, response) => {
+            let body = "";
+            request.setEncoding("utf8");
+            request.on("data", (chunk: string) => {
+              body += chunk;
+            });
+            request.on("end", () => {
+              requests.push({
+                url: `${request.headers.host}${request.url}`,
+                headers: request.headers,
+                body,
+              });
+              response.writeHead(200, { "content-type": "application/json" });
+              response.end("{}");
+            });
+          });
+          server.once("error", (error) => resume(Effect.fail(error)));
+          server.listen(0, "127.0.0.1", () => resume(Effect.succeed(server)));
+        }),
+        (server) =>
+          Effect.callback<void>((resume) => {
+            server.close(() => resume(Effect.void));
+            server.closeAllConnections();
+          }),
+      );
+      const port = (server: ReturnType<typeof createServer>) => {
+        const address = server.address();
+        return address !== null && typeof address === "object" ? address.port : 0;
+      };
+      const collector = port(yield* startCollector);
+      const axiom = port(yield* startCollector);
+      const config = makeServerConfig({
+        OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${collector}`,
+        OTEL_EXPORTER_OTLP_HEADERS: "X-Collector-Key=secret",
+        AXIOM_TOKEN: "xaat-test",
+        AXIOM_OTLP_ENDPOINT: `http://127.0.0.1:${axiom}`,
+      });
+
+      yield* Effect.logInfo("Utilities Print", { value: "hello" }).pipe(
+        Effect.withSpan("Schema.run util.Print"),
+        Effect.provide(Observability.layer(config)),
+      );
+
+      const find = (host: number, path: string) => {
+        const request = requests.find((r) => r.url === `127.0.0.1:${host}${path}`);
+        if (request === undefined) return assert.fail(`Expected ${path} on ${host}`);
+        return request;
+      };
+      const collectorTraces = find(collector, "/v1/traces");
+      const axiomTraces = find(axiom, "/v1/traces");
+      assert.lengthOf(requests, 2);
+      assert.strictEqual(axiomTraces.body, collectorTraces.body);
+      assert.strictEqual(collectorTraces.headers["x-collector-key"], "secret");
+      assert.isUndefined(collectorTraces.headers.authorization);
+      assert.isUndefined(axiomTraces.headers["x-collector-key"]);
+      assert.strictEqual(axiomTraces.headers.authorization, "Bearer xaat-test");
+      assert.strictEqual(axiomTraces.headers["x-axiom-dataset"], "macrograph-traces");
+
+      const span = JSON.parse(axiomTraces.body).resourceSpans[0].scopeSpans[0].spans[0];
+      assert.strictEqual(span.name, "Schema.run util.Print");
+      // Effect's default tracer logger records the log as a span event.
+      assert.include(span.events[0].name, "Utilities Print");
+      assert.include(span.events[0].name, "hello");
+    }).pipe(
+      Effect.scoped,
+      Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({})),
+    ),
+  );
+
   it.effect("returns an empty layer when no collector endpoint is configured", () =>
     Effect.gen(function* () {
       const layer = Observability.layer(makeServerConfig({}));
