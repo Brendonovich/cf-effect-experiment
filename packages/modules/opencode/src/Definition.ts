@@ -84,7 +84,11 @@ export const OAuthStatus = Schema.Union([
 
 export class RequestFailure extends Schema.TaggedError<RequestFailure>()("OpenCodeRequestFailure", {
   reason: Schema.String,
-}) {}
+}) {
+  override get message() {
+    return this.reason;
+  }
+}
 
 export const ConnectionTargetSummary = Schema.Union([
   Schema.Struct({ type: Schema.Literal("managed"), config: Schema.String }),

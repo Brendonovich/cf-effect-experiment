@@ -88,7 +88,24 @@ export class EngineClientUnavailable extends Schema.TaggedError<EngineClientUnav
 export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()(
   "NodeExecutionError",
   { nodeId: Schema.String, cause: Schema.Unknown },
-) {}
+) {
+  override get message() {
+    const error = Cause.isCause(this.cause) ? Cause.squash(this.cause) : this.cause;
+    const reason =
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string" &&
+      error.message !== ""
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : undefined;
+    return reason === undefined
+      ? `Node ${this.nodeId} failed`
+      : `Node ${this.nodeId} failed: ${reason}`;
+  }
+}
 
 export class NodeExecutionNotPending extends Schema.TaggedError<NodeExecutionNotPending>()(
   "NodeExecutionNotPending",

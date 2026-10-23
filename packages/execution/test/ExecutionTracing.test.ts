@@ -119,7 +119,10 @@ describe("execution tracing", () => {
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause);
         assert.instanceOf(error, Executor.NodeExecutionError);
-        if (error instanceof Executor.NodeExecutionError) assert.strictEqual(error.nodeId, nodeId);
+        if (error instanceof Executor.NodeExecutionError) {
+          assert.strictEqual(error.nodeId, nodeId);
+          assert.strictEqual(error.message, `Node ${nodeId} failed: node failed`);
+        }
       }
       const [eventSpan, graphSpan, nodeSpan] = executionSpanNames.map((name) =>
         assertSpanExit(spans, name, exit),
