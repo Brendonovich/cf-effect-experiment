@@ -215,7 +215,12 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
         ).pipe(Effect.provide(FetchHttpClient.layer));
         yield* GraphExecution.run(
           project,
-          { projectId: input.projectId, moduleId: input.moduleId, event },
+          {
+            projectId: input.projectId,
+            executionId: input.executionId,
+            moduleId: input.moduleId,
+            event,
+          },
           {
             executionEnvironment,
             modules: ExecutorModules.registry,
