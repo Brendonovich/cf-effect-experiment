@@ -57,9 +57,6 @@ export default Layer.unwrap(
           ...(process.env.WEBSITE_AUTH_REDIRECT_ORIGIN === undefined
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
-          ...(process.env.WEBSITE_ANALYTICS === undefined
-            ? {}
-            : { WEBSITE_ANALYTICS: process.env.WEBSITE_ANALYTICS }),
         },
         assets: {
           directory: websiteAssetsDirectory,
@@ -95,15 +92,12 @@ export default Layer.unwrap(
           // The original website's AUTH_REDIRECT_PROXY_URL, registered with every OAuth provider.
           Config.withDefault("https://macrograph.brendonovich.dev"),
         );
-        const analytics = yield* Config.Boolean("WEBSITE_ANALYTICS").pipe(
-          Config.withDefault(false),
-        );
 
         const app = yield* WebsiteRoutes.layer({
           stateKey,
           serverKey,
           authRedirectOrigin,
-          capture: analytics ? Analytics.posthog : Analytics.disabled,
+          capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
           shares: {
             get: (id) => withRuntime(shares.get(id, "text")),
             put: (id, value) => withRuntime(shares.put(id, value)),
