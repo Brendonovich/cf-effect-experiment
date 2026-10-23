@@ -39,6 +39,7 @@ export default Layer.unwrap(
           (provider) => [`${provider}_CLIENT_ID`, `${provider}_CLIENT_SECRET`],
         ),
         "JWT_PRIVATE_KEY",
+        "AUTH_SECRET",
       ].flatMap((name) => {
         // `WEBSITE_`-prefixed values configure only this Worker, e.g. providers Cloud doesn't offer.
         const value = process.env[`WEBSITE_${name}`] || process.env[name] || undefined;
@@ -77,7 +78,14 @@ export default Layer.unwrap(
 
         const stateKey = yield* Effect.cached(
           Effect.gen(function* () {
-            const secret = yield* runtimeContext.get<Redacted.Redacted<string>>(stateSecretKey);
+            // The original website's AUTH_SECRET lets its still-registered OAuth proxy host verify
+            // state signed here; other stages use a generated secret.
+            const authSecret = yield* Config.option(Config.Redacted("AUTH_SECRET")).pipe(
+              Effect.orDie,
+            );
+            const secret = Option.isSome(authSecret)
+              ? authSecret.value
+              : yield* runtimeContext.get<Redacted.Redacted<string>>(stateSecretKey);
             if (secret === undefined)
               return yield* Effect.die("Website OAuth state secret is unavailable");
             return yield* Jwt.hmacKey(Redacted.value(secret));

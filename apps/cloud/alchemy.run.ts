@@ -11,6 +11,7 @@ import type { StackServices } from "alchemy/Stack";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 
+import * as Dns from "./src/Dns.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
 import {
@@ -58,6 +59,7 @@ export default Alchemy.Stack(
 		);
 		yield* DatabaseHyperdrive;
 		yield* DeploymentObjectsBucket;
+		if ((yield* Alchemy.Stage) === "production") yield* Dns.records;
 		const legacyDatabase =
 			!ctx.dev && process.env.PULL_REQUEST === undefined
 				? yield* LegacyLogicalDatabase
