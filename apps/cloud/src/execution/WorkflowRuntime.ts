@@ -31,8 +31,7 @@ import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/rpc";
 
 const unavailableOpenCode: OpenCodeInstances = {
-  defaultTarget: "managed",
-  availableTargets: ["managed", "remote"],
+  connectionTypes: ["managed", "remote"],
   resolve: () => Effect.fail(new OpenCodeFailure({ reason: "OpenCode runtime is unavailable" })),
 };
 

@@ -2,7 +2,7 @@ import { t } from "@macrograph/module";
 import * as Module from "@macrograph/module/Module";
 import { Effect } from "effect";
 
-import { OpenCodeEngine } from "./Definition.ts";
+import { OpenCodeConnection, OpenCodeEngine } from "./Definition.ts";
 
 export default Module.make({
   id: "opencode",
@@ -14,21 +14,29 @@ export default Module.make({
       id: "GenerateText",
       name: "Generate Text",
       description:
-        "Runs one stateless OpenCode generation. Leave Model empty to use OpenCode's default.",
+        "Runs one stateless generation on the selected OpenCode connection. Leave Model empty to use OpenCode's default.",
+      properties: { connection: { name: "Connection", resource: OpenCodeConnection } },
       io: (io) => ({
         prompt: io.data.in("prompt", t.String, { name: "Prompt" }),
         model: io.data.in("model", t.String, {
           name: "Model",
           defaultValue: "",
-          suggestions: ({ engine }) => engine.OpenCodeListModels(),
+          suggestions: ({ engine, properties }) =>
+            engine.OpenCodeListModels({ connectionId: properties.connection }),
         }),
         response: io.data.out("response", t.String, { name: "Response" }),
       }),
-      run: ({ io, engine }) =>
-        engine.OpenCodeGenerateText({ prompt: io.prompt, model: io.model }).pipe(
-          Effect.tap((response) => Effect.sync(() => io.response(response))),
-          Effect.asVoid,
-        ),
+      run: ({ io, engine, properties }) =>
+        engine
+          .OpenCodeGenerateText({
+            connectionId: properties.connection,
+            prompt: io.prompt,
+            model: io.model,
+          })
+          .pipe(
+            Effect.tap((response) => Effect.sync(() => io.response(response))),
+            Effect.asVoid,
+          ),
     });
   }),
 });

@@ -2,14 +2,26 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { RpcTest } from "effect/rpc";
 
-import { OpenCodeEngine, RequestFailure, type Target, initialStorage } from "../src/Definition.ts";
+import {
+  type Connection,
+  ConnectionId,
+  OpenCodeEngine,
+  RequestFailure,
+} from "../src/Definition.ts";
 import ServerDeployment from "../src/Deployment/Server.ts";
 import { makeLayer } from "../src/Engine.ts";
 import { makeInstances, type Discover } from "../src/Engine/Server.ts";
 import OpenCodeModule from "../src/Module.ts";
 
-const runtime = (discover: Discover, initialTarget: Target = initialStorage.target) => {
-  let storage = { target: initialTarget };
+const local = ConnectionId.make("local");
+
+const runtime = (
+  discover: Discover,
+  connections: Record<ConnectionId, Connection> = {
+    [local]: { name: "Local", target: { type: "local" } },
+  },
+) => {
+  let storage = { connections };
   const context = Layer.succeed(OpenCodeEngine.EngineContext)(
     OpenCodeEngine.EngineContext.of({
       storage: {
@@ -17,7 +29,7 @@ const runtime = (discover: Discover, initialTarget: Target = initialStorage.targ
         set: (value) => Effect.sync(() => void (storage = value)),
         update: (update) => Effect.sync(() => void (storage = update(storage))),
       },
-      resource: { refresh: () => Effect.die("unused") },
+      resource: { refresh: () => Effect.void },
       credentials: {
         get: Effect.succeed([]),
         refresh: () => Effect.die("unused"),
@@ -59,21 +71,29 @@ const client = (requests: Array<unknown> = []) => ({
 });
 
 describe("OpenCode server deployment", () => {
-  it("binds the OpenCode module to the target-resolving engine", () => {
+  it("binds the OpenCode module to the connection-resolving engine", () => {
     assert.strictEqual(ServerDeployment.module, OpenCodeModule);
     assert.strictEqual(ServerDeployment.definition, OpenCodeEngine);
   });
 
-  it.effect("resolves the deployment default to the discovered local service", () =>
+  it.effect("resolves local connections to the discovered service", () =>
     Effect.gen(function* () {
       const requests: Array<unknown> = [];
       const { client: runtimeClient, engine } = yield* runtime(async () => client(requests));
       assert.strictEqual(
-        yield* runtimeClient.OpenCodeGenerateText({ prompt: "Hello", model: "anthropic/claude" }),
+        yield* runtimeClient.OpenCodeGenerateText({
+          connectionId: local,
+          prompt: "Hello",
+          model: "anthropic/claude",
+        }),
         "Generated",
       );
       assert.strictEqual(
-        yield* runtimeClient.OpenCodeGenerateText({ prompt: "Default", model: "" }),
+        yield* runtimeClient.OpenCodeGenerateText({
+          connectionId: local,
+          prompt: "Default",
+          model: "",
+        }),
         "Generated",
       );
       assert.deepStrictEqual(requests, [
@@ -81,11 +101,17 @@ describe("OpenCode server deployment", () => {
         { prompt: "Default" },
       ]);
       assert.deepStrictEqual(yield* engine.client.state, {
-        target: { type: "default" },
-        defaultTarget: "remote",
-        availableTargets: ["remote"],
-        credentials: [],
-        oauthMethods: [],
+        connectionTypes: ["local", "remote"],
+        connections: [
+          {
+            id: local,
+            name: "Local",
+            target: { type: "local" },
+            status: { state: "ready" },
+            credentials: [],
+            oauthMethods: [],
+          },
+        ],
       });
     }),
   );
@@ -93,7 +119,7 @@ describe("OpenCode server deployment", () => {
   it.effect("lists enabled models as sorted provider/model references", () =>
     Effect.gen(function* () {
       const { client: runtimeClient } = yield* runtime(async () => ({
-        generate: { text: async () => ({ text: "" }) },
+        ...client(),
         model: {
           list: async () => ({
             data: [
@@ -104,38 +130,44 @@ describe("OpenCode server deployment", () => {
             ],
           }),
         },
-        credential: { list: async () => [], remove: async () => {} },
-        integration: {
-          list: async () => ({ data: [] }),
-          connect: { key: async () => {} },
-          oauth: {
-            connect: async () => assert.fail("unused"),
-            status: async () => assert.fail("unused"),
-            complete: async () => {},
-            cancel: async () => {},
-          },
-        },
       }));
-      assert.deepStrictEqual(yield* runtimeClient.OpenCodeListModels(), [
+      assert.deepStrictEqual(yield* runtimeClient.OpenCodeListModels({ connectionId: local }), [
         "anthropic/claude",
         "openai/gpt",
       ]);
     }),
   );
 
-  it.effect("reports missing services and malformed model references", () =>
+  it.effect("reports missing services, unknown connections, and malformed models", () =>
     Effect.gen(function* () {
       const missing = yield* runtime(async () => undefined);
-      const missingResult = yield* Effect.result(missing.client.OpenCodeListModels());
+      const missingResult = yield* Effect.result(
+        missing.client.OpenCodeListModels({ connectionId: local }),
+      );
       assert.isTrue(missingResult._tag === "Failure");
       if (missingResult._tag === "Failure") {
         assert.instanceOf(missingResult.failure, RequestFailure);
         assert.include(missingResult.failure.reason, "No running local OpenCode service");
       }
+      const state = yield* missing.engine.client.state;
+      assert.deepStrictEqual(state.connections[0]?.status, {
+        state: "error",
+        message: "No running local OpenCode service was discovered",
+      });
 
       const connected = yield* runtime(async () => client());
+      const unknown = yield* Effect.result(
+        connected.client.OpenCodeListModels({ connectionId: ConnectionId.make("gone") }),
+      );
+      assert.isTrue(unknown._tag === "Failure");
+      if (unknown._tag === "Failure")
+        assert.strictEqual(unknown.failure.reason, "OpenCode connection gone does not exist");
       const invalid = yield* Effect.result(
-        connected.client.OpenCodeGenerateText({ prompt: "Hello", model: "invalid" }),
+        connected.client.OpenCodeGenerateText({
+          connectionId: local,
+          prompt: "Hello",
+          model: "invalid",
+        }),
       );
       assert.isTrue(invalid._tag === "Failure");
       if (invalid._tag === "Failure")
@@ -143,18 +175,22 @@ describe("OpenCode server deployment", () => {
     }),
   );
 
-  it.effect("does not expose or accept managed targets on the server", () =>
+  it.effect("does not accept managed connections on the server", () =>
     Effect.gen(function* () {
-      const { settings } = yield* runtime(async () => client());
+      const { settings, engine } = yield* runtime(async () => client(), {});
       const result = yield* Effect.result(
-        settings.OpenCodeSetTarget({ type: "managed", config: "{}" }),
+        settings.OpenCodeCreateConnection({
+          name: "Managed",
+          target: { type: "managed", config: "{}" },
+        }),
       );
       assert.isTrue(result._tag === "Failure");
       if (result._tag === "Failure")
         assert.strictEqual(
           result.failure.reason,
-          "managed OpenCode targets are unavailable in this deployment",
+          "managed OpenCode connections are unavailable in this deployment",
         );
+      assert.deepStrictEqual((yield* engine.client.state).connections, []);
     }),
   );
 });

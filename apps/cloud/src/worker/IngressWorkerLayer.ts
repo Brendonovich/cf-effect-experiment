@@ -20,6 +20,7 @@ import { IngressApi } from "../ingress/IngressApi.ts";
 import * as IngressHandlers from "../ingress/IngressHandlers.ts";
 import { ProjectIngressDOLayer } from "../ingress/ProjectIngressDO.ts";
 import { ObservabilityLayer } from "../Observability.ts";
+import { OpenCodeDOLayer } from "../opencode/OpenCodeDO.ts";
 import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
 import {
   ClientIdConfig as TwitchClientIdConfig,
@@ -83,6 +84,7 @@ export default Layer.unwrap(
         };
       }).pipe(
         Effect.provide(ProjectIngressDOLayer),
+        Effect.provide(OpenCodeDOLayer),
         Effect.provide(Database.layer(databaseResource)),
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
         Effect.provide(Cloudflare.R2.ReadBucketBinding),

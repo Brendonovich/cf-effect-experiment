@@ -40,7 +40,7 @@ export interface Client {
           readonly type: string;
           readonly id?: string;
           readonly label?: string;
-          readonly form?: ReadonlyArray<unknown>;
+          readonly form?: ReadonlyArray<object>;
         }>;
       }>;
     }>;
@@ -145,7 +145,8 @@ export const fromClient = (client: Client): Instance => ({
           method.type === "oauth" &&
           method.id !== undefined &&
           method.label !== undefined &&
-          (method.form === undefined || method.form.length === 0)
+          // Hidden fields carry defaults (e.g. the OpenCode Console server), so no input is needed.
+          (method.form ?? []).every((field) => "hidden" in field && field.hidden === true)
             ? [
                 {
                   integrationID: integration.id,
