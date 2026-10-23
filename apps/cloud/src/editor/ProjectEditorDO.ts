@@ -56,7 +56,6 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
-import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
@@ -117,7 +116,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       workerEnvironment?.IngressWorker,
     );
     const cloudAuths = yield* CloudAuthDO;
-    const openCodeDos = yield* OpenCodeDO;
+    // Managed OpenCode instances are hosted by the production worker (CloudWorker binds its
+    // namespace); the editor uses them directly instead of provisioning preview instances.
+    const openCodeDos = OpenCodeInstances.bindNamespace(workerEnvironment?.OpenCodeDO);
     let activeProjectId: string | undefined;
     const openCodeInstances = OpenCodeInstances.make(
       Effect.suspend(() =>
@@ -126,6 +127,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
           : Effect.succeed(activeProjectId),
       ),
       openCodeDos,
+      "editor",
     );
     const OpenCodeDeployment = Engine.deployment(
       OpenCodeModule,

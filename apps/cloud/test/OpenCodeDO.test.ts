@@ -61,4 +61,27 @@ describe("OpenCode Durable Object", () => {
     );
     assert.deepStrictEqual(created, ['{"model":"persisted"}']);
   });
+
+  it("provisions with initial config once and never applies editor config afterwards", async () => {
+    const values = new Map<string, string>();
+    const created: Array<string> = [];
+    const storage = {
+      get: async <T>(key: string) => values.get(key) as T | undefined,
+      put: async (key: string, value: string) => void values.set(key, value),
+    };
+    const make = async (config: string) => {
+      created.push(config);
+      return service(config, []);
+    };
+    const editor = makeController(storage, make);
+    assert.strictEqual(await editor.provision('{"v":1}'), '{"v":1}');
+    assert.strictEqual(await editor.provision('{"v":2}'), '{"v":1}');
+    assert.deepStrictEqual(created, ['{"v":1}']);
+
+    const evicted = makeController(storage, make);
+    assert.strictEqual(await evicted.provision('{"v":2}'), '{"v":1}');
+    await evicted.ensure('{"v":2}');
+    assert.strictEqual(await evicted.provision('{"v":3}'), '{"v":2}');
+    assert.deepStrictEqual(created, ['{"v":1}', '{"v":1}', '{"v":2}']);
+  });
 });

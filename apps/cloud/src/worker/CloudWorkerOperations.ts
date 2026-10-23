@@ -20,6 +20,8 @@ import GraphExecutionWorkflow, {
   type GraphExecutionWorkflowInput,
 } from "../execution/GraphExecutionWorkflow.ts";
 import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
+import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 
 interface DesiredDeployment {
   readonly deploymentId: string;
@@ -51,6 +53,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
   Effect.gen(function* () {
     const executionWorkflow = yield* GraphExecutionWorkflow;
     const projectIngressDos = yield* ProjectIngressDO;
+    const openCodeDos = yield* OpenCodeDO;
     const database = yield* Database.Service;
     const deployments = yield* Cloudflare.R2.ReadBucket(deploymentsResource);
 
@@ -196,6 +199,16 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             })
             .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(request.projectId);
+          // Managed OpenCode config edits are queued in the editor and only reach production here.
+          yield* OpenCodeInstances.applyDeployment(
+            request.projectId,
+            deployment.project.engines,
+            openCodeDos,
+          ).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning(`Failed to apply OpenCode connection config: ${error.reason}`),
+            ),
+          );
           return result;
         }),
       );
