@@ -52,8 +52,12 @@ export default Layer.unwrap(
 
     return WebsiteWorker.make(
       {
-        // A stable production name lets the www.macrograph.app Pages gateway bind to it.
-        ...(stage === "production" ? { name: productionWorkerName } : {}),
+        ...(stage === "production"
+          ? {
+              name: productionWorkerName,
+              domain: { name: "www.macrograph.app", redirects: ["macrograph.app"] },
+            }
+          : {}),
         main: import.meta.url,
         env: {
           ...environment,

@@ -20,9 +20,7 @@ migration. Both apps can safely serve traffic at the same time during the cutove
   `JWT_PRIVATE_KEY`. The Worker must use the same key, or every registered server must
   reconnect.
 - **OAuth:** providers have `https://macrograph.brendonovich.dev/auth/proxy` registered as the
-  redirect URI (the original `AUTH_REDIRECT_PROXY_URL`). The Worker uses this by default, so
-  that hostname must also be routed to the Worker. Override it with
-  `WEBSITE_AUTH_REDIRECT_ORIGIN` only after registering the new URI with every provider.
+  redirect URI (the original `AUTH_REDIRECT_PROXY_URL`). See [OAuth Proxy Host](#oauth-proxy-host).
 - **Playground shares:** production adopts and retains the existing
   `macrograph-saved-shares` KV namespace.
 - **Public API:** `/api/user`, `/api/credentials`, credential refresh, the device-code flow,
@@ -34,43 +32,37 @@ OAuth state expires after an hour and is bound to its provider, credential conne
 bound to the signed-in user, device grants are single-use under concurrent polling, and
 logging out also clears the session cookie.
 
-## Steps
+## Cutover Record
 
-1. Copy the Vercel project's `JWT_PRIVATE_KEY` into the GitHub Actions secret
-   `WEBSITE_JWT_PRIVATE_KEY`, and the Discord, Spotify, Google, Patreon, and Streamlabs client
-   credentials into `WEBSITE_<PROVIDER>_CLIENT_ID`/`_CLIENT_SECRET`. `WEBSITE_`-prefixed
-   values configure only `WebsiteWorker`; Twitch and GitHub fall back to Cloud's secrets. Do
-   not print them.
-2. Merge to `main`. The production deploy creates the `macrograph-website` Worker and adopts
-   the shares namespace. Check the plan reports an adoption, not a new namespace.
-3. Smoke-test the Worker's `workers.dev` URL (the `websiteWorkerUrl` stack output): the landing
-   page, `/api/user`, `/api/desktop/download/latest/windows-x86_64`, and an existing share.
-   Login cookies are host-specific, so sign-in testing waits for the real domain.
-4. Create the `macrograph-www` Pages gateway and deploy it from `apps/cloud`:
+**Completed on 2026-10-23.**
 
-   ```sh
-   pnpm exec wrangler pages project create macrograph-www --production-branch main
-   pnpm run deploy:website-domain
-   ```
+1. Copied the Vercel project's `JWT_PRIVATE_KEY` and `AUTH_SECRET` into the GitHub Actions
+   secrets `WEBSITE_JWT_PRIVATE_KEY` and `WEBSITE_AUTH_SECRET`, and the Discord, Spotify,
+   Google, Patreon, and Streamlabs client credentials into
+   `WEBSITE_<PROVIDER>_CLIENT_ID`/`_CLIENT_SECRET`. `WEBSITE_`-prefixed values configure only
+   `WebsiteWorker`; Twitch and GitHub fall back to Cloud's secrets.
+2. Deployed `macrograph-website`, adopting the shares namespace.
+3. Created the `macrograph.app` zone in Alchemy (`src/Dns.ts`) with the existing non-web records
+   and temporary records pointing `www`, the apex, and `cloud` at their old hosts, then switched
+   the domain's nameservers at Vercel (still the registrar) to Cloudflare.
+4. Once the zone was active, replaced the temporary records with Worker custom domains:
+   `www.macrograph.app` and `macrograph.app` on `WebsiteWorker`, `cloud.macrograph.app` on
+   `CloudWorker`. Alchemy owns these through each Worker's `domain`, with the apex redirecting
+   to `www`. The Pages gateways were deleted. Expect a few minutes of TLS errors on a new zone
+   while Cloudflare validates its edge certificates.
 
-5. In the Pages project, add the custom domains `www.macrograph.app` and
-   `macrograph.brendonovich.dev`. Then, in Vercel DNS, replace each record with a CNAME to
-   `macrograph-www.pages.dev`, and remove the domains from the Vercel project.
-6. After DNS propagates, verify on `www.macrograph.app`: an existing session, password login,
-   signup, connecting and removing a credential, desktop OAuth, server registration, device
-   login, Cloud sign-in on `cloud.macrograph.app`, and a self-hosted server's credential
-   refresh.
-7. Pause the Vercel project once no traffic reaches it.
+## OAuth Proxy Host
 
-## Apex Domain
-
-Pages only supports apex custom domains on Cloudflare-managed zones. While `macrograph.app`
-uses Vercel DNS, its apex redirect to `www` stays on Vercel. Removing Vercel entirely requires
-moving the zone's nameservers to Cloudflare, then serving or redirecting the apex there. With
-the zone on Cloudflare, Worker custom domains can replace both Pages gateways.
+`macrograph.brendonovich.dev` is still served by the Vercel project, and only its
+`/auth/proxy` matters: it verifies the OAuth state and redirects to the callback on
+`www.macrograph.app`. `WebsiteWorker` signs state with the original `AUTH_SECRET` so this keeps
+working. To retire the Vercel project, register `https://www.macrograph.app/auth/proxy` with
+every provider, deploy with `WEBSITE_AUTH_REDIRECT_ORIGIN=https://www.macrograph.app`, and then
+remove the project.
 
 ## Rollback
 
-Point the DNS records back to Vercel. Both apps share the database and session format, so
-sessions, credentials, and registrations created on either side remain valid. Server JWTs
-issued by the Worker are only valid on Vercel if both use the same `JWT_PRIVATE_KEY`.
+Point `macrograph.app`'s nameservers back to Vercel's (`PATCH
+/v1/registrar/domains/macrograph.app/nameservers` with an empty list). Both apps share the
+database, session format, JWT key, and OAuth state secret, so sessions, credentials, and
+registrations created on either side remain valid.

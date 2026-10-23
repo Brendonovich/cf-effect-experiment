@@ -84,8 +84,10 @@ export default Layer.unwrap(
         },
       ),
     );
+    const { stage } = yield* Alchemy.Stack;
     return CloudWorker.make(
       {
+        ...(stage === "production" ? { domain: "cloud.macrograph.app" } : {}),
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
