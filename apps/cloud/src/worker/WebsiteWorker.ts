@@ -29,7 +29,8 @@ export const productionWorkerName = "macrograph-website";
 export default Layer.unwrap(
   Effect.gen(function* () {
     const stateSecret = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteOAuthStateSecret));
-    const stage = yield* Alchemy.Stage;
+    // The stage only exists while deploying; at runtime, resources resolve by logical ID.
+    const stage = Option.getOrUndefined(yield* Effect.serviceOption(Alchemy.Stage));
     const sharesNamespace = yield* PlaygroundShares(stage === "production");
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
