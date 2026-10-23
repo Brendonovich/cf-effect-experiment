@@ -406,21 +406,11 @@ export const connectionPath = (from: Position, to: Position): string =>
   curvePath(connectionCurve(from, to));
 
 export interface WireSegment {
-  readonly kind: "wire" | "conversion-marker";
   readonly path: string;
   readonly stroke: string;
 }
 
-const markerPath = (point: Position): string =>
-  `M ${point.x} ${point.y - 4} L ${point.x} ${point.y + 4}`;
-
-const curveSpeedAtMidpoint = ([p0, p1, p2, p3]: Curve): number =>
-  Math.hypot(
-    0.75 * (p1.x - p0.x) + 1.5 * (p2.x - p1.x) + 0.75 * (p3.x - p2.x),
-    0.75 * (p1.y - p0.y) + 1.5 * (p2.y - p1.y) + 0.75 * (p3.y - p2.y),
-  );
-
-/** A converted wire changes color across two close vertical ticks at its midpoint. */
+/** A converted wire is drawn in its source color for the first half and its destination color after. */
 export const wireSegments = (edge: {
   readonly from: Position;
   readonly to: Position;
@@ -431,19 +421,46 @@ export const wireSegments = (edge: {
   const source = wireColor(edge.type, edge.scope);
   const target = edge.targetType === undefined ? source : wireColor(edge.targetType);
   const curve = connectionCurve(edge.from, edge.to);
-  if (target === source) return [{ kind: "wire", path: curvePath(curve), stroke: source }];
-  const speed = curveSpeedAtMidpoint(curve);
-  const offset = speed === 0 ? 0.02 : Math.min(0.1, 2 / speed);
-  const [first] = splitCurve(curve, 0.5 - offset);
-  const [, second] = splitCurve(curve, 0.5 + offset);
-  const sourceMarker = first[3];
-  const targetMarker = second[0];
+  if (target === source) return [{ path: curvePath(curve), stroke: source }];
+  const [first, second] = splitCurve(curve, 0.5);
   return [
-    { kind: "wire", path: curvePath(first), stroke: source },
-    { kind: "wire", path: curvePath(second), stroke: target },
-    { kind: "conversion-marker", path: markerPath(sourceMarker), stroke: source },
-    { kind: "conversion-marker", path: markerPath(targetMarker), stroke: target },
+    { path: curvePath(first), stroke: source },
+    { path: curvePath(second), stroke: target },
   ];
+};
+
+export interface ConversionMarker {
+  readonly x: number;
+  readonly y: number;
+  /** Direction of travel at the midpoint, in degrees. */
+  readonly angle: number;
+  readonly source: string;
+  readonly target: string;
+}
+
+export interface WireGeometry {
+  readonly segments: ReadonlyArray<WireSegment>;
+  /** Present on converted wires: a diamond at the color change, half in each type's color. */
+  readonly marker?: ConversionMarker;
+}
+
+export const wireGeometry = (edge: Parameters<typeof wireSegments>[0]): WireGeometry => {
+  const segments = wireSegments(edge);
+  if (segments.length === 1) return { segments };
+  const [first, second] = splitCurve(connectionCurve(edge.from, edge.to), 0.5);
+  const middle = first[3];
+  // Tangent at the split point, from the adjacent control points of each half.
+  const angle = (Math.atan2(second[1].y - first[2].y, second[1].x - first[2].x) * 180) / Math.PI;
+  return {
+    segments,
+    marker: {
+      x: middle.x,
+      y: middle.y,
+      angle,
+      source: segments[0]!.stroke,
+      target: segments[1]!.stroke,
+    },
+  };
 };
 
 export const wireColor = (type: t | undefined, scope = false): string => {

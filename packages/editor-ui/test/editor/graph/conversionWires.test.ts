@@ -10,7 +10,11 @@ import {
 import { Conversion, t } from "@macrograph/module";
 import { describe, expect, it } from "vitest";
 
-import { graphConnections, wireSegments } from "../../../src/editor/graph/graphPresentation";
+import {
+  graphConnections,
+  wireGeometry,
+  wireSegments,
+} from "../../../src/editor/graph/graphPresentation";
 
 const outputId = IoId.make("output");
 const inputId = IoId.make("connected");
@@ -93,35 +97,38 @@ describe("converted wires", () => {
     expect(edge?.targetType).toBeUndefined();
   });
 
-  it("draws a converted wire with two close vertical ticks at the color handoff", () => {
+  it("draws a converted wire as two halves that meet at the same point", () => {
     const ioByNode = io(t.Int, t.Float);
     const [edge] = graphConnections(graph, (id) => ioByNode[id]);
     const segments = wireSegments(edge!);
-    const wires = segments.filter((segment) => segment.kind === "wire");
-    const markers = segments.filter((segment) => segment.kind === "conversion-marker");
-    expect(wires.map((segment) => segment.stroke)).toEqual(["#30f3db", "#00ae75"]);
-    expect(markers.map((segment) => segment.stroke)).toEqual(["#30f3db", "#00ae75"]);
-    const first = points(wires[0]!.path);
-    const second = points(wires[1]!.path);
+    expect(segments.map((segment) => segment.stroke)).toEqual(["#30f3db", "#00ae75"]);
+    const first = points(segments[0]!.path);
+    const second = points(segments[1]!.path);
     expect(first.slice(0, 2)).toEqual([edge!.from.x, edge!.from.y]);
     expect(second.slice(-2)).toEqual([edge!.to.x, edge!.to.y]);
-    expect(first.slice(-2)).not.toEqual(second.slice(0, 2));
-    const sourceMarker = points(markers[0]!.path);
-    const targetMarker = points(markers[1]!.path);
-    expect(sourceMarker).toEqual([
-      first.at(-2),
-      first.at(-1)! - 4,
-      first.at(-2),
-      first.at(-1)! + 4,
-    ]);
-    expect(targetMarker).toEqual([second[0], second[1]! - 4, second[0], second[1]! + 4]);
+    expect(first.slice(-2)).toEqual(second.slice(0, 2));
   });
 
   it("draws a single segment when the source and destination colors match", () => {
     const ioByNode = io(t.Float, t.Float);
     const [edge] = graphConnections(graph, (id) => ioByNode[id]);
-    expect(wireSegments(edge!)).toEqual([
-      expect.objectContaining({ kind: "wire", stroke: "#00ae75" }),
-    ]);
+    expect(wireSegments(edge!)).toEqual([expect.objectContaining({ stroke: "#00ae75" })]);
+  });
+
+  it("leaves same-type wires undecorated", () => {
+    const ioByNode = io(t.Float, t.Float);
+    const [edge] = graphConnections(graph, (id) => ioByNode[id]);
+    expect(wireGeometry(edge!)).toEqual({ segments: wireSegments(edge!) });
+  });
+
+  it("marks converted wires with a diamond at the color change", () => {
+    const ioByNode = io(t.Int, t.String);
+    const [edge] = graphConnections(graph, (id) => ioByNode[id]);
+    const { segments, marker } = wireGeometry(edge!);
+    expect(segments).toEqual(wireSegments(edge!));
+    expect(marker).toMatchObject({ source: "#30f3db", target: "#da5697" });
+    expect([marker!.x, marker!.y]).toEqual(points(segments[0]!.path).slice(-2));
+    // Endpoints are level, so the wire travels horizontally at its midpoint.
+    expect(marker!.angle).toBeCloseTo(0);
   });
 });
