@@ -1,5 +1,6 @@
+import type { Service } from "@macrograph/opencode-workerd";
+
 import { RequestFailure } from "@macrograph/module-opencode/Definition";
-import { create, type Service } from "@macrograph/opencode-workerd";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 
@@ -124,8 +125,12 @@ export const OpenCodeDOLayer = OpenCodeDO.make(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.sync((): OpenCodeDOShape => {
+      // The embedded OpenCode runtime is large; load it on first use so it doesn't count toward
+      // the hosting worker's startup CPU limit.
       const controller = makeController(state.raw.storage, (config) =>
-        create(state.raw.storage, config),
+        import("@macrograph/opencode-workerd").then(({ create }) =>
+          create(state.raw.storage, config),
+        ),
       );
       const request = <A>(run: () => Promise<A>) =>
         Effect.tryPromise({

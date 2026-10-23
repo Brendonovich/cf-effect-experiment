@@ -1,8 +1,8 @@
 import type { Instance, Instances } from "@macrograph/module-opencode/Instance";
+import type { connectRemote, Service } from "@macrograph/opencode-workerd";
 
 import OpenCodeModule from "@macrograph/module-opencode";
 import { OpenCodeEngine, RequestFailure } from "@macrograph/module-opencode/Definition";
-import { connectRemote, type Service } from "@macrograph/opencode-workerd";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Schema } from "effect";
 
@@ -154,7 +154,8 @@ export const make = (
   projectId: Effect.Effect<string, RequestFailure>,
   namespace: Namespace,
   mode: Mode,
-  connect: typeof connectRemote = connectRemote,
+  connect: typeof connectRemote = (input) =>
+    import("@macrograph/opencode-workerd").then(({ connectRemote }) => connectRemote(input)),
 ): Instances => ({
   connectionTypes: ["managed", "remote"],
   resolve: ({ id, target }) => {
