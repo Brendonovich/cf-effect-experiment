@@ -55,7 +55,12 @@ export default Layer.unwrap(
         ...(stage === "production"
           ? {
               name: productionWorkerName,
-              domain: { name: "www.macrograph.app", redirects: ["macrograph.app"] },
+              domain: {
+                name: "www.macrograph.app",
+                // The OAuth redirect host every provider has registered (`/auth/proxy`).
+                aliases: ["macrograph.brendonovich.dev"],
+                redirects: ["macrograph.app"],
+              },
             }
           : {}),
         main: import.meta.url,

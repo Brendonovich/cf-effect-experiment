@@ -53,16 +53,16 @@ logging out also clears the session cookie.
 
 ## OAuth Proxy Host
 
-`macrograph.brendonovich.dev` is still served by the Vercel project, and only its
-`/auth/proxy` matters: it verifies the OAuth state and redirects to the callback on
-`www.macrograph.app`. `WebsiteWorker` signs state with the original `AUTH_SECRET` so this keeps
-working. To retire the Vercel project, register `https://www.macrograph.app/auth/proxy` with
-every provider, deploy with `WEBSITE_AUTH_REDIRECT_ORIGIN=https://www.macrograph.app`, and then
-remove the project.
+Providers have `https://macrograph.brendonovich.dev/auth/proxy` registered as their redirect URI.
+On 2026-10-24 `brendonovich.dev` also moved to Cloudflare: its zone and all of its records
+(Proton Mail, Resend, the Vercel-hosted root and wildcard, and others) are managed in
+`src/Dns.ts`, and `macrograph.brendonovich.dev` is a custom domain alias of `WebsiteWorker`.
+`WebsiteWorker` still signs OAuth state with the original `AUTH_SECRET`, which keeps state issued
+before the cutover valid but is otherwise only a secret.
 
 ## Rollback
 
-Point `macrograph.app`'s nameservers back to Vercel's (`PATCH
-/v1/registrar/domains/macrograph.app/nameservers` with an empty list). Both apps share the
+Point the domains' nameservers back to Vercel's (`PATCH
+/v1/registrar/domains/<domain>/nameservers` with an empty list) and restore the Vercel project. Both apps share the
 database, session format, JWT key, and OAuth state secret, so sessions, credentials, and
 registrations created on either side remain valid.
