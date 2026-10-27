@@ -408,6 +408,7 @@ Confirming requires ticking a checkbox.
 - **Same registry interface, static list.** They use the same `ModuleRegistry` with a static source built from bundled imports, plus static UI loaders. This replaces the hand-written module lists in `apps/cloud` (`CloudModules.ts`, `ProjectEditorDO.ts`, `ExecutorModules.ts`) and `apps/playground` (`LocalRuntime.ts`).
 - **Module RPCs.** In the cloud they use the same per-module HTTP path, scoped to the project and forwarded into the project's Durable Object. The playground keeps calling module RPCs in-process.
 - **No runtime installs.** Neither host loads modules from disk or installs from registries.
+- **How it's built.** `@macrograph/module-host/core` is the platform-neutral part of the host (registry core, `StaticRegistry`, version selection, catalog projection, `Mounter`, `ModuleTrust`); folder sources, the `vm` loader, the watcher and `state.json` stay in the Node entries. Each host has one list (`apps/playground/src/local/PlaygroundModules.ts`, `apps/cloud/src/modules/CloudModules.ts`) whose entries carry the package metadata and every facet the host needs. The cloud's per-module route is `/rpc/projects/:projectId/module/:namespace/:publisher/:name/rpc`; the worker checks project access and forwards it to `ProjectEditorDO` as `/module/:namespace/:publisher/:name/rpc`, which requires edit access. The editor DO serves `GetModules` on its WebSocket.
 
 ### 16. Security model
 

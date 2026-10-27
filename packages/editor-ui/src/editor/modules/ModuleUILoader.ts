@@ -182,12 +182,3 @@ export function createModuleUILoader(options: ModuleUILoaderOptions = {}): Modul
     },
   };
 }
-
-/** Bundled loaders from `{ id, settings }` entries, such as `virtual:macrograph-module-settings`. */
-export const staticSettings = (
-  entries: ReadonlyArray<{
-    readonly id: string;
-    readonly settings: NonNullable<ModuleUIDescriptor["settings"]>;
-  }>,
-): ReadonlyMap<string, StaticModuleUI> =>
-  new Map(entries.map((entry) => [entry.id, { settings: entry.settings }] as const));
