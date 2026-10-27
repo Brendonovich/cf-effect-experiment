@@ -1,6 +1,6 @@
+import * as Axiom from "@alchemy.run/axiom";
 import * as Alchemy from "alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Axiom from "alchemy/Axiom";
 import { retain } from "alchemy/RemovalPolicy";
 import { ConfigProvider, Context, Effect, Layer, Option, Tracer } from "effect";
 

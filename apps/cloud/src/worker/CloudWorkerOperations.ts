@@ -1,7 +1,7 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Project } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Cause, Effect, Schema } from "effect";
 import { HttpClient } from "effect/http";

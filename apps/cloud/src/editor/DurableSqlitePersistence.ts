@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { DrizzleDriver } from "@macrograph/persistence-sqlite";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import { Effect, Layer } from "effect";

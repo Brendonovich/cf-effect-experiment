@@ -241,12 +241,12 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
         });
       });
 
-      const helixRpc = <A, RX>(
+      const helixRpc = <A>(
         accountId: AccountId,
         requiredScopes: ReadonlyArray<string>,
         callback: (
           helix: HttpApiClient.ForApi<typeof Helix.Api.HelixApi>,
-        ) => Effect.Effect<A, HttpClientError.HttpClientError | S.SchemaError, RX>,
+        ) => Effect.Effect<A, HttpClientError.HttpClientError | S.SchemaError>,
       ) =>
         Effect.gen(function* () {
           const grantedScopes = yield* Cache.get(authorizations, accountId);

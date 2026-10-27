@@ -1,6 +1,6 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
 import { Config, Effect, Layer, Redacted } from "effect";
 
 import { processWorkflowRun, repositoryName, repositoryOwner } from "./workflow-run.ts";
@@ -104,7 +104,7 @@ export default Layer.unwrap(
 
           return {};
         }).pipe(Effect.provide(GitHub.fromToken(githubToken)));
-      }).pipe(Effect.provide(Cloudflare.Workers.GitHubRepositoryEventSourceLive)),
+      }).pipe(Effect.provide(GitHub.RepositoryEventSourceLive)),
     );
   }),
 );

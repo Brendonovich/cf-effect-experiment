@@ -1,5 +1,7 @@
 import type * as S from "effect/Schema";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Drizzle from "@alchemy.run/drizzle";
 import { Actor, Connection, Graph, Node, Package, Project } from "@macrograph/core";
 import {
   DualProtocol,
@@ -43,8 +45,6 @@ import { SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { ProjectEditor } from "@macrograph/project-api";
 import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
 import { Cause, HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";

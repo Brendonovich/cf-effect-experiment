@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { type InputProps, Resource } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Effect } from "effect";

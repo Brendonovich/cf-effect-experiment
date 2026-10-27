@@ -1,7 +1,7 @@
 import type { Service } from "@macrograph/opencode-workerd";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describeFailure, RequestFailure } from "@macrograph/module-opencode/Definition";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 
 const configKey = "macrograph-opencode-config-v1";
