@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { t, Engine, Module, Registration, Resource } from "@macrograph/module";
+import { t, Engine, Module, Registration, Resource, ModuleId } from "@macrograph/module";
 import { Array, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -21,7 +21,7 @@ const node = (
   id: string,
   schema: string,
   inputDefaults: Readonly<Record<string, unknown>> = {},
-  packageId = "gate-test",
+  packageId = "local/test/gate-test",
   properties: Readonly<Record<string, unknown>> = {},
 ) => ({
   id,
@@ -47,60 +47,62 @@ describe("event graph preflight", () => {
       Effect.gen(function* () {
         let runs = 0;
         let checkpoints = 0;
-        const module = Module.make({
-          id: "gate-test",
-          engine: TestEngine,
-          effect: Effect.fnUntraced(function* (context) {
-            yield* context.schema.register({
-              id: "event",
-              type: "event",
-              event: () => Effect.succeed(true),
-              io: () => ({}),
-              run: () =>
-                Effect.sync(() => {
-                  runs++;
-                }),
-            });
-            yield* context.schema.register({
-              id: "effect",
-              io: () => ({}),
-              run: () =>
-                Effect.sync(() => {
-                  runs++;
-                }),
-            });
-            yield* context.schema.register({
-              id: "sink",
-              io: (io) => ({ value: io.data.in("value", type) }),
-              run: () =>
-                Effect.sync(() => {
-                  runs++;
-                }),
-            });
-            yield* context.schema.register({
-              id: "int",
-              io: (io) => ({ value: io.data.in("value", t.Int) }),
-              run: () =>
-                Effect.sync(() => {
-                  runs++;
-                }),
-            });
-            yield* context.schema.register({
-              id: "cycle",
-              io: (io) => ({ alternate: io.exec.in("alternate") }),
-              run: () =>
-                Effect.sync(() => {
-                  runs++;
-                }),
-            });
-            yield* context.schema.register({
-              id: "pure-cycle",
-              type: "pure",
-              io: (io) => ({ value: io.data.in("value", type), out: io.data.out("value", type) }),
-              run: ({ io }) => Effect.sync(() => io.out(io.value)),
-            });
+        const module = Module.identify(
+          ModuleId.Id.make("local/test/gate-test"),
+          Module.make({
+            engine: TestEngine,
+            effect: Effect.fnUntraced(function* (context) {
+              yield* context.schema.register({
+                id: "event",
+                type: "event",
+                event: () => Effect.succeed(true),
+                io: () => ({}),
+                run: () =>
+                  Effect.sync(() => {
+                    runs++;
+                  }),
+              });
+              yield* context.schema.register({
+                id: "effect",
+                io: () => ({}),
+                run: () =>
+                  Effect.sync(() => {
+                    runs++;
+                  }),
+              });
+              yield* context.schema.register({
+                id: "sink",
+                io: (io) => ({ value: io.data.in("value", type) }),
+                run: () =>
+                  Effect.sync(() => {
+                    runs++;
+                  }),
+              });
+              yield* context.schema.register({
+                id: "int",
+                io: (io) => ({ value: io.data.in("value", t.Int) }),
+                run: () =>
+                  Effect.sync(() => {
+                    runs++;
+                  }),
+              });
+              yield* context.schema.register({
+                id: "cycle",
+                io: (io) => ({ alternate: io.exec.in("alternate") }),
+                run: () =>
+                  Effect.sync(() => {
+                    runs++;
+                  }),
+              });
+              yield* context.schema.register({
+                id: "pure-cycle",
+                type: "pure",
+                io: (io) => ({ value: io.data.in("value", type), out: io.data.out("value", type) }),
+                run: ({ io }) => Effect.sync(() => io.out(io.value)),
+              });
+            }),
           }),
-        });
+        );
         const make = (yield* Registration.collect(CustomTypes.module.effect)).find(
           (schema) => schema.name === "Make Struct",
         )!;
@@ -252,9 +254,12 @@ describe("event graph preflight", () => {
           });
           yield* executor.module(
             module,
-            Engine.deployment(
-              module,
-              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            Engine.identify(
+              module.id,
+              Engine.deployment(
+                module,
+                TestEngine.toLayer(() => Effect.die("Not hosted")),
+              ),
             ),
           );
           const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
@@ -268,22 +273,24 @@ describe("event graph preflight", () => {
   it.effect("ignores unused invalid definitions, disconnected nodes and unrelated graphs", () =>
     Effect.gen(function* () {
       let runs = 0;
-      const module = Module.make({
-        id: "gate-test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: () => ({}),
-            run: () =>
-              Effect.sync(() => {
-                runs++;
-              }),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/gate-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: () => ({}),
+              run: () =>
+                Effect.sync(() => {
+                  runs++;
+                }),
+            });
+          }),
         }),
-      });
+      );
       const unusedId = t.DefinitionId.make("unused");
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         ...Project.empty(),
@@ -320,9 +327,12 @@ describe("event graph preflight", () => {
       const executor = yield* Executor.make(project);
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -332,19 +342,21 @@ describe("event graph preflight", () => {
 
   it.effect("rejects replayed outputs using the current nominal registry without defects", () =>
     Effect.gen(function* () {
-      const module = Module.make({
-        id: "gate-test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({ value: io.data.out("value", type) }),
-            run: () => Effect.die("Replay must skip run"),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/gate-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({ value: io.data.out("value", type) }),
+              run: () => Effect.die("Replay must skip run"),
+            });
+          }),
         }),
-      });
+      );
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         ...Project.empty(),
         types: definitions,
@@ -374,9 +386,12 @@ describe("event graph preflight", () => {
         });
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(
@@ -395,33 +410,35 @@ describe("event graph preflight", () => {
       }) {}
       let runs = 0;
       let lookups = 0;
-      const module = Module.make({
-        id: "gate-test",
-        engine: ResourceEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            properties: { selector: { name: "Selector", resource: Selector } },
-            event: (_event, { properties }) =>
-              Effect.succeed(properties.selector === "selected-port"),
-            io: () => ({}),
-            run: () =>
-              Effect.sync(() => {
-                runs++;
-              }),
-          });
-          yield* context.schema.register({
-            id: "resource",
-            properties: { selector: { name: "Selector", resource: Selector } },
-            io: (io, properties) => ({ value: io.data.in(properties.selector, t.Int) }),
-            run: ({ io }) =>
-              Effect.sync(() => {
-                runs += io.value;
-              }),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/gate-test"),
+        Module.make({
+          engine: ResourceEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              properties: { selector: { name: "Selector", resource: Selector } },
+              event: (_event, { properties }) =>
+                Effect.succeed(properties.selector === "selected-port"),
+              io: () => ({}),
+              run: () =>
+                Effect.sync(() => {
+                  runs++;
+                }),
+            });
+            yield* context.schema.register({
+              id: "resource",
+              properties: { selector: { name: "Selector", resource: Selector } },
+              io: (io, properties) => ({ value: io.data.in(properties.selector, t.Int) }),
+              run: ({ io }) =>
+                Effect.sync(() => {
+                  runs += io.value;
+                }),
+            });
+          }),
         }),
-      });
+      );
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         ...Project.empty(),
         constants: {
@@ -459,9 +476,12 @@ describe("event graph preflight", () => {
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          ResourceEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            ResourceEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -514,33 +534,35 @@ describe("event graph preflight", () => {
         };
         cyclic.next = Option.some(cyclic);
         for (const pure of [false, true]) {
-          const module = Module.make({
-            id: "gate-test",
-            engine: TestEngine,
-            effect: Effect.fnUntraced(function* (context) {
-              yield* context.schema.register({
-                id: "event",
-                type: "event",
-                event: () => Effect.succeed(true),
-                io: (io) => (pure ? {} : { value: io.data.out("value", type) }),
-                run: ({ io }) =>
-                  Effect.sync(() => {
-                    io.value?.(cyclic);
-                  }),
-              });
-              yield* context.schema.register({
-                id: "pure",
-                type: "pure",
-                io: (io) => ({ value: io.data.out("value", type) }),
-                run: ({ io }) => Effect.sync(() => io.value(cyclic)),
-              });
-              yield* context.schema.register({
-                id: "sink",
-                io: (io) => ({ value: io.data.in("value", type) }),
-                run: () => Effect.die("Invalid output must not reach sink"),
-              });
+          const module = Module.identify(
+            ModuleId.Id.make("local/test/gate-test"),
+            Module.make({
+              engine: TestEngine,
+              effect: Effect.fnUntraced(function* (context) {
+                yield* context.schema.register({
+                  id: "event",
+                  type: "event",
+                  event: () => Effect.succeed(true),
+                  io: (io) => (pure ? {} : { value: io.data.out("value", type) }),
+                  run: ({ io }) =>
+                    Effect.sync(() => {
+                      io.value?.(cyclic);
+                    }),
+                });
+                yield* context.schema.register({
+                  id: "pure",
+                  type: "pure",
+                  io: (io) => ({ value: io.data.out("value", type) }),
+                  run: ({ io }) => Effect.sync(() => io.value(cyclic)),
+                });
+                yield* context.schema.register({
+                  id: "sink",
+                  io: (io) => ({ value: io.data.in("value", type) }),
+                  run: () => Effect.die("Invalid output must not reach sink"),
+                });
+              }),
             }),
-          });
+          );
           const project = yield* Schema.decodeUnknownEffect(Project.Model)({
             ...Project.empty(),
             types: recursive,
@@ -565,9 +587,12 @@ describe("event graph preflight", () => {
           const executor = yield* Executor.make(project);
           yield* executor.module(
             module,
-            Engine.deployment(
-              module,
-              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            Engine.identify(
+              module.id,
+              Engine.deployment(
+                module,
+                TestEngine.toLayer(() => Effect.die("Not hosted")),
+              ),
             ),
           );
           expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(

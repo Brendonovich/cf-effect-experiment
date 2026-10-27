@@ -26,17 +26,17 @@ const http = Layer.succeed(HttpClient.HttpClient)(
   HttpClient.make(() => Effect.die("Editor startup must not call a provider")),
 );
 const newIds = [
-  "discord",
-  "elevenlabs",
-  "json",
-  "list",
-  "logic",
-  "math",
-  "openai",
-  "opencode",
-  "string",
+  "macrograph.app/macrograph/discord",
+  "macrograph.app/macrograph/elevenlabs",
+  "macrograph.app/macrograph/json",
+  "macrograph.app/macrograph/list",
+  "macrograph.app/macrograph/logic",
+  "macrograph.app/macrograph/math",
+  "macrograph.app/macrograph/openai",
+  "macrograph.app/macrograph/opencode",
+  "macrograph.app/macrograph/string",
 ];
-const staticEditorIds = newIds.filter((id) => id !== "opencode");
+const staticEditorIds = newIds.filter((id) => id !== "macrograph.app/macrograph/opencode");
 const discordState = (configured: boolean) => ({
   configured,
   gatewayAvailable: false,
@@ -85,7 +85,7 @@ describe("Cloud modules", () => {
         const original: Project.Model = {
           ...Project.empty(),
           name: "Existing cloud project",
-          engines: { twitch: { accounts: {} } },
+          engines: { "macrograph.app/macrograph/twitch": { accounts: {} } },
           graphs: {
             [graphId]: {
               canvas: { id: graphId, name: "Existing graph", nodes: {}, connections: [] },
@@ -100,21 +100,31 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
+              [
+                "macrograph.app/macrograph/custom-types",
+                "macrograph.app/macrograph/functions",
+                ...staticEditorIds,
+              ].sort(),
             );
             assert.deepStrictEqual(yield* editor.project.get(), original);
-            assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
-              configured: false,
-            });
-            assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
-              configured: false,
-            });
             assert.deepStrictEqual(
-              yield* editor.engine.getClientState("discord"),
+              yield* editor.engine.getClientState("macrograph.app/macrograph/openai"),
+              {
+                configured: false,
+              },
+            );
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("macrograph.app/macrograph/elevenlabs"),
+              {
+                configured: false,
+              },
+            );
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("macrograph.app/macrograph/discord"),
               discordState(false),
             );
             const discordPackage = (yield* packages.getPackages()).find(
-              (pkg) => pkg.id === "discord",
+              (pkg) => pkg.id === "macrograph.app/macrograph/discord",
             );
             assert.deepStrictEqual(discordPackage?.schemas.map((schema) => schema.id).sort(), [
               "DiscordGetGuildMember",
@@ -153,7 +163,10 @@ describe("Cloud modules", () => {
             yield* editor.node.create({
               graphID: graphId,
               node: {
-                schema: { package: PackageId.make("math"), schema: SchemaId.make("AddInts") },
+                schema: {
+                  package: PackageId.make("macrograph.app/macrograph/math"),
+                  schema: SchemaId.make("AddInts"),
+                },
                 position: { x: 0, y: 0 },
               },
             });
@@ -165,10 +178,17 @@ describe("Cloud modules", () => {
         );
 
         const saved = yield* persistence.loadProject();
-        assert.deepStrictEqual(saved.engines.twitch, original.engines.twitch);
-        assert.deepStrictEqual(saved.engines.openai, { apiKey: "openai-secret" });
-        assert.deepStrictEqual(saved.engines.elevenlabs, { apiKey: "elevenlabs-secret" });
-        assert.deepStrictEqual(saved.engines.discord, {
+        assert.deepStrictEqual(
+          saved.engines["macrograph.app/macrograph/twitch"],
+          original.engines["macrograph.app/macrograph/twitch"],
+        );
+        assert.deepStrictEqual(saved.engines["macrograph.app/macrograph/openai"], {
+          apiKey: "openai-secret",
+        });
+        assert.deepStrictEqual(saved.engines["macrograph.app/macrograph/elevenlabs"], {
+          apiKey: "elevenlabs-secret",
+        });
+        assert.deepStrictEqual(saved.engines["macrograph.app/macrograph/discord"], {
           token: "discord-secret",
           gatewayEnabled: false,
           messageContent: true,
@@ -180,7 +200,11 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
+              [
+                "macrograph.app/macrograph/custom-types",
+                "macrograph.app/macrograph/functions",
+                ...staticEditorIds,
+              ].sort(),
             );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, {
@@ -189,16 +213,25 @@ describe("Cloud modules", () => {
             });
             const node = Object.values(saved.graphs[graphId]!.canvas.nodes)[0]!;
             assert.isDefined(snapshot.nodeIO[graphId]?.[node.id]);
-            assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
-              configured: true,
-            });
-            assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
-              configured: true,
-            });
-            assert.deepStrictEqual(yield* editor.engine.getClientState("discord"), {
-              ...discordState(true),
-              messageContent: true,
-            });
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("macrograph.app/macrograph/openai"),
+              {
+                configured: true,
+              },
+            );
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("macrograph.app/macrograph/elevenlabs"),
+              {
+                configured: true,
+              },
+            );
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("macrograph.app/macrograph/discord"),
+              {
+                ...discordState(true),
+                messageContent: true,
+              },
+            );
           }).pipe(
             Effect.provide(services),
             Effect.provide(Engine.emptyCredentialsLayer),

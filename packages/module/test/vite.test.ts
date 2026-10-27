@@ -72,13 +72,9 @@ it("discovers engine-less exports alongside deployments without mounting undeplo
   const root = mkdtempSync(join(tmpdir(), "macrograph-stateless-"));
   try {
     for (const [name, value, deployment] of [
-      ["pure", '{ id: "pure" }', false],
-      [
-        "engine",
-        '{ moduleId: "engine", definition: {}, module: { id: "engine", engine: {} } }',
-        true,
-      ],
-      ["undeployed", '{ id: "undeployed", engine: {} }', false],
+      ["pure", "{}", false],
+      ["engine", "{ definition: {}, module: { engine: {} } }", true],
+      ["undeployed", "{ engine: {} }", false],
     ] as const) {
       const fixture = join(root, "packages/modules", name);
       mkdirSync(fixture, { recursive: true });
@@ -103,21 +99,21 @@ it("discovers engine-less exports alongside deployments without mounting undeplo
       /from ("[^"]+")/g,
       (_match, path: string) => `from ${JSON.stringify(pathToFileURL(JSON.parse(path)).href)}`,
     );
-    const module: { default: ReadonlyArray<{ id?: string; moduleId?: string }> } = await import(
+    const module: { default: ReadonlyArray<{ id: string }> } = await import(
       `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
     );
     assert.deepStrictEqual(
-      module.default.map((value) => value.moduleId ?? value.id),
-      ["engine", "pure"],
+      module.default.map((entry) => entry.id),
+      ["macrograph.app/macrograph/engine", "macrograph.app/macrograph/pure"],
     );
     assert.notMatch(source, /engine\/Module\.mjs/);
     const duplicate = code.replace(
       "const discovered = [",
-      'const discovered = [{ value: { id: "engine" }, source: "@fixture/duplicate" }, ',
+      'const discovered = [{ value: { id: "macrograph.app/macrograph/engine", value: {} }, source: "@fixture/duplicate" }, ',
     );
     await rejects(
       import(`data:text/javascript;base64,${Buffer.from(duplicate).toString("base64")}`),
-      /Duplicate module id engine/,
+      /Duplicate module id macrograph.app\/macrograph\/engine/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -146,28 +142,19 @@ it("discovers a fixture module without changing a UI registry", () => {
   }
 });
 
-it("keys discovered settings by the module id exported from the package entry", async () => {
+it("keys discovered settings by the built-in id derived from the package name", async () => {
   const root = mkdtempSync(join(tmpdir(), "macrograph-settings-"));
   try {
-    for (const [name, id] of [
-      ["first", "first-id"],
-      ["second", "second-id"],
-      ["missing-entry", undefined],
+    for (const [name, packageName] of [
+      ["first", "@macrograph/module-first"],
+      ["second", "@fixture/second"],
     ] as const) {
       const fixture = join(root, "packages/modules", name);
       mkdirSync(fixture, { recursive: true });
       writeFileSync(
         join(fixture, "package.json"),
-        JSON.stringify({
-          name: `@fixture/${name}`,
-          exports: {
-            ...(id === undefined ? {} : { ".": "./Module.mjs" }),
-            "./Settings": "./Settings.mjs",
-          },
-        }),
+        JSON.stringify({ name: packageName, exports: { "./Settings": "./Settings.mjs" } }),
       );
-      if (id !== undefined)
-        writeFileSync(join(fixture, "Module.mjs"), `export default { id: "${id}" };`);
       writeFileSync(join(fixture, "Settings.mjs"), `export const settings = { name: "${name}" };`);
     }
     const plugin = moduleSettings(root);
@@ -180,8 +167,8 @@ it("keys discovered settings by the module id exported from the package entry", 
       default: ReadonlyArray<{ id: string; settings: { name: string } }>;
     } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
     assert.deepStrictEqual(module.default, [
-      { id: "first-id", settings: { name: "first" } },
-      { id: "second-id", settings: { name: "second" } },
+      { id: "macrograph.app/macrograph/second", settings: { name: "second" } },
+      { id: "macrograph.app/macrograph/first", settings: { name: "first" } },
     ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -191,13 +178,17 @@ it("keys discovered settings by the module id exported from the package entry", 
 it("rejects duplicate module ids deterministically in the generated module", () => {
   const root = mkdtempSync(join(tmpdir(), "macrograph-settings-"));
   try {
-    for (const name of ["first", "second"]) {
-      const fixture = join(root, "packages/modules", name);
+    // Both package names map to the built-in id `<official>/macrograph/first`.
+    for (const [directory, name] of [
+      ["first", "@fixture/first"],
+      ["second", "@macrograph/module-first"],
+    ] as const) {
+      const fixture = join(root, "packages/modules", directory);
       mkdirSync(join(fixture, "src"), { recursive: true });
       writeFileSync(
         join(fixture, "package.json"),
         JSON.stringify({
-          name: `@fixture/${name}`,
+          name,
           exports: { ".": "./src/Module.ts", "./Settings": "./src/Settings.ts" },
         }),
       );
@@ -208,7 +199,7 @@ it("rejects duplicate module ids deterministically in the generated module", () 
       | undefined;
     assert.match(source ?? "", /Duplicate module id/);
     assert.match(source ?? "", /@fixture\/first/);
-    assert.match(source ?? "", /@fixture\/second/);
+    assert.match(source ?? "", /@macrograph\/module-first/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

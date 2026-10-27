@@ -17,16 +17,23 @@ import {
   LoadingState,
 } from "@macrograph/editor-ui";
 import { styles } from "@macrograph/editor-ui/events.stylex";
-import GitHubModule from "@macrograph/module-github";
-import KofiModule from "@macrograph/module-kofi";
-import SendblueModule from "@macrograph/module-sendblue";
-import TwitchModule from "@macrograph/module-twitch";
+import GitHubDefault from "@macrograph/module-github";
+import KofiDefault from "@macrograph/module-kofi";
+import SendblueDefault from "@macrograph/module-sendblue";
+import TwitchDefault from "@macrograph/module-twitch";
+import * as Module from "@macrograph/module/Module";
+import * as ModuleId from "@macrograph/module/ModuleId";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { For, Show, createEffect, createMemo, createSignal, type Component } from "solid-js";
 
 import type { CredentialsApiClient, EventsApiClient } from "../../../../api";
+
+const KofiModule = Module.identify(Module.builtinId("kofi"), KofiDefault);
+const TwitchModule = Module.identify(Module.builtinId("twitch"), TwitchDefault);
+const GitHubModule = Module.identify(Module.builtinId("github"), GitHubDefault);
+const SendblueModule = Module.identify(Module.builtinId("sendblue"), SendblueDefault);
 
 import { runApi } from "../../../../api";
 
@@ -311,7 +318,7 @@ export const Events: Component<EventsProps> = (props) => {
               ? ""
               : `${endpointProps.ingress.schema.displayName} · `}
             {[KofiModule, TwitchModule, GitHubModule, SendblueModule].find((module) =>
-              endpointProps.ingress.schema.id.startsWith(`${module.id}:`),
+              endpointProps.ingress.schema.id.startsWith(`${ModuleId.name(module.id)}:`),
             )?.name ?? endpointProps.ingress.schema.id.split(":")[0]}
           </div>
           <Show when={pollingError(endpointProps.ingress.metadata)}>

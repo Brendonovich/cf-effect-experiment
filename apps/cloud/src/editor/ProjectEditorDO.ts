@@ -14,30 +14,18 @@ import {
   Presence,
 } from "@macrograph/editor";
 import { Credential, Engine, HttpEndpoint, Resource } from "@macrograph/module";
-import GitHubModule from "@macrograph/module-github";
 import { GitHubEngine } from "@macrograph/module-github/Definition";
-import GitHubDeployment from "@macrograph/module-github/Deployment/Webhook";
-import HttpClientModule from "@macrograph/module-http-client";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
-import HttpClientDeployment from "@macrograph/module-http-client/Deployment";
-import KofiModule from "@macrograph/module-kofi";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
-import KofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
-import OpenCodeModule from "@macrograph/module-opencode";
 import {
   OpenCodeEngine,
   RequestFailure as OpenCodeFailure,
 } from "@macrograph/module-opencode/Definition";
 import { makeLayer as makeOpenCodeLayer } from "@macrograph/module-opencode/Engine";
-import SendblueModule from "@macrograph/module-sendblue";
 import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
-import SendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
-import TwitchModule from "@macrograph/module-twitch";
 import { AccountId, TwitchEngine } from "@macrograph/module-twitch/Definition";
-import TwitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { make as makeTwitchEngine } from "@macrograph/module-twitch/Engine";
 import { EventSubEndpoint } from "@macrograph/module-twitch/EventSub/Webhook";
-import UtilitiesModule from "@macrograph/module-utilities";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { make as makeUtilitiesEngine } from "@macrograph/module-utilities/Engine";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
@@ -68,15 +56,30 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import * as CredentialStore from "../auth/CredentialStore.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
+import {
+  GitHubModule,
+  GitHubWebhookDeployment as GitHubDeployment,
+  HttpClientDeployment,
+  HttpClientModule,
+  ids,
+  KofiModule,
+  KofiWebhookDeployment as KofiDeployment,
+  OpenCodeModule,
+  SendblueModule,
+  SendblueWebhookDeployment as SendblueDeployment,
+  TwitchModule,
+  TwitchWebhookDeployment as TwitchDeployment,
+  UtilitiesModule,
+} from "../modules/BuiltinModules.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
 
-const UtilitiesDeployment = Engine.deployment(
-  UtilitiesModule,
-  makeUtilitiesEngine({ startTicker: false }),
+const UtilitiesDeployment = Engine.identify(
+  ids.utilities,
+  Engine.deployment(UtilitiesModule, makeUtilitiesEngine({ startTicker: false })),
 );
 
 const sqliteSchemaPath = "../../packages/persistence-sqlite/src/schema.ts";
@@ -191,9 +194,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       openCodeDos,
       "editor",
     );
-    const OpenCodeDeployment = Engine.deployment(
-      OpenCodeModule,
-      makeOpenCodeLayer(openCodeInstances),
+    const OpenCodeDeployment = Engine.identify(
+      ids.opencode,
+      Engine.deployment(OpenCodeModule, makeOpenCodeLayer(openCodeInstances)),
     );
 
     const AppLayer = Editor.defaultLayer
@@ -496,11 +499,13 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         Handlers extends ReadonlyArray<HttpIngress.Live<unknown, unknown>>,
         RequirementsError,
       >(
-        deployment: Engine.HttpIngressDeployment<
-          Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-          EngineLayer,
-          Handlers,
-          RequirementsError
+        deployment: Engine.Identified<
+          Engine.HttpIngressDeployment<
+            Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
+            EngineLayer,
+            Handlers,
+            RequirementsError
+          >
         >,
       ) => {
         const context = EngineHost.editorContextLayer(deployment, {

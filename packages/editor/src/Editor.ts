@@ -1,5 +1,6 @@
 import type * as Engine from "@macrograph/module/Engine";
 import type * as Module from "@macrograph/module/Module";
+import type * as ModuleId from "@macrograph/module/ModuleId";
 
 import {
   Canvas,
@@ -33,11 +34,11 @@ import {
   Clock,
   Context,
   Effect,
-  Fiber,
   Layer,
   Ref,
   Result,
   Schema,
+  Scope,
   Semaphore,
   Stream,
 } from "effect";
@@ -45,6 +46,7 @@ import {
 import { EditorEvent } from "./EditorEvent.ts";
 import { EditorEvents } from "./EditorEvents.ts";
 import { Packages } from "./Packages.ts";
+import { ScopedRegistry } from "./ScopedRegistry.ts";
 import { randomUUID } from "./Uuid.ts";
 
 const ResourceKey = Schema.String.pipe(Schema.brand("ResourceKey"));
@@ -400,6 +402,10 @@ export interface Interface {
       readonly connectionId: string;
     }) => Effect.Effect<EditorEvent.ConnectionDeleted, PersistenceError>;
   };
+  /**
+   * Engine hosting. Every `host*` registration lasts until the current scope closes and then
+   * removes exactly what it added.
+   */
   readonly engine: {
     readonly setState: (
       moduleId: string,
@@ -411,17 +417,17 @@ export interface Interface {
     readonly getEndpoints: () => Effect.Effect<ReadonlyArray<HttpEndpoint.Routed>>;
     readonly setEndpoints: (endpoints: ReadonlyArray<HttpEndpoint.Routed>) => Effect.Effect<void>;
     readonly hostClientState: (
-      moduleId: string,
+      moduleId: ModuleId.Id,
       state: Effect.Effect<Schema.Json>,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly getClientState: (moduleId: string) => Effect.Effect<Schema.Json, EngineNotHosted>;
     readonly dirtyClientState: (moduleId: string) => Effect.Effect<void>;
     readonly getClientCapabilities: () => Effect.Effect<ReadonlyArray<string>>;
     readonly hostResource: (
-      moduleId: string,
+      moduleId: ModuleId.Id,
       resourceId: string,
       resource: HostedResource,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly getResourceValues: (
       moduleId: string,
       resourceId: string,
@@ -433,12 +439,20 @@ export interface Interface {
       moduleId: string,
       resourceId: string,
     ) => Effect.Effect<void, ResourceConstant.InvalidResourceError>;
-    readonly hostRuntimeClient: (moduleId: string, client: unknown) => Effect.Effect<void>;
+    readonly hostRuntimeClient: (
+      moduleId: ModuleId.Id,
+      client: unknown,
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly getRuntimeClient: (moduleId: string) => Effect.Effect<unknown, EngineNotHosted>;
   };
+  /**
+   * Registers a module until the current scope closes. Registration and removal both recompute
+   * node IO for affected graphs and publish `PackagesChanged`; nodes of a removed module stay in
+   * the project as placeholders.
+   */
   readonly module: <Definition extends Engine.AnyDef = never>(
     ...args: Module.RegisterArgs<Definition>
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, never, Scope.Scope>;
 }
 
 /** Coordinates project editing, resource constants, module registration, and hosted engines. */
@@ -447,11 +461,15 @@ export class Service extends Context.Service<Service, Interface>()("macrograph/E
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
     const persistence = yield* Persistence.Service;
-    const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
     // Core defaults plus every mounted module's pairs; replaced (and caches cleared) on mount.
     const modulePairs = new Map<string, ReadonlyArray<Conversion.Pair>>();
+    const updateConversions = () => {
+      conversions = Conversion.rules([...Conversion.defaults, ...[...modulePairs.values()].flat()]);
+      // Inference depends on the rules, so cached groups from before this change are stale.
+      wildcardCaches.clear();
+    };
     let conversions = Conversion.defaultRules;
     const lock = yield* Semaphore.make(1);
     const initialProject = yield* persistence.loadProject().pipe(
@@ -469,15 +487,11 @@ export const layer = Layer.effect(Service)(
       }
     >();
     const clipboardSession = randomUUID();
-    const engines = yield* Ref.make<ReadonlyMap<string, Engine.AnyDef>>(new Map());
-    const engineClientStates = yield* Ref.make<ReadonlyMap<string, Effect.Effect<Schema.Json>>>(
-      new Map(),
-    );
+    const engines = yield* ScopedRegistry.make<string, Engine.AnyDef>();
+    const engineClientStates = yield* ScopedRegistry.make<string, Effect.Effect<Schema.Json>>();
     const engineEndpoints = yield* Ref.make<ReadonlyArray<HttpEndpoint.Routed>>([]);
-    const hostedResources = yield* Ref.make<
-      ReadonlyMap<ResourceKey, HostedResource & { readonly forwardingFiber: Fiber.Fiber<void> }>
-    >(new Map());
-    const runtimeClients = yield* Ref.make<ReadonlyMap<string, unknown>>(new Map());
+    const hostedResources = yield* ScopedRegistry.make<ResourceKey, HostedResource>();
+    const runtimeClients = yield* ScopedRegistry.make<string, unknown>();
     const resourceKey = (moduleId: string, resourceId: string) =>
       ResourceKey.make(`${moduleId}\0${resourceId}`);
     const resolveIOProperties = Effect.fnUntraced(function* (
@@ -2035,34 +2049,48 @@ export const layer = Layer.effect(Service)(
       return project;
     }, lock.withPermit);
 
+    // Nodes whose schema is not loaded (e.g. their module is missing) get no IO: they are
+    // placeholders that keep their saved properties and connections.
+    const projectedNodeIO = Effect.fnUntraced(function* (
+      project: Project.Model,
+      graphId: string,
+      persistedGraph: Canvas.Model,
+    ) {
+      const fn = project.functions[graphId];
+      const graph = Scopes.projectCanvas(
+        fn === undefined ? persistedGraph : GraphFunction.projectCanvas(fn),
+      );
+      const nodeIO: Record<string, NodeIO> = {};
+      const unavailable: Array<string> = [];
+      for (const node of Object.values(graph.nodes)) {
+        const io = yield* getNodeIO(node).pipe(
+          Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
+        );
+        if (io !== undefined) nodeIO[node.id] = io;
+        else unavailable.push(node.id);
+      }
+      if (fn !== undefined) {
+        nodeIO[GraphFunction.InputBoundaryNodeId] = GraphFunction.boundaryIO(
+          fn,
+          GraphFunction.InputBoundaryNodeId,
+        )!;
+        nodeIO[GraphFunction.OutputBoundaryNodeId] = GraphFunction.boundaryIO(
+          fn,
+          GraphFunction.OutputBoundaryNodeId,
+        )!;
+      }
+      return { graph, nodeIO, unavailable };
+    });
+
     const projectSnapshot = Effect.fn("Editor.project.snapshot")(function* () {
       const project = yield* persistence.loadProject();
       yield* packages.setTypeDefinitions(project.types);
       const generated: Record<string, Record<string, NodeIO>> = {};
       const graphs: Record<string, Canvas.Model> = {};
       for (const [graphId, persistedGraph] of Object.entries(Project.canvases(project))) {
-        const fn = project.functions[graphId];
-        const graph = Scopes.projectCanvas(
-          fn === undefined ? persistedGraph : GraphFunction.projectCanvas(fn),
-        );
-        graphs[graphId] = graph;
-        generated[graphId] = {};
-        for (const node of Object.values(graph.nodes)) {
-          const io = yield* getNodeIO(node).pipe(
-            Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)),
-          );
-          if (io !== undefined) generated[graphId][node.id] = io;
-        }
-        if (fn !== undefined) {
-          generated[graphId][GraphFunction.InputBoundaryNodeId] = GraphFunction.boundaryIO(
-            fn,
-            GraphFunction.InputBoundaryNodeId,
-          )!;
-          generated[graphId][GraphFunction.OutputBoundaryNodeId] = GraphFunction.boundaryIO(
-            fn,
-            GraphFunction.OutputBoundaryNodeId,
-          )!;
-        }
+        const projected = yield* projectedNodeIO(project, graphId, persistedGraph);
+        graphs[graphId] = projected.graph;
+        generated[graphId] = projected.nodeIO;
       }
       return { project: { ...project, graphs }, nodeIO: generated };
     }, lock.withPermit);
@@ -2082,13 +2110,7 @@ export const layer = Layer.effect(Service)(
             ? undefined
             : yield* packages
                 .getSchema(node.schema)
-                .pipe(
-                  Effect.catchTag("SchemaNotFoundError", (error) =>
-                    node.schema.package === CustomTypes.packageId
-                      ? Effect.succeed(undefined)
-                      : Effect.fail(error),
-                  ),
-                );
+                .pipe(Effect.catchTag("SchemaNotFoundError", () => Effect.succeed(undefined)));
           nodes[node.id] = {
             ...node,
             io: Result.isFailure(result)
@@ -2174,7 +2196,7 @@ export const layer = Layer.effect(Service)(
       value: Schema.Json,
     ) {
       const constant = yield* getConstant(id);
-      const hosted = (yield* Ref.get(hostedResources)).get(
+      const hosted = yield* hostedResources.get(
         resourceKey(constant.resource.package, constant.resource.resource),
       );
       if (hosted === undefined)
@@ -2285,11 +2307,42 @@ export const layer = Layer.effect(Service)(
       return yield* events.publish({ _tag: "ResourceConstantDeleted", constantId: id });
     }, lock.withPermit);
 
+    // Recomputes IO for every graph that uses a package, so clients see placeholders turn into
+    // real nodes (or back) without reloading the project.
+    const publishPackagesChanged = Effect.fnUntraced(function* (packageId: PackageId) {
+      const project = yield* persistence.loadProject().pipe(
+        Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(undefined)),
+        Effect.orDie,
+      );
+      const nodeIO: Record<string, Record<string, NodeIO>> = {};
+      const unavailableNodes: Record<string, Array<string>> = {};
+      if (project !== undefined) {
+        yield* packages.setTypeDefinitions(project.types);
+        for (const [graphId, persistedGraph] of Object.entries(Project.canvases(project))) {
+          if (
+            !Object.values(persistedGraph.nodes).some((node) => node.schema.package === packageId)
+          )
+            continue;
+          const generated = yield* projectedNodeIO(project, graphId, persistedGraph).pipe(
+            Effect.orDie,
+          );
+          nodeIO[graphId] = generated.nodeIO;
+          if (generated.unavailable.length > 0) unavailableNodes[graphId] = generated.unavailable;
+        }
+      }
+      yield* events.publishEphemeral({
+        _tag: "PackagesChanged",
+        packages: yield* packages.getPackages(),
+        nodeIO,
+        unavailableNodes,
+      });
+    });
+
     const engineSetState = Effect.fn("Editor.engine.setState")(function* (
       moduleId: string,
       state: unknown,
     ) {
-      const definition = (yield* Ref.get(engines)).get(moduleId);
+      const definition = yield* engines.get(moduleId);
       if (definition === undefined) return yield* new EngineNotRegistered({ moduleId });
       const decoded = yield* Schema.decodeUnknownEffect(definition.Storage)(state).pipe(
         Effect.mapError((cause) => new InvalidEngineState({ moduleId, cause })),
@@ -2311,11 +2364,16 @@ export const layer = Layer.effect(Service)(
             deployment.definition !== definition.engine)
         )
           return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-        const collected = yield* Registration.collectModule(definition.effect);
+        if (modulePairs.has(definition.id))
+          return yield* Effect.die(`Module ${definition.id} is already registered`);
+        const collected = yield* Registration.collectModule(definition.effect, {
+          moduleId: definition.id,
+          ...(definition.types === undefined ? {} : { types: definition.types }),
+        });
         const schemas = collected.schemas;
         const pairs = collected.conversions.map(({ from, to }) => ({ from, to }));
         const invalidConversion =
-          Conversion.validateModule(definition.id, definition.types ?? {}, pairs) ??
+          Conversion.validateModule(definition.id, collected.types, pairs) ??
           Conversion.duplicate([
             { owner: "core", pairs: Conversion.defaults },
             ...[...modulePairs]
@@ -2344,11 +2402,14 @@ export const layer = Layer.effect(Service)(
               );
           }
         }
-        const definitions = yield* persistence.loadProject().pipe(
-          Effect.map((project) => project.types),
-          Effect.catchTag("ProjectNotFoundError", () => Effect.succeed({})),
-          Effect.orDie,
-        );
+        const definitions = {
+          ...(yield* persistence.loadProject().pipe(
+            Effect.map((project) => project.types),
+            Effect.catchTag("ProjectNotFoundError", () => Effect.succeed({})),
+            Effect.orDie,
+          )),
+          ...collected.types,
+        };
         const encodeValue = (
           type: t.Type,
           value: unknown,
@@ -2360,7 +2421,7 @@ export const layer = Layer.effect(Service)(
         const pkg: Package.Model = {
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
-          types: definition.types ?? {},
+          types: collected.types,
           ...(pairs.length === 0 ? {} : { conversions: pairs }),
           ...(definition.description === undefined ? {} : { description: definition.description }),
           resources: resources.map((resource) => ({
@@ -2424,13 +2485,16 @@ export const layer = Layer.effect(Service)(
             executionOutputs: schema.executionOutputs.map(Scopes.executionPort),
           })),
         };
+        // Added first so it runs after the package and engine registrations are removed.
+        yield* Effect.addFinalizer(() =>
+          Effect.gen(function* () {
+            modulePairs.delete(definition.id);
+            updateConversions();
+            yield* publishPackagesChanged(pkg.id);
+          }).pipe(lock.withPermit),
+        );
         modulePairs.set(definition.id, pairs);
-        conversions = Conversion.rules([
-          ...Conversion.defaults,
-          ...[...modulePairs.values()].flat(),
-        ]);
-        // Inference depends on the rules, so cached groups from before this mount are stale.
-        wildcardCaches.clear();
+        updateConversions();
         yield* packages.loadPackage(
           pkg,
           new Map(
@@ -2483,7 +2547,7 @@ export const layer = Layer.effect(Service)(
                     const port = schema
                       .generateIO(properties)
                       .dataInputs.find((candidate) => candidate.id === input);
-                    const engine = (yield* Ref.get(runtimeClients)).get(definition.id);
+                    const engine = yield* runtimeClients.get(definition.id);
                     return yield* (
                       port?.suggestions?.({ properties, inputDefaults, engine }) ??
                         Effect.succeed([])
@@ -2494,12 +2558,8 @@ export const layer = Layer.effect(Service)(
           ),
         );
         const engine = definition.engine;
-        if (engine !== undefined)
-          yield* Ref.update(engines, (current) => {
-            const next = new Map(current);
-            next.set(definition.id, engine);
-            return next;
-          });
+        if (engine !== undefined) yield* engines.add(definition.id, engine);
+        yield* publishPackagesChanged(pkg.id);
       }).pipe(lock.withPermit);
 
     yield* module(CustomTypes.module);
@@ -2550,84 +2610,75 @@ export const layer = Layer.effect(Service)(
         setState: engineSetState,
         getEndpoints: () => Ref.get(engineEndpoints),
         setEndpoints: (endpoints) => Ref.set(engineEndpoints, endpoints),
-        hostClientState: (moduleId, state) =>
-          Ref.update(engineClientStates, (current) => {
-            const next = new Map(current);
-            next.set(moduleId, state);
-            return next;
-          }),
+        hostClientState: (moduleId, state) => engineClientStates.add(moduleId, state),
         getClientState: (moduleId) =>
-          Ref.get(engineClientStates).pipe(
-            Effect.flatMap((states) => {
-              const state = states.get(moduleId);
-              return state === undefined ? new EngineNotHosted({ moduleId }) : state;
-            }),
-          ),
+          engineClientStates
+            .get(moduleId)
+            .pipe(
+              Effect.flatMap((state) =>
+                state === undefined ? new EngineNotHosted({ moduleId }) : state,
+              ),
+            ),
         dirtyClientState: (moduleId) =>
           events.publishEphemeral({ _tag: "ModuleClientStateDirty", moduleId }).pipe(Effect.asVoid),
         getClientCapabilities: () =>
-          Ref.get(engineClientStates).pipe(
-            Effect.map((states) => Array.from(states.keys()).sort()),
-          ),
+          engineClientStates.entries.pipe(Effect.map((states) => Array.from(states.keys()).sort())),
         hostResource: (moduleId, resourceId, resource) =>
           Effect.gen(function* () {
-            const forwardingFiber = yield* resource.changes.pipe(
+            const key = resourceKey(moduleId, resourceId);
+            yield* hostedResources.add(key, resource);
+            // Only the current registration for a resource forwards its values.
+            yield* resource.changes.pipe(
               Stream.runForEach((values) =>
-                events.publishEphemeral({
-                  _tag: "ResourceValuesUpdated",
-                  package: moduleId,
-                  resource: resourceId,
-                  values,
-                }),
+                hostedResources.isCurrent(key, resource).pipe(
+                  Effect.flatMap((current) =>
+                    current
+                      ? events.publishEphemeral({
+                          _tag: "ResourceValuesUpdated",
+                          package: moduleId,
+                          resource: resourceId,
+                          values,
+                        })
+                      : Effect.void,
+                  ),
+                ),
               ),
-              Effect.forkIn(scope),
+              Effect.forkScoped,
             );
-            const previous = yield* Ref.modify(hostedResources, (current) => {
-              const key = resourceKey(moduleId, resourceId);
-              return [
-                current.get(key),
-                new Map(current).set(key, { ...resource, forwardingFiber }),
-              ];
-            });
-            if (previous !== undefined) yield* Fiber.interrupt(previous.forwardingFiber);
           }),
         getResourceValues: (moduleId, resourceId) =>
-          Ref.get(hostedResources).pipe(
-            Effect.flatMap((resources) => {
-              const resource = resources.get(resourceKey(moduleId, resourceId));
-              return resource === undefined
+          hostedResources.get(resourceKey(moduleId, resourceId)).pipe(
+            Effect.flatMap((resource) =>
+              resource === undefined
                 ? new ResourceConstant.InvalidResourceError({
                     package: moduleId,
                     resource: resourceId,
                     reason: "Resource engine is not hosted",
                   })
-                : resource.values;
-            }),
+                : resource.values,
+            ),
           ),
         reloadResource: (moduleId, resourceId) =>
-          Ref.get(hostedResources).pipe(
-            Effect.flatMap((resources) => {
-              const resource = resources.get(resourceKey(moduleId, resourceId));
-              return resource === undefined
+          hostedResources.get(resourceKey(moduleId, resourceId)).pipe(
+            Effect.flatMap((resource) =>
+              resource === undefined
                 ? new ResourceConstant.InvalidResourceError({
                     package: moduleId,
                     resource: resourceId,
                     reason: "Resource engine is not hosted",
                   })
-                : resource.reload;
-            }),
+                : resource.reload,
+            ),
           ),
-        hostRuntimeClient: (moduleId, client) =>
-          Ref.update(runtimeClients, (current) => new Map(current).set(moduleId, client)),
+        hostRuntimeClient: (moduleId, client) => runtimeClients.add(moduleId, client),
         getRuntimeClient: (moduleId) =>
-          Ref.get(runtimeClients).pipe(
-            Effect.flatMap((clients) => {
-              const client = clients.get(moduleId);
-              return client === undefined
-                ? new EngineNotHosted({ moduleId })
-                : Effect.succeed(client);
-            }),
-          ),
+          runtimeClients
+            .get(moduleId)
+            .pipe(
+              Effect.flatMap((client) =>
+                client === undefined ? new EngineNotHosted({ moduleId }) : Effect.succeed(client),
+              ),
+            ),
       },
       module,
     });

@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { ExecutorModules } from "@macrograph/project-host";
 import { Array, Effect, Layer, Schema } from "effect";
 import { ClusterWorkflowEngine, TestRunner } from "effect/cluster";
@@ -15,27 +15,32 @@ class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 
 let executions = 0;
 
-const TestModule = Module.make({
-  id: "effect-cluster-test",
-  engine: TestEngine,
-  effect: (registration) =>
-    registration.schema.register({
-      id: "trigger",
-      type: "event",
-      event: () => Effect.succeed(true),
-      io: (io) => ({ value: io.data.out("value", t.String) }),
-      run: ({ event, io }) =>
-        Effect.gen(function* () {
-          if (event === undefined) return yield* Effect.die("Expected event payload");
-          executions++;
-          io.value(event.value);
-        }),
-    }),
-});
+const TestModule = Module.identify(
+  ModuleId.Id.make("local/test/effect-cluster-test"),
+  Module.make({
+    engine: TestEngine,
+    effect: (registration) =>
+      registration.schema.register({
+        id: "trigger",
+        type: "event",
+        event: () => Effect.succeed(true),
+        io: (io) => ({ value: io.data.out("value", t.String) }),
+        run: ({ event, io }) =>
+          Effect.gen(function* () {
+            if (event === undefined) return yield* Effect.die("Expected event payload");
+            executions++;
+            io.value(event.value);
+          }),
+      }),
+  }),
+);
 
-const TestDeployment = Engine.deployment(
-  TestModule,
-  TestEngine.toLayer(() => Effect.die("not hosted")),
+const TestDeployment = Engine.identify(
+  TestModule.id,
+  Engine.deployment(
+    TestModule,
+    TestEngine.toLayer(() => Effect.die("not hosted")),
+  ),
 );
 
 const modules = ExecutorModules.make([ExecutorModules.entry(TestModule, Trigger, TestDeployment)]);

@@ -4,7 +4,6 @@ import { Effect, Option } from "effect";
 import { KofiEngine, KofiWebhook } from "./Definition.ts";
 
 export default Module.make({
-  id: "kofi",
   name: "Ko-fi",
   engine: KofiEngine,
   effect: Effect.fnUntraced(function* (ctx) {

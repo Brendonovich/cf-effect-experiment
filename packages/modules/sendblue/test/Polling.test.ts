@@ -77,7 +77,6 @@ describe("Sendblue polling ingress", () => {
       });
       assert.strictEqual(result.events.length, 1);
       assert.deepInclude(result.events[0], {
-        moduleId: "sendblue",
         eventType: "SendblueMessageReceived",
         eventId: "new",
       });

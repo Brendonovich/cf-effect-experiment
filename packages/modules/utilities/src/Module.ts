@@ -69,7 +69,6 @@ export const parseFormatString = (format: string): ReadonlyArray<FormatBlock> =>
 export const formatValue = (value: unknown): string => Inspectable.toStringUnknown(value, 0);
 
 const UtilitiesModule = Module.make({
-  id: "util",
   name: "Utilities",
   description: "General-purpose control flow, formatting, timing, and debugging tools.",
   engine: UtilitiesEngine,

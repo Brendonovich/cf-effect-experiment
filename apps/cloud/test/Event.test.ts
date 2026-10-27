@@ -353,7 +353,7 @@ describe("Event.make list", () => {
                   "project",
                   "ingress",
                   null,
-                  "github",
+                  "macrograph.app/macrograph/github",
                   "GitHubWebhookDelivery",
                   "delivery-1",
                   JSON.stringify(payload),

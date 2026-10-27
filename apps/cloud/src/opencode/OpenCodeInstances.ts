@@ -2,13 +2,14 @@ import type { Instance, Instances } from "@macrograph/module-opencode/Instance";
 import type { connectRemote, Service } from "@macrograph/opencode-workerd";
 
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import OpenCodeModule from "@macrograph/module-opencode";
 import {
   describeFailure,
   OpenCodeEngine,
   RequestFailure,
 } from "@macrograph/module-opencode/Definition";
 import { Effect, Schema } from "effect";
+
+import { OpenCodeModule } from "../modules/BuiltinModules.ts";
 
 export interface Namespace {
   readonly getByName: (name: string) => {

@@ -33,7 +33,6 @@ const context = {
 describe("OpenCode module", () => {
   it.effect("registers stateless generation with live model suggestions", () =>
     Effect.gen(function* () {
-      assert.strictEqual(module.id, "opencode");
       assert.strictEqual(module.engine, OpenCodeEngine);
       const [schema] = yield* Registration.collect(module.effect);
       assert.isDefined(schema);

@@ -14,17 +14,18 @@ import {
 import { ModuleRpcProtocol } from "@macrograph/editor-ui/modules";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import HttpClientDeployment from "@macrograph/module-http-client/Deployment/Local";
+import HttpClientLocalDeployment from "@macrograph/module-http-client/Deployment/Local";
 import JsonModule from "@macrograph/module-json";
 import ListModule from "@macrograph/module-list";
 import LogicModule from "@macrograph/module-logic";
 import MathModule from "@macrograph/module-math";
-import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
+import OBSWebSocketDeployment from "@macrograph/module-obs/Deployment/WebSocket";
 import StringModule from "@macrograph/module-string";
-import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
-import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
-import WebSocketClientDeployment from "@macrograph/module-websocket-client/Deployment/Local";
+import TwitchWebSocketDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
+import UtilitiesStandaloneDeployment from "@macrograph/module-utilities/Deployment";
+import WebSocketClientLocalDeployment from "@macrograph/module-websocket-client/Deployment/Local";
 import * as Engine from "@macrograph/module/Engine";
+import * as Module from "@macrograph/module/Module";
 import * as Resource from "@macrograph/module/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { ModuleMount } from "@macrograph/project-host/ModuleMount";
@@ -39,6 +40,29 @@ export interface LocalEditorConnection extends EditorConnection {
   /** Module settings call the engines mounted in this page directly. */
   readonly moduleRpcProtocol: ModuleRpcProtocolFactory;
 }
+
+// Built-ins load under official ids; the settings discovery derives the same ids from package names.
+const UtilitiesDeployment = Engine.identify(
+  Module.builtinId("utilities"),
+  UtilitiesStandaloneDeployment,
+);
+const HttpClientDeployment = Engine.identify(
+  Module.builtinId("http-client"),
+  HttpClientLocalDeployment,
+);
+const OBSDeployment = Engine.identify(Module.builtinId("obs"), OBSWebSocketDeployment);
+const TwitchDeployment = Engine.identify(Module.builtinId("twitch"), TwitchWebSocketDeployment);
+const WebSocketClientDeployment = Engine.identify(
+  Module.builtinId("websocket-client"),
+  WebSocketClientLocalDeployment,
+);
+const statelessModules = [
+  Module.identify(Module.builtinId("json"), JsonModule),
+  Module.identify(Module.builtinId("list"), ListModule),
+  Module.identify(Module.builtinId("logic"), LogicModule),
+  Module.identify(Module.builtinId("math"), MathModule),
+  Module.identify(Module.builtinId("string"), StringModule),
+];
 
 export const makeLocalConnection = (
   store: LocalProjectStore,
@@ -78,12 +102,14 @@ export const makeLocalConnection = (
           EngineError,
           EngineServices,
         >(
-          deployment: Engine.Deployment<
-            Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-            Layer.Layer<
-              Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
-              EngineError,
-              EngineServices
+          deployment: Engine.Identified<
+            Engine.Deployment<
+              Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
+              Layer.Layer<
+                Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
+                EngineError,
+                EngineServices
+              >
             >
           >,
         ) =>
@@ -116,8 +142,7 @@ export const makeLocalConnection = (
 
         const utilitiesContext = yield* mount(UtilitiesDeployment);
         yield* mount(HttpClientDeployment);
-        for (const module of [JsonModule, ListModule, LogicModule, MathModule, StringModule])
-          yield* ModuleMount.register(executor, module);
+        for (const module of statelessModules) yield* ModuleMount.register(executor, module);
         const obsContext = yield* mount(OBSDeployment);
         const twitchContext = yield* mount(TwitchDeployment);
         const websocketContext = yield* mount(WebSocketClientDeployment);

@@ -8,7 +8,7 @@ import {
   Project,
   SchemaId,
 } from "@macrograph/core";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, Effect, Option, Ref, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -37,63 +37,68 @@ describe("schema execution context", () => {
           Effect.andThen(executor.executeNode(key)),
         ),
       );
-      const module = Module.make({
-        id: "context",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (registration) {
-          const capture = (
-            execution: {
-              readonly projectId: string;
-              readonly graphId: string;
-              readonly eventNodeId: string;
-              readonly traceId: string;
-            },
-            node: {
-              readonly nodeId: string;
-              readonly executionPath: string;
-              readonly traceId: string;
-              readonly parentTraceId?: string;
-              readonly withSpan: <A, E, R>(
-                name: string,
-                effect: Effect.Effect<A, E, R>,
-              ) => Effect.Effect<A, E, R>;
-            },
-          ) =>
-            node.withSpan(
-              "context.capture",
-              Ref.update(contexts, (current) => [
-                ...current,
-                {
-                  projectId: execution.projectId,
-                  graphId: execution.graphId,
-                  eventNodeId: execution.eventNodeId,
-                  executionTraceId: execution.traceId,
-                  nodeId: node.nodeId,
-                  executionPath: node.executionPath,
-                  nodeTraceId: node.traceId,
-                  ...(node.parentTraceId === undefined
-                    ? {}
-                    : { parentTraceId: node.parentTraceId }),
-                },
-              ]),
-            );
-          yield* registration.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: () => ({}),
-            run: ({ execution, node }) => capture(execution, node),
-          });
-          yield* registration.schema.register({
-            id: "action",
-            io: (io) => ({ alternate: io.exec.in("alternate") }),
-            run: ({ execution, node }) => capture(execution, node),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/context"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (registration) {
+            const capture = (
+              execution: {
+                readonly projectId: string;
+                readonly graphId: string;
+                readonly eventNodeId: string;
+                readonly traceId: string;
+              },
+              node: {
+                readonly nodeId: string;
+                readonly executionPath: string;
+                readonly traceId: string;
+                readonly parentTraceId?: string;
+                readonly withSpan: <A, E, R>(
+                  name: string,
+                  effect: Effect.Effect<A, E, R>,
+                ) => Effect.Effect<A, E, R>;
+              },
+            ) =>
+              node.withSpan(
+                "context.capture",
+                Ref.update(contexts, (current) => [
+                  ...current,
+                  {
+                    projectId: execution.projectId,
+                    graphId: execution.graphId,
+                    eventNodeId: execution.eventNodeId,
+                    executionTraceId: execution.traceId,
+                    nodeId: node.nodeId,
+                    executionPath: node.executionPath,
+                    nodeTraceId: node.traceId,
+                    ...(node.parentTraceId === undefined
+                      ? {}
+                      : { parentTraceId: node.parentTraceId }),
+                  },
+                ]),
+              );
+            yield* registration.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: () => ({}),
+              run: ({ execution, node }) => capture(execution, node),
+            });
+            yield* registration.schema.register({
+              id: "action",
+              io: (io) => ({ alternate: io.exec.in("alternate") }),
+              run: ({ execution, node }) => capture(execution, node),
+            });
+          }),
         }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        ),
       );
       const graphId = GraphId.make("context-graph");
       const eventNodeId = NodeId.make("context-event");
@@ -118,7 +123,10 @@ describe("schema execution context", () => {
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
-                  schema: { package: PackageId.make("context"), schema: SchemaId.make("event") },
+                  schema: {
+                    package: PackageId.make("local/test/context"),
+                    schema: SchemaId.make("event"),
+                  },
                   position: { x: 0, y: 0 },
                 },
                 [actionNodeId]: {
@@ -127,7 +135,10 @@ describe("schema execution context", () => {
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
-                  schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
+                  schema: {
+                    package: PackageId.make("local/test/context"),
+                    schema: SchemaId.make("action"),
+                  },
                   position: { x: 100, y: 0 },
                 },
                 [secondActionNodeId]: {
@@ -136,7 +147,10 @@ describe("schema execution context", () => {
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
-                  schema: { package: PackageId.make("context"), schema: SchemaId.make("action") },
+                  schema: {
+                    package: PackageId.make("local/test/context"),
+                    schema: SchemaId.make("action"),
+                  },
                   position: { x: 100, y: 100 },
                 },
               },
@@ -205,7 +219,11 @@ describe("schema execution context", () => {
       const schemaSpans = spans.filter((span) => span.name.startsWith("Schema.run "));
       assert.deepStrictEqual(
         schemaSpans.map((span) => span.name),
-        ["Schema.run context.event", "Schema.run context.action", "Schema.run context.action"],
+        [
+          "Schema.run local/test/context.event",
+          "Schema.run local/test/context.action",
+          "Schema.run local/test/context.action",
+        ],
       );
       for (const [index, span] of schemaSpans.entries()) {
         assert.strictEqual(Option.getOrUndefined(span.parent), nodeSpans[index]);
@@ -213,7 +231,7 @@ describe("schema execution context", () => {
           span.attributes.get("macrograph.node.id"),
           nodeSpans[index]!.attributes.get("macrograph.node.id"),
         );
-        assert.strictEqual(span.attributes.get("macrograph.module.id"), "context");
+        assert.strictEqual(span.attributes.get("macrograph.module.id"), "local/test/context");
         assert.strictEqual(
           span.attributes.get("macrograph.schema.id"),
           index === 0 ? "event" : "action",
