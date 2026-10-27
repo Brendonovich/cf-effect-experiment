@@ -19,6 +19,7 @@ import type { EditorRpcClient } from "../../src/editor/Editor";
 
 import { createEditorController } from "../../src/editor/createEditorController";
 import { createEditorCanvas } from "../../src/editor/graph/createEditorCanvas";
+import { bundledModules } from "../../src/editor/modules/EditorModules";
 import { createEditorStore } from "../../src/editor/store";
 import { createEditorWorkspace } from "../../src/editor/workspace/createEditorWorkspace";
 import {
@@ -90,7 +91,7 @@ describe("editor concern hooks", () => {
         connection: Effect.never,
         workspaceId: "test",
         userId: "user",
-        settingsDescriptors: [],
+        modules: bundledModules(),
         projectSettings: true,
       });
     });
@@ -131,7 +132,7 @@ describe("editor concern hooks", () => {
           }),
           workspaceId: projectId,
           userId: "user",
-          settingsDescriptors: [],
+          modules: bundledModules(),
         });
       });
       return { controller, setId };

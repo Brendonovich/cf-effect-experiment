@@ -1,6 +1,13 @@
 import { CloudCredentials } from "@macrograph/cloud-credentials";
 import { randomUUID } from "@macrograph/editor";
-import { Button, createEditorController, RealtimeWorkspace } from "@macrograph/editor-ui";
+import {
+  bundledModules,
+  Button,
+  createEditorController,
+  createModuleUILoader,
+  RealtimeWorkspace,
+  staticSettings,
+} from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -11,7 +18,7 @@ import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { getSession, sessionKey } from "../api";
 import { Header } from "../Header";
-import { makeLocalConnection } from "./local/LocalRuntime";
+import { makeLocalConnection, type LocalEditorConnection } from "./local/LocalRuntime";
 import {
   MAX_LOCAL_PROJECT_BYTES,
   makeLocalProjectStore,
@@ -102,7 +109,10 @@ export function Playground() {
     ),
     workspaceId: "local-browser",
     userId: localUserId(),
-    settingsDescriptors: discoveredModuleSettings,
+    modules: bundledModules({
+      loader: createModuleUILoader({ static: staticSettings(discoveredModuleSettings) }),
+      rpcProtocol: (connection: LocalEditorConnection) => connection.moduleRpcProtocol,
+    }),
   });
   const [status, setStatus] = createSignal<LocalProjectStatus>();
   const statusMessage = () => {

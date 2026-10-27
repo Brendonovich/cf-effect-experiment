@@ -11,6 +11,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorRpcClient } from "../../src/editor/Editor";
 
+import { ModuleCatalogSource } from "../../src/editor/modules/ModuleCatalogSource";
+import { ModuleRpcProtocol } from "../../src/editor/modules/ModuleRpcProtocol";
+import { createModuleUILoader } from "../../src/editor/modules/ModuleUILoader";
 import { createEditorConnection } from "../../src/editor/session/createEditorConnection";
 import { createEditorPresence } from "../../src/editor/session/createEditorPresence";
 import { createEditorStore } from "../../src/editor/store";
@@ -22,6 +25,10 @@ vi.mock(
 );
 
 let dispose = () => {};
+const modules = {
+  catalog: ModuleCatalogSource.fromPackages,
+  rpcProtocol: ModuleRpcProtocol.unavailable,
+};
 
 const presenceClient = (overrides: Partial<Presence.Client> & { id: string }): Presence.Client => ({
   kind: "browser",
@@ -72,10 +79,10 @@ describe("editor presence lifecycle", () => {
       dispose = cleanup;
       const connection = createEditorConnection(
         {
-          settingsDescriptors: [],
+          loader: createModuleUILoader(),
           connection: Effect.succeed({
-            client: client as unknown as EditorRpcClient,
-            moduleSettings: new Map(),
+            connection: { client: client as unknown as EditorRpcClient },
+            modules,
           }),
         },
         createEditorStore(),
@@ -153,12 +160,12 @@ describe("editor presence lifecycle", () => {
       dispose = cleanup;
       return createEditorConnection(
         {
-          settingsDescriptors: [],
+          loader: createModuleUILoader(),
           reconnect: true,
           connection: Effect.gen(function* () {
             attempts++;
             yield* Effect.addFinalizer(() => Effect.sync(closed));
-            return { client: client as unknown as EditorRpcClient, moduleSettings: new Map() };
+            return { connection: { client: client as unknown as EditorRpcClient }, modules };
           }),
         },
         createEditorStore(),

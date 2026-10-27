@@ -114,11 +114,17 @@ it("provides a query client to engine settings and runs their mutations", async 
     () => (
       <ModuleSettingsView
         package={pkg}
-        settings={{ load: () => Effect.void, render: () => <Settings /> }}
+        settings={{
+          open: () => () => {},
+          settings: () => ({
+            _tag: "Ready",
+            connected: { load: () => Effect.void, render: () => <Settings /> },
+          }),
+          state: () => undefined,
+        }}
         view={{ selectedView: "engine", selectedReferenceKey: null }}
         onViewChange={() => {}}
         data={{ endpoints: [], capabilities: new Set() }}
-        state={() => undefined}
         onChanged={onChanged}
       />
     ),
@@ -134,6 +140,43 @@ it("provides a query client to engine settings and runs their mutations", async 
     expect(save.textContent).toBe("Saved");
   });
   expect(onChanged).toHaveBeenCalledOnce();
+});
+
+it("opens module settings only while the engine tab shows them and surfaces load errors", () => {
+  const release = vi.fn();
+  const open = vi.fn(() => release);
+  const [view, setView] = createSignal<{
+    selectedView: "engine" | "reference";
+    selectedReferenceKey: string | null;
+  }>({ selectedView: "reference", selectedReferenceKey: null });
+  dispose = render(
+    () => (
+      <ModuleSettingsView
+        package={pkg}
+        settings={{
+          open,
+          settings: () => ({ _tag: "Failed", message: "Failed to load the UI of Example" }),
+          state: () => undefined,
+        }}
+        view={view()}
+        onViewChange={setView}
+        data={{ endpoints: [], capabilities: new Set() }}
+        onChanged={() => Promise.resolve()}
+      />
+    ),
+    document.body,
+  );
+  flush();
+  expect(open).not.toHaveBeenCalled();
+  setView({ selectedView: "engine", selectedReferenceKey: null });
+  flush();
+  expect(open).toHaveBeenCalledOnce();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "Failed to load the UI of Example",
+  );
+  setView({ selectedView: "reference", selectedReferenceKey: null });
+  flush();
+  expect(release).toHaveBeenCalledOnce();
 });
 
 it("disables unavailable engine settings and selects the exposed node reference", () => {
@@ -158,7 +201,6 @@ it("disables unavailable engine settings and selects the exposed node reference"
         view={view()}
         onViewChange={setView}
         data={{ endpoints: [], capabilities: new Set() }}
-        state={() => undefined}
         onChanged={() => Promise.resolve()}
       />
     ),
@@ -296,7 +338,6 @@ it("copies resource-node references in the strict clipboard format accepted by p
         view={{ selectedView: "reference", selectedReferenceKey: "node:SetLightPower" }}
         onViewChange={() => {}}
         data={{ endpoints: [], capabilities: new Set() }}
-        state={() => undefined}
         onChanged={() => Promise.resolve()}
       />
     ),
