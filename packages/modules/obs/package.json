@@ -9,7 +9,8 @@
     "./Events": "./src/Events.ts",
     "./Deployment/WebSocket": "./src/Deployment/WebSocket.ts",
     "./Engine": "./src/Engine.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -31,6 +32,19 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/WebSocket.ts"
+    "publisher": "macrograph",
+    "name": "obs",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "OBS Studio",
+    "description": "Control OBS Studio and react to its events over obs-websocket.",
+    "entries": {
+      "server": "./src/Deployment/WebSocket.ts",
+      "ui": "./src/UI.ts"
+    },
+    "requires": [
+      "crypto",
+      "socket"
+    ]
   }
 }

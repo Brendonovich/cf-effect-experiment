@@ -87,7 +87,7 @@ it("discovers engine-less exports alongside deployments without mounting undeplo
         JSON.stringify({
           name: `@fixture/${name}`,
           exports: { ".": "./Module.mjs" },
-          ...(deployment ? { macrograph: { standaloneDeployment: "./Deployment.mjs" } } : {}),
+          ...(deployment ? { macrograph: { entries: { server: "./Deployment.mjs" } } } : {}),
         }),
       );
       writeFileSync(
@@ -223,7 +223,7 @@ it("discovers a standalone deployment and invalidates the virtual module on modu
       join(fixture, "package.json"),
       JSON.stringify({
         name: "@fixture/deployment",
-        macrograph: { standaloneDeployment: "./src/Deployment.ts" },
+        macrograph: { entries: { server: "./src/Deployment.ts" } },
       }),
     );
     const plugin = moduleDeployments(root);

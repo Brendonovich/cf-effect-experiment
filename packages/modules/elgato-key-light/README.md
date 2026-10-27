@@ -63,7 +63,7 @@ Package: `@macrograph/module-elgato-key-light`. Default root export is the modul
 operation schemas, storage/client state, RPC groups and `KeyLightFailure`. `/Engine` exports
 the self-contained native HTTP `layer` (default) and `runtimeLayer`, which requires Effect's
 `HttpClient` service. `/Deployment` default exports `Engine.deployment(module, layer)` and is declared
-in `macrograph.standaloneDeployment`. `/Settings` exports the `settings` descriptor.
+in `macrograph.entries.server`. `/Settings` exports the `settings` descriptor.
 
 The application must install the workspace dependency, register the module and settings,
 mount the deployment and include the package in its TypeScript project references. No shared

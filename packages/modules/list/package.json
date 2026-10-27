@@ -20,5 +20,16 @@
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "publisher": "macrograph",
+    "name": "list",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "List",
+    "description": "Create, inspect, and transform typed lists.",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
   }
 }

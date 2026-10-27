@@ -11,7 +11,8 @@
     "./EventSub/WebSocket": "./src/WebSocketEventSub.ts",
     "./EventSub/Webhook": "./src/WebhookEventSub.ts",
     "./Deployment/WebSocket": "./src/Deployment/WebSocket.ts",
-    "./Deployment/Webhook": "./src/Deployment/Webhook.ts"
+    "./Deployment/Webhook": "./src/Deployment/Webhook.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -36,6 +37,19 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/WebSocket.ts"
+    "publisher": "macrograph",
+    "name": "twitch",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Twitch",
+    "description": "Call the Twitch API and react to channel events.",
+    "entries": {
+      "server": "./src/Deployment/WebSocket.ts",
+      "ui": "./src/UI.ts"
+    },
+    "requires": [
+      "http-client",
+      "socket"
+    ]
   }
 }
