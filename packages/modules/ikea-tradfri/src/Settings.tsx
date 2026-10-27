@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import { For, createSignal, createUniqueId } from "solid-js";
 
 import { ClientRpcs, ClientState, initialClientState } from "./Definition.ts";
-import module from "./Module.ts";
 
 const styles = stylex.create({
   stack: { display: "flex", flexDirection: "column", gap: 12 },
@@ -34,7 +33,6 @@ const styles = stylex.create({
 });
 
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: initialClientState,
   rpcs: ClientRpcs,

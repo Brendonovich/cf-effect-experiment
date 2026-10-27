@@ -133,7 +133,7 @@ it("discovers a fixture module without changing a UI registry", () => {
       join(fixture, "package.json"),
       JSON.stringify({
         name: "@macrograph/module-fixture",
-        exports: { "./Settings": "./src/Settings.tsx" },
+        exports: { ".": "./src/Module.ts", "./Settings": "./src/Settings.tsx" },
       }),
     );
     const plugin = moduleSettings(root);
@@ -141,6 +141,48 @@ it("discovers a fixture module without changing a UI registry", () => {
       | string
       | undefined;
     assert.match(source ?? "", /modules\/fixture\/src\/Settings\.tsx/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("keys discovered settings by the module id exported from the package entry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "macrograph-settings-"));
+  try {
+    for (const [name, id] of [
+      ["first", "first-id"],
+      ["second", "second-id"],
+      ["missing-entry", undefined],
+    ] as const) {
+      const fixture = join(root, "packages/modules", name);
+      mkdirSync(fixture, { recursive: true });
+      writeFileSync(
+        join(fixture, "package.json"),
+        JSON.stringify({
+          name: `@fixture/${name}`,
+          exports: {
+            ...(id === undefined ? {} : { ".": "./Module.mjs" }),
+            "./Settings": "./Settings.mjs",
+          },
+        }),
+      );
+      if (id !== undefined)
+        writeFileSync(join(fixture, "Module.mjs"), `export default { id: "${id}" };`);
+      writeFileSync(join(fixture, "Settings.mjs"), `export const settings = { name: "${name}" };`);
+    }
+    const plugin = moduleSettings(root);
+    const source = plugin.load(plugin.resolveId("virtual:macrograph-module-settings") ?? "")!;
+    const code = source.replace(
+      /from ("[^"]+")/g,
+      (_match, path: string) => `from ${JSON.stringify(pathToFileURL(JSON.parse(path)).href)}`,
+    );
+    const module: {
+      default: ReadonlyArray<{ id: string; settings: { name: string } }>;
+    } = await import(`data:text/javascript;base64,${Buffer.from(code).toString("base64")}`);
+    assert.deepStrictEqual(module.default, [
+      { id: "first-id", settings: { name: "first" } },
+      { id: "second-id", settings: { name: "second" } },
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -156,7 +198,7 @@ it("rejects duplicate module ids deterministically in the generated module", () 
         join(fixture, "package.json"),
         JSON.stringify({
           name: `@fixture/${name}`,
-          exports: { "./Settings": "./src/Settings.ts" },
+          exports: { ".": "./src/Module.ts", "./Settings": "./src/Settings.ts" },
         }),
       );
     }

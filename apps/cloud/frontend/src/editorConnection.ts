@@ -1,4 +1,4 @@
-import type { EditorConnection, ModuleSettingsDescriptor } from "@macrograph/editor-ui";
+import type { EditorConnection, ModuleSettingsEntry } from "@macrograph/editor-ui";
 
 import { BrowserSocket } from "@effect/platform-browser";
 import { DualProtocol, EditorRpc } from "@macrograph/editor";
@@ -7,7 +7,7 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 
 export const makeEditorConnection = (
   wsUrl: string,
-  settingsDescriptors: ReadonlyArray<ModuleSettingsDescriptor>,
+  settingsDescriptors: ReadonlyArray<ModuleSettingsEntry>,
 ): Effect.Effect<EditorConnection, unknown, Scope.Scope> =>
   Effect.gen(function* () {
     const dualProtocol = yield* DualProtocol.makeDualClientProtocol;
@@ -19,7 +19,7 @@ export const makeEditorConnection = (
         settings: Effect.forEach(
           settingsDescriptors,
           (registration) =>
-            registration
+            registration.settings
               .connect(dualProtocol.protocol)
               .pipe(Effect.map((connected) => [registration.id, connected] as const)),
           { concurrency: "unbounded" },

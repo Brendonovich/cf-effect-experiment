@@ -19,10 +19,9 @@ declare module "*.webp" {
 }
 
 declare module "virtual:macrograph-module-settings" {
-  import type { ClientSettings } from "@macrograph/module";
-  import type { JSX } from "@solidjs/web";
+  import type { ModuleSettingsEntry } from "@macrograph/editor-ui";
 
-  const settings: ReadonlyArray<ClientSettings.Descriptor<JSX.Element>>;
+  const settings: ReadonlyArray<ModuleSettingsEntry>;
   export default settings;
 }
 

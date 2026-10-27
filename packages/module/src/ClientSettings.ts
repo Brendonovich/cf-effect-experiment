@@ -18,14 +18,13 @@ export interface RenderContext {
 }
 
 export interface Connected<View> {
-  readonly load: (
-    getState: (moduleId: string) => Effect.Effect<unknown, unknown>,
-  ) => Effect.Effect<unknown, unknown>;
+  /** Decodes the module's client state, fetched by the host for the module it keys this under. */
+  readonly load: (state: Effect.Effect<unknown, unknown>) => Effect.Effect<unknown, unknown>;
   readonly render: (state: () => unknown, context: RenderContext) => View;
 }
 
+/** A module's settings UI. The host keys descriptors by module id. */
 export interface Descriptor<View, Rpcs extends Rpc.Any = never> {
-  readonly id: string;
   readonly initial: unknown;
   readonly connect: (
     protocol: RpcClient.Protocol["Service"],
@@ -38,7 +37,6 @@ export interface Descriptor<View, Rpcs extends Rpc.Any = never> {
 }
 
 export const make = <State, Rpcs extends Rpc.Any, View>(options: {
-  readonly module: { readonly id: string };
   readonly state: S.Codec<State, unknown, never, never>;
   readonly initial: State;
   readonly rpcs: RpcGroup.RpcGroup<Rpcs>;
@@ -53,8 +51,7 @@ export const make = <State, Rpcs extends Rpc.Any, View>(options: {
   const connected = (
     rpc: RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
   ): Connected<View> => ({
-    load: (getState) =>
-      getState(options.module.id).pipe(Effect.flatMap(Schema.decodeUnknownEffect(options.state))),
+    load: (state) => state.pipe(Effect.flatMap(Schema.decodeUnknownEffect(options.state))),
     render: (state, context) =>
       options.render(
         () => {
@@ -73,7 +70,6 @@ export const make = <State, Rpcs extends Rpc.Any, View>(options: {
       ),
   });
   return {
-    id: options.module.id,
     initial: options.initial,
     connect: (protocol) =>
       RpcClient.make(options.rpcs).pipe(

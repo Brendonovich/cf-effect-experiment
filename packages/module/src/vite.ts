@@ -11,12 +11,17 @@ interface ModulePackage {
   readonly macrograph?: Readonly<Record<string, unknown>>;
 }
 
+interface ModuleImport {
+  readonly path: string;
+  readonly exportName: string;
+}
+
 interface DiscoveryOptions {
   readonly name: string;
   readonly virtualId: string;
   readonly workspaceRoot?: string;
-  readonly exportName: string;
-  readonly modulePath: (manifest: ModulePackage) => string | undefined;
+  readonly imports: (manifest: ModulePackage) => Readonly<Record<string, ModuleImport>> | undefined;
+  readonly value: (bindings: Readonly<Record<string, string>>) => string;
   readonly filter?: string;
   readonly include?: ReadonlySet<string>;
 }
@@ -49,14 +54,18 @@ const workspaceModules = (options: DiscoveryOptions) => {
         const manifest = JSON.parse(readFileSync(packageJson, "utf8")) as ModulePackage;
         if (options.include !== undefined && !options.include.has(manifest.name ?? entry.name))
           return [];
-        const modulePath = options.modulePath(manifest);
-        return modulePath === undefined
+        const imports = options.imports(manifest);
+        return imports === undefined
           ? []
           : [
               {
                 packageJson,
                 source: manifest.name ?? entry.name,
-                modulePath: resolve(modulesDirectory, entry.name, modulePath),
+                imports: Object.entries(imports).map(([binding, value]) => ({
+                  binding,
+                  exportName: value.exportName,
+                  path: resolve(modulesDirectory, entry.name, value.path),
+                })),
               },
             ];
       })
@@ -76,7 +85,7 @@ const workspaceModules = (options: DiscoveryOptions) => {
       this.addWatchFile(modulesDirectory);
       for (const module of discover()) {
         this.addWatchFile(module.packageJson);
-        this.addWatchFile(module.modulePath);
+        for (const { path } of module.imports) this.addWatchFile(path);
       }
     },
     configureServer<Module>(server: {
@@ -86,7 +95,7 @@ const workspaceModules = (options: DiscoveryOptions) => {
       server.watcher.add(modulesDirectory);
       for (const module of discover()) {
         server.watcher.add(module.packageJson);
-        server.watcher.add(module.modulePath);
+        for (const { path } of module.imports) server.watcher.add(path);
       }
       const refresh = () => invalidate(server.moduleGraph);
       server.watcher.add(resolve(modulesDirectory, "*/package.json"));
@@ -104,15 +113,20 @@ const workspaceModules = (options: DiscoveryOptions) => {
       if (id !== resolvedVirtualId) return undefined;
       const modules = discover();
       const imports = modules
-        .map(
-          (module, index) =>
-            `import { ${options.exportName} as value${index} } from ${JSON.stringify(module.modulePath)};`,
+        .flatMap((module, index) =>
+          module.imports.map(
+            ({ binding, exportName, path }) =>
+              `import { ${exportName} as ${binding}${index} } from ${JSON.stringify(path)};`,
+          ),
         )
         .join("\n");
       const values = modules
-        .map(
-          (module, index) => `{ value: value${index}, source: ${JSON.stringify(module.source)} }`,
-        )
+        .map((module, index) => {
+          const bindings = Object.fromEntries(
+            module.imports.map(({ binding }) => [binding, `${binding}${index}`]),
+          );
+          return `{ value: ${options.value(bindings)}, source: ${JSON.stringify(module.source)} }`;
+        })
         .join(", ");
       const filter =
         options.filter === undefined ? "" : `.filter(({ value }) => ${options.filter})`;
@@ -186,13 +200,23 @@ export const stylexProps = () =>
     },
   }) satisfies Plugin;
 
+/** Discovers module settings descriptors as `{ id, settings }` entries keyed by module id. */
 export const moduleSettings = (workspaceRoot?: string, include?: ReadonlySet<string>) =>
   workspaceModules({
     name: "macrograph-module-settings",
     virtualId: "virtual:macrograph-module-settings",
     ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
-    exportName: "settings",
-    modulePath: (manifest) => exportPath(manifest, "./Settings"),
+    imports: (manifest) => {
+      const settings = exportPath(manifest, "./Settings");
+      const module = exportPath(manifest, ".");
+      return settings === undefined || module === undefined
+        ? undefined
+        : {
+            settings: { path: settings, exportName: "settings" },
+            module: { path: module, exportName: "default" },
+          };
+    },
+    value: (bindings) => `{ id: ${bindings.module}.id, settings: ${bindings.settings} }`,
     ...(include === undefined ? {} : { include }),
   });
 
@@ -202,9 +226,11 @@ export const moduleDeployments = (workspaceRoot?: string, include?: ReadonlySet<
     name: "macrograph-module-deployments",
     virtualId: "virtual:macrograph-module-deployments",
     ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
-    exportName: "default",
-    modulePath: (manifest) =>
-      manifestPath(manifest, "standaloneDeployment") ?? exportPath(manifest, "."),
+    imports: (manifest) => {
+      const path = manifestPath(manifest, "standaloneDeployment") ?? exportPath(manifest, ".");
+      return path === undefined ? undefined : { value: { path, exportName: "default" } };
+    },
+    value: (bindings) => `${bindings.value}`,
     filter: '"definition" in value || value.engine === undefined',
     ...(include === undefined ? {} : { include }),
   });

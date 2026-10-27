@@ -1,7 +1,7 @@
 import type { SchemaAuthoring } from "@macrograph/core";
 import type { Effect, Scope } from "effect";
 
-import type { EditorConnection, ModuleSettingsDescriptor } from "./Editor";
+import type { EditorConnection, ModuleSettingsEntry } from "./Editor";
 
 import { createEditorCatalog } from "./catalog/createEditorCatalog";
 import { createEditorCommands } from "./createEditorCommands";
@@ -16,7 +16,7 @@ export interface EditorControllerOptions {
   readonly connection: Effect.Effect<EditorConnection, unknown, Scope.Scope>;
   readonly workspaceId: string;
   readonly userId: string;
-  readonly settingsDescriptors: ReadonlyArray<ModuleSettingsDescriptor>;
+  readonly settingsDescriptors: ReadonlyArray<ModuleSettingsEntry>;
   readonly reconnect?: boolean;
   readonly projectSettings?: boolean;
   readonly authoring?: SchemaAuthoring.Registry;

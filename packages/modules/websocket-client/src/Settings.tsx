@@ -11,7 +11,6 @@ import {
   type ConnectionDefinition,
   type ConnectionId,
 } from "./Definition.ts";
-import WebSocketClientModule from "./Module.ts";
 
 const sm = "@media (min-width: 640px)";
 const styles = stylex.create({
@@ -310,7 +309,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: WebSocketClientModule,
   state: ClientState,
   initial: { connections: [] },
   rpcs: ClientRpcs,

@@ -122,9 +122,7 @@ describe("local browser runtime", () => {
           assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
           const settings = connection.moduleSettings.get("twitch")!;
           assert.deepStrictEqual(
-            yield* settings.load((moduleId) =>
-              connection.client.GetModuleClientState({ moduleId }),
-            ),
+            yield* settings.load(connection.client.GetModuleClientState({ moduleId: "twitch" })),
             {
               transport: "websocket",
               accounts: [
@@ -150,9 +148,7 @@ describe("local browser runtime", () => {
             "CredentialCatalogUnavailable",
           );
           assert.deepStrictEqual(
-            yield* settings.load((moduleId) =>
-              connection.client.GetModuleClientState({ moduleId }),
-            ),
+            yield* settings.load(connection.client.GetModuleClientState({ moduleId: "twitch" })),
             { transport: "websocket", accounts: [] },
           );
         }),
@@ -233,7 +229,7 @@ describe("local browser runtime", () => {
         assert.deepStrictEqual(
           yield* connection.moduleSettings
             .get("util")!
-            .load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
+            .load(connection.client.GetModuleClientState({ moduleId: "util" })),
           { running: true },
         );
         assert.deepStrictEqual(
