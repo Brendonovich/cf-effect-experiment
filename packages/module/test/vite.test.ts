@@ -1,5 +1,4 @@
-import { moduleDeployments, moduleSettings, stylexProps } from "@macrograph/module/vite";
-import { rejects } from "node:assert/strict";
+import { moduleSettings, stylexProps } from "@macrograph/module/vite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +50,7 @@ it("discovers every module package Settings export for production bundling", () 
   assert.notMatch(source ?? "", /modules\/http-client\/src\/Settings/);
 });
 
-it("applies host allowlists to settings and standalone deployments", () => {
+it("applies host allowlists to settings", () => {
   const include = new Set(["@macrograph/module-obs"]);
   const settings = moduleSettings(undefined, include);
   const settingsSource = settings.load(
@@ -59,65 +58,6 @@ it("applies host allowlists to settings and standalone deployments", () => {
   ) as string | undefined;
   assert.match(settingsSource ?? "", /modules\/obs\/src\/Settings\.tsx/);
   assert.notMatch(settingsSource ?? "", /modules\/kofi/);
-
-  const deployments = moduleDeployments(undefined, include);
-  const deploymentsSource = deployments.load(
-    deployments.resolveId("virtual:macrograph-module-deployments") ?? "",
-  ) as string | undefined;
-  assert.match(deploymentsSource ?? "", /modules\/obs\/src\/Deployment\/WebSocket\.ts/);
-  assert.notMatch(deploymentsSource ?? "", /modules\/kofi/);
-});
-
-it("discovers engine-less exports alongside deployments without mounting undeployed engines", async () => {
-  const root = mkdtempSync(join(tmpdir(), "macrograph-stateless-"));
-  try {
-    for (const [name, value, deployment] of [
-      ["pure", "{}", false],
-      ["engine", "{ definition: {}, module: { engine: {} } }", true],
-      ["undeployed", "{ engine: {} }", false],
-    ] as const) {
-      const fixture = join(root, "packages/modules", name);
-      mkdirSync(fixture, { recursive: true });
-      writeFileSync(
-        join(fixture, "package.json"),
-        JSON.stringify({
-          name: `@fixture/${name}`,
-          exports: { ".": "./Module.mjs" },
-          ...(deployment ? { macrograph: { entries: { server: "./Deployment.mjs" } } } : {}),
-        }),
-      );
-      writeFileSync(
-        join(fixture, deployment ? "Deployment.mjs" : "Module.mjs"),
-        `export default ${value};`,
-      );
-    }
-    const discovery = moduleDeployments(root);
-    const source = discovery.load(
-      discovery.resolveId("virtual:macrograph-module-deployments") ?? "",
-    )!;
-    const code = source.replace(
-      /from ("[^"]+")/g,
-      (_match, path: string) => `from ${JSON.stringify(pathToFileURL(JSON.parse(path)).href)}`,
-    );
-    const module: { default: ReadonlyArray<{ id: string }> } = await import(
-      `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`
-    );
-    assert.deepStrictEqual(
-      module.default.map((entry) => entry.id),
-      ["macrograph.app/macrograph/engine", "macrograph.app/macrograph/pure"],
-    );
-    assert.notMatch(source, /engine\/Module\.mjs/);
-    const duplicate = code.replace(
-      "const discovered = [",
-      'const discovered = [{ value: { id: "macrograph.app/macrograph/engine", value: {} }, source: "@fixture/duplicate" }, ',
-    );
-    await rejects(
-      import(`data:text/javascript;base64,${Buffer.from(duplicate).toString("base64")}`),
-      /Duplicate module id macrograph.app\/macrograph\/engine/,
-    );
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
 });
 
 it("discovers a fixture module without changing a UI registry", () => {
@@ -200,43 +140,6 @@ it("rejects duplicate module ids deterministically in the generated module", () 
     assert.match(source ?? "", /Duplicate module id/);
     assert.match(source ?? "", /@fixture\/first/);
     assert.match(source ?? "", /@macrograph\/module-first/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-it("discovers a standalone deployment and invalidates the virtual module on module changes", () => {
-  const root = mkdtempSync(join(tmpdir(), "macrograph-deployment-"));
-  try {
-    const fixture = join(root, "packages/modules/fixture");
-    mkdirSync(join(fixture, "src"), { recursive: true });
-    writeFileSync(
-      join(fixture, "package.json"),
-      JSON.stringify({
-        name: "@fixture/deployment",
-        macrograph: { entries: { server: "./src/Deployment.ts" } },
-      }),
-    );
-    const plugin = moduleDeployments(root);
-    const resolved = plugin.resolveId("virtual:macrograph-module-deployments");
-    const source = plugin.load(resolved ?? "") as string | undefined;
-    assert.match(source ?? "", /modules\/fixture\/src\/Deployment\.ts/);
-
-    const module = {};
-    let invalidated: unknown;
-    const updates = plugin.handleHotUpdate({
-      file: join(fixture, "package.json"),
-      server: {
-        moduleGraph: {
-          getModuleById: () => module,
-          invalidateModule: (candidate) => {
-            invalidated = candidate;
-          },
-        },
-      },
-    });
-    assert.strictEqual(invalidated, module);
-    assert.deepStrictEqual(updates, [module]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

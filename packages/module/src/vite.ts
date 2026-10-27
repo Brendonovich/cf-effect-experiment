@@ -38,13 +38,6 @@ const exportPath = (manifest: ModulePackage, name: string) => {
   return typeof value === "string" ? value : undefined;
 };
 
-const serverEntryPath = (manifest: ModulePackage) => {
-  const entries = manifest.macrograph?.entries;
-  const value =
-    typeof entries === "object" && entries !== null ? Reflect.get(entries, "server") : undefined;
-  return typeof value === "string" ? value : undefined;
-};
-
 const workspaceModules = (options: DiscoveryOptions) => {
   const workspaceRoot = options.workspaceRoot ?? resolve(import.meta.dirname, "../../..");
   const modulesDirectory = resolve(workspaceRoot, "packages/modules");
@@ -221,23 +214,5 @@ export const moduleSettings = (workspaceRoot?: string, include?: ReadonlySet<str
         : { settings: { path: settings, exportName: "settings" } };
     },
     value: (bindings, id) => `{ id: ${id}, settings: ${bindings.settings} }`,
-    ...(include === undefined ? {} : { include }),
-  });
-
-/**
- * Discovers standalone engine deployments and engine-less module exports as `{ id, value }`
- * entries; the host identifies each value with its id before mounting it.
- */
-export const moduleDeployments = (workspaceRoot?: string, include?: ReadonlySet<string>) =>
-  workspaceModules({
-    name: "macrograph-module-deployments",
-    virtualId: "virtual:macrograph-module-deployments",
-    ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
-    imports: (manifest) => {
-      const path = serverEntryPath(manifest) ?? exportPath(manifest, ".");
-      return path === undefined ? undefined : { value: { path, exportName: "default" } };
-    },
-    value: (bindings, id) => `{ id: ${id}, value: ${bindings.value} }`,
-    filter: '"definition" in value.value || value.value.engine === undefined',
     ...(include === undefined ? {} : { include }),
   });
