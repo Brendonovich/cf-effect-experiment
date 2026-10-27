@@ -47,5 +47,5 @@ Commands without response contracts use a subsequent status query.
 
 There is no additional SDK dependency. The host provides Effect's injectable
 `Socket.WebSocketConstructor`. Register `./Deployment` (also declared as
-`macrograph.standaloneDeployment`) and `./Settings`. Tests use mocked WebSockets
+`macrograph.entries.server`) and `./Settings`. Tests use mocked WebSockets
 and collect/run the full catalog without a Voicemod installation.

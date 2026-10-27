@@ -99,7 +99,7 @@ Package exports: `.` (default module), `./Definition` (engine, resource, RPCs,
 schemas), `./Engine` (default real Node layer; named `layer` accepts a Transport
 service for tests), `./Deployment` (default standalone deployment), and
 `./Settings` (default Solid v2 component and named `settings` registration).
-The manifest provides `macrograph.standaloneDeployment` for standalone discovery.
+The manifest provides `macrograph.entries.server` for standalone discovery.
 Register the same module in editor and executor catalogs, the deployment in the
 Node server, and `settings` in the editor's client settings registry. Add this
 package to workspace dependency/project references as appropriate. Do not mount

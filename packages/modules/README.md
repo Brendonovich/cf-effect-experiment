@@ -11,9 +11,17 @@ for coverage and remaining capability requirements.
 
 Stateless modules only export `Module.make({ id, effect })`; no engine definition,
 deployment, RPC group, or client state is required. Standalone discovery uses the
-package's `.` export when no `macrograph.standaloneDeployment` is specified, and
+package's `.` export when no `macrograph.entries.server` is specified, and
 registers it directly if it has no engine. Modules with engines still need an
-explicit deployment for the host. Programmatic registration is `editor.module(module)`
+explicit deployment for the host.
+
+Each module's `package.json` has a `macrograph` field (publisher, name, version, `api`,
+display name, `entries.server`, optional `entries.ui`, `requires` and `node`) that
+`macrograph-module build` from `@macrograph/module-build` turns into a module package folder
+(`macrograph.json`, `server.cjs`, `ui/`, `assets/`). Modules with settings have a `src/UI.ts`
+that default-exports `ModuleUI.make({ settings })`. A standalone deployment may only require
+the host services listed in `@macrograph/module/HostService`; anything else it needs, such
+as a URL policy or a WebSocket listener, is provided inside the deployment itself. Programmatic registration is `editor.module(module)`
 and `executor.module(module)`, or `ModuleMount.register(executor, module)` for both.
 
 Engine implementation layers use `MyEngine.toLayer((mg) => Effect.gen(...))`.

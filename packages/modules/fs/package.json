@@ -26,6 +26,17 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "fs",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Filesystem",
+    "description": "List, read and write files on the runtime host.",
+    "entries": {
+      "server": "./src/Deployment.ts"
+    },
+    "requires": [
+      "file-system"
+    ]
   }
 }
