@@ -1,0 +1,29 @@
+{
+  "name": "@macrograph/module-registry",
+  "version": "0.0.1",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./CanonicalJson": "./src/CanonicalJson.ts",
+    "./Integrity": "./src/Integrity.ts",
+    "./Protocol": "./src/Protocol.ts",
+    "./Signing": "./src/Signing.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/module": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}
