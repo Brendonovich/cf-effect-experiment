@@ -42,6 +42,8 @@ const readOnlyRpcs = new Set([
   "PreviewTypeDefinition",
   "GetInputSuggestions",
   "GetPackages",
+  // Module admin: reading the catalog is the only operation viewers may perform.
+  "GetModules",
   "GetIngressEndpoints",
   "GetModuleClientState",
   "GetModuleSettingsCapabilities",
@@ -598,6 +600,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
     EditorEvent.PackagesChanged,
+    EditorEvent.ModulesChanged,
     EditorEvent.QueueUpdated,
     EditorEvent.QueueDeleted,
   ]),
