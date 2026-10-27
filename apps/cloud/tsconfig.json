@@ -35,6 +35,9 @@
       "path": "../../packages/module"
     },
     {
+      "path": "../../packages/module-registry"
+    },
+    {
       "path": "../../packages/persistence"
     },
     {

@@ -10,6 +10,7 @@
     "./Client": "./src/Client.ts",
     "./Integrity": "./src/Integrity.ts",
     "./Protocol": "./src/Protocol.ts",
+    "./Publish": "./src/Publish.ts",
     "./Signing": "./src/Signing.ts"
   },
   "scripts": {
