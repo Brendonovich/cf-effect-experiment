@@ -14,12 +14,10 @@ import { projectIngressEndpoints, projectIngressEvents } from "../database/Datab
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
 import {
-  GitHubWebhookDeployment as githubDeployment,
-  KofiWebhookDeployment as kofiDeployment,
-  SendblueWebhookDeployment as sendblueDeployment,
-  TwitchWebhookDeployment as twitchDeployment,
+  httpIngressDeployments,
+  pollingIngressDeployments,
   UtilitiesModule,
-} from "../modules/BuiltinModules.ts";
+} from "../modules/CloudModules.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../TwitchCredentials.ts";
 import { DurableObjectHttpEndpointHost } from "./DurableObjectHttpEndpointHost.ts";
@@ -115,7 +113,7 @@ const utilitiesTickCountKey = "utilities:tick-count";
 const pollingManifestKey = "polling-ingress:manifest";
 const pollingEventPrefix = "polling-ingress:";
 const pollingCursorPrefix = "polling-ingress:cursor:";
-const pollingDeployments = [sendblueDeployment] as const;
+const pollingDeployments = pollingIngressDeployments;
 const pollingHandlers = new Map(
   pollingDeployments.flatMap((deployment) =>
     deployment.pollingIngress.handlers.map(
@@ -167,14 +165,15 @@ export const projectIngressImplementation = Effect.gen(function* () {
       return yield* Drizzle.Postgres(Effect.succeed(Redacted.make(hyperdrive.connectionString)));
     });
 
+    const [twitch, kofi, github, sendblue] = httpIngressDeployments;
     const ingressRegistry = yield* HttpIngress.makeRegistry([
-      { moduleId: twitchDeployment.moduleId, handlers: twitchDeployment.httpIngress.handlers },
-      { moduleId: kofiDeployment.moduleId, handlers: kofiDeployment.httpIngress.handlers },
-      { moduleId: githubDeployment.moduleId, handlers: githubDeployment.httpIngress.handlers },
-      { moduleId: sendblueDeployment.moduleId, handlers: sendblueDeployment.httpIngress.handlers },
+      { moduleId: twitch.moduleId, handlers: twitch.httpIngress.handlers },
+      { moduleId: kofi.moduleId, handlers: kofi.httpIngress.handlers },
+      { moduleId: github.moduleId, handlers: github.httpIngress.handlers },
+      { moduleId: sendblue.moduleId, handlers: sendblue.httpIngress.handlers },
     ]).pipe(Effect.provide(layerWebCrypto(globalThis.crypto)), Effect.orDie);
     const ingressRuntime = yield* HttpIngressRuntime.make(
-      [twitchDeployment, kofiDeployment, githubDeployment, sendblueDeployment],
+      httpIngressDeployments,
       ingressRegistry,
       endpointHost,
     ).pipe(Effect.orDie);

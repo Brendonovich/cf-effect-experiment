@@ -12,6 +12,7 @@
   "include": ["src", "alchemy.run.ts", "dev-tunnel.ts"],
   "references": [
     { "path": "../../packages/workflow-runtime-cloudflare" },
+    { "path": "../../packages/module-host" },
     { "path": "../../packages/modules/elevenlabs" },
     { "path": "../../packages/modules/github" },
     { "path": "../../packages/modules/json" },

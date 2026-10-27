@@ -32,6 +32,7 @@
     "@macrograph/module-discord": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
     "@macrograph/module-github": "workspace:*",
+    "@macrograph/module-host": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-json": "workspace:*",
     "@macrograph/module-kofi": "workspace:*",

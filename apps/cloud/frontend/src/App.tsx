@@ -25,7 +25,6 @@ import {
   untrack,
   useContext,
 } from "solid-js";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import type { ApiClient } from "./api";
 
@@ -187,10 +186,10 @@ export function App(
     const userId = currentUserId();
     if (projectId === undefined || userId === undefined) return undefined;
     return createEditorController({
-      connection: makeEditorConnection(editorUrl(projectId)),
+      connection: makeEditorConnection(editorUrl(projectId), projectId),
       workspaceId: projectId,
       userId,
-      modules: editorModules(discoveredModuleSettings),
+      modules: editorModules(),
       reconnect: true,
     });
   });

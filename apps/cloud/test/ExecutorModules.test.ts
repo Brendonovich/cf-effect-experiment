@@ -14,8 +14,8 @@ import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
-import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";
+import * as CloudModules from "../src/modules/CloudModules.ts";
 
 describe("ExecutorModules", () => {
   it.effect("executes stateless nodes and both HTTP integrations in a hosted graph", () =>
@@ -104,7 +104,7 @@ describe("ExecutorModules", () => {
       );
       const steps = new Map<string, Executor.NodeExecutionResult>();
       const executor = yield* ProjectExecutor.make(project, {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
         engineClient,
         executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
           nodeExecutor
@@ -112,7 +112,7 @@ describe("ExecutorModules", () => {
             .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
         ),
       });
-      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+      yield* CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/utilities", {
         _tag: "TickEvent",
         tick: 1,
       });
@@ -126,7 +126,7 @@ describe("ExecutorModules", () => {
   );
 
   it("registers the cloud-compatible catalog without local or persistent-socket modules", () => {
-    assert.deepStrictEqual(ExecutorModules.registry.entries.map(({ id }) => id).sort(), [
+    assert.deepStrictEqual(CloudModules.executorRegistry.entries.map(({ id }) => id).sort(), [
       "macrograph.app/macrograph/discord",
       "macrograph.app/macrograph/elevenlabs",
       "macrograph.app/macrograph/github",
@@ -148,10 +148,10 @@ describe("ExecutorModules", () => {
   it.effect("registers stateless nodes without treating them as event sources", () =>
     Effect.gen(function* () {
       const executor = yield* ProjectExecutor.make(Project.empty(), {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
       });
       const result = yield* Effect.result(
-        ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/math", {
+        CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/math", {
           _tag: "not-an-event",
         }),
       );
@@ -162,17 +162,20 @@ describe("ExecutorModules", () => {
 
   it.effect("decodes legacy GitHub webhook JSON payloads through the current event type", () =>
     Effect.gen(function* () {
-      const decoded = yield* ExecutorModules.registry.decode("macrograph.app/macrograph/github", {
-        _tag: "GitHubWebhookDelivery",
-        webhookId: "primary",
-        event: "pull_request",
-        action: "closed",
-        owner: "macrograph",
-        repository: "macrograph",
-        sender: "octocat",
-        deliveryId: "delivery-1",
-        payloadJson: JSON.stringify({ action: "closed", number: 79 }),
-      });
+      const decoded = yield* CloudModules.executorRegistry.decode(
+        "macrograph.app/macrograph/github",
+        {
+          _tag: "GitHubWebhookDelivery",
+          webhookId: "primary",
+          event: "pull_request",
+          action: "closed",
+          owner: "macrograph",
+          repository: "macrograph",
+          sender: "octocat",
+          deliveryId: "delivery-1",
+          payloadJson: JSON.stringify({ action: "closed", number: 79 }),
+        },
+      );
       assert.deepStrictEqual(decoded, {
         _tag: "GitHubWebhookDelivery",
         webhookId: "primary",
@@ -190,7 +193,7 @@ describe("ExecutorModules", () => {
   it.effect("registers Twitch metadata with credential-owned workflow execution", () =>
     Effect.gen(function* () {
       assert.isTrue(
-        ExecutorModules.registry.entries.some(
+        CloudModules.executorRegistry.entries.some(
           ({ id }) => id === "macrograph.app/macrograph/twitch",
         ),
       );
@@ -203,9 +206,9 @@ describe("ExecutorModules", () => {
   it.effect("decodes and dispatches a Ko-fi payment", () =>
     Effect.gen(function* () {
       const executor = yield* ProjectExecutor.make(Project.empty(), {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
       });
-      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/kofi", {
+      yield* CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/kofi", {
         _tag: "Donation",
         webhookId: "primary",
         message_id: "message-1",

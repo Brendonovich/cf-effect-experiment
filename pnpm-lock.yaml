@@ -233,6 +233,9 @@ importers:
       '@macrograph/module-github':
         specifier: workspace:*
         version: link:../../packages/modules/github
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client
