@@ -1,0 +1,9 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "throws",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Throws on load",
+  "server": "server.cjs"
+}
