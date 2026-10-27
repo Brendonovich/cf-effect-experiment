@@ -601,6 +601,9 @@ importers:
       '@iconify/json':
         specifier: 2.2.196
         version: 2.2.196
+      '@macrograph/module-build':
+        specifier: workspace:*
+        version: link:../../packages/module-build
       '@macrograph/server-client':
         specifier: workspace:*
         version: link:client
@@ -1250,6 +1253,136 @@ importers:
         specifier: ^4.1.0
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.1)(yaml@2.9.0))
 
+  packages/module-build:
+    dependencies:
+      '@babel/parser':
+        specifier: ^7.29.3
+        version: 7.29.8
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      '@solidjs/vite-plugin':
+        specifier: 3.0.0-next.44
+        version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@stylexjs/unplugin':
+        specifier: 'catalog:'
+        version: 0.19.0(unplugin@2.3.11)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      rolldown:
+        specifier: ^1.0.1
+        version: 1.2.5
+      vite:
+        specifier: ^8.0.7
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@macrograph/module-discord':
+        specifier: workspace:*
+        version: link:../modules/discord
+      '@macrograph/module-elevenlabs':
+        specifier: workspace:*
+        version: link:../modules/elevenlabs
+      '@macrograph/module-elgato-key-light':
+        specifier: workspace:*
+        version: link:../modules/elgato-key-light
+      '@macrograph/module-fs':
+        specifier: workspace:*
+        version: link:../modules/fs
+      '@macrograph/module-github':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@macrograph/module-goxlr':
+        specifier: workspace:*
+        version: link:../modules/goxlr
+      '@macrograph/module-http-client':
+        specifier: workspace:*
+        version: link:../modules/http-client
+      '@macrograph/module-ikea-tradfri':
+        specifier: workspace:*
+        version: link:../modules/ikea-tradfri
+      '@macrograph/module-json':
+        specifier: workspace:*
+        version: link:../modules/json
+      '@macrograph/module-kofi':
+        specifier: workspace:*
+        version: link:../modules/kofi
+      '@macrograph/module-lifx':
+        specifier: workspace:*
+        version: link:../modules/lifx
+      '@macrograph/module-list':
+        specifier: workspace:*
+        version: link:../modules/list
+      '@macrograph/module-logic':
+        specifier: workspace:*
+        version: link:../modules/logic
+      '@macrograph/module-math':
+        specifier: workspace:*
+        version: link:../modules/math
+      '@macrograph/module-midi':
+        specifier: workspace:*
+        version: link:../modules/midi
+      '@macrograph/module-obs':
+        specifier: workspace:*
+        version: link:../modules/obs
+      '@macrograph/module-openai':
+        specifier: workspace:*
+        version: link:../modules/openai
+      '@macrograph/module-opencode':
+        specifier: workspace:*
+        version: link:../modules/opencode
+      '@macrograph/module-sendblue':
+        specifier: workspace:*
+        version: link:../modules/sendblue
+      '@macrograph/module-shell':
+        specifier: workspace:*
+        version: link:../modules/shell
+      '@macrograph/module-speakerbot':
+        specifier: workspace:*
+        version: link:../modules/speakerbot
+      '@macrograph/module-streamdeck':
+        specifier: workspace:*
+        version: link:../modules/streamdeck
+      '@macrograph/module-streamlabs':
+        specifier: workspace:*
+        version: link:../modules/streamlabs
+      '@macrograph/module-string':
+        specifier: workspace:*
+        version: link:../modules/string
+      '@macrograph/module-tiktok-euler-stream':
+        specifier: workspace:*
+        version: link:../modules/tiktok-euler-stream
+      '@macrograph/module-twitch':
+        specifier: workspace:*
+        version: link:../modules/twitch
+      '@macrograph/module-utilities':
+        specifier: workspace:*
+        version: link:../modules/utilities
+      '@macrograph/module-voicemod':
+        specifier: workspace:*
+        version: link:../modules/voicemod
+      '@macrograph/module-vtube-studio':
+        specifier: workspace:*
+        version: link:../modules/vtube-studio
+      '@macrograph/module-websocket-client':
+        specifier: workspace:*
+        version: link:../modules/websocket-client
+      '@macrograph/module-websocket-server':
+        specifier: workspace:*
+        version: link:../modules/websocket-server
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/module-registry:
     dependencies:
       '@macrograph/module':
@@ -1833,6 +1966,9 @@ importers:
 
   packages/modules/shell:
     dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../module
@@ -1840,9 +1976,6 @@ importers:
         specifier: 'catalog:'
         version: 4.0.6
     devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
