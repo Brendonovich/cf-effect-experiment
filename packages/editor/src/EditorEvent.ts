@@ -248,6 +248,13 @@ export const PackagesChanged = Schema.TaggedStruct("PackagesChanged", {
 });
 export type PackagesChanged = typeof PackagesChanged.Type;
 
+/**
+ * The host's module catalog changed (a module loaded, unloaded, failed or was flagged). Clients
+ * refetch `GetModules`.
+ */
+export const ModulesChanged = Schema.TaggedStruct("ModulesChanged", { actor });
+export type ModulesChanged = typeof ModulesChanged.Type;
+
 export const QueueUpdated = Schema.TaggedStruct("QueueUpdated", { actor, queue: Queue.Model });
 export type QueueUpdated = typeof QueueUpdated.Type;
 export const QueueDeleted = Schema.TaggedStruct("QueueDeleted", { actor, queueId: Schema.String });
@@ -281,13 +288,18 @@ export type Persistent =
   | ResourceConstantUpdated
   | ResourceConstantDeleted;
 
-export type Ephemeral = ModuleClientStateDirty | ResourceValuesUpdated | PackagesChanged;
+export type Ephemeral =
+  | ModuleClientStateDirty
+  | ResourceValuesUpdated
+  | PackagesChanged
+  | ModulesChanged;
 export type EditorEvent = Persistent | Ephemeral;
 
 export const ephemeralTags = [
   "ModuleClientStateDirty",
   "ResourceValuesUpdated",
   "PackagesChanged",
+  "ModulesChanged",
 ] as const;
 
 const ephemeralTagSet: ReadonlySet<EditorEvent["_tag"]> = new Set(ephemeralTags);
