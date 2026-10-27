@@ -135,10 +135,10 @@ export const makeLocalConnection = (
           activity: runtimeClient.ActivityStream(),
           replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
           moduleSettings: new Map<string, ClientSettings.Connected<JSX.Element>>([
-            [utilitiesSettings.id, utilitiesConnected],
-            [obsSettings.id, obsConnected],
-            [twitchSettings.id, twitchConnected],
-            [websocketSettings.id, websocketConnected],
+            [UtilitiesDeployment.moduleId, utilitiesConnected],
+            [OBSDeployment.moduleId, obsConnected],
+            [TwitchDeployment.moduleId, twitchConnected],
+            [WebSocketClientDeployment.moduleId, websocketConnected],
           ]),
         };
       }).pipe(Effect.provide(context)),

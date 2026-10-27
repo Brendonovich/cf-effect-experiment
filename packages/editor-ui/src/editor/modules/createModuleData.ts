@@ -4,7 +4,7 @@ import { Actor, type Package, type ResourceConstant } from "@macrograph/core";
 import { Cause, Effect } from "effect";
 import { createMemo, refresh } from "solid-js";
 
-import type { EditorConnection, ModuleSettingsDescriptor } from "../Editor";
+import type { EditorConnection, ModuleSettingsEntry } from "../Editor";
 import type { ModuleSettingsData } from "./ModuleSettingsView";
 
 import { runPromise } from "../../observability/browserTracing";
@@ -34,7 +34,10 @@ type Connection = {
 };
 
 export function createModuleData(
-  descriptors: ReadonlyArray<Pick<ModuleSettingsDescriptor, "id" | "initial">>,
+  descriptors: ReadonlyArray<{
+    readonly id: ModuleSettingsEntry["id"];
+    readonly settings: Pick<ModuleSettingsEntry["settings"], "initial">;
+  }>,
   applyEvent: (event: EditorEvent.EditorEvent) => void,
 ) {
   let session:
@@ -83,7 +86,7 @@ export function createModuleData(
       (descriptor) =>
         [
           descriptor.id,
-          query(descriptor.initial, `Failed to load ${descriptor.id} module state`),
+          query(descriptor.settings.initial, `Failed to load ${descriptor.id} module state`),
         ] as const,
     ),
   );
@@ -111,9 +114,7 @@ export function createModuleData(
         state.clear(false);
         continue;
       }
-      pending.push(
-        state.load(settings.load((moduleId) => client.GetModuleClientState({ moduleId }))),
-      );
+      pending.push(state.load(settings.load(client.GetModuleClientState({ moduleId: id }))));
     }
     pending.push(
       runPromise(

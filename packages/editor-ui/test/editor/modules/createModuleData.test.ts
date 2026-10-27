@@ -15,7 +15,10 @@ const packages = [
   { id: PackageId.make("twitch"), resources: [{ id: "TwitchAccount", name: "Twitch Account" }] },
   { id: PackageId.make("obs"), resources: [] },
 ];
-const descriptors = packages.map((pkg) => ({ id: pkg.id, initial: { accounts: [] } }));
+const descriptors = packages.map((pkg) => ({
+  id: pkg.id,
+  settings: { initial: { accounts: [] } },
+}));
 const makeConnection = (name: string, gate = Promise.resolve()) => ({
   client: {
     GetIngressEndpoints: vi.fn(() =>
@@ -53,7 +56,7 @@ const makeConnection = (name: string, gate = Promise.resolve()) => ({
     packages.map((pkg) => [
       pkg.id,
       {
-        load: (getState: (moduleId: string) => Effect.Effect<unknown, unknown>) => getState(pkg.id),
+        load: (state: Effect.Effect<unknown, unknown>) => state,
         render: () => undefined,
       },
     ]),

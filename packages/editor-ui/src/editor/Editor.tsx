@@ -385,6 +385,12 @@ export interface EditorConnection {
 
 export type ModuleSettingsDescriptor = ClientSettings.Descriptor<JSX.Element>;
 
+/** A settings descriptor keyed by the id of the module it belongs to. */
+export interface ModuleSettingsEntry {
+  readonly id: string;
+  readonly settings: ModuleSettingsDescriptor;
+}
+
 export interface EditorSettingsContext {
   readonly client: () => EditorRpcClient | null;
   readonly refreshModuleData: (moduleId?: string) => Promise<void>;

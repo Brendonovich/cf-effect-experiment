@@ -22,6 +22,7 @@ export {
   type EditorRpcClient,
   type EditorSettingsContext,
   type ModuleSettingsDescriptor,
+  type ModuleSettingsEntry,
 } from "./editor/Editor.tsx";
 export {
   createEditorController,
