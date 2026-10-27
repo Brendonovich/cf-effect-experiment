@@ -621,12 +621,18 @@ importers:
       '@macrograph/module-goxlr':
         specifier: workspace:*
         version: link:../../packages/modules/goxlr
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client
       '@macrograph/module-ikea-tradfri':
         specifier: workspace:*
         version: link:../../packages/modules/ikea-tradfri
+      '@macrograph/module-installer':
+        specifier: workspace:*
+        version: link:../../packages/module-installer
       '@macrograph/module-json':
         specifier: workspace:*
         version: link:../../packages/modules/json
@@ -760,75 +766,6 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../../packages/module
-      '@macrograph/module-discord':
-        specifier: workspace:*
-        version: link:../../../packages/modules/discord
-      '@macrograph/module-elevenlabs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/elevenlabs
-      '@macrograph/module-elgato-key-light':
-        specifier: workspace:*
-        version: link:../../../packages/modules/elgato-key-light
-      '@macrograph/module-github':
-        specifier: workspace:*
-        version: link:../../../packages/modules/github
-      '@macrograph/module-goxlr':
-        specifier: workspace:*
-        version: link:../../../packages/modules/goxlr
-      '@macrograph/module-http-client':
-        specifier: workspace:*
-        version: link:../../../packages/modules/http-client
-      '@macrograph/module-ikea-tradfri':
-        specifier: workspace:*
-        version: link:../../../packages/modules/ikea-tradfri
-      '@macrograph/module-lifx':
-        specifier: workspace:*
-        version: link:../../../packages/modules/lifx
-      '@macrograph/module-midi':
-        specifier: workspace:*
-        version: link:../../../packages/modules/midi
-      '@macrograph/module-obs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/obs
-      '@macrograph/module-openai':
-        specifier: workspace:*
-        version: link:../../../packages/modules/openai
-      '@macrograph/module-opencode':
-        specifier: workspace:*
-        version: link:../../../packages/modules/opencode
-      '@macrograph/module-sendblue':
-        specifier: workspace:*
-        version: link:../../../packages/modules/sendblue
-      '@macrograph/module-speakerbot':
-        specifier: workspace:*
-        version: link:../../../packages/modules/speakerbot
-      '@macrograph/module-streamdeck':
-        specifier: workspace:*
-        version: link:../../../packages/modules/streamdeck
-      '@macrograph/module-streamlabs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/streamlabs
-      '@macrograph/module-tiktok-euler-stream':
-        specifier: workspace:*
-        version: link:../../../packages/modules/tiktok-euler-stream
-      '@macrograph/module-twitch':
-        specifier: workspace:*
-        version: link:../../../packages/modules/twitch
-      '@macrograph/module-utilities':
-        specifier: workspace:*
-        version: link:../../../packages/modules/utilities
-      '@macrograph/module-voicemod':
-        specifier: workspace:*
-        version: link:../../../packages/modules/voicemod
-      '@macrograph/module-vtube-studio':
-        specifier: workspace:*
-        version: link:../../../packages/modules/vtube-studio
-      '@macrograph/module-websocket-client':
-        specifier: workspace:*
-        version: link:../../../packages/modules/websocket-client
-      '@macrograph/module-websocket-server':
-        specifier: workspace:*
-        version: link:../../../packages/modules/websocket-server
       '@solidjs/web':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)

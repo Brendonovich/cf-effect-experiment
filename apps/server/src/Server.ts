@@ -1,3 +1,4 @@
+import type { ModuleCatalog } from "@macrograph/module/ModuleCatalog";
 import type { Socket } from "node:net";
 
 import { NodeHttpServer, NodeServices, NodeSocket } from "@effect/platform-node";
@@ -15,7 +16,12 @@ import {
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Credential, Engine, Module } from "@macrograph/module";
+import { Credential, Engine } from "@macrograph/module";
+import { ModuleEvaluator } from "@macrograph/module-host/ModuleEvaluator";
+import { ModuleRegistry } from "@macrograph/module-host/ModuleRegistry";
+import { Installer } from "@macrograph/module-installer/Installer";
+import { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
+import { ModuleId } from "@macrograph/module/ModuleId";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Effect, Layer } from "effect";
 import {
@@ -28,11 +34,12 @@ import {
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { mkdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import DiscoveredModules from "virtual:macrograph-module-deployments";
+import { join } from "node:path";
 
 import { ApiKeys } from "./ApiKeys.ts";
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
+import { ModuleAdmin } from "./ModuleAdmin.ts";
 import { ModuleHost } from "./ModuleHost.ts";
 import { Observability } from "./Observability.ts";
 import { ProjectApi } from "./ProjectApi.ts";
@@ -42,6 +49,8 @@ import { StaticRoutes } from "./StaticRoutes.ts";
 
 const config = ServerConfig.makeServerConfig(process.env);
 mkdirSync(config.dataDirectory, { recursive: true });
+// The watcher only covers folders that exist when it starts.
+mkdirSync(join(config.dataDirectory, "modules", "local"), { recursive: true });
 const authFile = makeAtomicFileStore(config.cloudAuthPath);
 const cloudCredentials = Effect.runSync(
   CloudCredentials.make({
@@ -100,17 +109,16 @@ const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
     );
   });
 
-// Built-in ids come from the module discovery (package name → official id).
-const Deployments = DiscoveredModules.map(({ id, value }) =>
-  "definition" in value ? Engine.identify(id, value) : Module.identify(id, value),
-);
-
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,
   RuntimeActivity.Rpcs,
-  ...Deployments.flatMap((deployment) =>
-    "definition" in deployment ? [deployment.definition.ClientRpcs] : [],
-  ),
+  ModuleAdminRpc.ModuleAdminRpcs,
+).middleware(EditorRpc.ConnectionMiddleware);
+
+// Editor and module admin RPCs for HTTP callers such as scripts; module RPCs have their own routes.
+const HttpRpcs = EditorServer.mergeRpcGroups(
+  EditorRpc.EditorRpcs,
+  ModuleAdminRpc.ModuleAdminRpcs,
 ).middleware(EditorRpc.ConnectionMiddleware);
 
 const WsEndpoints = Layer.effectDiscard(
@@ -132,7 +140,7 @@ const WsEndpoints = Layer.effectDiscard(
 
 const EditorHttpRpc = Layer.effectDiscard(
   Effect.gen(function* () {
-    const httpEffect = yield* RpcServer.toHttpEffect(EditorRpc.EditorRpcs);
+    const httpEffect = yield* RpcServer.toHttpEffect(HttpRpcs);
     yield* (yield* HttpRouter.HttpRouter).prefixed(config.basePath).add("*", "/rpc", httpEffect);
   }),
 );
@@ -318,90 +326,46 @@ const RemoteApiRoutes = ProjectApi.layer({
   }),
 });
 
-const ApiRoutes = Layer.mergeAll(
-  EditorHttpRoutes,
-  ClientAuthRoutes,
-  RemoteApiRoutes,
-  ModuleHost.rpcRoute(config.basePath, canEditRequest),
-  HealthRoute,
-);
+/** How the server finds and evaluates modules; production and dev differ only here. */
+export interface ModuleOptions {
+  /** Roots of preinstalled packages laid out as `<namespace>/<publisher>/<name>/<version>/`. */
+  readonly shippedDirs: ReadonlyArray<string>;
+  readonly evaluator: Layer.Layer<ModuleEvaluator.Service>;
+  /** More folders to watch for staleness, e.g. built-in sources in dev. */
+  readonly extraWatchDirs?: ReadonlyArray<{ readonly dir: string; readonly id: ModuleId.Id }>;
+  /** Adjusts catalog entries after the base path is applied, e.g. dev UI source URLs. */
+  readonly mapEntry?: (entry: ModuleCatalog.Entry) => ModuleCatalog.Entry;
+}
 
-const StaticRoute = StaticRoutes.layer({
-  root: config.assetsDirectory,
-  basePath: config.basePath,
-  publicOrigin: config.publicOrigin,
-  ...(config.browserOtlpEndpoint === undefined ? {} : { otlpEndpoint: config.browserOtlpEndpoint }),
+const credentialsLayer = Layer.succeed(Engine.Credentials, {
+  ...cloudCredentials.credentials,
+  auth: {
+    ...cloudCredentials.auth,
+    // The setup approval URL is a capability, not public credential status.
+    status: serverOwnerId.pipe(
+      Effect.flatMap((ownerId) =>
+        ownerId === undefined
+          ? Effect.succeed({ state: "disconnected" as const })
+          : cloudCredentials.auth.status,
+      ),
+    ),
+    // Only the owner's account may connect the server, even when started from settings.
+    poll: serverOwnerId.pipe(
+      Effect.flatMap((ownerId) =>
+        ownerId === undefined
+          ? Effect.fail(
+              new Credential.AuthError({ reason: "Set up this server before connecting it" }),
+            )
+          : cloudCredentials.pollOwner(ownerId),
+      ),
+    ),
+  },
 });
 
-const HttpRoutes = ApiRoutes.pipe(Layer.provideMerge(StaticRoute));
-
-const MountedModules = Layer.mergeAll(
-  Layer.empty,
-  ...Deployments.map((deployment) =>
-    "definition" in deployment
-      ? ModuleHost.deploymentLayer(deployment)
-      : ModuleHost.moduleLayer(deployment),
-  ),
-);
-
-const AppLayer = HttpRoutes.pipe(
-  Layer.provideMerge(MountedModules),
-  Layer.provide(EditorRpc.handlerLayer),
-  Layer.provide(RuntimeActivity.handlerLayer),
-  // HTTP RPC servers (editor and module routes) share this; the WebSocket server has its own.
-  Layer.provide(connectionMiddlewareFor("http")),
-  Layer.provide(RpcSerialization.layerJsonRpc()),
-  Layer.provide(LiveRuntimeLayer),
-  Layer.provide(RuntimeActivity.layer),
-  Layer.provide(QueueRuntime.layer),
-  Layer.provide(
-    Layer.succeed(Engine.Credentials, {
-      ...cloudCredentials.credentials,
-      auth: {
-        ...cloudCredentials.auth,
-        // The setup approval URL is a capability, not public credential status.
-        status: serverOwnerId.pipe(
-          Effect.flatMap((ownerId) =>
-            ownerId === undefined
-              ? Effect.succeed({ state: "disconnected" as const })
-              : cloudCredentials.auth.status,
-          ),
-        ),
-        // Only the owner's account may connect the server, even when started from settings.
-        poll: serverOwnerId.pipe(
-          Effect.flatMap((ownerId) =>
-            ownerId === undefined
-              ? Effect.fail(
-                  new Credential.AuthError({ reason: "Set up this server before connecting it" }),
-                )
-              : cloudCredentials.pollOwner(ownerId),
-          ),
-        ),
-      },
-    }),
-  ),
-  Layer.provide(ModuleHost.layer),
-  Layer.provide(SqlitePersistence.layer),
-  Layer.provide(
-    Layer.mergeAll(
-      DrizzleDriver.layerNodeSqlite(config.databasePath, config.migrationsDirectory),
-      NodeServices.layer,
-    ),
-  ),
-  // Issues and logs a setup key whenever the server is unclaimed or loses its MacroGraph connection.
-  Layer.provide(
-    Layer.effectDiscard(
-      Effect.gen(function* () {
-        const scope = yield* Effect.scope;
-        yield* setup.status;
-        // Forked because notifications can arrive while setup holds its lock.
-        yield* cloudCredentials.credentials.subscribe(() =>
-          setup.status.pipe(Effect.forkIn(scope), Effect.asVoid),
-        );
-      }),
-    ),
-  ),
-);
+const InstallerLayer = Installer.layer({
+  dataDir: config.dataDirectory,
+  official: { url: config.registryUrl, keys: config.registryKeys },
+}).pipe(Layer.orDie);
 
 const nodeServer = createServer();
 const sockets = new Set<Socket>();
@@ -442,17 +406,101 @@ const pathGuard = HttpMiddleware.make((httpEffect) =>
   }),
 );
 
-const Served = HttpRouter.serve(AppLayer, { disableLogger: true, middleware: pathGuard }).pipe(
-  Layer.provide(
-    NodeHttpServer.layer(() => nodeServer, {
-      port: config.port,
-      host: config.host,
-      gracefulShutdownTimeout: "10 seconds",
-    }),
-  ),
-  Layer.provide(Observability.layer(config)),
-  Layer.provide(Layer.mergeAll(FetchHttpClient.layer, NodeSocket.layerWebSocketConstructor)),
-);
+export const make = (modules: ModuleOptions) => {
+  const mapEntry = (entry: ModuleCatalog.Entry) => {
+    const prefixed = ModuleHost.withBasePath(config.basePath)(entry);
+    return modules.mapEntry === undefined ? prefixed : modules.mapEntry(prefixed);
+  };
 
-// This outer layer is acquired last, so it quiesces sockets before the HTTP server waits to close.
-export const Main = ShutdownLayer.pipe(Layer.provideMerge(Served));
+  // Loads every enabled module while it is built, before the HTTP server starts listening.
+  const Modules = ModuleAdmin.backgroundLayer.pipe(
+    Layer.provideMerge(
+      ModuleRegistry.layer({
+        dataDir: config.dataDirectory,
+        shippedDirs: modules.shippedDirs,
+        hostServices: ModuleHost.hostServices,
+        watch: { extraDirs: modules.extraWatchDirs ?? [] },
+      }).pipe(Layer.provide([ModuleHost.mounterLayer, modules.evaluator, ModuleAdmin.trustLayer])),
+    ),
+    Layer.provideMerge(InstallerLayer),
+  );
+
+  const ApiRoutes = Layer.mergeAll(
+    EditorHttpRoutes,
+    ClientAuthRoutes,
+    RemoteApiRoutes,
+    ModuleHost.routes({ basePath: config.basePath, canEditRequest }),
+    HealthRoute,
+  );
+
+  const StaticRoute = StaticRoutes.layer({
+    root: config.assetsDirectory,
+    basePath: config.basePath,
+    publicOrigin: config.publicOrigin,
+    ...(config.browserOtlpEndpoint === undefined
+      ? {}
+      : { otlpEndpoint: config.browserOtlpEndpoint }),
+  });
+
+  const AppLayer = ApiRoutes.pipe(
+    Layer.provideMerge(StaticRoute),
+    Layer.provide(EditorRpc.handlerLayer),
+    Layer.provide(RuntimeActivity.handlerLayer),
+    Layer.provide(
+      ModuleAdmin.handlerLayer({
+        mapEntry,
+        officialNamespace: ModuleId.OfficialNamespace,
+        officialKeysConfigured: config.registryKeys.length > 0,
+      }),
+    ),
+    // The editor HTTP RPC server shares this; the WebSocket server has its own.
+    Layer.provide(connectionMiddlewareFor("http")),
+    Layer.provide(RpcSerialization.layerJsonRpc()),
+  );
+
+  const CoreLayer = Modules.pipe(
+    Layer.provideMerge(LiveRuntimeLayer),
+    Layer.provideMerge(RuntimeActivity.layer),
+    Layer.provideMerge(QueueRuntime.layer),
+    Layer.provideMerge(credentialsLayer),
+    Layer.provideMerge(SqlitePersistence.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        DrizzleDriver.layerNodeSqlite(config.databasePath, config.migrationsDirectory),
+        NodeServices.layer,
+      ),
+    ),
+    // Issues and logs a setup key whenever the server is unclaimed or loses its MacroGraph connection.
+    Layer.provideMerge(
+      Layer.effectDiscard(
+        Effect.gen(function* () {
+          const scope = yield* Effect.scope;
+          yield* setup.status;
+          // Forked because notifications can arrive while setup holds its lock.
+          yield* cloudCredentials.credentials.subscribe(() =>
+            setup.status.pipe(Effect.forkIn(scope), Effect.asVoid),
+          );
+        }),
+      ),
+    ),
+  );
+
+  const Served = HttpRouter.serve(AppLayer, { disableLogger: true, middleware: pathGuard }).pipe(
+    Layer.provide(
+      NodeHttpServer.layer(() => nodeServer, {
+        port: config.port,
+        host: config.host,
+        gracefulShutdownTimeout: "10 seconds",
+      }),
+    ),
+    Layer.provide(CoreLayer),
+    Layer.provide(Observability.layer(config)),
+    Layer.provide(Layer.mergeAll(FetchHttpClient.layer, NodeSocket.layerWebSocketConstructor)),
+  );
+
+  // This outer layer is acquired last, so it quiesces sockets before the HTTP server waits to close.
+  return ShutdownLayer.pipe(Layer.provideMerge(Served));
+};
+
+/** Shipped built-ins from `dist/modules`, evaluated with the `vm` loader. */
+export const Main = make({ shippedDirs: [config.modulesDirectory], evaluator: ModuleEvaluator.vm });

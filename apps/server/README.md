@@ -66,6 +66,18 @@ created it, and can only edit while that person is the owner or an admin. Edits 
 connected editors. Keys are stored as SHA-256 hashes in `MACROGRAPH_DATA_DIR/macrograph-api-keys.json`,
 with the same file protections as the authorization files.
 
+### Modules
+
+Every module, including the built-ins, is loaded at runtime from a folder. Built-ins ship in
+`dist/modules` next to the server bundle. Modules you add go in
+`MACROGRAPH_DATA_DIR/modules/local/<publisher>/<name>/` and load as `local/<publisher>/<name>`;
+installs from registries go under `MACROGRAPH_DATA_DIR/modules/installed/`. Admins manage modules
+under **Settings → Modules**: reload, enable or disable, rescan, browse registries and install. Changing
+a local module's files marks it stale; nothing reloads until an admin reloads it.
+
+Each module is served under `/module/<namespace>/<publisher>/<name>/`: `rpc` (editors only), and
+content-hashed `ui/` and `assets/` files.
+
 ### Environment
 
 - `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.
@@ -77,6 +89,11 @@ with the same file protections as the authorization files.
 - `MACROGRAPH_BASE_PATH`: public path such as `/macrograph`. Set it at both image build and runtime.
 - `MACROGRAPH_PUBLIC_ORIGIN`: externally visible HTTP(S) origin, without a path, used by the
   browser security policy. Set this when running behind a reverse proxy.
+- `MACROGRAPH_REGISTRY_URL`: official module registry, default `https://registry.macrograph.app`.
+- `MACROGRAPH_REGISTRY_KEYS`: the official registry's Ed25519 public keys, comma-separated base64,
+  each optionally prefixed with a key id (`<id>:<base64>`). Without keys, installing from the
+  official registry is refused because releases can't be verified.
+- `MACROGRAPH_MODULES_DIR`: built-in modules folder, default `dist/modules` next to the bundle.
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: optional server OTLP/HTTP collector base URL, such as
   `http://localhost:4318`. The server appends `/v1/traces`; existing URLs ending in `/v1/traces`
   continue to work.

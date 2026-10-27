@@ -73,6 +73,31 @@ it("serves the client and backend through one Vite server", async () => {
   });
 });
 
+it("loads built-ins from source and points their UI at Vite-served sources", async () => {
+  const response = await fetch(`${origin}${basePath}/rpc`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "GetModules", params: {} }),
+  });
+  const { result } = (await response.json()) as {
+    readonly result: ReadonlyArray<{
+      readonly id: string;
+      readonly status: string;
+      readonly source: string;
+      readonly ui?: { readonly entryUrl: string };
+    }>;
+  };
+  const utilities = result.find((entry) => entry.id === "macrograph.app/macrograph/utilities");
+  expect(utilities).toMatchObject({ status: "loaded", source: "shipped" });
+  expect(utilities?.ui?.entryUrl).toMatch(
+    new RegExp(`^${basePath}/@fs/.*/packages/modules/utilities/src/UI\\.ts$`),
+  );
+  const ui = await fetch(`${origin}${utilities?.ui?.entryUrl}`);
+  expect(ui.status).toBe(200);
+  expect(ui.headers.get("content-type")).toContain("javascript");
+  expect(await ui.text()).toContain("ModuleUI");
+});
+
 it.each([
   ["server code", "src/Server.ts"],
   ["workspace dependencies", "../../packages/modules/utilities/src/Engine.ts"],
