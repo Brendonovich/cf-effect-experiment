@@ -1,8 +1,6 @@
 import { ModuleId } from "@macrograph/module/ModuleId";
 import { Effect, Option, Ref, Schema } from "effect";
 
-import * as AtomicFile from "./AtomicFile.ts";
-
 /**
  * `<dataDir>/modules/state.json`: which modules are enabled and the dev links.
  *
@@ -32,8 +30,8 @@ export class ModuleStateError extends Schema.TaggedError<ModuleStateError>()("Mo
   message: Schema.String,
 }) {}
 
-const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Model));
-const encode = Schema.encodeEffect(Schema.fromJsonString(Model));
+export const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Model));
+export const encode = Schema.encodeEffect(Schema.fromJsonString(Model));
 
 export const isEnabled = (state: Model, id: ModuleId.Id) => state.modules[id]?.enabled ?? true;
 
@@ -68,37 +66,5 @@ export const memory = (initial: Model = empty): Effect.Effect<Store> =>
     get: Ref.get(ref),
     update: (f) => Ref.updateAndGet(ref, f),
   }));
-
-/** Reads the state file (missing means empty) and writes it atomically on every update. */
-export const file = (path: string): Effect.Effect<Store, ModuleStateError> =>
-  Effect.gen(function* () {
-    const failure = (message: unknown) =>
-      new ModuleStateError({
-        path,
-        message: message instanceof Error ? message.message : String(message),
-      });
-    const text = yield* Effect.try({ try: () => AtomicFile.readIfExists(path), catch: failure });
-    const initial =
-      text === undefined
-        ? empty
-        : yield* decode(text).pipe(
-            Effect.mapError((error) => failure(`Invalid ${FileName}: ${error.message}`)),
-          );
-    const ref = yield* Ref.make(initial);
-    return {
-      get: Ref.get(ref),
-      update: (f) =>
-        Effect.gen(function* () {
-          const next = f(yield* Ref.get(ref));
-          const json = yield* encode(next).pipe(Effect.mapError((error) => failure(error.message)));
-          yield* Effect.try({
-            try: () => AtomicFile.write(path, `${JSON.stringify(JSON.parse(json), null, 2)}\n`),
-            catch: failure,
-          });
-          yield* Ref.set(ref, next);
-          return next;
-        }),
-    };
-  });
 
 export * as ModuleState from "./ModuleState.ts";

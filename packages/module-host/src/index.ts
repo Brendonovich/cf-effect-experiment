@@ -1,12 +1,17 @@
 export * as ContentHash from "./ContentHash.ts";
+export * as ModuleCopies from "./ModuleCopies.ts";
 export * as ModuleEvaluator from "./ModuleEvaluator.ts";
+export * as ModuleFiles from "./ModuleFiles.ts";
 export * as ModuleRegistry from "./ModuleRegistry.ts";
+export * as ModuleRegistryCore from "./ModuleRegistryCore.ts";
 export * as ModuleSources from "./ModuleSources.ts";
 export * as ModuleState from "./ModuleState.ts";
+export * as ModuleStateFile from "./ModuleStateFile.ts";
 export * as ModuleTrust from "./ModuleTrust.ts";
 export * as ModuleUrls from "./ModuleUrls.ts";
 export * as ModuleWatcher from "./ModuleWatcher.ts";
 export * as Mounter from "./Mounter.ts";
 export * as SharedLibraryTable from "./SharedLibraryTable.ts";
+export * as StaticRegistry from "./StaticRegistry.ts";
 export * as VersionSelection from "./VersionSelection.ts";
 export * as VmLoader from "./VmLoader.ts";

@@ -4,14 +4,14 @@ import type { ModuleCatalog } from "@macrograph/module/ModuleCatalog";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 
-import type { ModuleSources } from "../src/ModuleSources.ts";
+import type { ModuleCopies } from "../src/ModuleCopies.ts";
 
 import { VersionSelection } from "../src/VersionSelection.ts";
 import { official } from "./helpers.ts";
 
 const id = official("thing");
 
-const copy = (source: ModuleCatalog.SourceKind, version: string, api = 1): ModuleSources.Copy => {
+const copy = (source: ModuleCatalog.SourceKind, version: string, api = 1): ModuleCopies.Copy => {
   const manifest: Manifest.Model = {
     manifest: 1,
     publisher: "fixtures",
@@ -30,7 +30,7 @@ const copy = (source: ModuleCatalog.SourceKind, version: string, api = 1): Modul
   };
 };
 
-const select = (copies: ReadonlyArray<ModuleSources.Copy>, apis: ReadonlyArray<number> = [1]) =>
+const select = (copies: ReadonlyArray<ModuleCopies.Copy>, apis: ReadonlyArray<number> = [1]) =>
   VersionSelection.select({ copies, invalid: [] }, new Set(apis));
 
 const chosen = (selection: VersionSelection.Selection) =>

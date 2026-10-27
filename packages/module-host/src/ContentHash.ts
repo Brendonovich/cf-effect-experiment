@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { ModuleUrls } from "./ModuleUrls.ts";
+
 export class ContentHashError extends Schema.TaggedError<ContentHashError>()("ContentHashError", {
   path: Schema.String,
   message: Schema.String,
@@ -47,6 +49,6 @@ export const compute = (root: string) =>
 export const ofString = (value: string) => createHash("sha256").update(value).digest("hex");
 
 /** The short form of a content hash used in versioned URLs. */
-export const short = (hash: string) => hash.slice(0, 16);
+export const short = ModuleUrls.short;
 
 export * as ContentHash from "./ContentHash.ts";

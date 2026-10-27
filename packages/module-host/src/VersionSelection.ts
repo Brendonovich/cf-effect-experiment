@@ -3,15 +3,15 @@ import type { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
 
 import { Option, SemVer } from "effect";
 
-import type { ModuleSources } from "./ModuleSources.ts";
+import type { ModuleCopies } from "./ModuleCopies.ts";
 
 export interface Selection {
   /** The copy to load, if any is usable. */
-  readonly chosen: Option.Option<ModuleSources.Copy>;
+  readonly chosen: Option.Option<ModuleCopies.Copy>;
   /** The manifest to describe the module with: the chosen copy's, or the best unusable one. */
   readonly manifest: Option.Option<Manifest.Model>;
   /** The copy the manifest above came from, for its source and path. */
-  readonly described: Option.Option<ModuleSources.Copy>;
+  readonly described: Option.Option<ModuleCopies.Copy>;
   readonly copies: ReadonlyArray<ModuleAdminRpc.ModuleCopy>;
   /** An installed copy newer than the chosen one exists but targets an unsupported `api`. */
   readonly incompatibleInstalled: boolean;
@@ -23,7 +23,7 @@ const compareVersions = (left: string, right: string) =>
   SemVer.Order(SemVer.parseUnsafe(left), SemVer.parseUnsafe(right));
 
 /** Higher version first; on a tie the shipped copy wins, since it's what the server was built with. */
-const byPreference = (left: ModuleSources.Copy, right: ModuleSources.Copy) => {
+const byPreference = (left: ModuleCopies.Copy, right: ModuleCopies.Copy) => {
   const order = compareVersions(right.manifest.version, left.manifest.version);
   if (order !== 0) return order;
   return (left.source === "shipped" ? 0 : 1) - (right.source === "shipped" ? 0 : 1);
@@ -32,7 +32,7 @@ const byPreference = (left: ModuleSources.Copy, right: ModuleSources.Copy) => {
 const describeApis = (supported: ReadonlySet<number>) =>
   supported.size === 0 ? "none" : [...supported].sort((a, b) => a - b).join(", ");
 
-const incompatibleMessage = (copy: ModuleSources.Copy, supported: ReadonlySet<number>) =>
+const incompatibleMessage = (copy: ModuleCopies.Copy, supported: ReadonlySet<number>) =>
   `${copy.source} copy ${copy.manifest.version} targets api ${copy.manifest.api}; this host supports api ${describeApis(supported)}`;
 
 /**
@@ -42,10 +42,10 @@ const incompatibleMessage = (copy: ModuleSources.Copy, supported: ReadonlySet<nu
  * 3. an incompatible installed copy newer than that sets `incompatibleInstalled`.
  */
 export const select = (
-  group: ModuleSources.Group,
+  group: ModuleCopies.Group,
   supportedApis: ReadonlySet<number>,
 ): Selection => {
-  const compatible = (copy: ModuleSources.Copy) => supportedApis.has(copy.manifest.api);
+  const compatible = (copy: ModuleCopies.Copy) => supportedApis.has(copy.manifest.api);
   const copies = group.copies.map(
     (copy): ModuleAdminRpc.ModuleCopy => ({
       source: copy.source,
@@ -66,7 +66,7 @@ export const select = (
   const invalidError = () =>
     Option.some(group.invalid.map((copy) => `${copy.root}: ${copy.error}`).join("\n"));
 
-  const preferred = (source: ModuleSources.Copy["source"]) =>
+  const preferred = (source: ModuleCopies.Copy["source"]) =>
     group.copies.filter((copy) => copy.source === source).sort(byPreference)[0];
 
   // A dev link or a local folder is the only copy considered when present.

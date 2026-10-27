@@ -2,10 +2,6 @@ import { Manifest } from "@macrograph/module/Manifest";
 import { ModuleId } from "@macrograph/module/ModuleId";
 import { ModulePackage } from "@macrograph/module/ModulePackage";
 import { Option } from "effect";
-import { realpathSync, statSync } from "node:fs";
-import { join, relative, resolve, sep, isAbsolute } from "node:path";
-
-import { ContentHash } from "./ContentHash.ts";
 
 /**
  * Static module files are served from `<routePrefix>/<kind>/<version>/<path>`, where `kind` is
@@ -15,7 +11,10 @@ import { ContentHash } from "./ContentHash.ts";
  */
 export type StaticKind = "ui" | "assets";
 
-const folder = (kind: StaticKind) =>
+/** The short form of a content hash used in versioned URLs. */
+export const short = (hash: string) => hash.slice(0, 16);
+
+export const folder = (kind: StaticKind) =>
   kind === "ui" ? ModulePackage.UiDirectory : ModulePackage.AssetsDirectory;
 
 /** The path inside the kind's folder for a manifest package path, if it lives there. */
@@ -37,7 +36,7 @@ export const url = (
 ): Option.Option<string> =>
   Option.map(
     pathInKind(kind, packagePath),
-    (path) => `${ModuleId.routePrefix(id)}/${kind}/${ContentHash.short(contentHash)}/${path}`,
+    (path) => `${ModuleId.routePrefix(id)}/${kind}/${short(contentHash)}/${path}`,
   );
 
 /** Splits the part of a static URL after `<kind>/` into its version and file path. */
@@ -53,34 +52,6 @@ export const parseStaticPath = (
 
 /** Whether a URL version matches the module's current content hash. */
 export const isCurrentVersion = (version: string, contentHash: string) =>
-  version === ContentHash.short(contentHash);
-
-const isInside = (parent: string, child: string) => {
-  const path = relative(parent, child);
-  return path !== "" && !path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path);
-};
-
-/**
- * The absolute file for a path inside a module's `ui/` or `assets/` folder. Rejects paths that
- * escape the folder, including through symlinks, and paths that don't exist.
- */
-export const resolveFile = (
-  root: string,
-  kind: StaticKind,
-  path: string,
-): Option.Option<string> => {
-  if (!Manifest.isPackagePath(path) || path.includes("\0")) return Option.none();
-  const base = resolve(root, folder(kind));
-  const candidate = resolve(join(base, path));
-  if (!isInside(base, candidate)) return Option.none();
-  try {
-    const real = realpathSync(candidate);
-    return isInside(realpathSync(base), real) && statSync(real).isFile()
-      ? Option.some(real)
-      : Option.none();
-  } catch {
-    return Option.none();
-  }
-};
+  version === short(contentHash);
 
 export * as ModuleUrls from "./ModuleUrls.ts";
