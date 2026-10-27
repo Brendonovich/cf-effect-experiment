@@ -49,6 +49,30 @@ const numberFromEnv = (value: string | undefined, fallback: number) => {
 const optionalEnv = (value: string | undefined) =>
   value === undefined || value.trim() === "" ? undefined : value;
 
+export interface RegistryKey {
+  readonly id: string;
+  readonly algorithm: "Ed25519";
+  readonly publicKey: string;
+}
+
+/**
+ * The official registry's Ed25519 public keys: comma-separated base64 raw keys, each optionally
+ * prefixed with an id (`<id>:<base64>`).
+ */
+export const parseRegistryKeys = (value: string | undefined): ReadonlyArray<RegistryKey> =>
+  (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "")
+    .map((entry, index) => {
+      const separator = entry.indexOf(":");
+      const id = separator > 0 ? entry.slice(0, separator) : `key-${index + 1}`;
+      const publicKey = separator > 0 ? entry.slice(separator + 1) : entry;
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(publicKey))
+        throw new Error("MACROGRAPH_REGISTRY_KEYS must contain base64 Ed25519 public keys");
+      return { id, algorithm: "Ed25519", publicKey };
+    });
+
 /** An OTLP/HTTP trace destination: where to POST spans and with which headers. */
 export interface OtlpTraceDestination {
   readonly url: string;
@@ -164,6 +188,12 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     assetsDirectory: resolve(
       env.MACROGRAPH_ASSETS_DIR ?? fileURLToPath(new URL("../client", import.meta.url)),
     ),
+    /** Built-in module packages shipped next to the built server. */
+    modulesDirectory: resolve(
+      env.MACROGRAPH_MODULES_DIR ?? fileURLToPath(new URL("../modules", import.meta.url)),
+    ),
+    registryUrl: optionalEnv(env.MACROGRAPH_REGISTRY_URL) ?? "https://registry.macrograph.app",
+    registryKeys: parseRegistryKeys(optionalEnv(env.MACROGRAPH_REGISTRY_KEYS)),
     migrationsDirectory: resolve(
       env.MACROGRAPH_MIGRATIONS_DIR ?? fileURLToPath(new URL("./migrations", import.meta.url)),
     ),

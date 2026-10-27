@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
     "dev": "vite",
-    "agent:rest": "node scripts/rest-agent.mjs"
+    "agent:rest": "node scripts/rest-agent.mjs",
+    "verify:browser": "node scripts/verify-modules-browser.mjs"
   },
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
@@ -32,8 +33,10 @@
     "@macrograph/module-fs": "workspace:*",
     "@macrograph/module-github": "workspace:*",
     "@macrograph/module-goxlr": "workspace:*",
+    "@macrograph/module-host": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-ikea-tradfri": "workspace:*",
+    "@macrograph/module-installer": "workspace:*",
     "@macrograph/module-json": "workspace:*",
     "@macrograph/module-lifx": "workspace:*",
     "@macrograph/module-list": "workspace:*",

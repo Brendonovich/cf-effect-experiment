@@ -7,15 +7,16 @@ import {
   Project,
   Queue,
 } from "@macrograph/core";
-import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
+import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Manifest, Module, ModuleId } from "@macrograph/module";
 import DiscordDefinition from "@macrograph/module-discord/Deployment";
 import ElevenLabsDefinition from "@macrograph/module-elevenlabs/Deployment";
 import ElgatoKeyLightDefinition from "@macrograph/module-elgato-key-light/Deployment";
 import FilesystemDefinition from "@macrograph/module-fs/Deployment";
 import GoXLRDefinition from "@macrograph/module-goxlr/Deployment";
+import { Mounter } from "@macrograph/module-host/Mounter";
 import HttpClientDefinition from "@macrograph/module-http-client/Deployment/Local";
 import IkeaTradfriDefinition from "@macrograph/module-ikea-tradfri/Deployment";
 import JsonDefinition from "@macrograph/module-json";
@@ -41,9 +42,8 @@ import VTubeStudioDefinition from "@macrograph/module-vtube-studio/Deployment";
 import WebSocketClientDefinition from "@macrograph/module-websocket-client/Deployment/Local";
 import WebSocketServerDefinition from "@macrograph/module-websocket-server/Deployment";
 import { Persistence } from "@macrograph/persistence";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { FetchHttpClient } from "effect/http";
-import { RpcSerialization } from "effect/rpc";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
 
@@ -115,34 +115,6 @@ const deployments = [
 
 const statelessModules = [Json, List, Logic, Math, Strings];
 
-const mounted = Layer.mergeAll(
-  ModuleHost.deploymentLayer(Discord),
-  ModuleHost.deploymentLayer(ElevenLabs),
-  ModuleHost.deploymentLayer(ElgatoKeyLight),
-  ModuleHost.deploymentLayer(Filesystem),
-  ModuleHost.deploymentLayer(GoXLR),
-  ModuleHost.deploymentLayer(HttpClient),
-  ModuleHost.deploymentLayer(IkeaTradfri),
-  ModuleHost.deploymentLayer(LIFX),
-  ModuleHost.deploymentLayer(Midi),
-  ModuleHost.deploymentLayer(OBS),
-  ModuleHost.deploymentLayer(OpenAI),
-  ModuleHost.deploymentLayer(OpenCode),
-  ModuleHost.deploymentLayer(Sendblue),
-  ModuleHost.deploymentLayer(Shell),
-  ModuleHost.deploymentLayer(SpeakerBot),
-  ModuleHost.deploymentLayer(StreamDeck),
-  ModuleHost.deploymentLayer(Streamlabs),
-  ModuleHost.deploymentLayer(TikTok),
-  ModuleHost.deploymentLayer(Twitch),
-  ModuleHost.deploymentLayer(Utilities),
-  ModuleHost.deploymentLayer(Voicemod),
-  ModuleHost.deploymentLayer(VTubeStudio),
-  ModuleHost.deploymentLayer(WebSocketClient),
-  ModuleHost.deploymentLayer(WebSocketServer),
-  ...statelessModules.map(ModuleHost.moduleLayer),
-);
-
 const services = LiveRuntime.layer({ initialProject: Project.empty() }).pipe(
   Layer.provideMerge(
     Editor.layer.pipe(
@@ -162,31 +134,33 @@ describe("Self-hosted modules", () => {
       deployments.map((deployment) => deployment.definition.EngineContext.key),
     ])
       assert.strictEqual(new Set(ids).size, deployments.length);
-    assert.doesNotThrow(() =>
-      EditorServer.mergeRpcGroups(
-        EditorRpc.EditorRpcs,
-        RuntimeActivity.Rpcs,
-        ...deployments.map((deployment) => deployment.definition.ClientRpcs),
-      ),
-    );
   });
 
   it.effect("mount every catalog and runtime together without configuration", () =>
     Effect.gen(function* () {
-      yield* Layer.build(
-        mounted.pipe(
-          Layer.provide([
-            NodeServices.layer,
-            NodeSocket.layerWebSocketConstructor,
-            FetchHttpClient.layer,
-            Engine.emptyCredentialsLayer,
-            RpcSerialization.layerJsonRpc(),
-          ]),
-        ),
-      );
+      const mounter = yield* Mounter.Service;
+      const rpcs = new Map<string, boolean>();
+      for (const value of [...deployments, ...statelessModules]) {
+        const id = "moduleId" in value ? value.moduleId : value.id;
+        const mounted = yield* mounter.mount({
+          id,
+          manifest: Manifest.Model.make({
+            manifest: Manifest.FormatVersion,
+            publisher: "macrograph",
+            name: ModuleId.name(id),
+            version: "0.1.0",
+            api: Manifest.ApiVersion,
+            displayName: ModuleId.name(id),
+            server: "server.cjs",
+          }),
+          source: "shipped",
+          root: Option.none(),
+          deployment: value,
+        });
+        rpcs.set(id, Option.isSome(mounted.rpc));
+      }
       const packages = yield* Packages.Service;
       const editor = yield* Editor.Service;
-      const registry = yield* ModuleHost.Service;
       const catalog = yield* packages.getPackages();
       assert.deepStrictEqual(
         catalog.map((module) => module.id).sort(),
@@ -234,11 +208,11 @@ describe("Self-hosted modules", () => {
       }
       for (const deployment of deployments) {
         assert.isDefined(yield* editor.engine.getRuntimeClient(deployment.moduleId));
-        assert.strictEqual((yield* registry.get(deployment.moduleId))._tag, "Some");
+        assert.isTrue(rpcs.get(deployment.moduleId));
       }
       for (const module of statelessModules) {
         assert.isUndefined(module.engine);
-        assert.strictEqual((yield* registry.get(module.id))._tag, "None");
+        assert.isFalse(rpcs.get(module.id));
         assert.strictEqual(
           (yield* editor.engine.getRuntimeClient(module.id).pipe(Effect.flip))._tag,
           "EngineNotHosted",
@@ -248,6 +222,16 @@ describe("Self-hosted modules", () => {
           "EngineNotHosted",
         );
       }
-    }).pipe(Effect.scoped, Effect.provide(ModuleHost.layer), Effect.provide(services)),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(ModuleHost.mounterLayer),
+      Effect.provide([
+        NodeServices.layer,
+        NodeSocket.layerWebSocketConstructor,
+        FetchHttpClient.layer,
+        Engine.emptyCredentialsLayer,
+      ]),
+      Effect.provide(services),
+    ),
   );
 });

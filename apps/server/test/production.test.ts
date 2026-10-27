@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createSign, generateKeyPairSync } from "node:crypto";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
@@ -95,6 +95,61 @@ const cloud = createServer((request, response) => {
     else send({ error: "not_found" }, 404);
   });
 });
+
+const utilities = "macrograph.app/macrograph/utilities";
+const fixtureId = "local/fixtures/hello";
+
+interface CatalogEntry {
+  readonly id: string;
+  readonly version: string;
+  readonly source: string;
+  readonly status: string;
+  readonly flags: { readonly stale: boolean };
+  readonly error?: string;
+  readonly iconUrl?: string;
+  readonly ui?: { readonly entryUrl: string; readonly styleUrls: ReadonlyArray<string> };
+}
+
+let rpcId = 0;
+/** Calls an editor or module admin RPC over the HTTP JSON-RPC endpoint. */
+const rpc = async (method: string, params: object, token?: string) => {
+  const response = await fetch(`${origin}${basePath}/rpc`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+  });
+  expect(response.status).toBe(200);
+  return (await response.json()) as {
+    readonly result?: unknown;
+    readonly error?: { readonly data?: ReadonlyArray<{ readonly error?: { _tag?: string } }> };
+  };
+};
+
+const catalog = async () => (await rpc("GetModules", {})).result as ReadonlyArray<CatalogEntry>;
+
+/** Calls a module RPC over its HTTP route with framed NDJSON, as the editor does. */
+const moduleRpc = (id: string, tag: string, token?: string) =>
+  fetch(`${origin}${basePath}/module/${id}/rpc`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/ndjson",
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+    },
+    body: `${JSON.stringify({ _tag: "Request", id: "1", tag, payload: null, headers: [] })}\n`,
+  });
+
+const waitFor = async <A>(check: () => Promise<A | undefined>, timeout = 10_000) => {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const value = await check();
+    if (value !== undefined) return value;
+    if (Date.now() > deadline) throw new Error("Timed out waiting for a condition");
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+};
 
 const rawStatus = (path: string) =>
   new Promise<number>((resolveStatus, reject) => {
@@ -278,7 +333,7 @@ describe("built self-hosted server", () => {
 
   it("rejects inherited-property session tokens at the HTTP module gate", async () => {
     for (const token of ["constructor", "toString", "__proto__"]) {
-      const response = await fetch(`${origin}${basePath}/module/twitch/rpc`, {
+      const response = await fetch(`${origin}${basePath}/module/${utilities}/rpc`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}` },
       });
@@ -299,7 +354,7 @@ describe("built self-hosted server", () => {
     websocket.close();
   });
 
-  it("routes module RPCs over the editor WebSocket", async () => {
+  it("no longer routes module RPCs over the editor WebSocket", async () => {
     const websocket = new WebSocket(`${origin.replace("http:", "ws:")}${basePath}/rpc-ws`);
     const response = new Promise<{ readonly id?: number; readonly error?: unknown }>(
       (resolveResponse, reject) => {
@@ -400,6 +455,159 @@ describe("built self-hosted server", () => {
       setupRequired: false,
       hasOwner: true,
     });
+  });
+
+  it("bundles no module code into the server", async () => {
+    const bundle = await readFile(join(appDirectory, "dist/esm/index.js"), "utf8");
+    expect(bundle).not.toContain("ToggleEventSubSubscription");
+    expect(bundle).not.toContain("StartTick");
+  });
+
+  it("loads built-ins from dist/modules with the vm loader and lists them in the catalog", async () => {
+    const entries = await catalog();
+    const builtins = entries.filter((entry) => entry.id.startsWith("macrograph.app/macrograph/"));
+    expect(builtins.length).toBeGreaterThanOrEqual(25);
+    expect(builtins.every((entry) => entry.source === "shipped")).toBe(true);
+    expect(entries.find((entry) => entry.id === utilities)).toMatchObject({
+      status: "loaded",
+      version: "0.1.0",
+      displayName: "Utilities",
+    });
+    const details = (await rpc("ListModules", {}, ownerToken)).result as ReadonlyArray<{
+      readonly entry: CatalogEntry;
+      readonly path?: string;
+    }>;
+    expect(details.find((detail) => detail.entry.id === utilities)?.path).toBe(
+      join(appDirectory, "dist/modules", utilities, "0.1.0"),
+    );
+    // Listing details is admin-only; reading the catalog is not.
+    expect((await rpc("ListModules", {}, readerToken)).error).toBeDefined();
+  });
+
+  it("serves module UI files under content-hashed URLs", async () => {
+    const entry = (await catalog()).find((value) => value.id === utilities);
+    const ui = entry?.ui;
+    if (ui === undefined) throw new Error("Utilities has no UI in the catalog");
+    expect(ui.entryUrl).toMatch(
+      new RegExp(`^${basePath}/module/${utilities}/ui/[0-9a-f]{16}/index\\.js$`),
+    );
+    const script = await fetch(`${origin}${ui.entryUrl}`);
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toContain("text/javascript");
+    expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(await script.text()).toContain("@macrograph/module/ModuleUI");
+    const style = await fetch(`${origin}${ui.styleUrls[0]}`);
+    expect(style.status).toBe(200);
+    expect(style.headers.get("content-type")).toContain("text/css");
+
+    const stale = await fetch(
+      `${origin}${ui.entryUrl.replace(/\/ui\/[0-9a-f]{16}\//, "/ui/0000000000000000/")}`,
+    );
+    expect(stale.status).toBe(200);
+    expect(stale.headers.get("cache-control")).toBe("no-cache");
+    expect((await fetch(`${origin}${ui.entryUrl.replace("index.js", "missing.js")}`)).status).toBe(
+      404,
+    );
+    expect(
+      (await fetch(`${origin}${basePath}/module/macrograph.app/macrograph/missing/ui/0/index.js`))
+        .status,
+    ).toBe(404);
+  });
+
+  it("serves module RPCs over HTTP with NDJSON to editors only", async () => {
+    const response = await moduleRpc(utilities, "StopTick", ownerToken);
+    expect(response.status).toBe(200);
+    const messages = (await response.text())
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => JSON.parse(line) as { _tag: string; exit?: { _tag: string } });
+    expect(messages.find((message) => message._tag === "Exit")?.exit?._tag).toBe("Success");
+    const state = await rpc("GetModuleClientState", { moduleId: utilities }, ownerToken);
+    expect(state.result).toEqual({ running: false });
+
+    expect((await moduleRpc(utilities, "StopTick", readerToken)).status).toBe(403);
+    expect((await moduleRpc(utilities, "StopTick")).status).toBe(403);
+    expect(
+      (await moduleRpc("macrograph.app/macrograph/missing", "StopTick", ownerToken)).status,
+    ).toBe(404);
+    expect((await moduleRpc("not-a-module", "StopTick", ownerToken)).status).toBe(404);
+  });
+
+  it("runs lifecycle admin RPCs for admins only", async () => {
+    const forbidden = await rpc("SetModuleEnabled", { id: utilities, enabled: false }, readerToken);
+    expect(forbidden.error?.data?.[0]?.error?._tag).toBe("EditorForbidden");
+    expect((await rpc("ReloadModule", { id: utilities }, readerToken)).error).toBeDefined();
+    expect((await rpc("RescanModules", {}, readerToken)).error).toBeDefined();
+
+    const disabled = await rpc("SetModuleEnabled", { id: utilities, enabled: false }, ownerToken);
+    expect(disabled.result).toMatchObject({ id: utilities, status: "disabled" });
+    const notLoaded = await moduleRpc(utilities, "StopTick", ownerToken);
+    expect(notLoaded.status).toBe(503);
+    expect(await notLoaded.json()).toMatchObject({
+      _tag: "ModuleNotLoaded",
+      id: utilities,
+      status: "disabled",
+    });
+    expect((await catalog()).find((entry) => entry.id === utilities)?.ui).toBeUndefined();
+
+    const enabled = await rpc("SetModuleEnabled", { id: utilities, enabled: true }, ownerToken);
+    expect(enabled.result).toMatchObject({ id: utilities, status: "loaded" });
+    const reloaded = await rpc("ReloadModule", { id: utilities }, ownerToken);
+    expect(reloaded.result).toMatchObject({ id: utilities, status: "loaded" });
+    expect((await moduleRpc(utilities, "StopTick", ownerToken)).status).toBe(200);
+
+    const unknown = await rpc(
+      "ReloadModule",
+      { id: "macrograph.app/macrograph/missing" },
+      ownerToken,
+    );
+    expect(unknown.error?.data?.[0]?.error?._tag).toBe("ModuleNotFound");
+  });
+
+  it("loads a local module, flags it stale after its files change and reloads it", async () => {
+    const folder = join(dataDirectory, "modules/local/fixtures/hello");
+    await mkdir(folder, { recursive: true });
+    await cp(join(import.meta.dirname, "fixtures/hello-module"), folder, { recursive: true });
+    const rescanned = (await rpc("RescanModules", {}, ownerToken))
+      .result as ReadonlyArray<CatalogEntry>;
+    const entry = rescanned.find((value) => value.id === fixtureId);
+    expect(entry).toMatchObject({ source: "local", status: "loaded", version: "1.0.0" });
+    expect((await catalog()).some((value) => value.id === fixtureId)).toBe(true);
+    const packages = (await rpc("GetPackages", {}, ownerToken)).result as ReadonlyArray<{
+      readonly id: string;
+    }>;
+    expect(packages.some((pkg) => pkg.id === fixtureId)).toBe(true);
+    const icon = await fetch(`${origin}${entry?.iconUrl}`);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get("content-type")).toContain("image/svg+xml");
+
+    await appendFile(join(folder, "server.cjs"), "// edited\n");
+    await waitFor(async () =>
+      (await catalog()).find((value) => value.id === fixtureId)?.flags.stale === true
+        ? true
+        : undefined,
+    );
+    const reloaded = await rpc("ReloadModule", { id: fixtureId }, ownerToken);
+    expect(reloaded.result).toMatchObject({
+      id: fixtureId,
+      status: "loaded",
+      flags: { stale: false },
+    });
+    expect((reloaded.result as CatalogEntry).iconUrl).not.toBe(entry?.iconUrl);
+
+    await rm(folder, { recursive: true });
+    const removed = (await rpc("RescanModules", {}, ownerToken))
+      .result as ReadonlyArray<CatalogEntry>;
+    expect(removed.some((value) => value.id === fixtureId)).toBe(false);
+  });
+
+  it("refuses installs from the official registry without its signing keys", async () => {
+    const result = await rpc(
+      "InstallModule",
+      { id: "macrograph.app/someone/thing", acknowledgeUntrusted: false },
+      ownerToken,
+    );
+    expect(result.error?.data?.[0]?.error).toMatchObject({ _tag: "InstallFailed" });
   });
 
   it("serves the REST API and MCP to API keys created by the owner", async () => {

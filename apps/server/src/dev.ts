@@ -1,8 +1,26 @@
-import { ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { fileURLToPath } from "node:url";
+import sources from "virtual:macrograph-dev-modules";
 
-import { Main } from "./Server.ts";
+import { DevModules } from "./DevModules.ts";
+import { make } from "./Server.ts";
+import { ServerConfig } from "./ServerConfig.ts";
 
-const runtime = ManagedRuntime.make(Main);
+const config = ServerConfig.makeServerConfig(process.env);
+const runtime = ManagedRuntime.make(
+  Layer.unwrap(
+    Effect.map(
+      DevModules.options({
+        sources,
+        directory: fileURLToPath(
+          new URL("../node_modules/.macrograph/dev-modules", import.meta.url),
+        ),
+        basePath: config.basePath,
+      }),
+      make,
+    ),
+  ),
+);
 let disposal: Promise<void> | undefined;
 const dispose = () => (disposal ??= runtime.dispose());
 
