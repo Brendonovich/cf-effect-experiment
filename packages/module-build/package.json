@@ -1,0 +1,71 @@
+{
+  "name": "@macrograph/module-build",
+  "version": "0.0.1",
+  "bin": {
+    "macrograph-module": "./bin/macrograph-module.mjs"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Build": "./src/Build.ts",
+    "./Checks": "./src/Checks.ts",
+    "./Cli": "./src/Cli.ts",
+    "./Distribution": "./src/Distribution.ts",
+    "./PackageConfig": "./src/PackageConfig.ts",
+    "./StyleX": "./src/StyleX.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.3",
+    "@macrograph/module": "workspace:*",
+    "@solidjs/vite-plugin": "3.0.0-next.44",
+    "@stylexjs/unplugin": "catalog:",
+    "effect": "catalog:",
+    "rolldown": "^1.0.1",
+    "vite": "^8.0.7"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@macrograph/module-discord": "workspace:*",
+    "@macrograph/module-elevenlabs": "workspace:*",
+    "@macrograph/module-elgato-key-light": "workspace:*",
+    "@macrograph/module-fs": "workspace:*",
+    "@macrograph/module-github": "workspace:*",
+    "@macrograph/module-goxlr": "workspace:*",
+    "@macrograph/module-http-client": "workspace:*",
+    "@macrograph/module-ikea-tradfri": "workspace:*",
+    "@macrograph/module-json": "workspace:*",
+    "@macrograph/module-kofi": "workspace:*",
+    "@macrograph/module-lifx": "workspace:*",
+    "@macrograph/module-list": "workspace:*",
+    "@macrograph/module-logic": "workspace:*",
+    "@macrograph/module-math": "workspace:*",
+    "@macrograph/module-midi": "workspace:*",
+    "@macrograph/module-obs": "workspace:*",
+    "@macrograph/module-openai": "workspace:*",
+    "@macrograph/module-opencode": "workspace:*",
+    "@macrograph/module-sendblue": "workspace:*",
+    "@macrograph/module-shell": "workspace:*",
+    "@macrograph/module-speakerbot": "workspace:*",
+    "@macrograph/module-streamdeck": "workspace:*",
+    "@macrograph/module-streamlabs": "workspace:*",
+    "@macrograph/module-string": "workspace:*",
+    "@macrograph/module-tiktok-euler-stream": "workspace:*",
+    "@macrograph/module-twitch": "workspace:*",
+    "@macrograph/module-utilities": "workspace:*",
+    "@macrograph/module-voicemod": "workspace:*",
+    "@macrograph/module-vtube-studio": "workspace:*",
+    "@macrograph/module-websocket-client": "workspace:*",
+    "@macrograph/module-websocket-server": "workspace:*",
+    "@types/node": "^24",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}

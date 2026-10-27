@@ -1,0 +1,15 @@
+{
+  "name": "@macrograph-fixture/module-bundled-effect",
+  "private": true,
+  "type": "module",
+  "macrograph": {
+    "publisher": "fixture",
+    "name": "bundled-effect",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Bundled Effect",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
+  }
+}

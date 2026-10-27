@@ -8,7 +8,8 @@
     "./Definition": "./src/Definition.ts",
     "./Deployment": "./src/Deployment.ts",
     "./Engine": "./src/Engine.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -29,6 +30,28 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "streamdeck",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Stream Deck WebSocket",
+    "description": "React to Stream Deck key presses over WebSocket.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "buffer",
+      "crypto",
+      "events",
+      "http",
+      "https",
+      "net",
+      "stream",
+      "tls",
+      "url",
+      "util",
+      "zlib"
+    ]
   }
 }
