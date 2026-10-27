@@ -3,6 +3,8 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse, HttpStaticServer } f
 import { realpathSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
+import { ClientBuildManifest } from "./ClientBuildManifest.ts";
+
 const reservedPaths = ["/api", "/health", "/module", "/rpc", "/rpc-ws"];
 
 const decodePath = (url: string) => {
@@ -87,13 +89,14 @@ export const layer = (options: {
           // Invalid tracing configuration is ignored by both the browser and CSP.
         }
       }
+      const scriptSources = yield* ClientBuildManifest.scriptSources(options.root);
       const csp = [
         "default-src 'self'",
         "base-uri 'self'",
         `connect-src ${connectSources.join(" ")}`,
         "img-src 'self' data: https://gravatar.com",
         "object-src 'none'",
-        "script-src 'self'",
+        `script-src ${["'self'", ...scriptSources].join(" ")}`,
         "style-src 'self' 'unsafe-inline'",
       ].join("; ");
 
@@ -109,7 +112,9 @@ export const layer = (options: {
             return HttpServerResponse.text("Not found", { status: 404 });
           if (!isInsideStaticRoot(options.root, path))
             return HttpServerResponse.text("Not found", { status: 404 });
-          const response = yield* path.startsWith("/assets/") ? assets : application;
+          const response = yield* path.startsWith("/assets/") || path.startsWith("/_shared/")
+            ? assets
+            : application;
           return HttpServerResponse.setHeader(response, "content-security-policy", csp);
         }),
       );
