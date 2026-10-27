@@ -485,6 +485,9 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client

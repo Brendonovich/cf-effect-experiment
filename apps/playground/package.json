@@ -22,6 +22,7 @@
     "@macrograph/execution": "workspace:*",
     "@macrograph/live-runtime": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/module-host": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-json": "workspace:*",
     "@macrograph/module-list": "workspace:*",

@@ -19,6 +19,7 @@
     { "path": "../../packages/live-runtime" },
     { "path": "../../packages/persistence" },
     { "path": "../../packages/module" },
+    { "path": "../../packages/module-host" },
     { "path": "../../packages/project-host" },
     { "path": "../../packages/modules/http-client" },
     { "path": "../../packages/modules/obs" },

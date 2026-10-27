@@ -1,17 +1,11 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { moduleSettings, stylexProps } from "@macrograph/module/vite";
+import { stylexProps } from "@macrograph/module/vite";
 import { layerAnchors, stylexOptions } from "@macrograph/vite-shared-libraries/StyleX";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig, type Plugin } from "vite";
 
-const browserSettings = new Set([
-  "@macrograph/module-obs",
-  "@macrograph/module-twitch",
-  "@macrograph/module-utilities",
-  "@macrograph/module-websocket-client",
-]);
 const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
   generateBundle(_options, bundle) {
@@ -21,6 +15,10 @@ const browserImportAudit: Plugin = {
       "/packages/cloud-api/",
       "/packages/persistence-sqlite/",
       "/packages/modules/kofi/",
+      "/packages/module-host/src/ModuleRegistry.ts",
+      "/packages/module-host/src/ModuleSources.ts",
+      "/packages/module-host/src/VmLoader.ts",
+      "/packages/module-host/src/ModuleWatcher.ts",
       "/packages/module/src/HttpIngress",
       "/packages/modules/twitch/src/Deployment/Webhook",
       "/packages/modules/twitch/src/WebhookEventSub",
@@ -66,6 +64,8 @@ const browserImportAudit: Plugin = {
       "/packages/modules/websocket-client/src/Engine.ts",
       "/apps/playground/src/local/BrowserCredentials.ts",
       "/apps/playground/src/local/BrowserServices.ts",
+      "/packages/module-host/src/StaticRegistry.ts",
+      "/packages/module-host/src/ModuleRegistryCore.ts",
     ];
     for (const expected of required) {
       if (!modules.some((id) => id.includes(expected)))
@@ -91,7 +91,6 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
-    moduleSettings(undefined, browserSettings),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
     stylexProps(),
     layerAnchors(),

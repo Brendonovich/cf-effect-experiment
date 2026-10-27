@@ -1,20 +1,17 @@
 import { randomUUID } from "@macrograph/editor";
 import {
-  bundledModules,
   Button,
   CredentialSettings,
   createEditorController,
   createModuleUILoader,
   RealtimeWorkspace,
   macrographLogo,
-  staticSettings,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { makeBrowserCredentialProvider } from "./local/BrowserCredentials";
 import { makeLocalConnection, type LocalEditorConnection } from "./local/LocalRuntime";
@@ -23,6 +20,7 @@ import {
   makeLocalProjectStore,
   type LocalProjectStatus,
 } from "./local/LocalStoragePersistence";
+import { moduleUIs } from "./local/ModuleUIs";
 
 const localPath = (path: string) =>
   new URL(
@@ -138,10 +136,11 @@ export function App() {
     ),
     workspaceId: "local-browser",
     userId: localUserId(),
-    modules: bundledModules({
-      loader: createModuleUILoader({ static: staticSettings(discoveredModuleSettings) }),
+    modules: {
+      catalog: (connection: LocalEditorConnection) => connection.moduleCatalog,
+      loader: createModuleUILoader({ static: moduleUIs }),
       rpcProtocol: (connection: LocalEditorConnection) => connection.moduleRpcProtocol,
-    }),
+    },
     projectSettings: true,
   });
   const [status, setStatus] = createSignal<LocalProjectStatus>();

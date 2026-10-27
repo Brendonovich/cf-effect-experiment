@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
+import { StaticRegistry } from "@macrograph/module-host/core";
+import { ModuleId } from "@macrograph/module/ModuleId";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
+import { readFileSync } from "node:fs";
 import { vi } from "vitest";
 
 import { MACROGRAPH_AUTH_SESSION_KEY, makeBrowserCredentialProvider } from "./BrowserCredentials";
@@ -12,11 +14,16 @@ import {
   makeLocalProjectStore,
   type StorageLike,
 } from "./LocalStoragePersistence";
+import { moduleUIs } from "./ModuleUIs";
+import { modules } from "./PlaygroundModules";
 
 /** Connects a bundled settings UI to the engine mounted in the local runtime, as the editor does. */
 const connectSettings = (connection: LocalEditorConnection, moduleId: string) =>
   Effect.gen(function* () {
-    const settings = discoveredModuleSettings.find((entry) => entry.id === moduleId)?.settings;
+    const ui = moduleUIs.get(moduleId);
+    const loaded = yield* Effect.promise(async () => (typeof ui === "function" ? await ui() : ui));
+    const descriptor = loaded !== undefined && "default" in loaded ? loaded.default : loaded;
+    const settings = descriptor?.settings;
     const rpc = yield* connection.moduleRpcProtocol(moduleId);
     if (settings === undefined || rpc._tag !== "InProcess")
       return yield* Effect.die(`No in-process settings for ${moduleId}`);
@@ -231,7 +238,11 @@ describe("local browser runtime", () => {
             "InProcess",
             moduleId,
           );
-        assert.isTrue(Exit.isFailure(yield* Effect.exit(connection.moduleRpcProtocol("macrograph.app/macrograph/json"))));
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(connection.moduleRpcProtocol("macrograph.app/macrograph/json")),
+          ),
+        );
         assert.deepStrictEqual(
           yield* (yield* connectSettings(connection, "macrograph.app/macrograph/utilities")).load(
             connection.client.GetModuleClientState({
@@ -270,6 +281,54 @@ describe("local browser runtime", () => {
           presenceAfterInterrupt.value._tag === "PresenceSnapshot"
         )
           assert.strictEqual(presenceAfterInterrupt.value.clients.length, 1);
+      }),
+    ),
+  );
+
+  it.effect("loads bundled modules through the registry and unloads them by scope", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* makeLocalConnection(makeLocalProjectStore(new MemoryStorage()));
+        const catalog = yield* connection.moduleCatalog.fetch([]);
+        assert.deepStrictEqual(
+          catalog.map((entry) => [entry.id, entry.status]),
+          modules.map((module) => [StaticRegistry.id(module.static), "loaded"]).sort(),
+        );
+        for (const module of modules) {
+          const packageJson = JSON.parse(
+            readFileSync(
+              new URL(
+                `../../../../packages/modules/${module.static.manifest.name}/package.json`,
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          );
+          const config = packageJson.macrograph;
+          assert.deepStrictEqual(
+            [
+              module.static.manifest.displayName,
+              module.static.manifest.description,
+              module.static.manifest.version,
+            ],
+            [config.displayName, config.description, config.version],
+            module.static.manifest.name,
+          );
+        }
+        for (const id of moduleUIs.keys())
+          assert.isTrue(
+            catalog.some((entry) => entry.id === id),
+            id,
+          );
+
+        const obs = "macrograph.app/macrograph/obs" as const;
+        const obsId = Option.getOrThrow(ModuleId.parse(obs));
+        yield* connection.modules.unload(obsId);
+        assert.isFalse((yield* connection.client.GetPackages({})).some((pkg) => pkg.id === obs));
+        assert.isTrue(Exit.isFailure(yield* Effect.exit(connection.moduleRpcProtocol(obs))));
+        yield* connection.modules.load(obsId);
+        assert.isTrue((yield* connection.client.GetPackages({})).some((pkg) => pkg.id === obs));
+        assert.strictEqual((yield* connection.moduleRpcProtocol(obs))._tag, "InProcess");
       }),
     ),
   );
