@@ -26,6 +26,9 @@
       "path": "packages/module-registry"
     },
     {
+      "path": "packages/vite-shared-libraries"
+    },
+    {
       "path": "packages/module-host"
     },
     {

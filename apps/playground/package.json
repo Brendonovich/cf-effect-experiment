@@ -44,6 +44,7 @@
     "@effect/vitest": "catalog:",
     "@iconify/json": "2.2.196",
     "@macrograph/icons": "workspace:*",
+    "@macrograph/vite-shared-libraries": "workspace:*",
     "@solidjs/diagnostics": "2.0.0-rc.9",
     "@solidjs/vite-plugin": "3.0.0-next.44",
     "@stylexjs/unplugin": "catalog:",

@@ -28,6 +28,7 @@
     { "path": "../../packages/modules/obs" },
     { "path": "../../packages/modules/twitch" },
     { "path": "../../packages/modules/websocket-client" },
-    { "path": "../../packages/modules/websocket-server" }
+    { "path": "../../packages/modules/websocket-server" },
+    { "path": "../../packages/vite-shared-libraries" }
   ]
 }
