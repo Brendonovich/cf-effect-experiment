@@ -9,7 +9,7 @@ import {
 } from "@macrograph/module-opencode/Definition";
 import { Effect, Schema } from "effect";
 
-import { OpenCodeModule } from "../modules/BuiltinModules.ts";
+import { OpenCodeModule } from "../modules/CloudModules.ts";
 
 export interface Namespace {
   readonly getByName: (name: string) => {

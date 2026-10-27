@@ -8,42 +8,32 @@ import {
   DualProtocol,
   Editor,
   EditorAccess,
+  EditorEvents,
   EditorRpc,
   EditorServer,
   Packages,
   Presence,
 } from "@macrograph/editor";
-import { Credential, Engine, HttpEndpoint, Resource } from "@macrograph/module";
-import { GitHubEngine } from "@macrograph/module-github/Definition";
-import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
-import { KofiEngine } from "@macrograph/module-kofi/Definition";
-import {
-  OpenCodeEngine,
-  RequestFailure as OpenCodeFailure,
-} from "@macrograph/module-opencode/Definition";
-import { makeLayer as makeOpenCodeLayer } from "@macrograph/module-opencode/Engine";
-import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
-import { AccountId, TwitchEngine } from "@macrograph/module-twitch/Definition";
-import { make as makeTwitchEngine } from "@macrograph/module-twitch/Engine";
-import { EventSubEndpoint } from "@macrograph/module-twitch/EventSub/Webhook";
-import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
-import { make as makeUtilitiesEngine } from "@macrograph/module-utilities/Engine";
-import * as HttpIngress from "@macrograph/module/HttpIngress";
+import { Credential, Engine, HttpEndpoint } from "@macrograph/module";
+import { ModuleRegistry } from "@macrograph/module-host/core";
+import { RequestFailure as OpenCodeFailure } from "@macrograph/module-opencode/Definition";
+import { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
 import { Persistence } from "@macrograph/persistence";
 import { SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { ProjectEditor } from "@macrograph/project-api";
-import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
 import {
   Cause,
   ConfigProvider,
-  HashMap,
+  Context,
+  Duration,
   Layer,
   Option,
   Queue,
   Redacted,
   Schema,
   Scope,
+  Stream,
 } from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
@@ -56,47 +46,19 @@ import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts"
 import { requestOrigin } from "../api/HttpOrigin.ts";
 import * as CredentialStore from "../auth/CredentialStore.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
-import {
-  GitHubModule,
-  GitHubWebhookDeployment as GitHubDeployment,
-  HttpClientDeployment,
-  HttpClientModule,
-  ids,
-  KofiModule,
-  KofiWebhookDeployment as KofiDeployment,
-  OpenCodeModule,
-  SendblueModule,
-  SendblueWebhookDeployment as SendblueDeployment,
-  TwitchModule,
-  TwitchWebhookDeployment as TwitchDeployment,
-  UtilitiesModule,
-} from "../modules/BuiltinModules.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
 import { DurableObjectMigrationBundle } from "./DurableObjectMigrationBundle.ts";
 import { DurableSqlitePersistence } from "./DurableSqlitePersistence.ts";
-
-const UtilitiesDeployment = Engine.identify(
-  ids.utilities,
-  Engine.deployment(UtilitiesModule, makeUtilitiesEngine({ startTicker: false })),
-);
+import { ModuleRpcRoutes } from "./ModuleRpcRoutes.ts";
 
 const sqliteSchemaPath = "../../packages/persistence-sqlite/src/schema.ts";
-const HostedDeployments = [
-  KofiDeployment,
-  SendblueDeployment,
-  TwitchDeployment,
-  UtilitiesDeployment,
-  HttpClientDeployment,
-  GitHubDeployment,
-  ...CloudModules.apiDeployments,
-] as const;
-const WorkspaceRpcs = EditorServer.mergeRpcGroups(
-  EditorRpc.EditorRpcs,
-  ...HostedDeployments.map((deployment) => deployment.definition.ClientRpcs),
-  OpenCodeEngine.ClientRpcs,
-).middleware(EditorRpc.ConnectionMiddleware);
+/** Module RPCs are served per module over HTTP (`ModuleRpcRoutes`), not on this socket. */
+const CatalogRpcs = RpcGroup.make(ModuleAdminRpc.GetModules);
+const WorkspaceRpcs = EditorServer.mergeRpcGroups(EditorRpc.EditorRpcs, CatalogRpcs).middleware(
+  EditorRpc.ConnectionMiddleware,
+);
 const editorIdentityKey = "editor-identity";
 
 /** Named here so the Durable Object's inferred RPC type can refer to the editor's errors. */
@@ -193,10 +155,6 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       ),
       openCodeDos,
       "editor",
-    );
-    const OpenCodeDeployment = Engine.identify(
-      ids.opencode,
-      Engine.deployment(OpenCodeModule, makeOpenCodeLayer(openCodeInstances)),
     );
 
     const AppLayer = Editor.defaultLayer
@@ -448,136 +406,50 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         }),
       );
 
-      const editorTwitchLayer = makeTwitchEngine((context) =>
-        Effect.gen(function* () {
-          const endpointHost = yield* HttpEndpoint.Host;
-          const endpointFor = (accountId: AccountId) =>
-            endpointHost.get(EventSubEndpoint, accountId).pipe(
-              Effect.catch(() =>
-                Effect.logWarning("Failed to determine EventSub webhook state", {
-                  accountId,
-                }).pipe(Effect.as(Option.none())),
-              ),
-            );
-
-          return {
-            transport: "webhook" as const,
-            state: Effect.gen(function* () {
-              let current = HashMap.empty<AccountId, { readonly state: "connected" }>();
-              for (const accountId of yield* context.getAccountIds) {
-                const endpoint = yield* endpointFor(accountId);
-                if (Option.isSome(endpoint)) {
-                  current = HashMap.set(current, accountId, { state: "connected" });
-                }
-              }
-              return current;
-            }),
-            connect: Effect.fnUntraced(function* () {
-              const project = yield* persistence.loadProject().pipe(Effect.orDie);
-              // Retry provider setup even when saved settings and endpoint IDs are unchanged.
-              yield* reconcileEditorIngress(project.engines, true).pipe(
-                Effect.flatMap(editor.engine.setEndpoints),
-              );
-              yield* context.refresh;
-            }),
-            disconnect: () => context.refresh,
-          };
-        }),
-      ).pipe(Layer.provide(Layer.mergeAll(endpointHostLayer, FetchHttpClient.layer)));
-      const hostDeployment = <
-        ResourceType extends Resource.ResourceClass<any, any, any>,
-        Event extends { _tag: string },
-        Storage extends S.Codec<unknown, unknown, never, never>,
-        Rpcs extends Rpc.Any,
-        ClientState extends S.Top,
-        ClientRpcs extends Rpc.Any,
-        EngineLayer extends Layer.Layer<
-          Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
-          never,
-          Engine.EngineContext<ResourceType, Event, Storage>
-        >,
-        Handlers extends ReadonlyArray<HttpIngress.Live<unknown, unknown>>,
-        RequirementsError,
-      >(
-        deployment: Engine.Identified<
-          Engine.HttpIngressDeployment<
-            Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-            EngineLayer,
-            Handlers,
-            RequirementsError
-          >
-        >,
-      ) => {
-        const context = EngineHost.editorContextLayer(deployment, {
-          emit: () => Effect.void,
-          reconcile: (state) =>
-            persistence.loadProject().pipe(
-              Effect.flatMap((project) =>
-                reconcileEditorIngress({
-                  ...project.engines,
-                  [deployment.moduleId]: state,
-                }),
-              ),
-              Effect.orDie,
+      const moduleHost: CloudModules.EditorHost = {
+        credentials,
+        endpointHost: endpointHostLayer,
+        reconcile: (moduleId, state) =>
+          persistence.loadProject().pipe(
+            Effect.flatMap((project) =>
+              reconcileEditorIngress({ ...project.engines, [moduleId]: state }),
             ),
-        });
-        return EngineHost.layer(deployment, context);
-      };
-      const EngineClientHandlersLayer = Layer.mergeAll(
-        CloudModules.editorLayer,
-        hostDeployment(KofiDeployment),
-        hostDeployment({
-          ...SendblueDeployment,
-          layer: SendblueDeployment.layer.pipe(Layer.provide(FetchHttpClient.layer)),
-        }),
-        hostDeployment({
-          ...GitHubDeployment,
-          layer: GitHubDeployment.layer.pipe(
-            Layer.provide(endpointHostLayer),
-            Layer.provide(FetchHttpClient.layer),
+            Effect.orDie,
           ),
-        }),
-        hostDeployment({
-          ...TwitchDeployment,
-          layer: editorTwitchLayer,
-        }),
-        EngineHost.layer(
-          UtilitiesDeployment,
-          EngineHost.editorContextLayer(UtilitiesDeployment, { emit: () => Effect.void }),
+        reconnectIngress: persistence.loadProject().pipe(
+          Effect.orDie,
+          Effect.flatMap((project) => reconcileEditorIngress(project.engines, true)),
+          Effect.flatMap(editor.engine.setEndpoints),
         ),
-        EngineHost.layer(
-          HttpClientDeployment,
-          EngineHost.editorContextLayer(HttpClientDeployment, { emit: () => Effect.void }),
-        ),
-        EngineHost.layer(
-          OpenCodeDeployment,
-          EngineHost.editorContextLayer(OpenCodeDeployment, { emit: () => Effect.void }),
-        ),
-      ).pipe(Layer.provide(Layer.succeed(Engine.Credentials, credentials)));
-      const MountModules = Layer.effectDiscard(
+        openCode: openCodeInstances,
+      };
+      const CatalogHandlers = CatalogRpcs.toLayer(
+        Effect.map(ModuleRegistry.Service, (registry) => ({
+          GetModules: () => registry.catalog,
+        })),
+      );
+      // The cloud's modules are static, but the editor refetches the catalog whenever it changes.
+      const ModulesChanged = Layer.effectDiscard(
         Effect.gen(function* () {
-          const kofi = yield* KofiEngine;
-          const sendblue = yield* SendblueEngine;
-          const twitch = yield* TwitchEngine;
-          const utilities = yield* UtilitiesEngine;
-          const httpClient = yield* HttpClientEngine;
-          const github = yield* GitHubEngine;
-          const opencode = yield* OpenCodeEngine;
-          yield* EngineHost.mount(KofiModule, KofiDeployment, kofi.client.state);
-          yield* EngineHost.mount(SendblueModule, SendblueDeployment, sendblue.client.state);
-          yield* EngineHost.mount(TwitchModule, TwitchDeployment, twitch.client.state);
-          yield* EngineHost.mount(UtilitiesModule, UtilitiesDeployment, utilities.client.state);
-          yield* EngineHost.mount(HttpClientModule, HttpClientDeployment, httpClient.client.state);
-          yield* EngineHost.mount(GitHubModule, GitHubDeployment, github.client.state);
-          yield* EngineHost.mount(OpenCodeModule, OpenCodeDeployment, opencode.client.state);
+          const registry = yield* ModuleRegistry.Service;
+          const events = yield* EditorEvents.Service;
+          const entries = yield* registry.entries;
+          yield* registry.changes.pipe(
+            Stream.filter((value) => value !== entries),
+            Stream.debounce(Duration.millis(50)),
+            Stream.runForEach(() => events.publishEphemeral({ _tag: "ModulesChanged" })),
+            Effect.forkScoped,
+          );
         }),
-      ).pipe(Layer.provideMerge(EngineClientHandlersLayer));
+      );
       const RpcLayer = Layer.mergeAll(
         RpcSerialization.layerJsonRpc(),
         EditorRpc.handlerLayer,
         EditorRpc.connectionMiddlewareLayer,
-        MountModules,
+        CatalogHandlers,
+        ModulesChanged,
       ).pipe(
+        Layer.provideMerge(CloudModules.registryLayer(moduleHost)),
         Layer.provide(Layer.succeed(Engine.Credentials, credentials)),
         Layer.provide(
           Layer.succeed(
@@ -614,8 +486,10 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       );
 
       // Engines fork in-process runtime RPC servers, so the layer must outlive construction.
+      const rpcContext = yield* Layer.buildWithScope(RpcLayer, Scope.makeUnsafe());
+      const modules = Context.get(rpcContext, ModuleRegistry.Service);
       const rpcWs = yield* makeRpcServerHttpEffectWebsocket(WorkspaceRpcs).pipe(
-        Effect.provide(Layer.effectContext(Layer.buildWithScope(RpcLayer, Scope.makeUnsafe()))),
+        Effect.provide(rpcContext),
       );
 
       const disconnectUser = Effect.fnUntraced(function* (userId: string) {
@@ -674,6 +548,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
       const fetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         yield* configureRequest(request);
+        // Module RPCs skip project and ingress reconciliation, which every connection repeats.
+        if (ModuleRpcRoutes.isModulePath(request.url))
+          return yield* ModuleRpcRoutes.serve(modules, { projectId: activeProjectId });
         const name = request.headers["x-macrograph-project-name"] ?? "New Project";
         const storedProject = yield* persistence.loadProject().pipe(Effect.orDie);
         const project = storedProject.name === name ? storedProject : { ...storedProject, name };

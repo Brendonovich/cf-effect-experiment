@@ -19,7 +19,7 @@ import GraphExecutionWorkflow, {
   type GraphExecutionWorkflowInput,
 } from "../execution/GraphExecutionWorkflow.ts";
 import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
-import { UtilitiesModule } from "../modules/BuiltinModules.ts";
+import { UtilitiesModule } from "../modules/CloudModules.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 

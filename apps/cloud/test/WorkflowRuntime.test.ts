@@ -20,8 +20,8 @@ import {
   HttpClientResponse,
 } from "effect/http";
 
-import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";
+import * as CloudModules from "../src/modules/CloudModules.ts";
 
 const chat = { message: "Hello", model: "gpt-4o-mini", historyIn: "[]" };
 const speech = {
@@ -287,7 +287,7 @@ describe("WorkflowRuntime", () => {
       );
       const requested: Array<string> = [];
       yield* ProjectExecutor.make(project, {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
         engineClient: (id) => {
           requested.push(id);
           return engineClient(id);
@@ -302,7 +302,7 @@ describe("WorkflowRuntime", () => {
         "macrograph.app/macrograph/math",
         "macrograph.app/macrograph/string",
       ]) {
-        assert.isTrue(ExecutorModules.registry.entries.some((entry) => entry.id === id));
+        assert.isTrue(CloudModules.executorRegistry.entries.some((entry) => entry.id === id));
         assert.notInclude(requested, id);
       }
       assert.strictEqual(

@@ -6,7 +6,7 @@ import { t } from "@macrograph/module";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
-import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
+import * as CloudModules from "../src/modules/CloudModules.ts";
 
 describe("hosted custom types", () => {
   it.effect("retains deployment definitions and replays tagged match outputs as JSON", () =>
@@ -83,7 +83,7 @@ describe("hosted custom types", () => {
       const executor = yield* ProjectExecutor.make(
         { ...project, types: deployed.types },
         {
-          modules: ExecutorModules.registry,
+          modules: CloudModules.executorRegistry,
           executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
             nodeExecutor.executeNode(key).pipe(
               Effect.map((result) => {
@@ -108,7 +108,7 @@ describe("hosted custom types", () => {
             }),
         }),
       );
-      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+      yield* CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/utilities", {
         _tag: "TickEvent",
         tick: 1,
       });
@@ -120,7 +120,7 @@ describe("hosted custom types", () => {
       yield* executor.loadProject({ ...project, types: {} });
       const count = recorded.length;
       const failure = yield* Effect.flip(
-        ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+        CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/utilities", {
           _tag: "TickEvent",
           tick: 2,
         }),

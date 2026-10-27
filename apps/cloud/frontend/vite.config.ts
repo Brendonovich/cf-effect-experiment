@@ -1,21 +1,11 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { moduleSettings, stylexProps } from "@macrograph/module/vite";
+import { stylexProps } from "@macrograph/module/vite";
 import { layerAnchors, stylexOptions } from "@macrograph/vite-shared-libraries/StyleX";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
 
-const cloudSettings = new Set([
-  "@macrograph/module-kofi",
-  "@macrograph/module-github",
-  "@macrograph/module-twitch",
-  "@macrograph/module-openai",
-  "@macrograph/module-opencode",
-  "@macrograph/module-sendblue",
-  "@macrograph/module-elevenlabs",
-  "@macrograph/module-discord",
-]);
 const workerUrl =
   process.env.VITE_WORKER_URL ??
   "https://cloudflare-mainworker-dev-brendonovich5egibymynq36yh4t.brendonovich.workers.dev";
@@ -34,7 +24,6 @@ export default defineConfig({
   build: { sourcemap: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
-    moduleSettings(undefined, cloudSettings),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
     stylexProps(),
     layerAnchors(),
