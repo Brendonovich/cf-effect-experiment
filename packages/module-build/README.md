@@ -71,5 +71,16 @@ macrograph-module publish   # not implemented yet
 `apps/server` runs `pnpm build:modules` to package its module dependencies into
 `dist/modules/<namespace>/<publisher>/<name>/<version>/`.
 
-StyleX options live in `src/StyleX.ts` and mirror `apps/server/client/vite.config.ts` until the
-shared Vite package exports canonical options.
+## UI bundle
+
+Vite library build (`src/UiBuild.ts`) with the host's canonical StyleX settings from
+`@macrograph/vite-shared-libraries/StyleX`: `layerAnchors()` before `stylex.vite(stylexOptions())`,
+so token variable names and `stylex.priorityN` layers match the host's stylesheet. Every
+`SharedLibraries.isShared(id, "browser")` import stays a bare external import that the host's
+import map resolves. All CSS, StyleX included, goes into `ui/styles.css`; nothing is written
+outside `ui/`.
+
+`@stylexjs/unplugin` keeps its rules in a global store that survives between builds, so each
+module's UI is built in its own worker thread (`UiBuild.isolated`). `buildTree`, `package` and
+the other CLI commands never mix one module's rules into another's stylesheet. `UiBuild.run`
+builds in the current thread.

@@ -32,7 +32,6 @@ Options:
       --namespace <ns>  package: namespace folder (default: the official registry's)
       --dependencies-of <dir>
                         package: also build every module the package in <dir> depends on
-      --root <dir>      Root StyleX hashes token paths against (default: workspace root)
       --no-minify       Don't minify the UI bundle
       --max-server <n>  Server entry size limit in bytes
       --max-ui <n>      UI size limit in bytes
@@ -51,7 +50,6 @@ const options = {
   watch: { type: "boolean", short: "w" },
   namespace: { type: "string" },
   "dependencies-of": { type: "string" },
-  root: { type: "string" },
   "no-minify": { type: "boolean" },
   "max-server": { type: "string" },
   "max-ui": { type: "string" },
@@ -162,7 +160,6 @@ export const main = async (argv: ReadonlyArray<string>, runtime: Runtime = defau
   const packageDirectory = resolve(directory);
   const common = {
     packageDirectory,
-    ...(values.root === undefined ? {} : { rootDirectory: resolve(values.root) }),
     ...(values["no-minify"] === true ? { minifyUi: false } : {}),
     limits: limitsFrom(values),
   };
@@ -228,7 +225,6 @@ export const main = async (argv: ReadonlyArray<string>, runtime: Runtime = defau
           packageDirectories,
           outDirectory: resolve(values.out),
           ...(values.namespace === undefined ? {} : { namespace: values.namespace }),
-          ...(values.root === undefined ? {} : { rootDirectory: resolve(values.root) }),
           limits: common.limits,
         }),
       ).then(

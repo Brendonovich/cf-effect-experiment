@@ -20,6 +20,9 @@
       "path": "../module-registry"
     },
     {
+      "path": "../vite-shared-libraries"
+    },
+    {
       "path": "../modules/discord"
     },
     {

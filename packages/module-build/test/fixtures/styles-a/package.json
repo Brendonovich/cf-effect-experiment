@@ -1,0 +1,16 @@
+{
+  "name": "@macrograph-fixture/module-styles-a",
+  "private": true,
+  "type": "module",
+  "macrograph": {
+    "publisher": "fixture",
+    "name": "styles-a",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Styles a",
+    "entries": {
+      "server": "./src/Module.ts",
+      "ui": "./src/UI.ts"
+    }
+  }
+}
