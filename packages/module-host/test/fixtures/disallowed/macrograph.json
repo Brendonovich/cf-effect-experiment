@@ -1,0 +1,9 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "disallowed",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Disallowed require",
+  "server": "server.cjs"
+}

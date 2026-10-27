@@ -1,0 +1,9 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "gc",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Garbage collection",
+  "server": "server.cjs"
+}

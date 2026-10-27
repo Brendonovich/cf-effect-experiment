@@ -26,6 +26,9 @@
       "path": "packages/module-registry"
     },
     {
+      "path": "packages/module-host"
+    },
+    {
       "path": "packages/module-installer"
     },
     {
