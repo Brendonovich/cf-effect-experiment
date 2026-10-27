@@ -38,6 +38,6 @@ objects retain `hotkeyID` rather than the old struct's renamed `id` field. Model
 expression and hotkey selections use string pins, not client SDK objects.
 
 The package uses Effect's injectable `Socket.WebSocketConstructor`, not an SDK
-dependency. Export `./Deployment` (also `macrograph.standaloneDeployment`) and
+dependency. Export `./Deployment` (also `macrograph.entries.server`) and
 `./Settings` for host registration. Tests use mocked WebSockets and collect/run
 the complete catalog without requiring VTube Studio.

@@ -36,8 +36,10 @@ const exportPath = (manifest: ModulePackage, name: string) => {
   return typeof value === "string" ? value : undefined;
 };
 
-const manifestPath = (manifest: ModulePackage, name: string) => {
-  const value = manifest.macrograph?.[name];
+const serverEntryPath = (manifest: ModulePackage) => {
+  const entries = manifest.macrograph?.entries;
+  const value =
+    typeof entries === "object" && entries !== null ? Reflect.get(entries, "server") : undefined;
   return typeof value === "string" ? value : undefined;
 };
 
@@ -227,7 +229,7 @@ export const moduleDeployments = (workspaceRoot?: string, include?: ReadonlySet<
     virtualId: "virtual:macrograph-module-deployments",
     ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     imports: (manifest) => {
-      const path = manifestPath(manifest, "standaloneDeployment") ?? exportPath(manifest, ".");
+      const path = serverEntryPath(manifest) ?? exportPath(manifest, ".");
       return path === undefined ? undefined : { value: { path, exportName: "default" } };
     },
     value: (bindings) => `${bindings.value}`,

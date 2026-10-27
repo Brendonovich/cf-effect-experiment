@@ -16,16 +16,31 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "@macrograph/module": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "shell",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Shell",
+    "description": "Run shell commands on the runtime host.",
+    "entries": {
+      "server": "./src/Deployment.ts"
+    },
+    "requires": [
+      "file-system"
+    ],
+    "node": [
+      "child_process",
+      "stream"
+    ]
   }
 }
