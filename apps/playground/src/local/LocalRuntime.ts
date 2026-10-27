@@ -1,6 +1,5 @@
 import type { EditorConnection } from "@macrograph/editor-ui";
-import type { ClientSettings } from "@macrograph/module/ClientSettings";
-import type { JSX } from "@solidjs/web";
+import type { ModuleRpcProtocolFactory } from "@macrograph/editor-ui/modules";
 import type * as S from "effect/Schema";
 
 import {
@@ -12,6 +11,7 @@ import {
   Presence,
   QueueRuntime,
 } from "@macrograph/editor";
+import { ModuleRpcProtocol } from "@macrograph/editor-ui/modules";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
 import HttpClientDeployment from "@macrograph/module-http-client/Deployment/Local";
@@ -20,14 +20,10 @@ import ListModule from "@macrograph/module-list";
 import LogicModule from "@macrograph/module-logic";
 import MathModule from "@macrograph/module-math";
 import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
-import { settings as obsSettings } from "@macrograph/module-obs/Settings";
 import StringModule from "@macrograph/module-string";
 import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
-import { settings as twitchSettings } from "@macrograph/module-twitch/Settings";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
-import { settings as utilitiesSettings } from "@macrograph/module-utilities/Settings";
 import WebSocketClientDeployment from "@macrograph/module-websocket-client/Deployment/Local";
-import { settings as websocketSettings } from "@macrograph/module-websocket-client/Settings";
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
@@ -40,10 +36,15 @@ import type { LocalProjectStore } from "./LocalStoragePersistence";
 
 import { browserServices } from "./BrowserServices";
 
+export interface LocalEditorConnection extends EditorConnection {
+  /** Module settings call the engines mounted in this page directly. */
+  readonly moduleRpcProtocol: ModuleRpcProtocolFactory;
+}
+
 export const makeLocalConnection = (
   store: LocalProjectStore,
   credentials?: BrowserCredentialProvider,
-): Effect.Effect<EditorConnection, unknown, Scope.Scope> => {
+): Effect.Effect<LocalEditorConnection, unknown, Scope.Scope> => {
   const persistence = store.layer;
   const base = Layer.mergeAll(
     persistence,
@@ -121,25 +122,20 @@ export const makeLocalConnection = (
         const obsContext = yield* mount(OBSDeployment);
         const twitchContext = yield* mount(TwitchDeployment);
         const websocketContext = yield* mount(WebSocketClientDeployment);
-        const [utilitiesConnected, obsConnected, twitchConnected, websocketConnected] =
-          yield* Effect.all([
-            utilitiesSettings.connectInProcess.pipe(Effect.provide(utilitiesContext)),
-            obsSettings.connectInProcess.pipe(Effect.provide(obsContext)),
-            twitchSettings.connectInProcess.pipe(Effect.provide(twitchContext)),
-            websocketSettings.connectInProcess.pipe(Effect.provide(websocketContext)),
-          ] as const);
         const client = yield* RpcTest.makeClient(EditorRpc.EditorRpcs);
         const runtimeClient = yield* RpcTest.makeClient(RuntimeActivity.Rpcs);
         return {
           client,
           activity: runtimeClient.ActivityStream(),
           replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
-          moduleSettings: new Map<string, ClientSettings.Connected<JSX.Element>>([
-            [UtilitiesDeployment.moduleId, utilitiesConnected],
-            [OBSDeployment.moduleId, obsConnected],
-            [TwitchDeployment.moduleId, twitchConnected],
-            [WebSocketClientDeployment.moduleId, websocketConnected],
-          ]),
+          moduleRpcProtocol: ModuleRpcProtocol.inProcess(
+            new Map<string, Context.Context<never>>([
+              [UtilitiesDeployment.moduleId, utilitiesContext],
+              [OBSDeployment.moduleId, obsContext],
+              [TwitchDeployment.moduleId, twitchContext],
+              [WebSocketClientDeployment.moduleId, websocketContext],
+            ]),
+          ),
         };
       }).pipe(Effect.provide(context)),
     ),
