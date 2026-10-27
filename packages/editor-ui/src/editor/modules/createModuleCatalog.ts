@@ -43,7 +43,7 @@ export function createModuleCatalog() {
      * Fetches the catalog and commits it unless a newer load or clear superseded it. A failed fetch
      * keeps the previous catalog.
      */
-    load(source: ModuleCatalogSource, packages: ReadonlyArray<ModuleCatalogPackage>) {
+    load(source: ModuleCatalogSource.Source, packages: ReadonlyArray<ModuleCatalogPackage>) {
       const request = ++generation;
       return source.fetch(packages).pipe(
         Effect.flatMap((next) =>
