@@ -6,6 +6,7 @@ import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/rpc";
 
 import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
+import { ModuleId } from "@macrograph/module/ModuleId";
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, Errored, For, Show } from "solid-js";
 
@@ -399,6 +400,29 @@ export interface EditorProps {
   readonly controller: EditorController;
   readonly renderProjectSettings?: (context: EditorSettingsContext) => JSX.Element;
 }
+
+/** Explains why a node is a missing-module placeholder: which module, and its catalog status. */
+const missingModuleDiagnostics = (
+  controller: EditorController,
+  node: { readonly schema: { readonly package: string; readonly schema: string } },
+  missing: boolean,
+): ReadonlyArray<string> => {
+  if (!missing) return [];
+  const id = node.schema.package;
+  const parsed = ModuleId.parse(id);
+  const name = parsed._tag === "Some" ? ModuleId.toDisplay(parsed.value) : id;
+  const entry = controller.connection.moduleCatalog.get(id);
+  if (entry === undefined) return [`Module ${name} is not installed`];
+  const status =
+    entry.status === "loaded"
+      ? `has no node ${node.schema.schema}`
+      : entry.status === "failed" || entry.status === "disabled"
+        ? `is ${entry.status}`
+        : "is not loaded";
+  return [
+    `Module ${entry.displayName} (${name}) ${status}${entry.error === undefined ? "" : `: ${entry.error}`}`,
+  ];
+};
 
 export function Editor(props: EditorProps) {
   return (
@@ -921,6 +945,11 @@ function EditorContent(
                                     }}
                                     diagnostics={[
                                       ...new Set([
+                                        ...missingModuleDiagnostics(
+                                          controller,
+                                          node(),
+                                          canvas.schemaForNode(node()) === undefined,
+                                        ),
                                         ...(controller.editor.store.nodeDiagnostics[
                                           tab().graphId
                                         ]?.[node().id] ?? []),

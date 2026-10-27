@@ -1,4 +1,4 @@
-import type { EditorConnection, ModuleSettingsEntry } from "@macrograph/editor-ui";
+import type { EditorConnection, ModuleAdminClient } from "@macrograph/editor-ui";
 import type { ConnectionModules, EditorModules } from "@macrograph/editor-ui/modules";
 
 import { BrowserSocket } from "@effect/platform-browser";
@@ -7,7 +7,6 @@ import {
   createModuleUILoader,
   ModuleCatalogSource,
   ModuleRpcProtocol,
-  staticSettings,
 } from "@macrograph/editor-ui/modules";
 import { RuntimeActivity } from "@macrograph/execution";
 import { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
@@ -15,51 +14,29 @@ import { Effect, type Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 
-/**
- * How the editor finds module UIs and reaches module RPCs.
- *
- * - `bundled`: the catalog is the loaded packages, settings UIs are bundled into this app, and
- *   module RPCs share the editor WebSocket.
- * - `server`: the catalog comes from `GetModules` (refetched on `ModulesChanged`), UIs are imported
- *   from the catalog's module URLs, and each module's RPCs go over HTTP to
- *   `/module/<namespace>/<publisher>/<name>/rpc`.
- */
-export type ModuleLoading = "bundled" | "server";
+/** The server's `ModuleAdminRpcs`, over the editor WebSocket. */
+/** The server's `ModuleAdminRpcs`, authorized by the editor connection policy. */
+export type ModuleAdminConnection = ModuleAdminClient;
 
-/** Switch to `"server"` once the server serves `GetModules`, module UI URLs and per-module RPCs. */
-export const moduleLoading: ModuleLoading = "bundled";
+const makeModuleAdmin: Effect.Effect<ModuleAdminClient, never, RpcClient.Protocol | Scope.Scope> =
+  RpcClient.make(ModuleAdminRpc.ModuleAdminRpcs.middleware(EditorRpc.ConnectionMiddleware));
 
 export interface ServerEditorConnection extends EditorConnection {
+  /**
+   * The catalog comes from `GetModules` (refetched on `ModulesChanged`), UIs are imported from the
+   * catalog's module URLs, and each module's RPCs go over HTTP to
+   * `/module/<namespace>/<publisher>/<name>/rpc`.
+   */
   readonly modules: ConnectionModules;
+  readonly moduleAdmin: ModuleAdminConnection;
 }
 
 export interface EditorConnectionOptions {
-  readonly moduleLoading: ModuleLoading;
   /** The app's base URL, which module routes are resolved against. */
   readonly baseUrl: URL;
   /** The current session token, read on every module RPC request. */
   readonly token: () => string | null;
 }
-
-const connectionModules = (
-  dualProtocol: RpcClient.Protocol["Service"],
-  options: EditorConnectionOptions,
-): Effect.Effect<ConnectionModules, never, Scope.Scope> =>
-  options.moduleLoading === "bundled"
-    ? Effect.succeed({
-        catalog: ModuleCatalogSource.fromPackages,
-        rpcProtocol: ModuleRpcProtocol.shared(dualProtocol),
-      })
-    : Effect.gen(function* () {
-        const admin = yield* RpcClient.make(
-          ModuleAdminRpc.ModuleAdminRpcs.middleware(EditorRpc.ConnectionMiddleware),
-        ).pipe(Effect.provideService(RpcClient.Protocol, dualProtocol));
-        const rpcProtocol = yield* ModuleRpcProtocol.http({
-          baseUrl: options.baseUrl,
-          token: options.token,
-        }).pipe(Effect.provide(FetchHttpClient.layer));
-        return { catalog: ModuleCatalogSource.fromRpc({ client: admin }), rpcProtocol };
-      });
 
 export function editorConnection(
   url: string,
@@ -67,15 +44,20 @@ export function editorConnection(
 ): Effect.Effect<ServerEditorConnection, unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const dualProtocol = yield* DualProtocol.makeDualClientProtocol;
-    const client = yield* RpcClient.make(EditorRpc.EditorRpcs).pipe(
-      Effect.provideService(RpcClient.Protocol, dualProtocol.protocol),
-    );
+    const withProtocol = Effect.provideService(RpcClient.Protocol, dualProtocol.protocol);
+    const client = yield* RpcClient.make(EditorRpc.EditorRpcs).pipe(withProtocol);
     const runtimeClient = yield* RpcClient.make(
       RuntimeActivity.Rpcs.middleware(EditorRpc.ConnectionMiddleware),
-    ).pipe(Effect.provideService(RpcClient.Protocol, dualProtocol.protocol));
+    ).pipe(withProtocol);
+    const moduleAdmin = yield* makeModuleAdmin.pipe(withProtocol);
+    const rpcProtocol = yield* ModuleRpcProtocol.http({
+      baseUrl: options.baseUrl,
+      token: options.token,
+    }).pipe(Effect.provide(FetchHttpClient.layer));
     return {
       client,
-      modules: yield* connectionModules(dualProtocol.protocol, options),
+      modules: { catalog: ModuleCatalogSource.fromRpc({ client: moduleAdmin }), rpcProtocol },
+      moduleAdmin,
       activity: runtimeClient.ActivityStream(),
       replayEvent: (eventId: string) => runtimeClient.ReplayEvent({ eventId }),
     };
@@ -83,13 +65,8 @@ export function editorConnection(
 }
 
 /** The editor's module wiring for a connection opened by `editorConnection`. */
-export const editorModules = (
-  moduleLoading: ModuleLoading,
-  bundled: ReadonlyArray<ModuleSettingsEntry>,
-): EditorModules<ServerEditorConnection> => ({
+export const editorModules = (): EditorModules<ServerEditorConnection> => ({
   catalog: (connection) => connection.modules.catalog,
   rpcProtocol: (connection) => connection.modules.rpcProtocol,
-  loader: createModuleUILoader(
-    moduleLoading === "bundled" ? { static: staticSettings(bundled) } : { url: true },
-  ),
+  loader: createModuleUILoader({ url: true }),
 });

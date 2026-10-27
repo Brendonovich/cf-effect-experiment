@@ -1,12 +1,16 @@
 import type { RpcClient, RpcClientError } from "effect/rpc";
 
+import { EditorAccess } from "@macrograph/editor";
 import { ModuleAdminRpc, type ModuleCatalog, ModuleId } from "@macrograph/module";
 import { Effect } from "effect";
 
-/** A client for the server's `ModuleAdminRpcs` group. */
+/**
+ * A client for the server's `ModuleAdminRpcs` group. Hosts authorize it with the editor connection
+ * middleware, which can reject a call with `EditorAccess.Forbidden`.
+ */
 export type ModuleAdminClient = RpcClient.FromGroup<
   typeof ModuleAdminRpc.ModuleAdminRpcs,
-  RpcClientError.RpcClientError
+  RpcClientError.RpcClientError | EditorAccess.Forbidden
 >;
 
 /**
@@ -41,6 +45,8 @@ const display = (id: string) => {
 
 /** A message a person can act on for any admin RPC failure. */
 export const describeError = (error: unknown): string => {
+  if (error instanceof EditorAccess.Forbidden)
+    return "Only server administrators can manage modules.";
   if (error instanceof ModuleAdminRpc.ModuleNotFound)
     return `Module ${display(error.id)} was not found.`;
   if (error instanceof ModuleAdminRpc.ModuleNotLoaded)
