@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./CanonicalJson": "./src/CanonicalJson.ts",
+    "./Client": "./src/Client.ts",
     "./Integrity": "./src/Integrity.ts",
     "./Protocol": "./src/Protocol.ts",
     "./Signing": "./src/Signing.ts"
