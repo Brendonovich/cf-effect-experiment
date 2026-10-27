@@ -397,6 +397,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))
@@ -537,6 +540,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -833,6 +839,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -903,6 +912,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -1073,6 +1085,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../vite-shared-libraries
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.44
         version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -2384,6 +2399,46 @@ importers:
       typescript:
         specifier: ^5.8
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/vite-shared-libraries:
+    dependencies:
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
+    devDependencies:
+      '@solidjs/vite-plugin':
+        specifier: 3.0.0-next.44
+        version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@solidjs/web':
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)
+      '@stylexjs/unplugin':
+        specifier: 'catalog:'
+        version: 0.19.0(unplugin@2.3.11)
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      playwright:
+        specifier: 1.63.0
+        version: 1.63.0
+      solid-js:
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.7
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.0
         version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
