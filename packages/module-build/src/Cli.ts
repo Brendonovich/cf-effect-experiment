@@ -1,11 +1,19 @@
-import { Effect } from "effect";
+import { Publish } from "@macrograph/module-registry/Publish";
+import { Manifest } from "@macrograph/module/Manifest";
+import { Effect, Schema } from "effect";
+import { FetchHttpClient } from "effect/http";
 import { watch } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { Build } from "./Build.ts";
 import { Checks } from "./Checks.ts";
 import { Distribution } from "./Distribution.ts";
+import { Pack } from "./Pack.ts";
+
+export const DefaultRegistry = "https://registry.macrograph.app";
+export const TokenEnvironmentVariable = "MACROGRAPH_TOKEN";
 
 const usage = `Usage: macrograph-module <command> [options]
 
@@ -13,7 +21,8 @@ Commands:
   build [dir]    Build the module in dir (default: .) into a package folder
   dev [dir]      Build into a target folder, optionally rebuilding on changes
   package [dirs] Build modules into <out>/<namespace>/<publisher>/<name>/<version>/
-  publish [dir]  Publish a built package to a registry (not implemented yet)
+  pack [dir]     Build and check the module, then write its package tarball
+  publish [dir]  Build, check and pack the module, then upload it to a registry
 
 Options:
   -o, --out <dir>       Output folder (build: <dir>/dist/macrograph,
@@ -27,6 +36,12 @@ Options:
       --no-minify       Don't minify the UI bundle
       --max-server <n>  Server entry size limit in bytes
       --max-ui <n>      UI size limit in bytes
+      --from <dir>      pack/publish: use an already built package folder instead of building
+      --tarball <file>  pack/publish: where to write the tarball
+                        (pack default: <dir>/dist/<publisher>-<name>-<version>.tgz)
+      --registry <url>  publish: registry URL (default: ${DefaultRegistry})
+      --token <token>   publish: API token (default: $${TokenEnvironmentVariable})
+      --dry-run         publish: pack and check only, don't upload
   -h, --help            Show this help
 `;
 
@@ -40,6 +55,11 @@ const options = {
   "no-minify": { type: "boolean" },
   "max-server": { type: "string" },
   "max-ui": { type: "string" },
+  from: { type: "string" },
+  tarball: { type: "string" },
+  registry: { type: "string" },
+  token: { type: "string" },
+  "dry-run": { type: "boolean" },
   help: { type: "boolean", short: "h" },
 } as const;
 
@@ -70,7 +90,65 @@ const reportFailure = (error: unknown) => {
   else console.error(error);
 };
 
-export const main = async (argv: ReadonlyArray<string>) => {
+export class PublishCheckError extends Schema.TaggedError<PublishCheckError>()(
+  "ModulePublishCheckError",
+  { reason: Schema.String },
+) {}
+
+export interface PackResult {
+  readonly manifest: Manifest.Model;
+  readonly tarball: Uint8Array<ArrayBuffer>;
+  readonly issues: ReadonlyArray<Checks.Issue>;
+}
+
+/**
+ * Reads a built package folder, runs the publish checks (no `build.external` allowance: published
+ * modules may only require shared libraries and declared node built-ins) and packs it.
+ */
+export const packFolder = (directory: string, limits: Partial<Checks.Limits> = {}) =>
+  Effect.gen(function* () {
+    const files = yield* Build.readPackageFiles(directory);
+    const { manifest, issues } = Checks.checkPackage(files, {
+      limits,
+      supportedApis: [Manifest.ApiVersion],
+    });
+    if (manifest === undefined || Checks.hasErrors(issues))
+      return yield* new PublishCheckError({
+        reason: `${directory} failed the publish checks:\n${Checks.errors(issues).map(Checks.format).join("\n")}`,
+      });
+    const tarball = yield* Pack.tarball(files);
+    return { manifest, tarball, issues } satisfies PackResult;
+  });
+
+const tarballName = (manifest: Manifest.Model) =>
+  `${manifest.publisher}-${manifest.name}-${manifest.version}.tgz`;
+
+const writeTarball = (path: string, bytes: Uint8Array) =>
+  Effect.tryPromise({
+    try: async () => {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, bytes);
+    },
+    catch: (cause) =>
+      new PublishCheckError({ reason: `Unable to write ${path}: ${String(cause)}` }),
+  });
+
+/** What the CLI reads from its surroundings; tests swap these. */
+export interface Runtime {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly fetch: typeof globalThis.fetch;
+}
+
+const defaultRuntime = (): Runtime => ({ env: process.env, fetch: globalThis.fetch });
+
+const reportPublishFailure = (error: unknown) => {
+  if (error instanceof Publish.PublishError) {
+    console.error(`Publish failed (${error.status} ${error.reason}): ${error.message}`);
+    for (const problem of error.problems) console.error(`  - ${problem}`);
+  } else reportFailure(error);
+};
+
+export const main = async (argv: ReadonlyArray<string>, runtime: Runtime = defaultRuntime()) => {
   const { values, positionals } = parseArgs({
     args: [...argv],
     options,
@@ -170,11 +248,56 @@ export const main = async (argv: ReadonlyArray<string>) => {
         },
       );
     }
-    case "publish":
-      console.error(
-        "publish is not implemented yet; it will upload a built package through @macrograph/module-registry.",
+    case "pack":
+    case "publish": {
+      const upload = command === "publish" && values["dry-run"] !== true;
+      const token = values.token ?? runtime.env[TokenEnvironmentVariable];
+      if (upload && (token === undefined || token === "")) {
+        console.error(`publish needs --token <token> or ${TokenEnvironmentVariable}`);
+        return 1;
+      }
+      const registry = values.registry ?? DefaultRegistry;
+      const program = Effect.gen(function* () {
+        const folder =
+          values.from === undefined
+            ? (yield* runBuild({
+                ...common,
+                outDirectory: resolve(values.out ?? join(packageDirectory, "dist", "macrograph")),
+              })).outDirectory
+            : resolve(values.from);
+        const packed = yield* packFolder(folder, common.limits);
+        printIssues(packed.issues);
+        const { manifest } = packed;
+        const label = `${manifest.publisher}/${manifest.name}@${manifest.version}`;
+        const tarballPath =
+          values.tarball !== undefined
+            ? resolve(values.tarball)
+            : upload
+              ? undefined
+              : join(packageDirectory, "dist", tarballName(manifest));
+        if (tarballPath !== undefined) {
+          yield* writeTarball(tarballPath, packed.tarball);
+          console.log(`Packed ${label} → ${tarballPath} (${packed.tarball.byteLength} bytes)`);
+        }
+        if (!upload || token === undefined) return;
+        const release = yield* Publish.publish({ registry, token, tarball: packed.tarball }).pipe(
+          Effect.provide(FetchHttpClient.layer),
+          Effect.provideService(FetchHttpClient.Fetch, runtime.fetch),
+        );
+        console.log(`Published ${label} to ${registry}`);
+        console.log(`  version:   ${release.version}`);
+        console.log(`  integrity: ${release.integrity}`);
+        console.log(`  trust:     ${release.trust}`);
+        console.log(`  tarball:   ${release.tarball}`);
+      });
+      return Effect.runPromise(program).then(
+        () => 0,
+        (error: unknown) => {
+          reportPublishFailure(error);
+          return 1;
+        },
       );
-      return 1;
+    }
     default:
       console.error(`Unknown command ${command}\n\n${usage}`);
       return 1;
