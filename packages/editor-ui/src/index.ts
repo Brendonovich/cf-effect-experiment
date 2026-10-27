@@ -53,3 +53,10 @@ export {
   EventExecutionRow,
   type EventSource,
 } from "./events/Events.tsx";
+export {
+  ModulesAdminView,
+  type ModulesAdminTab,
+  type ModulesAdminViewProps,
+  type ModuleAdminClient,
+  type SubscribeModulesChanged,
+} from "./modules-admin/index.ts";
