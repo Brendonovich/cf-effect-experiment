@@ -13,6 +13,7 @@
     "./Checks": "./src/Checks.ts",
     "./Cli": "./src/Cli.ts",
     "./Distribution": "./src/Distribution.ts",
+    "./Pack": "./src/Pack.ts",
     "./PackageConfig": "./src/PackageConfig.ts",
     "./StyleX": "./src/StyleX.ts"
   },
@@ -25,9 +26,11 @@
   "dependencies": {
     "@babel/parser": "^7.29.3",
     "@macrograph/module": "workspace:*",
+    "@macrograph/module-registry": "workspace:*",
     "@solidjs/vite-plugin": "3.0.0-next.44",
     "@stylexjs/unplugin": "catalog:",
     "effect": "catalog:",
+    "modern-tar": "0.8.5",
     "rolldown": "^1.0.1",
     "vite": "^8.0.7"
   },
@@ -41,6 +44,7 @@
     "@macrograph/module-goxlr": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-ikea-tradfri": "workspace:*",
+    "@macrograph/module-installer": "workspace:*",
     "@macrograph/module-json": "workspace:*",
     "@macrograph/module-kofi": "workspace:*",
     "@macrograph/module-lifx": "workspace:*",

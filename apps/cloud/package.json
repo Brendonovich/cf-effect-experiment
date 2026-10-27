@@ -28,6 +28,7 @@
     "@macrograph/execution": "workspace:*",
     "@macrograph/http-ingress": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/module-build": "workspace:*",
     "@macrograph/module-discord": "workspace:*",
     "@macrograph/module-elevenlabs": "workspace:*",
     "@macrograph/module-github": "workspace:*",

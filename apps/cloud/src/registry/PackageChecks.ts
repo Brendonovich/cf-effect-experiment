@@ -1,3 +1,4 @@
+import { Checks } from "@macrograph/module-build/Checks";
 import { Manifest } from "@macrograph/module/Manifest";
 import { ModulePackage } from "@macrograph/module/ModulePackage";
 import { Effect, Schema } from "effect";
@@ -27,12 +28,42 @@ export interface Options {
   readonly checks: ReadonlyArray<Check>;
 }
 
+/** Manifest and layout issues are already covered by {@link apiCheck} and {@link layoutCheck}. */
+const coveredIssues: ReadonlySet<Checks.IssueCode> = new Set([
+  "invalid-manifest",
+  "missing-file",
+  "unexpected-file",
+]);
+
+const externalsPolicy =
+  "Published modules may only require shared libraries and the node built-ins declared in macrograph.json; bundle every other dependency";
+
+const describeIssue = (issue: Checks.Issue) => {
+  const location = issue.path === undefined ? "" : `${issue.path}: `;
+  const policy = issue.code === "unresolvable-require" ? `. ${externalsPolicy}` : "";
+  return `${location}${issue.message}${policy}`;
+};
+
 /**
- * Hook for the bundle checks from `@macrograph/module-build` (W5): no top-level await in the server
- * bundle, and no bundled copies of shared libraries (`SharedLibraries`). The coordinator connects
- * them here; until then no bundle checks run at publish time.
+ * The bundle checks from `@macrograph/module-build`: valid syntax, no top-level await, no bundled
+ * copies of shared libraries, only resolvable `require`s and declared node built-ins, UI imports
+ * limited to shared browser libraries, and size limits. Packages are checked without any
+ * `build.external` allowance, so built-in style native externals are rejected.
  */
-export const bundleChecks: ReadonlyArray<Check> = [];
+export const bundleChecks: ReadonlyArray<Check> = [
+  {
+    name: "bundle",
+    run: ({ files }) =>
+      Effect.sync(() => {
+        const { issues } = Checks.checkPackage(
+          [...files].map(([path, contents]) => ({ path, contents })),
+        );
+        return Checks.errors(issues)
+          .filter((issue) => !coveredIssues.has(issue.code))
+          .map(describeIssue);
+      }),
+  },
+];
 
 const extraTopLevelFiles = /^(?:README(?:\.md)?|LICEN[CS]E(?:\.md|\.txt)?|CHANGELOG\.md)$/i;
 
