@@ -14,7 +14,6 @@ export {
   createStylesheets,
   isDescriptor,
   ModuleUILoadError,
-  staticSettings,
   type ModuleUIDescriptor,
   type ModuleUIHandle,
   type ModuleUILoader,
