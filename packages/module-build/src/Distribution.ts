@@ -11,7 +11,6 @@ export interface Options {
   readonly outDirectory: string;
   /** Defaults to the official registry's namespace. */
   readonly namespace?: string;
-  readonly rootDirectory?: string;
   readonly limits?: Build.Options["limits"];
   readonly concurrency?: number;
 }
@@ -35,7 +34,6 @@ export const buildTree = (options: Options) =>
             config.name,
             config.version,
           ),
-          ...(options.rootDirectory === undefined ? {} : { rootDirectory: options.rootDirectory }),
           ...(options.limits === undefined ? {} : { limits: options.limits }),
         });
       }),
