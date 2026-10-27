@@ -7,7 +7,6 @@ describe("PollingIngress", () => {
   const Event = Schema.Struct({ _tag: Schema.Literal("ItemReceived"), value: Schema.String });
   const handler = PollingIngress.make({
     id: "test:items",
-    moduleId: "test",
     displayName: "Items",
     intervalMs: 1_000,
     configuration: Schema.Struct({ token: Schema.String }),
@@ -35,7 +34,6 @@ describe("PollingIngress", () => {
         cursor: { offset: 1 },
         events: [
           {
-            moduleId: "test",
             eventType: "ItemReceived",
             eventId: "1",
             payload: { _tag: "ItemReceived", value: "hello" },

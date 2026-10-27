@@ -597,6 +597,7 @@ const ProjectEventsStream = Rpc.make("ProjectEventsStream", {
     EditorEvent.ResourceConstantUpdated,
     EditorEvent.ResourceConstantDeleted,
     EditorEvent.ResourceValuesUpdated,
+    EditorEvent.PackagesChanged,
     EditorEvent.QueueUpdated,
     EditorEvent.QueueDeleted,
   ]),

@@ -7,7 +7,6 @@ import { LIFXEngine, LIFXLight } from "./Definition.ts";
 const properties = { light: { name: "Light", resource: LIFXLight } } as const;
 
 export default Module.make({
-  id: "lifx",
   name: "LIFX",
   engine: LIFXEngine,
   effect: Effect.fnUntraced(function* (context) {

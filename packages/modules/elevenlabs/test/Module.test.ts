@@ -72,7 +72,6 @@ describe("ElevenLabs catalog", () => {
 
   it.effect("registers a runtime-compatible text-to-audio schema without file pins", () =>
     Effect.gen(function* () {
-      assert.strictEqual(module.id, "elevenlabs");
       assert.strictEqual(deployment.module, module);
       assert.strictEqual(deployment.definition, ElevenLabsEngine);
       const schemas = yield* Registration.collect(module.effect);

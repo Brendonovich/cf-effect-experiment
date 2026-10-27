@@ -5,7 +5,6 @@ import { AccountId, InboundMessage } from "./Definition.ts";
 
 export const WebhookIngress = HttpIngress.make({
   id: "sendblue:receive",
-  moduleId: "sendblue",
   displayName: "Receive Messages",
   method: "POST",
   metadata: Schema.Struct({ accountId: AccountId }),

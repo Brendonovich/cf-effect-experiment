@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { createServer, type IncomingHttpHeaders } from "node:http";
@@ -95,21 +95,26 @@ describe("Observability", () => {
       });
       class ChatMessage extends Schema.TaggedClass<ChatMessage>()("channel.chat.message", {}) {}
       class TestEngine extends Engine.make({ events: Array.empty<ChatMessage>() }) {}
-      const module = Module.make({
-        id: "twitch",
-        engine: TestEngine,
-        effect: (registration) =>
-          registration.schema.register({
-            id: "ChatMessage",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: () => ({}),
-            run: ({ node }) => node.withSpan("test.chat-handler", Effect.void),
-          }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("not hosted")),
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/twitch"),
+        Module.make({
+          engine: TestEngine,
+          effect: (registration) =>
+            registration.schema.register({
+              id: "ChatMessage",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: () => ({}),
+              run: ({ node }) => node.withSpan("test.chat-handler", Effect.void),
+            }),
+        }),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("not hosted")),
+        ),
       );
       const graphId = GraphId.make("chat");
       const nodeId = NodeId.make("message");
@@ -125,7 +130,7 @@ describe("Observability", () => {
                   id: nodeId,
                   name: "Chat Message",
                   schema: {
-                    package: PackageId.make("twitch"),
+                    package: PackageId.make("local/test/twitch"),
                     schema: SchemaId.make("ChatMessage"),
                   },
                   properties: {},
@@ -175,13 +180,13 @@ describe("Observability", () => {
           "server-operation",
           "Executor.matchEvent",
           "test.chat-handler",
-          "Schema.run twitch.ChatMessage",
+          "Schema.run local/test/twitch.ChatMessage",
           "Executor.runNode",
           "Executor.executeEventNode",
           "Executor.handleEvent",
           "Executor.matchEvent",
           "test.chat-handler",
-          "Schema.run twitch.ChatMessage",
+          "Schema.run local/test/twitch.ChatMessage",
           "Executor.runNode",
           "Executor.executeEventNode",
           "Executor.handleEvent",
@@ -206,7 +211,9 @@ describe("Observability", () => {
         const graph = trace.find((span) => span.name === "Executor.executeEventNode")!;
         const node = trace.find((span) => span.name === "Executor.runNode")!;
         const handler = trace.find((span) => span.name === "test.chat-handler")!;
-        const schema = trace.find((span) => span.name === "Schema.run twitch.ChatMessage")!;
+        const schema = trace.find(
+          (span) => span.name === "Schema.run local/test/twitch.ChatMessage",
+        )!;
         assert.strictEqual(graph.parentSpanId, eventSpan.spanId);
         assert.strictEqual(node.parentSpanId, graph.spanId);
         assert.strictEqual(schema.parentSpanId, node.spanId);

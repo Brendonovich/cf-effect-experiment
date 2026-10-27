@@ -34,7 +34,6 @@ describe("IKEA TRADFRI catalog", () => {
           "GetLightState",
         ],
       );
-      assert.strictEqual(module.id, "ikea-tradfri");
       assert.strictEqual(module.name, "IKEA TRADFRI Gateway");
       assert.isDefined(deployment);
       for (const schema of schemas.filter((s) => s.id !== "ListLights"))

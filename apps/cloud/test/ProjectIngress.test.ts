@@ -81,7 +81,7 @@ describe("Project ingress preview", () => {
             publicOrigin: "https://example.com",
             previewId: "editor",
             engines: {
-              twitch: {
+              "macrograph.app/macrograph/twitch": {
                 accounts: { "account-1": { enabled: true, subscriptions: ["channel.ban"] } },
               },
             },
@@ -128,7 +128,7 @@ describe("Project ingress preview", () => {
           const partialRequest = {
             ...request,
             engines: {
-              twitch: {
+              "macrograph.app/macrograph/twitch": {
                 accounts: {
                   "account-2": { enabled: true, subscriptions: ["channel.unban", "channel.ban"] },
                 },
@@ -137,7 +137,10 @@ describe("Project ingress preview", () => {
           };
           assert.isTrue(Exit.isFailure(yield* Effect.exit(ingress.preview(partialRequest))));
           assert.deepStrictEqual([...subscriptions.keys()], ["channel.ban", "channel.unban"]);
-          yield* ingress.preview({ ...request, engines: { twitch: { accounts: {} } } });
+          yield* ingress.preview({
+            ...request,
+            engines: { "macrograph.app/macrograph/twitch": { accounts: {} } },
+          });
           assert.deepStrictEqual(deleted, ["channel.ban", "channel.unban"]);
           assert.strictEqual(subscriptions.size, 0);
         }).pipe(

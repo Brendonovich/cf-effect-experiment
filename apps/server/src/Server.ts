@@ -15,7 +15,7 @@ import {
 } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Credential, Engine } from "@macrograph/module";
+import { Credential, Engine, Module } from "@macrograph/module";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { Effect, Layer } from "effect";
 import {
@@ -28,7 +28,7 @@ import {
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { mkdirSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import Deployments from "virtual:macrograph-module-deployments";
+import DiscoveredModules from "virtual:macrograph-module-deployments";
 
 import { ApiKeys } from "./ApiKeys.ts";
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
@@ -96,6 +96,11 @@ const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
       session !== undefined && (session.userId === ownerId || config.adminIds.has(session.userId))
     );
   });
+
+// Built-in ids come from the module discovery (package name → official id).
+const Deployments = DiscoveredModules.map(({ id, value }) =>
+  "definition" in value ? Engine.identify(id, value) : Module.identify(id, value),
+);
 
 const WorkspaceRpcs = EditorServer.mergeRpcGroups(
   EditorRpc.EditorRpcs,

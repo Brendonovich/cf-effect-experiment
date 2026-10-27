@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CustomTypes, Package, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration, ModuleId } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -81,6 +81,7 @@ const value = () => ({
 
 class Trigger extends Schema.TaggedClass<Trigger>()("GeneratedTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
+class InferenceEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 const node = (
   id: string,
   packageId: string,
@@ -347,38 +348,40 @@ describe("generated custom operations", () => {
     () =>
       Effect.gen(function* () {
         const captured: unknown[] = [];
-        const module = Module.make({
-          id: "generated-test",
-          engine: TestEngine,
-          effect: Effect.fnUntraced(function* (context) {
-            yield* context.schema.register({
-              id: "event",
-              type: "event",
-              event: () => Effect.succeed(true),
-              io: () => ({}),
-              run: () => Effect.void,
-            });
-            yield* context.schema.register({
-              id: "sink",
-              io: (io) => ({ value: io.data.in("value", recordType) }),
-              run: ({ io }) =>
-                Effect.sync(() => {
-                  captured.push(io.value);
-                }),
-            });
-            yield* context.schema.register({
-              id: "enum-anchor",
-              type: "pure",
-              io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
-              run: () => Effect.void,
-            });
-            yield* context.schema.register({
-              id: "forbidden",
-              io: () => ({}),
-              run: () => Effect.die("Unselected branch must not execute"),
-            });
+        const module = Module.identify(
+          ModuleId.Id.make("local/test/generated-test"),
+          Module.make({
+            engine: TestEngine,
+            effect: Effect.fnUntraced(function* (context) {
+              yield* context.schema.register({
+                id: "event",
+                type: "event",
+                event: () => Effect.succeed(true),
+                io: () => ({}),
+                run: () => Effect.void,
+              });
+              yield* context.schema.register({
+                id: "sink",
+                io: (io) => ({ value: io.data.in("value", recordType) }),
+                run: ({ io }) =>
+                  Effect.sync(() => {
+                    captured.push(io.value);
+                  }),
+              });
+              yield* context.schema.register({
+                id: "enum-anchor",
+                type: "pure",
+                io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
+                run: () => Effect.void,
+              });
+              yield* context.schema.register({
+                id: "forbidden",
+                io: () => ({}),
+                run: () => Effect.die("Unselected branch must not execute"),
+              });
+            }),
           }),
-        });
+        );
         const original = value();
         const stored = Schema.encodeUnknownSync(t.JsonValueSchema(recordType, definitions))(
           original,
@@ -448,9 +451,12 @@ describe("generated custom operations", () => {
         const executor = yield* Executor.make(project, { executionEnvironment: driver });
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         yield* executor.handleEvent(module, new Trigger({}));
@@ -487,27 +493,29 @@ describe("generated custom operations", () => {
         },
       };
       const captured: unknown[] = [];
-      const module = Module.make({
-        id: "make-inference-test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: () => ({}),
-            run: () => Effect.void,
-          });
-          yield* context.schema.register({
-            id: "sink",
-            io: (io) => ({ value: io.data.in("value", type) }),
-            run: ({ io }) =>
-              Effect.sync(() => {
-                captured.push(io.value);
-              }),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/make-inference-test"),
+        Module.make({
+          engine: InferenceEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: () => ({}),
+              run: () => Effect.void,
+            });
+            yield* context.schema.register({
+              id: "sink",
+              io: (io) => ({ value: io.data.in("value", type) }),
+              run: ({ io }) =>
+                Effect.sync(() => {
+                  captured.push(io.value);
+                }),
+            });
+          }),
         }),
-      });
+      );
       const project = yield* Schema.decodeUnknownEffect(Project.Model)({
         ...Project.empty(),
         types,
@@ -538,9 +546,12 @@ describe("generated custom operations", () => {
       const executor = yield* Executor.make(project);
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));

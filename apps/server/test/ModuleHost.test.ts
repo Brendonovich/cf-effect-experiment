@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import { ModuleId } from "@macrograph/module";
 import { Effect, Exit, Option } from "effect";
 import { HttpServerResponse } from "effect/http";
 
@@ -9,12 +10,13 @@ it.effect("registers module RPC apps and rejects collisions", () =>
     const host = yield* ModuleHost.Service;
     const first = Effect.succeed(HttpServerResponse.text("first"));
     const second = Effect.succeed(HttpServerResponse.text("second"));
+    const test = ModuleId.Id.make("local/test/test");
 
-    yield* host.register("test", first);
-    assert.strictEqual(Option.getOrThrow(yield* host.get("test")), first);
+    yield* host.register(test, first);
+    assert.strictEqual(Option.getOrThrow(yield* host.get(test)), first);
 
-    const duplicate = yield* Effect.exit(host.register("test", second));
+    const duplicate = yield* Effect.exit(host.register(test, second));
     assert.isTrue(Exit.isFailure(duplicate));
-    assert.strictEqual(Option.getOrThrow(yield* host.get("test")), first);
+    assert.strictEqual(Option.getOrThrow(yield* host.get(test)), first);
   }).pipe(Effect.provide(ModuleHost.layer)),
 );

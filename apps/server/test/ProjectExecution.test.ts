@@ -1,14 +1,23 @@
 import { assert, describe, it } from "@effect/vitest";
-import { GraphId, IoId, PackageId, Project, SchemaId } from "@macrograph/core";
+import {
+  CustomTypes,
+  Function as GraphFunction,
+  GraphId,
+  IoId,
+  PackageId,
+  Project,
+  Queue,
+  SchemaId,
+} from "@macrograph/core";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Engine, Module } from "@macrograph/module";
-import OBSModule from "@macrograph/module-obs";
+import { Engine, Module, ModuleId } from "@macrograph/module";
+import OBSModuleDefinition from "@macrograph/module-obs";
 import { OBSEngine } from "@macrograph/module-obs/Definition";
-import OBSDeployment from "@macrograph/module-obs/Deployment/WebSocket";
-import TwitchModule from "@macrograph/module-twitch";
-import TwitchDeployment from "@macrograph/module-twitch/Deployment/WebSocket";
+import OBSDeploymentDefinition from "@macrograph/module-obs/Deployment/WebSocket";
+import TwitchModuleDefinition from "@macrograph/module-twitch";
+import TwitchDeploymentDefinition from "@macrograph/module-twitch/Deployment/WebSocket";
 import { Persistence } from "@macrograph/persistence";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
 import {
@@ -27,6 +36,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const OBSModule = Module.identify(Module.builtinId("obs"), OBSModuleDefinition);
+const OBSDeployment = Engine.identify(Module.builtinId("obs"), OBSDeploymentDefinition);
+const TwitchModule = Module.identify(Module.builtinId("twitch"), TwitchModuleDefinition);
+const TwitchDeployment = Engine.identify(Module.builtinId("twitch"), TwitchDeploymentDefinition);
 
 const EditorLayer = Editor.layer.pipe(
   Layer.provideMerge(EditorEvents.layer),
@@ -48,21 +62,26 @@ describe("LiveRuntime", () => {
       class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
       const input = new Trigger({ message: "x".repeat(20_000) });
       let nodeEffect: Effect.Effect<void, Error> = Effect.void;
-      const module = Module.make({
-        id: "activity-test",
-        engine: TestEngine,
-        effect: (registration) =>
-          registration.schema.register({
-            id: "event",
-            type: "event",
-            event: (event) => Effect.succeed(event.message === input.message),
-            io: () => ({}),
-            run: () => nodeEffect,
-          }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("unused")),
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/activity-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: (registration) =>
+            registration.schema.register({
+              id: "event",
+              type: "event",
+              event: (event) => Effect.succeed(event.message === input.message),
+              io: () => ({}),
+              run: () => nodeEffect,
+            }),
+        }),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("unused")),
+        ),
       );
       const editor = yield* Editor.Service;
       const executor = yield* LiveRuntime.Service;
@@ -147,19 +166,22 @@ describe("LiveRuntime", () => {
       yield* editor.engine.hostRuntimeClient(OBSModule.id, {});
       yield* executor.module(OBSModule, OBSDeployment);
 
-      assert.deepStrictEqual((yield* packages.getPackages()).map((pkg) => pkg.id).sort(), [
-        "CustomTypes",
-        "macrograph-functions",
-        "macrograph-queues",
-        "obs",
-        "twitch",
-      ]);
+      assert.deepStrictEqual(
+        (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
+        [
+          CustomTypes.packageId,
+          GraphFunction.packageId,
+          Queue.packageId,
+          OBSModule.id,
+          TwitchModule.id,
+        ].sort(),
+      );
 
       const created = yield* editor.graph.create({ name: "Live" });
-      yield* editor.engine.setState("twitch", {
+      yield* editor.engine.setState(TwitchModule.id, {
         accounts: { streamer: { subscriptions: ["channel.ban"] } },
       });
-      yield* editor.engine.setState("obs", {
+      yield* editor.engine.setState(OBSModule.id, {
         sockets: {
           "ws://localhost:4455": { password: "obs-secret", connectOnStartup: false },
         },
@@ -168,10 +190,10 @@ describe("LiveRuntime", () => {
 
       const project = yield* executor.project;
       assert.strictEqual(project.graphs[created.graph.id]?.canvas.name, "Live");
-      assert.deepStrictEqual(project.engines.twitch, {
+      assert.deepStrictEqual(project.engines[TwitchModule.id], {
         accounts: { streamer: { enabled: true, subscriptions: ["channel.ban"] } },
       });
-      assert.deepStrictEqual(project.engines.obs, {
+      assert.deepStrictEqual(project.engines[OBSModule.id], {
         sockets: {
           "ws://localhost:4455": { password: "obs-secret", connectOnStartup: false },
         },
@@ -191,7 +213,7 @@ describe("LiveRuntime", () => {
     const project = {
       ...Project.empty(),
       engines: {
-        obs: {
+        [OBSModule.id]: {
           sockets: {
             "ws://localhost:4455": {
               name: "Studio OBS",
@@ -217,8 +239,8 @@ describe("LiveRuntime", () => {
         }),
       );
       assert.deepStrictEqual(
-        Schema.decodeUnknownSync(OBSEngine.Storage)(loaded.engines.obs),
-        project.engines.obs,
+        Schema.decodeUnknownSync(OBSEngine.Storage)(loaded.engines[OBSModule.id]),
+        project.engines[OBSModule.id],
       );
     }).pipe(Effect.ensuring(Effect.sync(() => rmSync(directory, { recursive: true }))));
   });

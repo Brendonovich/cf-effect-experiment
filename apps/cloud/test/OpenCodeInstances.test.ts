@@ -82,7 +82,7 @@ describe("Cloud OpenCode instances", () => {
       yield* OpenCodeInstances.applyDeployment(
         "project",
         {
-          opencode: {
+          "macrograph.app/macrograph/opencode": {
             connections: {
               writer: { name: "Writer", target: { type: "managed", config: '{"v":2}' } },
               remote: {

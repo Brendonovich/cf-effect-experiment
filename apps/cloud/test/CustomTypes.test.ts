@@ -45,7 +45,7 @@ describe("hosted custom types", () => {
               id: "graph",
               name: "Hosted custom types",
               nodes: {
-                tick: makeNode("tick", "util", "Tick"),
+                tick: makeNode("tick", "macrograph.app/macrograph/utilities", "Tick"),
                 source: makeNode("source", "custom-anchor", "source"),
                 match: makeNode("match", CustomTypes.packageId, "MatchEnum", {}, {}),
               },
@@ -108,7 +108,10 @@ describe("hosted custom types", () => {
             }),
         }),
       );
-      yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
+      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+        _tag: "TickEvent",
+        tick: 1,
+      });
       assert.deepStrictEqual(recorded.find((step) => step.node === "match")?.output, {
         outputs: [],
         executionOutputId: 'variant:"Found"',
@@ -117,7 +120,10 @@ describe("hosted custom types", () => {
       yield* executor.loadProject({ ...project, types: {} });
       const count = recorded.length;
       const failure = yield* Effect.flip(
-        ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 2 }),
+        ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+          _tag: "TickEvent",
+          tick: 2,
+        }),
       );
       assert.strictEqual(failure._tag, "InvalidGraph");
       assert.strictEqual(

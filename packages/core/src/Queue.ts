@@ -1,3 +1,4 @@
+import { Module } from "@macrograph/module";
 import { Effect, Schema, SchemaGetter } from "effect";
 
 import type { Model as NodeModel } from "./Node.ts";
@@ -44,7 +45,7 @@ export const State = Schema.Struct({
 });
 export type State = typeof State.Type;
 
-export const packageId = PackageId.make("macrograph-queues");
+export const packageId = PackageId.make(Module.builtinId("queues"));
 export const EnqueueSchemaId = SchemaId.make("add");
 export const isEnqueue = (node: Pick<NodeModel, "schema">): boolean =>
   node.schema.package === packageId && node.schema.schema === EnqueueSchemaId;

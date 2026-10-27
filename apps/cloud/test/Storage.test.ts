@@ -50,9 +50,9 @@ describe("Storage", () => {
       const input = {
         name: "Example Workflow",
         nodes: {
-          timer: { schema: { package: "util", schema: "Tick" } },
+          timer: { schema: { package: "macrograph.app/macrograph/utilities", schema: "Tick" } },
           print: {
-            schema: { package: "util", schema: "Print" },
+            schema: { package: "macrograph.app/macrograph/utilities", schema: "Print" },
             position: { x: 320, y: 0 },
           },
         },
