@@ -29,6 +29,7 @@ export {
   type EditorController,
   type EditorControllerOptions,
 } from "./editor/createEditorController.ts";
+export * from "./editor/modules/index.ts";
 export { macrographLogo };
 export { CredentialSettings } from "./credentials/CredentialSettings.tsx";
 export {

@@ -378,7 +378,6 @@ export type EditorRpcClient = RpcClient.FromGroup<
 
 export interface EditorConnection {
   readonly client: EditorRpcClient;
-  readonly moduleSettings: ReadonlyMap<string, ClientSettings.Connected<JSX.Element>>;
   readonly activity?: Stream.Stream<ReadonlyArray<RuntimeActivity.Event>, unknown>;
   readonly replayEvent?: (eventId: string) => Effect.Effect<void, unknown>;
 }
@@ -564,9 +563,8 @@ function EditorContent(
                         view,
                       })
                     }
-                    settings={controller.connection.moduleSettingsById().get(value().id)}
+                    settings={controller.connection.moduleData.settings(value().id)}
                     data={controller.connection.moduleData.metadata()}
-                    state={() => controller.connection.moduleData.states.get(value().id)?.()}
                     onChanged={() => controller.connection.refreshModuleData(value().id)}
                   />
                 )}

@@ -1,7 +1,9 @@
 import type { SchemaAuthoring } from "@macrograph/core";
-import type { Effect, Scope } from "effect";
 
-import type { EditorConnection, ModuleSettingsEntry } from "./Editor";
+import { Effect, type Scope } from "effect";
+
+import type { EditorConnection } from "./Editor";
+import type { EditorModules } from "./modules/EditorModules";
 
 import { createEditorCatalog } from "./catalog/createEditorCatalog";
 import { createEditorCommands } from "./createEditorCommands";
@@ -12,22 +14,36 @@ import { createEditorPresence } from "./session/createEditorPresence";
 import { createEditorStore } from "./store";
 import { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
-export interface EditorControllerOptions {
-  readonly connection: Effect.Effect<EditorConnection, unknown, Scope.Scope>;
+export interface EditorControllerOptions<Connection extends EditorConnection = EditorConnection> {
+  readonly connection: Effect.Effect<Connection, unknown, Scope.Scope>;
   readonly workspaceId: string;
   readonly userId: string;
-  readonly settingsDescriptors: ReadonlyArray<ModuleSettingsEntry>;
+  /** The module catalog source, UI loader and per-module RPC protocols. */
+  readonly modules: EditorModules<Connection>;
   readonly reconnect?: boolean;
   readonly projectSettings?: boolean;
   readonly authoring?: SchemaAuthoring.Registry;
 }
 
 /** Construct in the parent's Solid scope; that scope owns the connection and model. */
-export function createEditorController(options: EditorControllerOptions) {
+export function createEditorController<Connection extends EditorConnection>(
+  options: EditorControllerOptions<Connection>,
+) {
   const editor = createEditorStore(options.authoring);
   const layout = createEditorWorkspace(options, editor, () => presence.setLocalCursor(null));
+  const modules = options.modules;
   const connection = createEditorConnection(
-    options,
+    {
+      connection: Effect.map(options.connection, (connection) => ({
+        connection,
+        modules: {
+          catalog: modules.catalog(connection),
+          rpcProtocol: modules.rpcProtocol(connection),
+        },
+      })),
+      loader: modules.loader,
+      ...(options.reconnect === undefined ? {} : { reconnect: options.reconnect }),
+    },
     editor,
     layout.onProjectSnapshot,
     () => presence.dispose(),
