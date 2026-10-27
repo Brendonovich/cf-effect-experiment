@@ -24,6 +24,9 @@ const packageDirectory = resolve(import.meta.dirname, "..");
 const repositoryRoot = resolve(packageDirectory, "../..");
 const serverClient = join(repositoryRoot, "apps/server/client");
 const viteBin = join(packageDirectory, "node_modules/vite/bin/vite.js");
+// Invoked by path: module-build depends on this package, so it can't be a dependency here.
+const moduleBuildBin = join(repositoryRoot, "packages/module-build/bin/macrograph-module.mjs");
+const builtInModule = join(repositoryRoot, "packages/modules/obs");
 
 const files = (directory: string): ReadonlyArray<string> =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
@@ -134,6 +137,7 @@ let serverHost = "";
 let fixtureCss: ReadonlyArray<string> = [];
 let unanchoredCss: ReadonlyArray<string> = [];
 let serverModuleCss: ReadonlyArray<string> = [];
+let builtInCss = "";
 
 const fixtureModuleSource = `
 import * as stylex from "@stylexjs/stylex";
@@ -194,6 +198,13 @@ beforeAll(async () => {
     source: serverModuleSource,
     outDirectory: join(serverHost, "fixture-module"),
   });
+  // A built-in module built by `macrograph-module`, served the way the server serves packages.
+  await run(
+    process.execPath,
+    [moduleBuildBin, "build", builtInModule, "--out", join(serverHost, "modules/obs")],
+    { cwd: repositoryRoot, maxBuffer: 64 * 1024 * 1024 },
+  );
+  builtInCss = readFileSync(join(serverHost, "modules/obs/ui/styles.css"), "utf8");
   server = serveStatic({ "/host/": fixtureHost, "/mg/": serverHost });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
   const address = server.address();
@@ -369,6 +380,47 @@ describe("shared libraries", () => {
     expect(result.expectedBackground).not.toBe("rgba(0, 0, 0, 0)");
     expect(result.background).toBe(result.expectedBackground);
     expect(result.color).toBe(result.expectedColor);
+    await page.close();
+  });
+
+  it("loads a built-in module built by macrograph-module in the built server client", async () => {
+    const { page, violations, errors } = await openPage(`${origin}/mg/`);
+    await addStylesheets(page, ["/mg/modules/obs/ui/styles.css"]);
+    // A class whose only declaration is a color token, read from the module's own stylesheet.
+    const match = /\.([\w-]+)\s*\{\s*color:\s*var\((--[\w-]+)\);?\s*\}/.exec(builtInCss);
+    expect(match).not.toBeNull();
+    const [, className, variable] = match ?? [];
+    const result = await page.evaluate<Record<string, unknown>>(`(async () => {
+      const ui = await import("/mg/modules/obs/ui/index.js");
+      const box = document.createElement("div");
+      box.className = ${JSON.stringify(className)};
+      const probe = document.createElement("div");
+      probe.style.color = "var(${variable})";
+      document.body.append(box, probe);
+      return {
+        hasSettings: typeof ui.default?.settings?.connect === "function",
+        token: getComputedStyle(document.documentElement).getPropertyValue(${JSON.stringify(variable)}),
+        color: getComputedStyle(box).color,
+        expectedColor: getComputedStyle(probe).color,
+        scripts: performance
+          .getEntriesByType("resource")
+          .map((entry) => new URL(entry.name).pathname)
+          .filter((path) => path.endsWith(".js")),
+      };
+    })()`);
+    expect(result.hasSettings).toBe(true);
+    expect(result.token).not.toBe("");
+    expect(result.color).toBe(result.expectedColor);
+    expect(result.color).not.toBe("rgb(0, 0, 0)");
+    // Every library the module uses comes from the host's shared chunks: the only script the
+    // module itself adds is its entry.
+    const shared = new Set(readManifest(serverHost).files.map((file) => `/mg/${file}`));
+    const moduleScripts = (result.scripts as ReadonlyArray<string>).filter(
+      (path) => !shared.has(path) && !path.startsWith("/mg/assets/"),
+    );
+    expect(moduleScripts).toEqual(["/mg/modules/obs/ui/index.js"]);
+    expect(violations).toEqual([]);
+    expect(errors).toEqual([]);
     await page.close();
   });
 });
