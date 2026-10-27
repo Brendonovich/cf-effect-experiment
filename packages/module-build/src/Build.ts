@@ -2,31 +2,22 @@ import type { Manifest } from "@macrograph/module/Manifest";
 
 import { ModulePackage } from "@macrograph/module/ModulePackage";
 import { SharedLibraries } from "@macrograph/module/SharedLibraries";
-import { stylexProps } from "@macrograph/module/vite";
-import solid from "@solidjs/vite-plugin";
-import stylex from "@stylexjs/unplugin";
 import { Effect, Schema } from "effect";
 import { existsSync, readFileSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { rolldown, type Plugin as RolldownPlugin } from "rolldown";
-import { build as viteBuild, type Plugin as VitePlugin, type Rolldown } from "vite";
 
 import { Checks } from "./Checks.ts";
 import { PackageConfig } from "./PackageConfig.ts";
-import { StyleX } from "./StyleX.ts";
+import { UiBuild } from "./UiBuild.ts";
 
 export interface Options {
   /** The module's package directory (the folder with its `package.json`). */
   readonly packageDirectory: string;
   /** Where the package folder is written. Emptied first. */
   readonly outDirectory: string;
-  /**
-   * Root that StyleX hashes token file paths against. Defaults to the nearest ancestor with a
-   * `pnpm-workspace.yaml`, or the package directory.
-   */
-  readonly rootDirectory?: string;
   readonly limits?: Partial<Checks.Limits>;
   /** Fail the build when a check reports an error. Defaults to true. */
   readonly failOnError?: boolean;
@@ -175,104 +166,9 @@ const buildServer = (options: {
         : fail(options.packageDirectory, `Server build failed: ${String(cause)}`),
   });
 
-const stylesFile = basename(ModulePackage.UiStyles);
-
-const cssAssets = (bundle: Rolldown.OutputBundle) =>
-  Object.values(bundle).flatMap((item) =>
-    item.type === "asset" && item.fileName.endsWith(".css") ? [item] : [],
-  );
-
-/**
- * Collects every stylesheet, including StyleX's extracted CSS, into `ui/styles.css`. StyleX
- * only appends to a CSS asset that exists during `generateBundle`, so a placeholder is emitted
- * first; otherwise it writes a stray `assets/stylex.css` after the bundle is written.
- */
-const uiStyles = (): VitePlugin => ({
-  name: "macrograph-module-ui-styles",
-  generateBundle: {
-    order: "pre",
-    handler(_options, bundle) {
-      if (cssAssets(bundle).length === 0)
-        this.emitFile({ type: "asset", fileName: "macrograph-styles-placeholder.css", source: "" });
-    },
-  },
-});
-
-const mergeUiStyles = (): VitePlugin => ({
-  name: "macrograph-module-ui-styles-merge",
-  enforce: "post",
-  generateBundle: {
-    order: "post",
-    handler(_options, bundle) {
-      const assets = cssAssets(bundle);
-      const source = assets
-        .map((asset) =>
-          typeof asset.source === "string" ? asset.source : new TextDecoder().decode(asset.source),
-        )
-        .filter((css) => css.trim() !== "")
-        .join("\n");
-      for (const asset of assets) delete bundle[asset.fileName];
-      if (source !== "") this.emitFile({ type: "asset", fileName: stylesFile, source });
-    },
-  },
-});
-
-const buildUi = (options: {
-  readonly packageDirectory: string;
-  readonly rootDirectory: string;
-  readonly entry: string;
-  readonly outDirectory: string;
-  readonly minify: boolean;
-}) =>
+const buildUi = (options: UiBuild.Options) =>
   Effect.tryPromise({
-    try: async () => {
-      const result = await viteBuild({
-        configFile: false,
-        root: options.packageDirectory,
-        mode: "production",
-        logLevel: "warn",
-        publicDir: false,
-        css: { postcss: { plugins: [] } },
-        define: { "process.env.NODE_ENV": JSON.stringify("production") },
-        plugins: [
-          uiStyles(),
-          stylexProps(),
-          stylex.vite(StyleX.options(options.rootDirectory)),
-          solid(),
-          mergeUiStyles(),
-        ],
-        build: {
-          outDir: options.outDirectory,
-          emptyOutDir: true,
-          copyPublicDir: false,
-          target: "esnext",
-          minify: options.minify,
-          sourcemap: false,
-          cssCodeSplit: false,
-          reportCompressedSize: false,
-          lib: {
-            entry: resolve(options.packageDirectory, options.entry),
-            formats: ["es"],
-            fileName: () => basename(ModulePackage.UiEntry),
-            cssFileName: basename(ModulePackage.UiStyles, ".css"),
-          },
-          rolldownOptions: {
-            external: (id: string) => SharedLibraries.isShared(id, "browser"),
-            output: {
-              chunkFileNames: "[name]-[hash].js",
-              assetFileNames: "[name]-[hash][extname]",
-            },
-          },
-        },
-      });
-      const outputs = (Array.isArray(result) ? result : [result]).flatMap(
-        (item: Rolldown.RolldownOutput | unknown) =>
-          typeof item === "object" && item !== null && "output" in item
-            ? (item as Rolldown.RolldownOutput).output
-            : [],
-      );
-      return outputs.flatMap((item) => (item.type === "chunk" ? item.moduleIds : []));
-    },
+    try: () => UiBuild.isolated(options),
     catch: (cause) => fail(options.packageDirectory, `UI build failed: ${String(cause)}`),
   });
 
@@ -296,16 +192,6 @@ export const readPackageFiles = (directory: string) =>
     },
     catch: (cause) => fail(directory, `Unable to read package files: ${String(cause)}`),
   });
-
-export const findWorkspaceRoot = (from: string) => {
-  let directory = resolve(from);
-  while (true) {
-    if (existsSync(join(directory, "pnpm-workspace.yaml"))) return directory;
-    const parent = dirname(directory);
-    if (parent === directory) return undefined;
-    directory = parent;
-  }
-};
 
 /** Reads and validates the `macrograph` field of a module's `package.json`. */
 export const readConfig = (packageDirectory: string) =>
@@ -332,9 +218,6 @@ export const build = (options: Options) =>
   Effect.gen(function* () {
     const packageDirectory = resolve(options.packageDirectory);
     const outDirectory = resolve(options.outDirectory);
-    const rootDirectory = resolve(
-      options.rootDirectory ?? findWorkspaceRoot(packageDirectory) ?? packageDirectory,
-    );
     const { config } = yield* readConfig(packageDirectory);
 
     yield* Effect.tryPromise({
@@ -362,9 +245,8 @@ export const build = (options: Options) =>
 
     const ui = config.entries.ui;
     if (ui !== undefined) {
-      const moduleIds = yield* buildUi({
+      const { moduleIds } = yield* buildUi({
         packageDirectory,
-        rootDirectory,
         entry: ui,
         outDirectory: join(outDirectory, ModulePackage.UiDirectory),
         minify: options.minifyUi ?? true,
