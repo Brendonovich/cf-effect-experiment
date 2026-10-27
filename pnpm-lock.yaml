@@ -252,6 +252,9 @@ importers:
       '@macrograph/module-opencode':
         specifier: workspace:*
         version: link:../../packages/modules/opencode
+      '@macrograph/module-registry':
+        specifier: workspace:*
+        version: link:../../packages/module-registry
       '@macrograph/module-sendblue':
         specifier: workspace:*
         version: link:../../packages/modules/sendblue
