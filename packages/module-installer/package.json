@@ -1,0 +1,33 @@
+{
+  "name": "@macrograph/module-installer",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./AdminHandlers": "./src/AdminHandlers.ts",
+    "./Archive": "./src/Archive.ts",
+    "./InstallRecords": "./src/InstallRecords.ts",
+    "./Installer": "./src/Installer.ts",
+    "./ModuleStatus": "./src/ModuleStatus.ts",
+    "./Registries": "./src/Registries.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/module": "workspace:*",
+    "@macrograph/module-registry": "workspace:*",
+    "effect": "catalog:",
+    "modern-tar": "0.8.5"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "^24",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  }
+}
