@@ -9,14 +9,15 @@ import {
   CredentialSettings,
   RealtimeWorkspace,
   macrographLogo,
+  ModulesAdminView,
   PresenceList,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import { Effect } from "effect";
 import { createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
-import { editorConnection, editorModules, moduleLoading } from "./editorConnection";
+import { editorConnection, editorModules, type ModuleAdminConnection } from "./editorConnection";
 
 const baseUrl = () => new URL(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/`, location.origin);
 const sessionKey = "macrograph:self-hosted:session";
@@ -529,14 +530,18 @@ export function App() {
       >
         <Show when={rpcUrl()} keyed>
           {(url) => {
+            const [moduleAdmin, setModuleAdmin] = createSignal<ModuleAdminConnection | null>(null);
             const controller = createEditorController({
               connection: editorConnection(url, {
-                moduleLoading,
                 baseUrl: baseUrl(),
                 token: () => untrack(auth).session,
-              }),
+              }).pipe(
+                Effect.tap((connection) =>
+                  Effect.sync(() => setModuleAdmin(() => connection.moduleAdmin)),
+                ),
+              ),
               workspaceId: new URL(url).pathname,
-              modules: editorModules(moduleLoading, discoveredModuleSettings),
+              modules: editorModules(),
               userId: localUserId(),
               reconnect: true,
               projectSettings: true,
@@ -623,6 +628,19 @@ export function App() {
                           mcpUrl={new URL("api/mcp", baseUrl()).href}
                           restUrl={new URL("api", baseUrl()).href}
                         />
+                        {/* Only admins manage modules; the server enforces this too. */}
+                        <Show when={canEdit() ? moduleAdmin() : null}>
+                          {(client) => (
+                            <ModulesAdminView
+                              client={client()}
+                              subscribeModulesChanged={(listener) =>
+                                controller.connection.moduleCatalog.onChange(() =>
+                                  listener({ _tag: "ModulesChanged" }),
+                                )
+                              }
+                            />
+                          )}
+                        </Show>
                       </>
                     )}
                   />
