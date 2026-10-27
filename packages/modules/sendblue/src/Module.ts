@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { SendblueAccount, SendblueEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "sendblue",
   name: "Sendblue",
   engine: SendblueEngine,
   effect: Effect.fnUntraced(function* (context) {

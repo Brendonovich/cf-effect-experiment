@@ -5,6 +5,8 @@ import MagicString from "magic-string";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { builtinIdFromPackage } from "./Module.ts";
+
 interface ModulePackage {
   readonly name?: string;
   readonly exports?: Readonly<Record<string, unknown>>;
@@ -21,7 +23,7 @@ interface DiscoveryOptions {
   readonly virtualId: string;
   readonly workspaceRoot?: string;
   readonly imports: (manifest: ModulePackage) => Readonly<Record<string, ModuleImport>> | undefined;
-  readonly value: (bindings: Readonly<Record<string, string>>) => string;
+  readonly value: (bindings: Readonly<Record<string, string>>, id: string) => string;
   readonly filter?: string;
   readonly include?: ReadonlySet<string>;
 }
@@ -125,12 +127,13 @@ const workspaceModules = (options: DiscoveryOptions) => {
           const bindings = Object.fromEntries(
             module.imports.map(({ binding }) => [binding, `${binding}${index}`]),
           );
-          return `{ value: ${options.value(bindings)}, source: ${JSON.stringify(module.source)} }`;
+          const id = builtinIdFromPackage(module.source);
+          return `{ value: ${options.value(bindings, JSON.stringify(id))}, source: ${JSON.stringify(module.source)} }`;
         })
         .join(", ");
       const filter =
         options.filter === undefined ? "" : `.filter(({ value }) => ${options.filter})`;
-      return `${imports}\nconst discovered = [${values}]${filter};\nconst ids = new Map();\nfor (const entry of discovered) {\n  const id = entry.value.moduleId ?? entry.value.id;\n  const previous = ids.get(id);\n  if (previous !== undefined) throw new Error(\`Duplicate module id \${id}: \${previous}, \${entry.source}\`);\n  ids.set(id, entry.source);\n}\nexport default discovered.map((entry) => entry.value);`;
+      return `${imports}\nconst discovered = [${values}]${filter};\nconst ids = new Map();\nfor (const entry of discovered) {\n  const id = entry.value.id;\n  const previous = ids.get(id);\n  if (previous !== undefined) throw new Error(\`Duplicate module id \${id}: \${previous}, \${entry.source}\`);\n  ids.set(id, entry.source);\n}\nexport default discovered.map((entry) => entry.value);`;
     },
   } satisfies Plugin;
 };
@@ -200,7 +203,10 @@ export const stylexProps = () =>
     },
   }) satisfies Plugin;
 
-/** Discovers module settings descriptors as `{ id, settings }` entries keyed by module id. */
+/**
+ * Discovers module settings descriptors as `{ id, settings }` entries. Built-in ids are derived
+ * from package names (`@macrograph/module-twitch` → `<official>/macrograph/twitch`).
+ */
 export const moduleSettings = (workspaceRoot?: string, include?: ReadonlySet<string>) =>
   workspaceModules({
     name: "macrograph-module-settings",
@@ -208,19 +214,18 @@ export const moduleSettings = (workspaceRoot?: string, include?: ReadonlySet<str
     ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
     imports: (manifest) => {
       const settings = exportPath(manifest, "./Settings");
-      const module = exportPath(manifest, ".");
-      return settings === undefined || module === undefined
+      return settings === undefined
         ? undefined
-        : {
-            settings: { path: settings, exportName: "settings" },
-            module: { path: module, exportName: "default" },
-          };
+        : { settings: { path: settings, exportName: "settings" } };
     },
-    value: (bindings) => `{ id: ${bindings.module}.id, settings: ${bindings.settings} }`,
+    value: (bindings, id) => `{ id: ${id}, settings: ${bindings.settings} }`,
     ...(include === undefined ? {} : { include }),
   });
 
-/** Discovers standalone engine deployments and engine-less module exports. */
+/**
+ * Discovers standalone engine deployments and engine-less module exports as `{ id, value }`
+ * entries; the host identifies each value with its id before mounting it.
+ */
 export const moduleDeployments = (workspaceRoot?: string, include?: ReadonlySet<string>) =>
   workspaceModules({
     name: "macrograph-module-deployments",
@@ -230,7 +235,7 @@ export const moduleDeployments = (workspaceRoot?: string, include?: ReadonlySet<
       const path = manifestPath(manifest, "standaloneDeployment") ?? exportPath(manifest, ".");
       return path === undefined ? undefined : { value: { path, exportName: "default" } };
     },
-    value: (bindings) => `${bindings.value}`,
-    filter: '"definition" in value || value.engine === undefined',
+    value: (bindings, id) => `{ id: ${id}, value: ${bindings.value} }`,
+    filter: '"definition" in value.value || value.value.engine === undefined',
     ...(include === undefined ? {} : { include }),
   });

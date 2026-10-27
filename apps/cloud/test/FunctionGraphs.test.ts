@@ -59,7 +59,10 @@ describe("hosted function graphs", () => {
                 [tickId]: {
                   id: tickId,
                   name: "Tick",
-                  schema: { package: PackageId.make("util"), schema: SchemaId.make("Tick") },
+                  schema: {
+                    package: PackageId.make("macrograph.app/macrograph/utilities"),
+                    schema: SchemaId.make("Tick"),
+                  },
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
@@ -121,7 +124,10 @@ describe("hosted function graphs", () => {
             .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
         ),
       });
-      yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
+      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+        _tag: "TickEvent",
+        tick: 1,
+      });
       assert.deepStrictEqual(steps.get(GraphFunction.InputBoundaryNodeId)?.outputs, [
         { outputId: value.id, value: "cloud" },
       ]);

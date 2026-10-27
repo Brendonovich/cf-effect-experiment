@@ -3,7 +3,7 @@ import type * as S from "effect/Schema";
 
 import { Editor } from "@macrograph/editor";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Engine, Resource, type Module } from "@macrograph/module";
+import { Engine, ModuleId, Resource, type Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { EngineHost, ModuleMount } from "@macrograph/project-host";
 import { Context, Effect, Layer, Option, Ref, Scope } from "effect";
@@ -20,9 +20,9 @@ type RpcHttpEffect = Effect.Effect<
 export class Service extends Context.Service<
   Service,
   {
-    readonly get: (moduleId: string) => Effect.Effect<Option.Option<RpcHttpEffect>>;
+    readonly get: (moduleId: ModuleId.Id) => Effect.Effect<Option.Option<RpcHttpEffect>>;
     readonly register: (
-      moduleId: string,
+      moduleId: ModuleId.Id,
       rpc: RpcHttpEffect,
     ) => Effect.Effect<void, never, Scope.Scope>;
   }
@@ -30,7 +30,7 @@ export class Service extends Context.Service<
 
 export const layer = Layer.effect(Service)(
   Effect.gen(function* () {
-    const rpcs = yield* Ref.make<ReadonlyMap<string, RpcHttpEffect>>(new Map());
+    const rpcs = yield* Ref.make<ReadonlyMap<ModuleId.Id, RpcHttpEffect>>(new Map());
     return Service.of({
       get: (moduleId) =>
         Ref.get(rpcs).pipe(Effect.map((current) => Option.fromNullishOr(current.get(moduleId)))),
@@ -68,15 +68,17 @@ export const rpcRoute = (
       const router = (yield* HttpRouter.HttpRouter).prefixed(basePath);
       yield* router.add(
         "*",
-        "/module/:moduleId/rpc",
+        // Matches `${ModuleId.routePrefix(id)}/rpc`; module ids contain slashes.
+        "/module/:namespace/:publisher/:name/rpc",
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           if (!(yield* authorize(request)))
             return HttpServerResponse.text("Forbidden", { status: 403 });
-          const moduleId = (yield* HttpRouter.RouteContext).params.moduleId;
-          if (moduleId === undefined)
+          const { namespace, publisher, name } = (yield* HttpRouter.RouteContext).params;
+          const moduleId = ModuleId.parse(`${namespace}/${publisher}/${name}`);
+          if (Option.isNone(moduleId))
             return HttpServerResponse.text("Module not found", { status: 404 });
-          const rpc = yield* registry.get(moduleId);
+          const rpc = yield* registry.get(moduleId.value);
           return Option.isNone(rpc)
             ? HttpServerResponse.text("Module not found", { status: 404 })
             : yield* rpc.value;
@@ -85,7 +87,7 @@ export const rpcRoute = (
     }),
   );
 
-export const moduleLayer = (module: Module.Module<never>) =>
+export const moduleLayer = (module: Module.Identified<never>) =>
   Layer.effectDiscard(
     Effect.flatMap(LiveRuntime.Service, (executor) => ModuleMount.register(executor, module)),
   );
@@ -100,12 +102,14 @@ export const deploymentLayer = <
   EngineError,
   EngineServices,
 >(
-  deployment: Engine.Deployment<
-    Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-    Layer.Layer<
-      Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
-      EngineError,
-      EngineServices
+  deployment: Engine.Identified<
+    Engine.Deployment<
+      Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
+      Layer.Layer<
+        Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
+        EngineError,
+        EngineServices
+      >
     >
   > & { readonly httpIngress?: never },
 ): Layer.Layer<
@@ -164,12 +168,14 @@ export const mount = <
   EngineError,
   EngineServices,
 >(
-  deployment: Engine.Deployment<
-    Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-    Layer.Layer<
-      Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
-      EngineError,
-      EngineServices
+  deployment: Engine.Identified<
+    Engine.Deployment<
+      Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
+      Layer.Layer<
+        Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
+        EngineError,
+        EngineServices
+      >
     >
   > & { readonly httpIngress?: never },
 ): Effect.Effect<

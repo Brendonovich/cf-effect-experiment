@@ -1,45 +1,90 @@
 import { NodeServices, NodeSocket } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Project } from "@macrograph/core";
+import {
+  CustomTypes,
+  Function as GraphFunction,
+  PackageId,
+  Project,
+  Queue,
+} from "@macrograph/core";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
 import { RuntimeActivity } from "@macrograph/execution";
 import { LiveRuntime } from "@macrograph/live-runtime";
-import { Engine } from "@macrograph/module";
-import Discord from "@macrograph/module-discord/Deployment";
-import ElevenLabs from "@macrograph/module-elevenlabs/Deployment";
-import ElgatoKeyLight from "@macrograph/module-elgato-key-light/Deployment";
-import Filesystem from "@macrograph/module-fs/Deployment";
-import GoXLR from "@macrograph/module-goxlr/Deployment";
-import HttpClient from "@macrograph/module-http-client/Deployment/Local";
-import IkeaTradfri from "@macrograph/module-ikea-tradfri/Deployment";
-import Json from "@macrograph/module-json";
-import LIFX from "@macrograph/module-lifx/Deployment";
-import List from "@macrograph/module-list";
-import Logic from "@macrograph/module-logic";
-import Math from "@macrograph/module-math";
-import Midi from "@macrograph/module-midi/Deployment";
-import OBS from "@macrograph/module-obs/Deployment/WebSocket";
-import OpenAI from "@macrograph/module-openai/Deployment";
-import OpenCode from "@macrograph/module-opencode/Deployment/Server";
-import Sendblue from "@macrograph/module-sendblue/Deployment";
-import Shell from "@macrograph/module-shell/Deployment";
-import SpeakerBot from "@macrograph/module-speakerbot/Deployment";
-import StreamDeck from "@macrograph/module-streamdeck/Deployment";
-import Streamlabs from "@macrograph/module-streamlabs/Deployment";
-import Strings from "@macrograph/module-string";
-import TikTok from "@macrograph/module-tiktok-euler-stream/Deployment";
-import Twitch from "@macrograph/module-twitch/Deployment/WebSocket";
-import Utilities from "@macrograph/module-utilities/Deployment";
-import Voicemod from "@macrograph/module-voicemod/Deployment";
-import VTubeStudio from "@macrograph/module-vtube-studio/Deployment";
-import WebSocketClient from "@macrograph/module-websocket-client/Deployment/Local";
-import WebSocketServer from "@macrograph/module-websocket-server/Deployment";
+import { Engine, Module } from "@macrograph/module";
+import DiscordDefinition from "@macrograph/module-discord/Deployment";
+import ElevenLabsDefinition from "@macrograph/module-elevenlabs/Deployment";
+import ElgatoKeyLightDefinition from "@macrograph/module-elgato-key-light/Deployment";
+import FilesystemDefinition from "@macrograph/module-fs/Deployment";
+import GoXLRDefinition from "@macrograph/module-goxlr/Deployment";
+import HttpClientDefinition from "@macrograph/module-http-client/Deployment/Local";
+import IkeaTradfriDefinition from "@macrograph/module-ikea-tradfri/Deployment";
+import JsonDefinition from "@macrograph/module-json";
+import LIFXDefinition from "@macrograph/module-lifx/Deployment";
+import ListDefinition from "@macrograph/module-list";
+import LogicDefinition from "@macrograph/module-logic";
+import MathDefinition from "@macrograph/module-math";
+import MidiDefinition from "@macrograph/module-midi/Deployment";
+import OBSDefinition from "@macrograph/module-obs/Deployment/WebSocket";
+import OpenAIDefinition from "@macrograph/module-openai/Deployment";
+import OpenCodeDefinition from "@macrograph/module-opencode/Deployment/Server";
+import SendblueDefinition from "@macrograph/module-sendblue/Deployment";
+import ShellDefinition from "@macrograph/module-shell/Deployment";
+import SpeakerBotDefinition from "@macrograph/module-speakerbot/Deployment";
+import StreamDeckDefinition from "@macrograph/module-streamdeck/Deployment";
+import StreamlabsDefinition from "@macrograph/module-streamlabs/Deployment";
+import StringsDefinition from "@macrograph/module-string";
+import TikTokDefinition from "@macrograph/module-tiktok-euler-stream/Deployment";
+import TwitchDefinition from "@macrograph/module-twitch/Deployment/WebSocket";
+import UtilitiesDefinition from "@macrograph/module-utilities/Deployment";
+import VoicemodDefinition from "@macrograph/module-voicemod/Deployment";
+import VTubeStudioDefinition from "@macrograph/module-vtube-studio/Deployment";
+import WebSocketClientDefinition from "@macrograph/module-websocket-client/Deployment/Local";
+import WebSocketServerDefinition from "@macrograph/module-websocket-server/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { RpcSerialization } from "effect/rpc";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
+
+const Discord = Engine.identify(Module.builtinId("discord"), DiscordDefinition);
+const ElevenLabs = Engine.identify(Module.builtinId("elevenlabs"), ElevenLabsDefinition);
+const ElgatoKeyLight = Engine.identify(
+  Module.builtinId("elgato-key-light"),
+  ElgatoKeyLightDefinition,
+);
+const Filesystem = Engine.identify(Module.builtinId("fs"), FilesystemDefinition);
+const GoXLR = Engine.identify(Module.builtinId("goxlr"), GoXLRDefinition);
+const HttpClient = Engine.identify(Module.builtinId("http-client"), HttpClientDefinition);
+const IkeaTradfri = Engine.identify(Module.builtinId("ikea-tradfri"), IkeaTradfriDefinition);
+const Json = Module.identify(Module.builtinId("json"), JsonDefinition);
+const LIFX = Engine.identify(Module.builtinId("lifx"), LIFXDefinition);
+const List = Module.identify(Module.builtinId("list"), ListDefinition);
+const Logic = Module.identify(Module.builtinId("logic"), LogicDefinition);
+const Math = Module.identify(Module.builtinId("math"), MathDefinition);
+const Midi = Engine.identify(Module.builtinId("midi"), MidiDefinition);
+const OBS = Engine.identify(Module.builtinId("obs"), OBSDefinition);
+const OpenAI = Engine.identify(Module.builtinId("openai"), OpenAIDefinition);
+const OpenCode = Engine.identify(Module.builtinId("opencode"), OpenCodeDefinition);
+const Sendblue = Engine.identify(Module.builtinId("sendblue"), SendblueDefinition);
+const Shell = Engine.identify(Module.builtinId("shell"), ShellDefinition);
+const SpeakerBot = Engine.identify(Module.builtinId("speakerbot"), SpeakerBotDefinition);
+const StreamDeck = Engine.identify(Module.builtinId("streamdeck"), StreamDeckDefinition);
+const Streamlabs = Engine.identify(Module.builtinId("streamlabs"), StreamlabsDefinition);
+const Strings = Module.identify(Module.builtinId("string"), StringsDefinition);
+const TikTok = Engine.identify(Module.builtinId("tiktok-euler-stream"), TikTokDefinition);
+const Twitch = Engine.identify(Module.builtinId("twitch"), TwitchDefinition);
+const Utilities = Engine.identify(Module.builtinId("utilities"), UtilitiesDefinition);
+const Voicemod = Engine.identify(Module.builtinId("voicemod"), VoicemodDefinition);
+const VTubeStudio = Engine.identify(Module.builtinId("vtube-studio"), VTubeStudioDefinition);
+const WebSocketClient = Engine.identify(
+  Module.builtinId("websocket-client"),
+  WebSocketClientDefinition,
+);
+const WebSocketServer = Engine.identify(
+  Module.builtinId("websocket-server"),
+  WebSocketServerDefinition,
+);
 
 const deployments = [
   Discord,
@@ -146,9 +191,9 @@ describe("Self-hosted modules", () => {
       assert.deepStrictEqual(
         catalog.map((module) => module.id).sort(),
         [
-          "CustomTypes",
-          "macrograph-functions",
-          "macrograph-queues",
+          CustomTypes.packageId,
+          GraphFunction.packageId,
+          Queue.packageId,
           ...deployments.map((deployment) => deployment.moduleId),
           ...statelessModules.map((module) => module.id),
         ].sort(),
@@ -177,11 +222,15 @@ describe("Self-hosted modules", () => {
         ["string", 26],
         ["tiktok-euler-stream", 19],
         ["twitch", 92],
-        ["util", 6],
+        ["utilities", 6],
         ["voicemod", 3],
         ["vtube-studio", 6],
       ] as const) {
-        assert.lengthOf(catalog.find((module) => module.id === id)!.schemas, count, id);
+        assert.lengthOf(
+          catalog.find((module) => module.id === PackageId.make(Module.builtinId(id)))!.schemas,
+          count,
+          id,
+        );
       }
       for (const deployment of deployments) {
         assert.isDefined(yield* editor.engine.getRuntimeClient(deployment.moduleId));

@@ -6,6 +6,7 @@ import {
   IoId,
   Node,
   NodeIO,
+  Package,
   ResourceConstant,
   Queue,
   Scopes,
@@ -234,6 +235,19 @@ export const ResourceValuesUpdated = Schema.TaggedStruct("ResourceValuesUpdated"
 });
 export type ResourceValuesUpdated = typeof ResourceValuesUpdated.Type;
 
+/**
+ * The loaded package set changed because a module was registered or unregistered. Carries the new
+ * package set, recomputed IO for nodes in affected graphs, and nodes that became missing-module
+ * placeholders (their saved data is kept; they simply have no IO until the module loads again).
+ */
+export const PackagesChanged = Schema.TaggedStruct("PackagesChanged", {
+  actor,
+  packages: Schema.Array(Package.Model),
+  nodeIO: Schema.Record(Schema.String, Schema.Record(Schema.String, NodeIO)),
+  unavailableNodes: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+});
+export type PackagesChanged = typeof PackagesChanged.Type;
+
 export const QueueUpdated = Schema.TaggedStruct("QueueUpdated", { actor, queue: Queue.Model });
 export type QueueUpdated = typeof QueueUpdated.Type;
 export const QueueDeleted = Schema.TaggedStruct("QueueDeleted", { actor, queueId: Schema.String });
@@ -267,10 +281,14 @@ export type Persistent =
   | ResourceConstantUpdated
   | ResourceConstantDeleted;
 
-export type Ephemeral = ModuleClientStateDirty | ResourceValuesUpdated;
+export type Ephemeral = ModuleClientStateDirty | ResourceValuesUpdated | PackagesChanged;
 export type EditorEvent = Persistent | Ephemeral;
 
-export const ephemeralTags = ["ModuleClientStateDirty", "ResourceValuesUpdated"] as const;
+export const ephemeralTags = [
+  "ModuleClientStateDirty",
+  "ResourceValuesUpdated",
+  "PackagesChanged",
+] as const;
 
 const ephemeralTagSet: ReadonlySet<EditorEvent["_tag"]> = new Set(ephemeralTags);
 

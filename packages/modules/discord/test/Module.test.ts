@@ -21,7 +21,6 @@ describe("Discord module", () => {
           "DiscordSendWebhook",
         ],
       );
-      assert.strictEqual(deployment.moduleId, "discord");
       assert.strictEqual(deployment.definition, module.engine);
     }),
   );
@@ -39,7 +38,6 @@ describe("Discord module", () => {
           "DiscordSendWebhook",
         ],
       );
-      assert.strictEqual(restDeployment.moduleId, "discord");
       assert.strictEqual(restDeployment.module, restModule);
       assert.strictEqual(restDeployment.definition, module.engine);
     }),

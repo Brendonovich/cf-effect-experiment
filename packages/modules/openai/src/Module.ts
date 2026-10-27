@@ -4,7 +4,6 @@ import { Effect, Option } from "effect";
 import { defaultChatModel, defaultImageModel, OpenAIEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "openai",
   name: "OpenAI",
   engine: OpenAIEngine,
   effect: Effect.fnUntraced(function* (context) {

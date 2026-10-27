@@ -2,33 +2,36 @@ import type { Project } from "@macrograph/core";
 import type { Instances as OpenCodeInstances } from "@macrograph/module-opencode/Instance";
 
 import * as Executor from "@macrograph/execution/Executor";
-import DiscordModule from "@macrograph/module-discord";
 import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { restLayer as discordLayer } from "@macrograph/module-discord/Engine";
-import ElevenLabsModule from "@macrograph/module-elevenlabs";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { layer as elevenLabsLayer } from "@macrograph/module-elevenlabs/Engine";
-import GitHubModule from "@macrograph/module-github";
 import { unavailableRuntimeClient as unavailableGitHubRuntime } from "@macrograph/module-github/Engine";
-import HttpClientModule from "@macrograph/module-http-client";
 import { makeRuntimeClient as makeHttpClientRuntime } from "@macrograph/module-http-client/Engine";
 import { secureLayer as secureHttpUrlPolicy } from "@macrograph/module-http-client/UrlPolicy";
-import OpenAIModule from "@macrograph/module-openai";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import { layer as openAILayer } from "@macrograph/module-openai/Engine";
-import OpenCodeModule from "@macrograph/module-opencode";
 import {
   OpenCodeEngine,
   RequestFailure as OpenCodeFailure,
 } from "@macrograph/module-opencode/Definition";
 import { makeLayer as makeOpenCodeLayer } from "@macrograph/module-opencode/Engine";
-import SendblueModule from "@macrograph/module-sendblue";
 import { SendblueEngine } from "@macrograph/module-sendblue/Definition";
 import { layer as sendblueLayer } from "@macrograph/module-sendblue/Engine";
-import TwitchModule from "@macrograph/module-twitch";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { Effect, Layer, Schema } from "effect";
 import { RpcTest } from "effect/rpc";
+
+import {
+  DiscordModule,
+  ElevenLabsModule,
+  GitHubModule,
+  HttpClientModule,
+  OpenAIModule,
+  OpenCodeModule,
+  SendblueModule,
+  TwitchModule,
+} from "../modules/BuiltinModules.ts";
 
 const unavailableOpenCode: OpenCodeInstances = {
   connectionTypes: ["managed", "remote"],

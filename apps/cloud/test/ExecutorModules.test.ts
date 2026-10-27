@@ -43,17 +43,19 @@ describe("ExecutorModules", () => {
       });
       const graphId = GraphId.make("cloud");
       const nodes = [
-        node("tick", "util", "Tick"),
-        node("add", "math", "AddInts", { two: 2 }),
-        node("string", "string", "IntToString"),
-        node("chat", "openai", "ChatGPTMessage"),
-        node("speech", "elevenlabs", "ElevenLabsTTS", { voiceId: "voice_123" }),
+        node("tick", "macrograph.app/macrograph/utilities", "Tick"),
+        node("add", "macrograph.app/macrograph/math", "AddInts", { two: 2 }),
+        node("string", "macrograph.app/macrograph/string", "IntToString"),
+        node("chat", "macrograph.app/macrograph/openai", "ChatGPTMessage"),
+        node("speech", "macrograph.app/macrograph/elevenlabs", "ElevenLabsTTS", {
+          voiceId: "voice_123",
+        }),
       ];
       const project: Project.Model = {
         ...Project.empty(),
         engines: {
-          openai: { apiKey: "snapshot-openai" },
-          elevenlabs: { apiKey: "snapshot-elevenlabs" },
+          "macrograph.app/macrograph/openai": { apiKey: "snapshot-openai" },
+          "macrograph.app/macrograph/elevenlabs": { apiKey: "snapshot-elevenlabs" },
         },
         graphs: {
           [graphId]: {
@@ -110,7 +112,10 @@ describe("ExecutorModules", () => {
             .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
         ),
       });
-      yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
+      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/utilities", {
+        _tag: "TickEvent",
+        tick: 1,
+      });
       assert.deepStrictEqual(calls, ["https://api.openai.com", "https://api.elevenlabs.io"]);
       assert.deepStrictEqual([...steps.keys()], ["tick", "chat", "speech"]);
       assert.deepStrictEqual(steps.get("speech")?.outputs, [
@@ -122,21 +127,21 @@ describe("ExecutorModules", () => {
 
   it("registers the cloud-compatible catalog without local or persistent-socket modules", () => {
     assert.deepStrictEqual(ExecutorModules.registry.entries.map(({ id }) => id).sort(), [
-      "discord",
-      "elevenlabs",
-      "github",
-      "http-client",
-      "json",
-      "kofi",
-      "list",
-      "logic",
-      "math",
-      "openai",
-      "opencode",
-      "sendblue",
-      "string",
-      "twitch",
-      "util",
+      "macrograph.app/macrograph/discord",
+      "macrograph.app/macrograph/elevenlabs",
+      "macrograph.app/macrograph/github",
+      "macrograph.app/macrograph/http-client",
+      "macrograph.app/macrograph/json",
+      "macrograph.app/macrograph/kofi",
+      "macrograph.app/macrograph/list",
+      "macrograph.app/macrograph/logic",
+      "macrograph.app/macrograph/math",
+      "macrograph.app/macrograph/openai",
+      "macrograph.app/macrograph/opencode",
+      "macrograph.app/macrograph/sendblue",
+      "macrograph.app/macrograph/string",
+      "macrograph.app/macrograph/twitch",
+      "macrograph.app/macrograph/utilities",
     ]);
   });
 
@@ -146,7 +151,9 @@ describe("ExecutorModules", () => {
         modules: ExecutorModules.registry,
       });
       const result = yield* Effect.result(
-        ExecutorModules.registry.handle(executor, "math", { _tag: "not-an-event" }),
+        ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/math", {
+          _tag: "not-an-event",
+        }),
       );
       assert.isTrue(Result.isFailure(result));
       if (Result.isFailure(result)) assert.strictEqual(result.failure._tag, "SchemaError");
@@ -155,7 +162,7 @@ describe("ExecutorModules", () => {
 
   it.effect("decodes legacy GitHub webhook JSON payloads through the current event type", () =>
     Effect.gen(function* () {
-      const decoded = yield* ExecutorModules.registry.decode("github", {
+      const decoded = yield* ExecutorModules.registry.decode("macrograph.app/macrograph/github", {
         _tag: "GitHubWebhookDelivery",
         webhookId: "primary",
         event: "pull_request",
@@ -182,7 +189,11 @@ describe("ExecutorModules", () => {
 
   it.effect("registers Twitch metadata with credential-owned workflow execution", () =>
     Effect.gen(function* () {
-      assert.isTrue(ExecutorModules.registry.entries.some(({ id }) => id === "twitch"));
+      assert.isTrue(
+        ExecutorModules.registry.entries.some(
+          ({ id }) => id === "macrograph.app/macrograph/twitch",
+        ),
+      );
       const failure = yield* Effect.flip(unavailableTwitchRuntimeClient.SendChatMessage());
       assert.strictEqual(failure._tag, "TwitchExecutionUnavailable");
       assert.include(failure.reason, "no credential-scoped workflow RPC binding exists");
@@ -194,7 +205,7 @@ describe("ExecutorModules", () => {
       const executor = yield* ProjectExecutor.make(Project.empty(), {
         modules: ExecutorModules.registry,
       });
-      yield* ExecutorModules.registry.handle(executor, "kofi", {
+      yield* ExecutorModules.registry.handle(executor, "macrograph.app/macrograph/kofi", {
         _tag: "Donation",
         webhookId: "primary",
         message_id: "message-1",

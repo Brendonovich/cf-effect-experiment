@@ -1,7 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Project } from "@macrograph/core";
+import { PackageId, Project } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/module";
-import UtilitiesModule from "@macrograph/module-utilities";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Cause, Effect, Schema } from "effect";
 import { HttpClient } from "effect/http";
@@ -20,6 +19,7 @@ import GraphExecutionWorkflow, {
   type GraphExecutionWorkflowInput,
 } from "../execution/GraphExecutionWorkflow.ts";
 import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
+import { UtilitiesModule } from "../modules/BuiltinModules.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 
@@ -193,7 +193,8 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
               utilitiesTickEnabled: Object.values(deployment.project.graphs).some((graph) =>
                 Object.values(graph.canvas.nodes).some(
                   (node) =>
-                    node.schema.package === UtilitiesModule.id && node.schema.schema === "Tick",
+                    node.schema.package === PackageId.make(UtilitiesModule.id) &&
+                    node.schema.schema === "Tick",
                 ),
               ),
             })
