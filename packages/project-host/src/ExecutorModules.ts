@@ -1,11 +1,11 @@
 import type { Executor } from "@macrograph/execution";
-import type { Engine, Module } from "@macrograph/module";
+import type { Engine, Module, ModuleId } from "@macrograph/module";
 
-import { Effect, Schema } from "effect";
+import { Effect, Schema, type Scope } from "effect";
 
 export interface Entry {
-  readonly id: string;
-  readonly register: (executor: Executor.Service) => Effect.Effect<void>;
+  readonly id: ModuleId.Id;
+  readonly register: (executor: Executor.Service) => Effect.Effect<void, never, Scope.Scope>;
   readonly decode: (event: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
   readonly handle: (
     executor: Executor.Service,
@@ -15,7 +15,8 @@ export interface Entry {
 
 export interface Registry {
   readonly entries: ReadonlyArray<Entry>;
-  readonly register: (executor: Executor.Service) => Effect.Effect<void>;
+  /** Registers every module with the executor until the current scope closes. */
+  readonly register: (executor: Executor.Service) => Effect.Effect<void, never, Scope.Scope>;
   readonly decode: (moduleId: string, event: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
   readonly handle: (
     executor: Executor.Service,
@@ -26,9 +27,9 @@ export interface Registry {
 
 export const entry = <Definition extends Engine.AnyDef = never>(
   ...args:
-    | readonly [module: Module.Module<never>]
+    | readonly [module: Module.Identified<never>]
     | readonly [
-        module: Module.Module<Definition>,
+        module: Module.Identified<Definition>,
         event: Schema.Codec<Engine.EventOf<Definition>, unknown, never, never>,
         deployment: Engine.AnyDeploymentFor<Definition>,
       ]

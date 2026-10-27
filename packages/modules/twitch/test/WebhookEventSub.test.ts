@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Engine, EngineTest, HttpEndpoint } from "@macrograph/module";
+import { Engine, EngineTest, HttpEndpoint, Module } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
@@ -15,6 +15,8 @@ import {
   make,
   type Request,
 } from "../src/WebhookEventSub.ts";
+
+const moduleId = Module.builtinId("twitch");
 
 interface HttpCall {
   readonly method: string;
@@ -292,10 +294,10 @@ describe("WebhookEventSub", () => {
           },
         },
       });
-      assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
+      assert.deepStrictEqual(yield* HttpIngress.manifest(moduleId, requirements), [
         {
           handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
-          moduleId: "twitch",
+          moduleId,
           instanceKey: HttpEndpoint.InstanceKey.make("account-1"),
           displayName: "EventSub Webhook",
           metadata: { accountId: "account-1" },
@@ -303,7 +305,7 @@ describe("WebhookEventSub", () => {
         },
         {
           handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
-          moduleId: "twitch",
+          moduleId,
           instanceKey: HttpEndpoint.InstanceKey.make("account-2"),
           displayName: "EventSub Webhook",
           metadata: { accountId: "account-2" },
@@ -533,7 +535,7 @@ describe("WebhookEventSub", () => {
         yield* ingressRegistry.mount(
           {
             handlerId: HttpEndpoint.HandlerId.make("twitch:eventsub"),
-            moduleId: "twitch",
+            moduleId,
             instanceKey: HttpEndpoint.InstanceKey.make(accountId),
             displayName: "EventSub Webhook",
             metadata: { accountId },
@@ -650,7 +652,7 @@ describe("WebhookEventSub", () => {
         });
         assert.strictEqual(notification.status, 204);
         assert.strictEqual(notification.events.length, 1);
-        assert.strictEqual(notification.events[0]?.moduleId, "twitch");
+        assert.strictEqual(notification.events[0]?.moduleId, moduleId);
         assert.strictEqual(notification.events[0]?.eventType, "channel.ban");
         assert.strictEqual(notification.events[0]?.eventId, "notification-1");
         assert.deepStrictEqual(
@@ -764,7 +766,9 @@ describe("WebhookEventSub", () => {
         );
         assert.isTrue(clientRefreshes > refreshesBeforeDisconnect);
       }).pipe(
-        Effect.provide(HttpIngress.layer(deployment.httpIngress.handlers)),
+        Effect.provide(
+          HttpIngress.layer([{ moduleId, handlers: deployment.httpIngress.handlers }]),
+        ),
         Effect.provide(dependencies),
       );
     }),

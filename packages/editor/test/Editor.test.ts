@@ -12,9 +12,9 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { t, Engine, Module, Resource } from "@macrograph/module";
-import UtilitiesModule from "@macrograph/module-utilities";
-import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
+import { t, Engine, Module, Resource, ModuleId } from "@macrograph/module";
+import UtilitiesDefault from "@macrograph/module-utilities";
+import UtilitiesStandalone from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
@@ -27,88 +27,95 @@ const schemaRef = {
 };
 
 const formatSchemaRef = {
-  package: PackageId.make("format"),
+  package: PackageId.make("local/test/format"),
   schema: SchemaId.make("format-string"),
 };
 
+const UtilitiesModule = Module.identify(Module.builtinId("utilities"), UtilitiesDefault);
+const UtilitiesDeployment = Engine.identify(UtilitiesModule.id, UtilitiesStandalone);
+
 const utilitiesFormatSchemaRef = {
-  package: PackageId.make("util"),
+  package: PackageId.make(UtilitiesModule.id),
   schema: SchemaId.make("FormatString"),
 };
 
-const makeFormatModule = (id: string) =>
-  Module.make({
-    id,
-    effect: (context) =>
-      context.schema.register({
-        id: "format-string",
-        name: "Format String",
-        type: "pure",
-        properties: {
-          format: { name: "Format", type: t.String, defaultValue: "" },
-          kind: { name: "Integer inputs", type: t.String, optional: true },
-        },
-        io: (io, properties) => {
-          const format = typeof properties.format === "string" ? properties.format : "";
-          const names = Array.from(
-            format.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g),
-            (match) => match[1],
-          ).filter((name): name is string => name !== undefined);
-          return {
-            values: Array.from(new Set(names), (name) =>
-              io.data.in(name, properties.kind === "int" ? t.Int : t.String, {
-                name,
-              }),
-            ),
-            result: io.data.out("result", t.String),
-          };
-        },
-        run: () => Effect.void,
-      }),
-  });
+const makeFormatModule = (name: string) =>
+  Module.identify(
+    ModuleId.Id.make(`local/test/${name}`),
+    Module.make({
+      effect: (context) =>
+        context.schema.register({
+          id: "format-string",
+          name: "Format String",
+          type: "pure",
+          properties: {
+            format: { name: "Format", type: t.String, defaultValue: "" },
+            kind: { name: "Integer inputs", type: t.String, optional: true },
+          },
+          io: (io, properties) => {
+            const format = typeof properties.format === "string" ? properties.format : "";
+            const names = Array.from(
+              format.matchAll(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g),
+              (match) => match[1],
+            ).filter((name): name is string => name !== undefined);
+            return {
+              values: Array.from(new Set(names), (name) =>
+                io.data.in(name, properties.kind === "int" ? t.Int : t.String, {
+                  name,
+                }),
+              ),
+              result: io.data.out("result", t.String),
+            };
+          },
+          run: () => Effect.void,
+        }),
+    }),
+  );
 
 const FormatModule = makeFormatModule("format");
 const LateFormatModule = makeFormatModule("late-format");
 const lateFormatSchemaRef = {
-  package: PackageId.make("late-format"),
+  package: PackageId.make("local/test/late-format"),
   schema: SchemaId.make("format-string"),
 };
 
 const suggestionSchemaRef = {
-  package: PackageId.make("suggestions"),
+  package: PackageId.make("local/test/suggestions"),
   schema: SchemaId.make("search"),
 };
 
-const SuggestionModule = Module.make({
-  id: "suggestions",
-  effect: (context) =>
-    context.schema.register({
-      id: "search",
-      name: "Search",
-      description: "Suggests values using the current node state.",
-      properties: {
-        prefix: { name: "Prefix", type: t.String, defaultValue: "default" },
-        enabled: { name: "Enabled", type: t.Bool, optional: true },
-      },
-      io: (io) => ({
-        query: io.data.in("query", t.String, {
-          suggestions: ({ properties, inputDefaults }) =>
-            Effect.succeed([
-              `${properties.prefix}:${typeof inputDefaults.query === "string" ? inputDefaults.query : "empty"}`,
-            ]),
+const SuggestionModule = Module.identify(
+  ModuleId.Id.make("local/test/suggestions"),
+  Module.make({
+    effect: (context) =>
+      context.schema.register({
+        id: "search",
+        name: "Search",
+        description: "Suggests values using the current node state.",
+        properties: {
+          prefix: { name: "Prefix", type: t.String, defaultValue: "default" },
+          enabled: { name: "Enabled", type: t.Bool, optional: true },
+        },
+        io: (io) => ({
+          query: io.data.in("query", t.String, {
+            suggestions: ({ properties, inputDefaults }) =>
+              Effect.succeed([
+                `${properties.prefix}:${typeof inputDefaults.query === "string" ? inputDefaults.query : "empty"}`,
+              ]),
+          }),
+          broken: io.data.in("broken", t.String, {
+            suggestions: () => Effect.die("resolver failed"),
+          }),
+          throws: io.data.in("throws", t.String, {
+            suggestions: () => {
+              throw new Error("resolver threw");
+            },
+          }),
         }),
-        broken: io.data.in("broken", t.String, {
-          suggestions: () => Effect.die("resolver failed"),
-        }),
-        throws: io.data.in("throws", t.String, {
-          suggestions: () => {
-            throw new Error("resolver threw");
-          },
-        }),
+        run: () => Effect.void,
       }),
-      run: () => Effect.void,
-    }),
-});
+  }),
+);
 
 class AccountResource extends Resource.make<AccountResource, string>()("account", {
   name: "Account",
@@ -124,35 +131,40 @@ class ResourceEngine extends Engine.make({
     }),
   ),
 }) {}
-const ResourceModule = Module.make({
-  id: "resource-module",
-  name: "Resources",
-  engine: ResourceEngine,
-  effect: (context) =>
-    context.schema.register({
-      id: "action",
-      name: "Action",
-      properties: { account: { name: "Account", resource: AccountResource } },
-      io: (io, properties) => ({
-        account: io.data.in(properties.account ?? "account", t.String, {
-          suggestions: ({ properties, inputDefaults, engine }) => {
-            const query = inputDefaults[properties.account];
-            return engine.GetSuggestions({
-              account: properties.account,
-              query: typeof query === "string" ? query : "",
-            });
-          },
+const ResourceModule = Module.identify(
+  ModuleId.Id.make("local/test/resource-module"),
+  Module.make({
+    name: "Resources",
+    engine: ResourceEngine,
+    effect: (context) =>
+      context.schema.register({
+        id: "action",
+        name: "Action",
+        properties: { account: { name: "Account", resource: AccountResource } },
+        io: (io, properties) => ({
+          account: io.data.in(properties.account ?? "account", t.String, {
+            suggestions: ({ properties, inputDefaults, engine }) => {
+              const query = inputDefaults[properties.account];
+              return engine.GetSuggestions({
+                account: properties.account,
+                query: typeof query === "string" ? query : "",
+              });
+            },
+          }),
         }),
+        run: () => Effect.void,
       }),
-      run: () => Effect.void,
-    }),
-});
-const ResourceDeployment = Engine.deployment(
-  ResourceModule,
-  ResourceEngine.toLayer(() => Effect.die("not hosted in editor unit test")),
+  }),
+);
+const ResourceDeployment = Engine.identify(
+  ResourceModule.id,
+  Engine.deployment(
+    ResourceModule,
+    ResourceEngine.toLayer(() => Effect.die("not hosted in editor unit test")),
+  ),
 );
 const resourceSchemaRef = {
-  package: PackageId.make("resource-module"),
+  package: PackageId.make("local/test/resource-module"),
   schema: SchemaId.make("action"),
 };
 
@@ -230,7 +242,7 @@ describe("Resource defaults", () => {
       const legacy = ResourceConstant.Model.make({
         id: ResourceConstant.Id.make("legacy"),
         name: "Legacy account",
-        resource: { package: "resource-module", resource: "account" },
+        resource: { package: "local/test/resource-module", resource: "account" },
         value: "account-1",
       });
       const otherPackage = {
@@ -288,7 +300,7 @@ describe("Resource defaults", () => {
     Effect.gen(function* () {
       const editor = yield* Editor.Service;
       yield* editor.module(ResourceModule, ResourceDeployment);
-      yield* editor.engine.hostResource("resource-module", "account", {
+      yield* editor.engine.hostResource(ModuleId.Id.make("local/test/resource-module"), "account", {
         values: Effect.succeed([
           { id: "account-1", display: "Streamer" },
           { id: "account-2", display: "Moderator" },
@@ -304,7 +316,7 @@ describe("Resource defaults", () => {
       expect(unbound.node.properties).toEqual({});
 
       const first = yield* editor.constant.create({
-        package: "resource-module",
+        package: "local/test/resource-module",
         resource: "account",
       });
       const second = yield* editor.constant.create(first.constant.resource);
@@ -436,7 +448,7 @@ describe("Resource defaults", () => {
       const editor = yield* Editor.Service;
       yield* editor.module(ResourceModule, ResourceDeployment);
       const first = yield* editor.constant.create({
-        package: "resource-module",
+        package: "local/test/resource-module",
         resource: "account",
       });
       const second = yield* editor.constant.create(first.constant.resource);
@@ -619,9 +631,14 @@ it.layer(TestLayer)((it) => {
     it.effect("retrieves hosted module client state", () =>
       Effect.gen(function* () {
         const editor = yield* Editor.Service;
-        yield* editor.engine.hostClientState("module", Effect.succeed({ connected: true }));
+        yield* editor.engine.hostClientState(
+          ModuleId.Id.make("local/test/module"),
+          Effect.succeed({ connected: true }),
+        );
 
-        expect(yield* editor.engine.getClientState("module")).toEqual({ connected: true });
+        expect(yield* editor.engine.getClientState("local/test/module")).toEqual({
+          connected: true,
+        });
         const missing = yield* editor.engine.getClientState("missing").pipe(Effect.result);
         expect(Result.isFailure(missing)).toBe(true);
         if (Result.isFailure(missing)) expect(missing.failure._tag).toBe("EngineNotHosted");
@@ -633,12 +650,12 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
 
-        yield* editor.engine.dirtyClientState("module");
+        yield* editor.engine.dirtyClientState("local/test/module");
 
         expect(yield* PubSub.take(events)).toEqual({
           _tag: "ModuleClientStateDirty",
           actor: Actor.system,
-          moduleId: "module",
+          moduleId: "local/test/module",
         });
       }),
     );
@@ -651,29 +668,35 @@ it.layer(TestLayer)((it) => {
           storage: Schema.Struct({ accounts: Schema.Array(Schema.String) }),
           initialStorage: { accounts: [] },
         });
-        const TestModule = Module.make({
-          id: "engine-test",
-          engine: TestEngine,
-          effect: () => Effect.void,
-        });
+        const TestModule = Module.identify(
+          ModuleId.Id.make("local/test/engine-test"),
+          Module.make({
+            engine: TestEngine,
+            effect: () => Effect.void,
+          }),
+        );
         if (false) {
           // @ts-expect-error Deployment layers must provide the declared engine service.
-          Engine.deployment(TestModule, Layer.empty);
+          Engine.identify(TestModule.id, Engine.deployment(TestModule, Layer.empty));
         }
-        const deployment = Engine.deployment(
-          TestModule,
-          TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        const deployment = Engine.identify(
+          TestModule.id,
+          Engine.deployment(
+            TestModule,
+            TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+          ),
         );
         // @ts-expect-error Engine modules cannot be registered without a deployment.
         editor.module(TestModule);
         yield* editor.module(TestModule, deployment);
+        expect((yield* PubSub.take(events))._tag).toBe("PackagesChanged");
 
-        const event = yield* editor.engine.setState("engine-test", {
+        const event = yield* editor.engine.setState("local/test/engine-test", {
           accounts: ["one", "two"],
         });
 
         expect(yield* PubSub.take(events)).toEqual(event);
-        expect((yield* editor.project.get()).engines["engine-test"]).toEqual({
+        expect((yield* editor.project.get()).engines["local/test/engine-test"]).toEqual({
           accounts: ["one", "two"],
         });
       }),
@@ -685,7 +708,7 @@ it.layer(TestLayer)((it) => {
         const packages = yield* Packages.Service;
         yield* editor.module(ResourceModule, ResourceDeployment);
         const metadata = (yield* packages.getPackages()).find(
-          (pkg) => pkg.id === "resource-module",
+          (pkg) => pkg.id === "local/test/resource-module",
         );
         assert.deepStrictEqual(metadata?.resources, [
           {
@@ -694,17 +717,21 @@ it.layer(TestLayer)((it) => {
             description: "An authenticated account.",
           },
         ]);
-        yield* editor.engine.hostResource("resource-module", "account", {
-          values: Effect.succeed([
-            { id: "account-1", display: "Streamer" },
-            { id: "account-2", display: "Moderator" },
-          ]),
-          reload: Effect.void,
-          changes: Stream.make([{ id: "account-1", display: "Streamer" }]),
-        });
+        yield* editor.engine.hostResource(
+          ModuleId.Id.make("local/test/resource-module"),
+          "account",
+          {
+            values: Effect.succeed([
+              { id: "account-1", display: "Streamer" },
+              { id: "account-2", display: "Moderator" },
+            ]),
+            reload: Effect.void,
+            changes: Stream.make([{ id: "account-1", display: "Streamer" }]),
+          },
+        );
 
         const created = yield* editor.constant.create({
-          package: "resource-module",
+          package: "local/test/resource-module",
           resource: "account",
         });
         const renamed = yield* editor.constant.rename(created.constant.id, "Moderator");
@@ -718,7 +745,7 @@ it.layer(TestLayer)((it) => {
             graphID: graph.graph.id,
             node: {
               schema: {
-                package: PackageId.make("resource-module"),
+                package: PackageId.make("local/test/resource-module"),
                 schema: SchemaId.make("action"),
               },
               properties: { account: "missing" },
@@ -732,7 +759,7 @@ it.layer(TestLayer)((it) => {
           graphID: graph.graph.id,
           node: {
             schema: {
-              package: PackageId.make("resource-module"),
+              package: PackageId.make("local/test/resource-module"),
               schema: SchemaId.make("action"),
             },
             properties: { account: created.constant.id },
@@ -755,7 +782,7 @@ it.layer(TestLayer)((it) => {
           _tag: "InvalidInputDefaultError",
           reason: "Suggestion resolver failed",
         });
-        yield* editor.engine.hostRuntimeClient("resource-module", {
+        yield* editor.engine.hostRuntimeClient(ModuleId.Id.make("local/test/resource-module"), {
           GetSuggestions: (request: { account: string; query: string }) => {
             expect(request).toEqual({ account: "account-1", query: "saved" });
             return editor.node
@@ -769,7 +796,7 @@ it.layer(TestLayer)((it) => {
           },
         });
         expect(yield* getSuggestions).toEqual(["live value"]);
-        yield* editor.engine.hostRuntimeClient("resource-module", {
+        yield* editor.engine.hostRuntimeClient(ModuleId.Id.make("local/test/resource-module"), {
           GetSuggestions: () => Effect.fail("disconnected"),
         });
         expect(yield* Effect.flip(getSuggestions)).toMatchObject({
@@ -841,6 +868,7 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
         yield* editor.module(UtilitiesModule, UtilitiesDeployment);
+        expect((yield* PubSub.take(events))._tag).toBe("PackagesChanged");
 
         const graphEvent = yield* editor.graph.create({ name: "Dynamic IO" });
         yield* PubSub.take(events);
@@ -927,6 +955,7 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
         yield* editor.module(SuggestionModule);
+        expect((yield* PubSub.take(events))._tag).toBe("PackagesChanged");
         const packages = yield* Packages.Service;
         const metadata = yield* packages.getSchema(suggestionSchemaRef);
         expect(metadata.description).toBe("Suggests values using the current node state.");
@@ -1074,6 +1103,7 @@ it.layer(TestLayer)((it) => {
         const editor = yield* Editor.Service;
         const events = yield* makeEventPull;
         yield* editor.module(FormatModule);
+        expect((yield* PubSub.take(events))._tag).toBe("PackagesChanged");
         const graph = yield* editor.graph.create({ name: "Dynamic Types" });
         yield* PubSub.take(events);
         const source = yield* editor.node.create({
@@ -1135,7 +1165,7 @@ it.layer(TestLayer)((it) => {
         expect(node.io.dataInputs[0]?.id).toBe("dynamic");
 
         yield* packages.loadPackage({
-          id: PackageId.make("format"),
+          id: PackageId.make("local/test/format"),
           name: "Replacement",
           resources: [],
           schemas: [
@@ -1545,27 +1575,29 @@ it.layer(TestLayer)((it) => {
         });
 
         yield* editor.module(
-          Module.make({
-            id: "module",
-            name: "Module",
-            effect: (context) =>
-              context.schema.register({
-                id: "schema",
-                name: "Schema",
-                description: "A test schema.",
-                io: (io) => ({
-                  next: io.exec.out("next", { name: "Next" }),
-                  names: io.data.in("names", t.List(t.String), { name: "Names" }),
-                  optional: io.data.in("optional", t.Option(t.Int)),
-                  result: io.data.out("result", t.Option(t.String)),
+          Module.identify(
+            ModuleId.Id.make("local/test/module"),
+            Module.make({
+              name: "Module",
+              effect: (context) =>
+                context.schema.register({
+                  id: "schema",
+                  name: "Schema",
+                  description: "A test schema.",
+                  io: (io) => ({
+                    next: io.exec.out("next", { name: "Next" }),
+                    names: io.data.in("names", t.List(t.String), { name: "Names" }),
+                    optional: io.data.in("optional", t.Option(t.Int)),
+                    result: io.data.out("result", t.Option(t.String)),
+                  }),
+                  run: () => Effect.void,
                 }),
-                run: () => Effect.void,
-              }),
-          }),
+            }),
+          ),
         );
 
         const schema = yield* packages.getSchema({
-          package: PackageId.make("module"),
+          package: PackageId.make("local/test/module"),
           schema: SchemaId.make("schema"),
         });
         expect(schema.name).toBe("Schema");
@@ -1585,7 +1617,10 @@ it.layer(TestLayer)((it) => {
         const node = yield* editor.node.create({
           graphID: graph.graph.id,
           node: {
-            schema: { package: PackageId.make("module"), schema: SchemaId.make("schema") },
+            schema: {
+              package: PackageId.make("local/test/module"),
+              schema: SchemaId.make("schema"),
+            },
             inputDefaults: {
               names: ["one", "two"],
               optional: { _tag: "Some", value: 1 },

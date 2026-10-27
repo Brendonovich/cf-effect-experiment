@@ -132,9 +132,13 @@ describe("local browser runtime", () => {
         const connection = yield* makeLocalConnection(makeLocalProjectStore(storage), credentials);
         const catalog = yield* connection.client.GetCredentialCatalog();
         assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
-        const settings = yield* connectSettings(connection, "twitch");
+        const settings = yield* connectSettings(connection, "macrograph.app/macrograph/twitch");
         assert.deepStrictEqual(
-          yield* settings.load(connection.client.GetModuleClientState({ moduleId: "twitch" })),
+          yield* settings.load(
+            connection.client.GetModuleClientState({
+              moduleId: "macrograph.app/macrograph/twitch",
+            }),
+          ),
           {
             transport: "websocket",
             accounts: [
@@ -149,14 +153,18 @@ describe("local browser runtime", () => {
         );
         assert.deepStrictEqual(
           yield* connection.client.GetResourceValues({
-            package: "twitch",
+            package: "macrograph.app/macrograph/twitch",
             resource: "TwitchAccount",
           }),
           [{ id: "twitch-1", display: "Streamer" }],
         );
         yield* connection.client.DisconnectCredentialAuth();
         assert.deepStrictEqual(
-          yield* settings.load(connection.client.GetModuleClientState({ moduleId: "twitch" })),
+          yield* settings.load(
+            connection.client.GetModuleClientState({
+              moduleId: "macrograph.app/macrograph/twitch",
+            }),
+          ),
           { transport: "websocket", accounts: [] },
         );
       }),
@@ -191,42 +199,57 @@ describe("local browser runtime", () => {
         );
 
         const packageIds = (yield* connection.client.GetPackages({})).map((pkg) => pkg.id).sort();
-        assert.deepStrictEqual(packageIds, [
-          "CustomTypes",
-          "http-client",
-          "json",
-          "list",
-          "logic",
-          "macrograph-functions",
-          "macrograph-queues",
-          "math",
-          "obs",
-          "string",
-          "twitch",
-          "util",
-          "websocket-client",
-        ]);
+        assert.deepStrictEqual(
+          packageIds,
+          [
+            ...[
+              "macrograph.app/macrograph/custom-types",
+              "macrograph.app/macrograph/http-client",
+              "macrograph.app/macrograph/json",
+              "macrograph.app/macrograph/list",
+              "macrograph.app/macrograph/logic",
+              "macrograph.app/macrograph/functions",
+              "macrograph.app/macrograph/queues",
+              "macrograph.app/macrograph/math",
+              "macrograph.app/macrograph/obs",
+              "macrograph.app/macrograph/string",
+              "macrograph.app/macrograph/twitch",
+              "macrograph.app/macrograph/utilities",
+              "macrograph.app/macrograph/websocket-client",
+            ],
+          ].sort(),
+        );
         assert.strictEqual(new Set(packageIds).size, packageIds.length);
-        for (const moduleId of ["util", "obs", "twitch", "websocket-client"])
+        for (const moduleId of [
+          "macrograph.app/macrograph/utilities",
+          "macrograph.app/macrograph/obs",
+          "macrograph.app/macrograph/twitch",
+          "macrograph.app/macrograph/websocket-client",
+        ])
           assert.strictEqual(
             (yield* connection.moduleRpcProtocol(moduleId))._tag,
             "InProcess",
             moduleId,
           );
-        assert.isTrue(Exit.isFailure(yield* Effect.exit(connection.moduleRpcProtocol("json"))));
+        assert.isTrue(Exit.isFailure(yield* Effect.exit(connection.moduleRpcProtocol("macrograph.app/macrograph/json"))));
         assert.deepStrictEqual(
-          yield* (yield* connectSettings(connection, "util")).load(
-            connection.client.GetModuleClientState({ moduleId: "util" }),
+          yield* (yield* connectSettings(connection, "macrograph.app/macrograph/utilities")).load(
+            connection.client.GetModuleClientState({
+              moduleId: "macrograph.app/macrograph/utilities",
+            }),
           ),
           { running: true },
         );
         assert.deepStrictEqual(
-          yield* connection.client.GetResourceValues({ package: "obs", resource: "OBSWebSocket" }),
+          yield* connection.client.GetResourceValues({
+            package: "macrograph.app/macrograph/obs",
+            resource: "OBSWebSocket",
+          }),
           [],
         );
         assert.deepStrictEqual(
           yield* connection.client.GetResourceValues({
-            package: "twitch",
+            package: "macrograph.app/macrograph/twitch",
             resource: "TwitchAccount",
           }),
           [],
@@ -284,7 +307,7 @@ describe("local browser runtime", () => {
             socket: {
               id: ResourceConstant.Id.make("socket"),
               name: "OBS",
-              resource: { package: "obs", resource: "OBSWebSocket" },
+              resource: { package: "macrograph.app/macrograph/obs", resource: "OBSWebSocket" },
               value: "ws://localhost:4455",
             },
           },
@@ -299,7 +322,7 @@ describe("local browser runtime", () => {
                     id: NodeId.make("event"),
                     name: "Custom Event",
                     schema: {
-                      package: PackageId.make("obs"),
+                      package: PackageId.make("macrograph.app/macrograph/obs"),
                       schema: SchemaId.make("CustomEvent"),
                     },
                     properties: { socket: "socket" },
@@ -312,7 +335,7 @@ describe("local browser runtime", () => {
             },
           },
           engines: {
-            obs: {
+            "macrograph.app/macrograph/obs": {
               sockets: {
                 "ws://localhost:4455": {
                   password: "reload-secret",
@@ -366,7 +389,7 @@ describe("local browser runtime", () => {
               Stream.runHead,
             ),
           );
-          assert.strictEqual(events[0]?.moduleId, "obs");
+          assert.strictEqual(events[0]?.moduleId, "macrograph.app/macrograph/obs");
           assert.strictEqual(events[0]?.name, "CustomEvent");
           assert.include(events[0]!.payload, "hello");
           assert.lengthOf(events[0]!.nodes, 1);

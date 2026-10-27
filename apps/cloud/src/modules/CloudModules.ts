@@ -1,18 +1,27 @@
 import { Editor } from "@macrograph/editor";
+import { Engine } from "@macrograph/module";
 import { DiscordEngine } from "@macrograph/module-discord/Definition";
-import DiscordDeployment from "@macrograph/module-discord/RestDeployment";
+import DiscordRestDeployment from "@macrograph/module-discord/RestDeployment";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
-import ElevenLabsDeployment from "@macrograph/module-elevenlabs/Deployment";
-import JsonModule from "@macrograph/module-json";
-import ListModule from "@macrograph/module-list";
-import LogicModule from "@macrograph/module-logic";
-import MathModule from "@macrograph/module-math";
+import ElevenLabsStandaloneDeployment from "@macrograph/module-elevenlabs/Deployment";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
-import OpenAIDeployment from "@macrograph/module-openai/Deployment";
-import OpenCodeModule from "@macrograph/module-opencode";
-import StringModule from "@macrograph/module-string";
+import OpenAIStandaloneDeployment from "@macrograph/module-openai/Deployment";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { Effect, Layer } from "effect";
+
+import {
+  ids,
+  JsonModule,
+  ListModule,
+  LogicModule,
+  MathModule,
+  OpenCodeModule,
+  StringModule,
+} from "./BuiltinModules.ts";
+
+const OpenAIDeployment = Engine.identify(ids.openai, OpenAIStandaloneDeployment);
+const ElevenLabsDeployment = Engine.identify(ids.elevenlabs, ElevenLabsStandaloneDeployment);
+const DiscordDeployment = Engine.identify(ids.discord, DiscordRestDeployment);
 
 export const statelessModules = [
   JsonModule,

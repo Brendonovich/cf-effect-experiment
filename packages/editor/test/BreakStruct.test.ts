@@ -11,13 +11,13 @@ import {
   SchemaId,
   Wildcards,
 } from "@macrograph/core";
-import { t, Module } from "@macrograph/module";
+import { t, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Result } from "effect";
 
 import { Editor, Packages } from "../src/index.ts";
 
-// Namespaced by the module that owns them in the module-owned variant.
+// The host scopes module-owned type ids to the module id in the module-owned variant.
 const childId = t.DefinitionId.make("break-test/child"),
   rootId = t.DefinitionId.make("break-test/root");
 const definitions: t.Definitions = {
@@ -48,17 +48,19 @@ const setup = (moduleOwned = false) =>
     const editor = yield* Editor.Service;
     yield* editor.project.get();
     yield* editor.module(
-      Module.make({
-        id: "break-test",
-        ...(moduleOwned ? { types: definitions } : {}),
-        effect: (context) =>
-          context.schema.register({
-            id: "root",
-            type: "pure",
-            io: (io) => ({ value: io.data.out("value", t.Struct(rootId)) }),
-            run: () => Effect.void,
-          }),
-      }),
+      Module.identify(
+        ModuleId.Id.make("local/test/break-test"),
+        Module.make({
+          ...(moduleOwned ? { types: definitions } : {}),
+          effect: (context) =>
+            context.schema.register({
+              id: "root",
+              type: "pure",
+              io: (io) => ({ value: io.data.out("value", t.Struct(rootId)) }),
+              run: () => Effect.void,
+            }),
+        }),
+      ),
     );
     const create = (schema: string, properties = {}) =>
       editor.node.create({
@@ -71,7 +73,7 @@ const setup = (moduleOwned = false) =>
     const root = yield* editor.node.create({
       graphID: "graph",
       node: {
-        schema: { package: PackageId.make("break-test"), schema: SchemaId.make("root") },
+        schema: { package: PackageId.make("local/test/break-test"), schema: SchemaId.make("root") },
       },
     });
     const first = yield* create("BreakStruct");
@@ -95,7 +97,9 @@ it.effect("infers Break Struct fields from module-owned type definitions", () =>
     yield* connect(root.node.id, "value", first.node.id);
     expect(
       (yield* editor.project.rendered()).graphs.graph!.nodes[first.node.id]!.io.dataOutputs,
-    ).toEqual([{ id: 'field:"child"', name: "child", type: t.Struct(childId) }]);
+    ).toEqual([
+      { id: 'field:"child"', name: "child", type: t.Struct(`local/test/break-test/${childId}`) },
+    ]);
   }).pipe(Effect.provide(TestLayer)),
 );
 
@@ -153,20 +157,24 @@ it.effect("rejects non-struct input connections and reacts to changed definition
   Effect.gen(function* () {
     const { editor, root, first, connect } = yield* setup();
     yield* editor.module(
-      Module.make({
-        id: "test",
-        effect: (context) =>
-          context.schema.register({
-            id: "string",
-            type: "pure",
-            io: (io) => ({ out: io.data.out("out", t.String) }),
-            run: () => Effect.void,
-          }),
-      }),
+      Module.identify(
+        ModuleId.Id.make("local/test/test"),
+        Module.make({
+          effect: (context) =>
+            context.schema.register({
+              id: "string",
+              type: "pure",
+              io: (io) => ({ out: io.data.out("out", t.String) }),
+              run: () => Effect.void,
+            }),
+        }),
+      ),
     );
     const source = yield* editor.node.create({
       graphID: "graph",
-      node: { schema: { package: PackageId.make("test"), schema: SchemaId.make("string") } },
+      node: {
+        schema: { package: PackageId.make("local/test/test"), schema: SchemaId.make("string") },
+      },
     });
     expect((yield* Effect.flip(connect(source.node.id, "out", first.node.id)))._tag).toBe(
       "InvalidConnectionError",
@@ -192,16 +200,18 @@ it.effect("infers Make Struct field inputs from its wildcard output without prop
   Effect.gen(function* () {
     const { editor, connect } = yield* setup();
     yield* editor.module(
-      Module.make({
-        id: "make-test",
-        effect: (context) =>
-          context.schema.register({
-            id: "root",
-            type: "pure",
-            io: (io) => ({ value: io.data.in("value", t.Struct(rootId)) }),
-            run: () => Effect.void,
-          }),
-      }),
+      Module.identify(
+        ModuleId.Id.make("local/test/make-test"),
+        Module.make({
+          effect: (context) =>
+            context.schema.register({
+              id: "root",
+              type: "pure",
+              io: (io) => ({ value: io.data.in("value", t.Struct(rootId)) }),
+              run: () => Effect.void,
+            }),
+        }),
+      ),
     );
     const make = yield* editor.node.create({
       graphID: "graph",
@@ -212,7 +222,7 @@ it.effect("infers Make Struct field inputs from its wildcard output without prop
     const sink = yield* editor.node.create({
       graphID: "graph",
       node: {
-        schema: { package: PackageId.make("make-test"), schema: SchemaId.make("root") },
+        schema: { package: PackageId.make("local/test/make-test"), schema: SchemaId.make("root") },
       },
     });
     expect(make.node.properties).toEqual({});

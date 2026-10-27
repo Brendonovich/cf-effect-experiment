@@ -70,7 +70,6 @@ const isJsonObject = (
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const GitHubModule = Module.make({
-  id: "github",
   name: "GitHub",
   engine: GitHubEngine,
   types: WebhookTypeDefinitions,

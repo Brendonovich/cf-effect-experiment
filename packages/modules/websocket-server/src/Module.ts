@@ -19,7 +19,6 @@ const serverProperty = {
 } as const;
 
 const WebSocketServerModule = Module.make({
-  id: "websocket-server",
   name: "WebSocket Server",
   engine: WebSocketServerEngine,
   effect: Effect.fnUntraced(function* (context) {

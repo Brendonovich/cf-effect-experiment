@@ -5,19 +5,30 @@ import * as Scope from "effect/Scope";
 
 import type { Catalog } from "./Credential.ts";
 import type { Live, Requirement } from "./HttpIngress.ts";
-import type { Module } from "./Module.ts";
 import type * as PollingIngress from "./PollingIngress.ts";
 import type { ResourceClass, ToHandler } from "./Resource.ts";
 
 import { unavailable } from "./Credential.ts";
+import * as BoundKey from "./internal/boundKey.ts";
+import * as Module from "./Module.ts";
+import * as ModuleId from "./ModuleId.ts";
+import { BindTypeId } from "./Resource.ts";
 
 export const EngineTypeId: unique symbol = Symbol.for("~macrograph/Module/Engine");
+/**
+ * Binds an engine or resource definition to the module id it is mounted under. Definitions are
+ * created before their module id is known, so their service keys are derived lazily from the id.
+ */
+export { BindTypeId };
+
+export type Bind = (moduleId: ModuleId.Id) => void;
 
 export interface AnyDef {
   readonly [EngineTypeId]: typeof EngineTypeId;
   readonly Storage: S.Codec<unknown, unknown, never, never>;
   readonly InitialStorage: unknown;
   readonly Resource: ReadonlyArray<ResourceClass<any, any, any>>;
+  readonly [BindTypeId]?: Bind;
 }
 
 export type EventOf<Definition extends AnyDef> = Definition extends {
@@ -71,10 +82,11 @@ export type Def<
   ClientRpcs extends Rpc.Any = never,
 > = Context.ServiceClass<
   Instance<Resource, Rpcs, ClientState, ClientRpcs>,
-  `macrograph/Module/Engine/${number}`,
+  `macrograph/Module/Engine/${string}`,
   Service<Resource, Rpcs, ClientState, ClientRpcs>
 > & {
   readonly [EngineTypeId]: typeof EngineTypeId;
+  readonly [BindTypeId]: Bind;
   readonly Resource: Resource[];
   readonly Event: Event[];
   readonly Storage: Storage;
@@ -103,7 +115,7 @@ export interface EngineContext<
   Event extends { _tag: string } = never,
   Storage extends S.Codec<unknown, unknown, never, never> = typeof S.Never,
 > extends Context.ServiceClass.Shape<
-  `macrograph/Module/EngineContext/${number}`,
+  `macrograph/Module/EngineContext/${string}`,
   ToLayerCtx<Resource, Event, Storage>
 > {}
 
@@ -113,7 +125,7 @@ export interface Instance<
   ClientState extends S.Top = typeof S.Never,
   ClientRpcs extends Rpc.Any = never,
 > extends Context.ServiceClass.Shape<
-  `macrograph/Module/Engine/${number}`,
+  `macrograph/Module/Engine/${string}`,
   Service<Resource, Rpcs, ClientState, ClientRpcs>
 > {}
 
@@ -183,8 +195,6 @@ export type ToLayerCtx<
   emit: (event: Event) => Effect.Effect<void>;
 };
 
-let engineSequence = 0;
-
 export const make = <
   Resource extends ResourceClass<any, any, any> = never,
   Event extends { _tag: string } = never,
@@ -205,17 +215,26 @@ export const make = <
     rpcs: RpcGroup.RpcGroup<ClientRpcs>;
   };
 }): Def<Resource, Event, Storage, Rpcs, ClientState, ClientRpcs> => {
-  const id = engineSequence++;
+  const unboundEngineKey: `macrograph/Module/Engine/${string}` = "macrograph/Module/Engine/unbound";
+  const engineKey = BoundKey.make((scope) => `macrograph/Module/Engine/${scope}`);
+  const contextKey = BoundKey.make((scope) => `macrograph/Module/EngineContext/${scope}`);
+  const resources = opts.resources ?? [];
   const EngineContextTag = Context.Service<
     EngineContext<Resource, Event, Storage>,
     ToLayerCtx<Resource, Event, Storage>
-  >(`macrograph/Module/EngineContext/${id}`);
+  >("macrograph/Module/EngineContext/unbound");
+  BoundKey.install(EngineContextTag, contextKey.key);
   class Engine extends Context.Service<
     Instance<Resource, Rpcs, ClientState, ClientRpcs>,
     Service<Resource, Rpcs, ClientState, ClientRpcs>
-  >()(`macrograph/Module/Engine/${id}`) {
+  >()(unboundEngineKey) {
     static readonly [EngineTypeId]: typeof EngineTypeId = EngineTypeId;
-    static Resource: Resource[] = opts.resources ?? [];
+    static readonly [BindTypeId]: Bind = (moduleId) => {
+      engineKey.bind(moduleId);
+      contextKey.bind(moduleId);
+      for (const resource of resources) resource[BindTypeId](moduleId);
+    };
+    static Resource: Resource[] = resources;
     static Event: Event[] = opts.events ?? [];
     static Storage = (opts.storage ?? S.Never) as Storage;
     static InitialStorage = opts.initialStorage;
@@ -233,21 +252,32 @@ export const make = <
       return Layer.effect(Engine)(Effect.flatMap(EngineContextTag, effect));
     }
   }
+  BoundKey.install(Engine, engineKey.key);
 
   return Engine;
 };
 
+/** Derives the engine's and its resources' service keys from the module id. */
+export const bind = (definition: AnyDef, moduleId: ModuleId.Id) =>
+  definition[BindTypeId]?.(moduleId);
+
 export class DeploymentError extends Schema.TaggedError<DeploymentError>()(
   "EngineDeploymentError",
-  { moduleId: Schema.String, cause: Schema.Unknown },
+  { cause: Schema.Unknown },
 ) {}
 
+/** A module's engine implementation, defined by the module without knowing its id. */
 export interface Deployment<Definition extends AnyDef, EngineLayer extends Layer.Any> {
-  readonly module: Module<Definition> & { readonly engine: Definition };
-  readonly moduleId: string;
+  readonly module: Module.Module<Definition> & { readonly engine: Definition };
   readonly definition: Definition;
   readonly layer: EngineLayer;
 }
+
+/** A deployment paired with the id its host mounts it under. */
+export type Identified<D extends Deployment<AnyDef, Layer.Any>> = D & {
+  readonly moduleId: ModuleId.Id;
+  readonly module: D["module"] & { readonly id: ModuleId.Id };
+};
 
 export interface HttpIngressDeployment<
   Definition extends AnyDef,
@@ -266,20 +296,21 @@ export interface HttpIngressDeployment<
   };
 }
 
-export type AnyDeploymentFor<Definition extends AnyDef> = Deployment<
-  Definition,
-  ImplementationLayer<Definition>
+export type AnyDeploymentFor<Definition extends AnyDef> = Identified<
+  Deployment<Definition, ImplementationLayer<Definition>>
 >;
 
-export type AnyHttpIngressDeploymentFor<Definition extends AnyDef> = HttpIngressDeployment<
-  Definition,
-  ImplementationLayer<Definition>,
-  ReadonlyArray<Live<unknown, unknown>>,
-  unknown
+export type AnyHttpIngressDeploymentFor<Definition extends AnyDef> = Identified<
+  HttpIngressDeployment<
+    Definition,
+    ImplementationLayer<Definition>,
+    ReadonlyArray<Live<unknown, unknown>>,
+    unknown
+  >
 >;
 
 export interface AnyHttpIngressDeployment {
-  readonly moduleId: string;
+  readonly moduleId: ModuleId.Id;
   readonly definition: AnyDef;
   readonly httpIngress: {
     readonly handlers: ReadonlyArray<Live<unknown, unknown>>;
@@ -293,14 +324,25 @@ export const deployment = <
   Definition extends AnyDef,
   EngineLayer extends ImplementationLayer<Definition>,
 >(
-  module: Module<Definition> & { readonly engine: Definition },
+  module: Module.Module<Definition> & { readonly engine: Definition },
   layer: EngineLayer,
 ): Deployment<Definition, EngineLayer> => ({
   module,
-  moduleId: module.id,
   definition: module.engine,
   layer,
 });
+
+/**
+ * Pairs a deployment with the id its host mounts it under and derives the engine's service keys
+ * from that id. Must run before the deployment's layers are built.
+ */
+export const identify = <D extends Deployment<AnyDef, Layer.Any>>(
+  moduleId: ModuleId.Id,
+  deployment: D,
+): Identified<D> => {
+  bind(deployment.definition, moduleId);
+  return { ...deployment, moduleId, module: { ...deployment.module, id: moduleId } };
+};
 
 export const withHttpIngress = <
   Definition extends AnyDef,
@@ -324,9 +366,7 @@ export const withHttpIngress = <
       Schema.decodeUnknownEffect(deployment.definition.Storage)(state).pipe(
         Effect.flatMap(options.requirements),
         Effect.catchCause((cause) =>
-          Effect.fail(
-            new DeploymentError({ moduleId: deployment.moduleId, cause: Cause.squash(cause) }),
-          ),
+          Effect.fail(new DeploymentError({ cause: Cause.squash(cause) })),
         ),
       ),
   },
@@ -349,7 +389,7 @@ export type PollingIngressDeployment<
 };
 
 export interface AnyPollingIngressDeployment {
-  readonly moduleId: string;
+  readonly moduleId: ModuleId.Id;
   readonly definition: AnyDef;
   readonly pollingIngress: {
     readonly handlers: ReadonlyArray<PollingIngress.AnyHandler>;
@@ -380,9 +420,7 @@ export const withPollingIngress = <
       Schema.decodeUnknownEffect(deployment.definition.Storage)(state).pipe(
         Effect.flatMap(options.requirements),
         Effect.catchCause((cause) =>
-          Effect.fail(
-            new DeploymentError({ moduleId: deployment.moduleId, cause: Cause.squash(cause) }),
-          ),
+          Effect.fail(new DeploymentError({ cause: Cause.squash(cause) })),
         ),
       ),
   },

@@ -2,12 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
 import { HttpEndpoint } from "@macrograph/module";
-import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
-import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
-import sendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
-import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
-import UtilitiesModule from "@macrograph/module-utilities";
 import { TickEvent } from "@macrograph/module-utilities/Definition";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import * as PollingIngress from "@macrograph/module/PollingIngress";
@@ -18,6 +13,13 @@ import { FetchHttpClient } from "effect/http";
 import { projectIngressEndpoints, projectIngressEvents } from "../database/DatabaseSchema.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
+import {
+  GitHubWebhookDeployment as githubDeployment,
+  KofiWebhookDeployment as kofiDeployment,
+  SendblueWebhookDeployment as sendblueDeployment,
+  TwitchWebhookDeployment as twitchDeployment,
+  UtilitiesModule,
+} from "../modules/BuiltinModules.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import { AppCredentialsLayer as TwitchAppCredentialsLayer } from "../TwitchCredentials.ts";
 import { DurableObjectHttpEndpointHost } from "./DurableObjectHttpEndpointHost.ts";
@@ -116,7 +118,9 @@ const pollingCursorPrefix = "polling-ingress:cursor:";
 const pollingDeployments = [sendblueDeployment] as const;
 const pollingHandlers = new Map(
   pollingDeployments.flatMap((deployment) =>
-    deployment.pollingIngress.handlers.map((handler) => [handler.id, handler] as const),
+    deployment.pollingIngress.handlers.map(
+      (handler) => [handler.id, { handler, moduleId: deployment.moduleId }] as const,
+    ),
   ),
 );
 
@@ -164,10 +168,10 @@ export const projectIngressImplementation = Effect.gen(function* () {
     });
 
     const ingressRegistry = yield* HttpIngress.makeRegistry([
-      ...twitchDeployment.httpIngress.handlers,
-      ...kofiDeployment.httpIngress.handlers,
-      ...githubDeployment.httpIngress.handlers,
-      ...sendblueDeployment.httpIngress.handlers,
+      { moduleId: twitchDeployment.moduleId, handlers: twitchDeployment.httpIngress.handlers },
+      { moduleId: kofiDeployment.moduleId, handlers: kofiDeployment.httpIngress.handlers },
+      { moduleId: githubDeployment.moduleId, handlers: githubDeployment.httpIngress.handlers },
+      { moduleId: sendblueDeployment.moduleId, handlers: sendblueDeployment.httpIngress.handlers },
     ]).pipe(Effect.provide(layerWebCrypto(globalThis.crypto)), Effect.orDie);
     const ingressRuntime = yield* HttpIngressRuntime.make(
       [twitchDeployment, kofiDeployment, githubDeployment, sendblueDeployment],
@@ -224,7 +228,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       }
       const now = yield* Clock.currentTimeMillis;
       for (const requirement of desired) {
-        const handler = pollingHandlers.get(requirement.handlerId);
+        const handler = pollingHandlers.get(requirement.handlerId)?.handler;
         if (handler === undefined)
           return yield* Effect.die(
             `Polling ingress handler ${requirement.handlerId} is unavailable`,
@@ -687,11 +691,12 @@ export const projectIngressImplementation = Effect.gen(function* () {
           yield* Cloudflare.Workers.cancelEvent(pollingEventId(requirement));
           return;
         }
-        const handler = pollingHandlers.get(requirement.handlerId);
-        if (handler === undefined)
+        const registered = pollingHandlers.get(requirement.handlerId);
+        if (registered === undefined)
           return yield* Effect.die(
             `Polling ingress handler ${requirement.handlerId} is unavailable`,
           );
+        const { handler, moduleId } = registered;
         const storedCursor = yield* durableState.storage.get(pollingCursorKey(requirement));
         const cursor =
           storedCursor === undefined
@@ -761,7 +766,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
           .pipe(Effect.orDie);
         for (const event of result.events) {
           const stableId = event.eventId ?? crypto.randomUUID();
-          const ingressEventId = `${projectId}:polling:${event.moduleId}:${stableId}`;
+          const ingressEventId = `${projectId}:polling:${moduleId}:${stableId}`;
           const payloadJson = JSON.stringify(event.payload);
           yield* database
             .insert(projectIngressEvents)
@@ -769,7 +774,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
               id: ingressEventId,
               projectId,
               endpointId: pollingEndpointId(requirement),
-              moduleId: event.moduleId,
+              moduleId,
               eventType: event.eventType,
               eventId: event.eventId ?? null,
               eventPayload: payloadJson,
@@ -794,7 +799,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
                     ingressEventId,
                     deploymentId: deployment.value.deploymentId,
                     r2Key: deployment.value.r2Key,
-                    moduleId: event.moduleId,
+                    moduleId,
                     eventType: event.eventType,
                     ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
                     event: payloadJson,
@@ -845,7 +850,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       schema: {
         id: HttpEndpoint.HandlerId.make(requirement.handlerId),
         displayName:
-          pollingHandlers.get(requirement.handlerId)?.displayName ?? requirement.handlerId,
+          pollingHandlers.get(requirement.handlerId)?.handler.displayName ?? requirement.handlerId,
       },
       instanceKey: HttpEndpoint.InstanceKey.make(requirement.instanceKey),
       displayName: requirement.displayName,

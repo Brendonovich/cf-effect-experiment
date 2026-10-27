@@ -2,9 +2,9 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { IoId, Package, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, Packages, Presence } from "@macrograph/editor";
-import { t } from "@macrograph/module";
-import UtilitiesModule from "@macrograph/module-utilities";
-import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
+import { t, Module, Engine } from "@macrograph/module";
+import UtilitiesModuleDefinition from "@macrograph/module-utilities";
+import UtilitiesDeploymentDefinition from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, PubSub } from "effect";
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/http";
@@ -14,6 +14,12 @@ import type { AtomicFileStore } from "../src/AtomicFileStore.ts";
 import { ApiKeys } from "../src/ApiKeys.ts";
 import { ClientSessions } from "../src/ClientSessions.ts";
 import { ProjectApi } from "../src/ProjectApi.ts";
+
+const UtilitiesModule = Module.identify(Module.builtinId("utilities"), UtilitiesModuleDefinition);
+const UtilitiesDeployment = Engine.identify(
+  Module.builtinId("utilities"),
+  UtilitiesDeploymentDefinition,
+);
 
 const memoryStore = (): AtomicFileStore => {
   let stored: string | null = null;
@@ -305,7 +311,7 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
           nodes: {
             source: { schema: { package: "test", schema: "text" } },
             hello: {
-              schema: { package: "util", schema: "FormatString" },
+              schema: { package: "macrograph.app/macrograph/utilities", schema: "FormatString" },
               properties: { format: "Hello {name}" },
             },
           },

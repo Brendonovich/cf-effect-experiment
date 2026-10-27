@@ -1,5 +1,5 @@
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { ExecutorModules } from "@macrograph/project-host";
 import { Array, Effect, Schema } from "effect";
 
@@ -14,29 +14,34 @@ class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 export const makeModules = (
   onExecute: (value: string) => Effect.Effect<void> = () => Effect.void,
 ) => {
-  const module = Module.make({
-    id: "infra-test",
-    engine: TestEngine,
-    effect: (registration) =>
-      registration.schema.register({
-        id: "trigger",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: (io) => ({ value: io.data.out("value", t.String) }),
-        run: ({ event, io }) =>
-          Effect.gen(function* () {
-            if (event === undefined) return yield* Effect.die("Missing test event");
-            if (event.value === "fail")
-              return yield* Effect.die("Intentional infrastructure test failure");
-            if (event.value !== "durable") return yield* Effect.die("Unexpected test event");
-            yield* onExecute(event.value);
-            io.value(event.value);
-          }),
-      }),
-  });
-  const deployment = Engine.deployment(
-    module,
-    TestEngine.toLayer(() => Effect.die("Not hosted")),
+  const module = Module.identify(
+    ModuleId.Id.make("local/test/infra-test"),
+    Module.make({
+      engine: TestEngine,
+      effect: (registration) =>
+        registration.schema.register({
+          id: "trigger",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: (io) => ({ value: io.data.out("value", t.String) }),
+          run: ({ event, io }) =>
+            Effect.gen(function* () {
+              if (event === undefined) return yield* Effect.die("Missing test event");
+              if (event.value === "fail")
+                return yield* Effect.die("Intentional infrastructure test failure");
+              if (event.value !== "durable") return yield* Effect.die("Unexpected test event");
+              yield* onExecute(event.value);
+              io.value(event.value);
+            }),
+        }),
+    }),
+  );
+  const deployment = Engine.identify(
+    module.id,
+    Engine.deployment(
+      module,
+      TestEngine.toLayer(() => Effect.die("Not hosted")),
+    ),
   );
   return ExecutorModules.make([ExecutorModules.entry(module, Trigger, deployment)]);
 };
@@ -55,7 +60,10 @@ export const project: Project.Model = {
           [nodeId]: {
             id: nodeId,
             name: "Trigger",
-            schema: { package: PackageId.make("infra-test"), schema: SchemaId.make("trigger") },
+            schema: {
+              package: PackageId.make("local/test/infra-test"),
+              schema: SchemaId.make("trigger"),
+            },
             properties: {},
             inputDefaults: {},
             foldPins: false,
@@ -71,7 +79,7 @@ export const project: Project.Model = {
 export const input = (executionId: string, value = "durable") => ({
   executionId,
   projectId: "infra-project",
-  moduleId: "infra-test",
+  moduleId: "local/test/infra-test",
   project,
   event: { _tag: "Trigger", value },
 });

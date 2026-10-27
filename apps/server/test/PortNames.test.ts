@@ -1,23 +1,44 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Registration } from "@macrograph/module";
-import Discord from "@macrograph/module-discord";
-import ElevenLabs from "@macrograph/module-elevenlabs";
-import Filesystem from "@macrograph/module-fs";
-import GoXLR from "@macrograph/module-goxlr";
-import Json from "@macrograph/module-json";
-import List from "@macrograph/module-list";
-import Logic from "@macrograph/module-logic";
-import Math from "@macrograph/module-math";
-import OBS from "@macrograph/module-obs";
-import OpenAI from "@macrograph/module-openai";
-import Streamlabs from "@macrograph/module-streamlabs";
-import Strings from "@macrograph/module-string";
-import Twitch from "@macrograph/module-twitch";
-import Utilities from "@macrograph/module-utilities";
-import Voicemod from "@macrograph/module-voicemod";
-import VTubeStudio from "@macrograph/module-vtube-studio";
-import WebSocketServer from "@macrograph/module-websocket-server";
+import { Registration, Module } from "@macrograph/module";
+import DiscordDefinition from "@macrograph/module-discord";
+import ElevenLabsDefinition from "@macrograph/module-elevenlabs";
+import FilesystemDefinition from "@macrograph/module-fs";
+import GoXLRDefinition from "@macrograph/module-goxlr";
+import JsonDefinition from "@macrograph/module-json";
+import ListDefinition from "@macrograph/module-list";
+import LogicDefinition from "@macrograph/module-logic";
+import MathDefinition from "@macrograph/module-math";
+import OBSDefinition from "@macrograph/module-obs";
+import OpenAIDefinition from "@macrograph/module-openai";
+import StreamlabsDefinition from "@macrograph/module-streamlabs";
+import StringsDefinition from "@macrograph/module-string";
+import TwitchDefinition from "@macrograph/module-twitch";
+import UtilitiesDefinition from "@macrograph/module-utilities";
+import VoicemodDefinition from "@macrograph/module-voicemod";
+import VTubeStudioDefinition from "@macrograph/module-vtube-studio";
+import WebSocketServerDefinition from "@macrograph/module-websocket-server";
 import { Effect } from "effect";
+
+const Discord = Module.identify(Module.builtinId("discord"), DiscordDefinition);
+const ElevenLabs = Module.identify(Module.builtinId("elevenlabs"), ElevenLabsDefinition);
+const Filesystem = Module.identify(Module.builtinId("fs"), FilesystemDefinition);
+const GoXLR = Module.identify(Module.builtinId("goxlr"), GoXLRDefinition);
+const Json = Module.identify(Module.builtinId("json"), JsonDefinition);
+const List = Module.identify(Module.builtinId("list"), ListDefinition);
+const Logic = Module.identify(Module.builtinId("logic"), LogicDefinition);
+const Math = Module.identify(Module.builtinId("math"), MathDefinition);
+const OBS = Module.identify(Module.builtinId("obs"), OBSDefinition);
+const OpenAI = Module.identify(Module.builtinId("openai"), OpenAIDefinition);
+const Streamlabs = Module.identify(Module.builtinId("streamlabs"), StreamlabsDefinition);
+const Strings = Module.identify(Module.builtinId("string"), StringsDefinition);
+const Twitch = Module.identify(Module.builtinId("twitch"), TwitchDefinition);
+const Utilities = Module.identify(Module.builtinId("utilities"), UtilitiesDefinition);
+const Voicemod = Module.identify(Module.builtinId("voicemod"), VoicemodDefinition);
+const VTubeStudio = Module.identify(Module.builtinId("vtube-studio"), VTubeStudioDefinition);
+const WebSocketServer = Module.identify(
+  Module.builtinId("websocket-server"),
+  WebSocketServerDefinition,
+);
 
 type PortName = readonly [
   schema: string,
