@@ -4,7 +4,7 @@ MacroGraph is a pnpm monorepo for authoring and running typed visual automation 
 
 ## Source of Truth
 
-- Effect v4 changes quickly. Inspect the checked-in `lib/effect-smol` submodule instead of relying on remembered APIs. Start with `packages/effect/src/Schema.ts`, `Effect.ts`, and `Layer.ts`, then read the relevant package source.
+- Effect v4 changes quickly. Inspect the checked-in `lib/effect` submodule instead of relying on remembered APIs. Start with `packages/effect/src/Schema.ts`, `Effect.ts`, and `Layer.ts`, then read the relevant package source.
 - Prefer current code, public package exports, tests, and generated schemas over prose descriptions of implementation details.
 
 ## Workflow

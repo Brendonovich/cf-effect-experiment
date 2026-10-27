@@ -182,7 +182,9 @@ export const make = Effect.fnUntraced(function* (
               ).pipe(
                 Effect.andThen(
                   Effect.raceFirst(
-                    Effect.ignore(write.write(new Socket.CloseEvent(1000))),
+                    Effect.ignoreCause(
+                      Effect.suspend(() => write.write(new Socket.CloseEvent(1000))),
+                    ),
                     Fiber.interrupt(reader),
                   ),
                 ),

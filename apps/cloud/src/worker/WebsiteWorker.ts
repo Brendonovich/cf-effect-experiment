@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 

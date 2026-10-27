@@ -12,6 +12,8 @@
     "typecheck": "tsgo --build"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.84",
+    "@alchemy.run/github": "2.0.0-beta.84",
     "@effect/platform-browser": "catalog:",
     "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",
@@ -34,7 +36,7 @@
     "@macrograph/project-host": "workspace:*",
     "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",
-    "alchemy": "2.0.0-beta.81",
+    "alchemy": "2.0.0-beta.84",
     "effect": "catalog:",
     "solid-js": "2.0.0-rc.9"
   },

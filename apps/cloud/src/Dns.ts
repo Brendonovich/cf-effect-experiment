@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect } from "effect";
 
 /** The production `macrograph.app` zone, adopted if it already exists. Zones are retained on removal. */

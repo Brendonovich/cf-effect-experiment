@@ -1,8 +1,8 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as PlanetscaleLogicalDb from "@macrograph/planetscale-logical-db";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
-import * as Planetscale from "alchemy/Planetscale";
 import { retain } from "alchemy/RemovalPolicy";
 import { Effect } from "effect";
 

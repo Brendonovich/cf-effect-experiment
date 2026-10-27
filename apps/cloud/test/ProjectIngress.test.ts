@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { assert, describe, it } from "@effect/vitest";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { Cause, ConfigProvider, Effect, Exit } from "effect";
 import { afterEach, vi } from "vitest";
 

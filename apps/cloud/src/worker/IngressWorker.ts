@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 import type OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import type * as CloudWorkerOperations from "./CloudWorkerOperations.ts";

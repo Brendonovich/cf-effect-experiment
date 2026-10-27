@@ -17,19 +17,18 @@ allowBuilds:
   tree-sitter-powershell: false
   workerd: true
 patchedDependencies:
-  alchemy@2.0.0-beta.72: patches/alchemy@2.0.0-beta.72.patch
   "@solidjs/router@2.0.0-next.17": patches/@solidjs__router@2.0.0-next.17.patch
   "@opencode/core@2.0.27": patches/@opencode__core@2.0.27.patch
 
 catalog:
   "@stylexjs/stylex": 0.19.0
   "@stylexjs/unplugin": 0.19.0
-  effect: 4.0.3
-  "@effect/opentelemetry": 4.0.3
-  "@effect/platform-browser": 4.0.3
-  "@effect/platform-node": 4.0.3
-  "@effect/platform-node-shared": 4.0.3
-  "@effect/vitest": 4.0.3
+  effect: 4.0.6
+  "@effect/opentelemetry": 4.0.6
+  "@effect/platform-browser": 4.0.6
+  "@effect/platform-node": 4.0.6
+  "@effect/platform-node-shared": 4.0.6
+  "@effect/vitest": 4.0.6
 minimumReleaseAge: 0
 minimumReleaseAgeExclude:
   - "@types/node@26.4.1"

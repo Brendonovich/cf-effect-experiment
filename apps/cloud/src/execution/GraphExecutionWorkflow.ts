@@ -2,10 +2,10 @@ import type { EventTraceContext } from "@macrograph/cloud-api";
 import type * as Executor from "@macrograph/execution/Executor";
 import type { ExecutionStep } from "@macrograph/workflow-runtime";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Project } from "@macrograph/core";
 import { GraphExecution } from "@macrograph/workflow-runtime";
 import * as CloudflareRuntime from "@macrograph/workflow-runtime-cloudflare/Alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Schema, Tracer } from "effect";
 import { FetchHttpClient } from "effect/http";

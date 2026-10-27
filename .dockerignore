@@ -12,4 +12,4 @@
 **/macrograph-auth.json
 **/macrograph-client-auth.json
 **/*.tsbuildinfo
-lib/effect-smol
+lib/effect

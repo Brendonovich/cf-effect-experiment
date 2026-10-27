@@ -1,13 +1,13 @@
 import type { Instance, Instances } from "@macrograph/module-opencode/Instance";
 import type { connectRemote, Service } from "@macrograph/opencode-workerd";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import OpenCodeModule from "@macrograph/module-opencode";
 import {
   describeFailure,
   OpenCodeEngine,
   RequestFailure,
 } from "@macrograph/module-opencode/Definition";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { Effect, Schema } from "effect";
 
 export interface Namespace {

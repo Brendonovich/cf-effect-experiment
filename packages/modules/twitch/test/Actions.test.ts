@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { EngineTest, Registration, Retry } from "@macrograph/module";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
+import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
 
 import { actions, mapResponse, prepare } from "../src/Actions.ts";
 import { AccountId, TwitchEngine } from "../src/Definition.ts";
@@ -407,7 +407,7 @@ const setup = Effect.fnUntraced(function* (
       calls.push({
         method: request.method,
         url: request.url,
-        query: Object.fromEntries(request.urlParams),
+        query: Object.fromEntries(new URLSearchParams(UrlParams.toString(request.urlParams))),
         body:
           request.body._tag === "Uint8Array"
             ? JSON.parse(new TextDecoder().decode(request.body.body))
