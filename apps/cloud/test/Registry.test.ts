@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { Pack } from "@macrograph/module-build/Pack";
 import { Integrity } from "@macrograph/module-registry/Integrity";
 import { Protocol } from "@macrograph/module-registry/Protocol";
 import { Publish } from "@macrograph/module-registry/Publish";
@@ -347,6 +348,84 @@ describe("official registry", () => {
         "not a relative path",
       );
       yield* expectInvalid(new Uint8Array([1, 2, 3]), "");
+    }),
+  );
+
+  it.effect("rejects packages that fail the module-build bundle checks", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const withServer = (server: string) =>
+        Tarball.write([
+          { path: "macrograph.json", content: JSON.stringify(manifest()) },
+          { path: "server.cjs", content: server },
+        ]);
+      const expectProblem = (bytes: Uint8Array<ArrayBuffer>, fragment: string) =>
+        Effect.gen(function* () {
+          const response = yield* registry.publish("maintainer", bytes);
+          assert.strictEqual(response.status, 422);
+          assert.strictEqual(response.body._tag, "InvalidPackage");
+          assert.isTrue(
+            response.body.problems.some(
+              (problem: string) => problem.startsWith("bundle: ") && problem.includes(fragment),
+            ),
+            `${JSON.stringify(response.body.problems)} should mention ${fragment}`,
+          );
+        });
+
+      yield* expectProblem(
+        yield* withServer(
+          [
+            "//#region ../../node_modules/effect/dist/Effect.js",
+            'const TypeId = "~effect/Effect";',
+            "//#endregion",
+            "module.exports.default = { TypeId };",
+          ].join("\n"),
+        ),
+        "shared library effect",
+      );
+      yield* expectProblem(
+        yield* withServer("await Promise.resolve();\nmodule.exports.default = {};"),
+        "top-level await",
+      );
+      yield* expectProblem(
+        yield* withServer('module.exports.default = require("@julusian/midi");'),
+        "may only require shared libraries",
+      );
+      yield* expectProblem(
+        yield* withServer('module.exports.default = require("node:fs");'),
+        "node list does not declare fs",
+      );
+      // Shared libraries and declared node built-ins are fine.
+      const ok = yield* registry.publish(
+        "maintainer",
+        yield* Tarball.write([
+          { path: "macrograph.json", content: JSON.stringify(manifest({ node: ["fs"] })) },
+          {
+            path: "server.cjs",
+            content: 'require("node:fs");\nmodule.exports.default = require("effect");',
+          },
+        ]),
+      );
+      assert.strictEqual(ok.status, 201);
+    }),
+  );
+
+  it.effect("accepts tarballs packed by macrograph-module", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const bytes = yield* Pack.tarball([
+        { path: "server.cjs", contents: "module.exports.default = {};" },
+        { path: "macrograph.json", contents: JSON.stringify(manifest({ name: "packed" })) },
+        { path: "assets/icon.svg", contents: "<svg/>" },
+      ]);
+      const entries = yield* Tarball.read(bytes, { maxUnpackedBytes: 1024 * 1024, maxFiles: 10 });
+      assert.deepStrictEqual(
+        entries.map((entry) => entry.path),
+        ["assets/icon.svg", "macrograph.json", "server.cjs"],
+      );
+      const published = yield* registry.publish("maintainer", bytes);
+      assert.strictEqual(published.status, 201);
+      assert.strictEqual(published.body.integrity, yield* Integrity.compute(bytes));
     }),
   );
 

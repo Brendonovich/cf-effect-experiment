@@ -32,6 +32,9 @@
       "path": "../../packages/module"
     },
     {
+      "path": "../../packages/module-build"
+    },
+    {
       "path": "../../packages/module-registry"
     },
     {
