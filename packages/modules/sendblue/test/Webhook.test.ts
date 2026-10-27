@@ -49,7 +49,7 @@ describe("Sendblue webhook", () => {
       );
       const requirements = yield* deployment.httpIngress.requirements({
         accounts: {
-          primary: {
+          [AccountId.make("primary")]: {
             name: "Primary",
             apiKey: "key",
             apiSecret: "api-secret",

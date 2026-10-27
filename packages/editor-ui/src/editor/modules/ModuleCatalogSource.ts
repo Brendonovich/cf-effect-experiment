@@ -15,7 +15,7 @@ export interface ModuleCatalogPackage {
 }
 
 /** Where the editor reads the module catalog from for one connection. */
-export interface ModuleCatalogSource {
+export interface Source {
   /** Fetches the catalog. Receives the packages the editor fetched on the same connection. */
   readonly fetch: (
     packages: ReadonlyArray<ModuleCatalogPackage>,
@@ -34,12 +34,12 @@ export const packageEntry = (pkg: ModuleCatalogPackage): ModuleCatalogEntry => (
 });
 
 /** A static catalog of the modules the host bundles, one entry per loaded package. */
-export const fromPackages: ModuleCatalogSource = {
+export const fromPackages: Source = {
   fetch: (packages) => Effect.succeed(packages.map(packageEntry)),
 };
 
 /** A static catalog with fixed entries. */
-export const fromEntries = (entries: ReadonlyArray<ModuleCatalogEntry>): ModuleCatalogSource => ({
+export const fromEntries = (entries: ReadonlyArray<ModuleCatalogEntry>): Source => ({
   fetch: () => Effect.succeed(entries),
 });
 
@@ -51,7 +51,7 @@ export const fromRpc = (options: {
     ) => Effect.Effect<ModuleCatalog.Catalog, unknown>;
   };
   readonly changes?: Stream.Stream<ModuleAdminRpc.ModulesChanged, unknown>;
-}): ModuleCatalogSource => ({
+}): Source => ({
   fetch: () => options.client.GetModules({}),
   ...(options.changes === undefined ? {} : { changes: options.changes }),
 });

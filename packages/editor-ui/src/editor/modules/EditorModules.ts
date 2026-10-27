@@ -4,7 +4,7 @@ import { createModuleUILoader, type ModuleUILoader } from "./ModuleUILoader";
 
 /** What the editor needs from the host to show modules for one connection. */
 export interface ConnectionModules {
-  readonly catalog: ModuleCatalogSource;
+  readonly catalog: ModuleCatalogSource.Source;
   readonly rpcProtocol: ModuleRpcProtocolFactory;
 }
 
@@ -13,7 +13,7 @@ export interface ConnectionModules {
  * derived from each connection the host opens; the UI loader lives as long as the editor.
  */
 export interface EditorModules<Connection> {
-  readonly catalog: (connection: Connection) => ModuleCatalogSource;
+  readonly catalog: (connection: Connection) => ModuleCatalogSource.Source;
   readonly loader: ModuleUILoader;
   readonly rpcProtocol: (connection: Connection) => ModuleRpcProtocolFactory;
 }
