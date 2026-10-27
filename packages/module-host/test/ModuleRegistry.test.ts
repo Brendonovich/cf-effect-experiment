@@ -498,4 +498,28 @@ describe("ModuleRegistry", () => {
       assert.strictEqual((yield* getEntry(id)).status, "loaded");
     }).pipe(Effect.provide(registryLayer({ dataDir, watch: { debounce: "50 millis" } })));
   });
+
+  it.live("watches a local folder created after startup once a rescan loads it", () => {
+    const dataDir = tempDir();
+    const id = local("late");
+    return Effect.gen(function* () {
+      const registry = yield* ModuleRegistry.Service;
+      assert.isTrue(Option.isNone(yield* registry.get(id)));
+      yield* Effect.sleep("300 millis");
+      const folder = writeModule(join(dataDir, "modules", "local", "fixtures", "late"), {
+        name: "late",
+        version: "1.0.0",
+      });
+      yield* registry.rescan;
+      assert.strictEqual((yield* getEntry(id)).status, "loaded");
+      yield* Effect.sleep("300 millis");
+      appendFileSync(join(folder, "server.cjs"), "// late change\n");
+      const stale = yield* registry.changes.pipe(
+        Stream.filter((entries) => entries.get(id)?.flags.stale === true),
+        Stream.runHead,
+        Effect.timeout("10 seconds"),
+      );
+      assert.isTrue(Option.isSome(stale));
+    }).pipe(Effect.provide(registryLayer({ dataDir, watch: { debounce: "50 millis" } })));
+  });
 });
