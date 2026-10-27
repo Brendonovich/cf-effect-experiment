@@ -10,6 +10,7 @@
     "./Button": "./src/ui/Button.tsx",
     "./events.stylex": "./src/events/events.stylex.ts",
     "./events-markers.stylex": "./src/events/events-markers.stylex.ts",
+    "./modules": "./src/editor/modules/index.ts",
     "./tokens.stylex": "./src/tokens.stylex.ts",
     "./styles.css": "./src/styles.css"
   },

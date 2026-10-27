@@ -25,7 +25,10 @@ vi.mock("./Auth", () => ({
     },
   }),
 }));
-vi.mock("./editorConnection", () => ({ makeEditorConnection: () => Effect.never }));
+vi.mock("./editorConnection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./editorConnection")>()),
+  makeEditorConnection: () => Effect.never,
+}));
 vi.mock("virtual:macrograph-module-settings", () => ({ default: [] }));
 vi.mock("@macrograph/editor-ui", async () => {
   const actual =

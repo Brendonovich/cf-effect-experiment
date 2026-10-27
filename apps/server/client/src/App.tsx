@@ -14,10 +14,10 @@ import {
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { createMemo, createSignal, For, onCleanup, onSettled, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
-import { editorConnection } from "./editorConnection";
+import { editorConnection, editorModules, moduleLoading } from "./editorConnection";
 
 const baseUrl = () => new URL(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/`, location.origin);
 const sessionKey = "macrograph:self-hosted:session";
@@ -568,9 +568,13 @@ export function App() {
         <Show when={rpcUrl()} keyed>
           {(url) => {
             const controller = createEditorController({
-              connection: editorConnection(url, discoveredModuleSettings),
+              connection: editorConnection(url, {
+                moduleLoading,
+                baseUrl: baseUrl(),
+                token: () => untrack(auth).session,
+              }),
               workspaceId: new URL(url).pathname,
-              settingsDescriptors: discoveredModuleSettings,
+              modules: editorModules(moduleLoading, discoveredModuleSettings),
               userId: localUserId(),
               reconnect: true,
               projectSettings: true,

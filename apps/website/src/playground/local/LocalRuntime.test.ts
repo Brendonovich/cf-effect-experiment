@@ -3,14 +3,25 @@ import { CloudCredentials } from "@macrograph/cloud-credentials";
 import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
+import discoveredModuleSettings from "virtual:macrograph-module-settings";
 import { vi } from "vitest";
 
-import { makeLocalConnection } from "./LocalRuntime";
+import { makeLocalConnection, type LocalEditorConnection } from "./LocalRuntime";
 import {
   encodeLocalProject,
   makeLocalProjectStore,
   type StorageLike,
 } from "./LocalStoragePersistence";
+
+/** Connects a bundled settings UI to the engine mounted in the local runtime, as the editor does. */
+const connectSettings = (connection: LocalEditorConnection, moduleId: string) =>
+  Effect.gen(function* () {
+    const settings = discoveredModuleSettings.find((entry) => entry.id === moduleId)?.settings;
+    const rpc = yield* connection.moduleRpcProtocol(moduleId);
+    if (settings === undefined || rpc._tag !== "InProcess")
+      return yield* Effect.die(`No in-process settings for ${moduleId}`);
+    return yield* settings.connectInProcess.pipe(Effect.provide(rpc.context));
+  });
 
 class MemoryStorage implements StorageLike {
   readonly values = new Map<string, string>();
@@ -120,7 +131,7 @@ describe("local browser runtime", () => {
           );
           const catalog = yield* connection.client.GetCredentialCatalog();
           assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
-          const settings = connection.moduleSettings.get("twitch")!;
+          const settings = yield* connectSettings(connection, "twitch");
           assert.deepStrictEqual(
             yield* settings.load(connection.client.GetModuleClientState({ moduleId: "twitch" })),
             {
@@ -222,14 +233,17 @@ describe("local browser runtime", () => {
           "websocket-client",
         ]);
         assert.strictEqual(new Set(packageIds).size, packageIds.length);
+        for (const moduleId of ["util", "obs", "twitch", "websocket-client"])
+          assert.strictEqual(
+            (yield* connection.moduleRpcProtocol(moduleId))._tag,
+            "InProcess",
+            moduleId,
+          );
+        assert.isTrue(Exit.isFailure(yield* Effect.exit(connection.moduleRpcProtocol("json"))));
         assert.deepStrictEqual(
-          [...connection.moduleSettings.keys()],
-          ["util", "obs", "twitch", "websocket-client"],
-        );
-        assert.deepStrictEqual(
-          yield* connection.moduleSettings
-            .get("util")!
-            .load(connection.client.GetModuleClientState({ moduleId: "util" })),
+          yield* (yield* connectSettings(connection, "util")).load(
+            connection.client.GetModuleClientState({ moduleId: "util" }),
+          ),
           { running: true },
         );
         assert.deepStrictEqual(
