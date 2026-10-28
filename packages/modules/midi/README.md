@@ -20,8 +20,9 @@ working when a device is unplugged and plugged back in.
   or you press **Rescan**.
 
 MIDI devices must be connected to the machine running the server. Containers normally cannot
-see USB MIDI devices, and the Alpine-based Docker image has no ALSA library for the addon, so
-MIDI usually shows as unavailable there.
+see USB MIDI devices unless they're passed through (for example `--device /dev/snd`). The
+Docker image includes ALSA on x64; arm64 Alpine has no prebuilt addon, so MIDI shows as
+unavailable there.
 
 On macOS, CoreMIDI may not report devices plugged in after the server started. Restart the
 server if a new device doesn't appear.

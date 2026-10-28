@@ -17,6 +17,9 @@ RUN pnpm --filter @macrograph/server build
 
 FROM node:24-alpine AS runtime
 
+# The MIDI module's native addon links against ALSA.
+RUN apk add --no-cache alsa-lib
+
 ARG MACROGRAPH_BASE_PATH=/
 ARG VITE_OTEL_EXPORTER_OTLP_ENDPOINT
 ENV NODE_ENV=production \
