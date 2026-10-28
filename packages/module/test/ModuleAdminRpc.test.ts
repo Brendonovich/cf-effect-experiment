@@ -65,6 +65,7 @@ describe("ModuleAdminRpc", () => {
       registry: "modules.example.com",
       requires: ["http-client"],
       node: [],
+      native: ["midi"],
     });
     assert.strictEqual(error._tag, "UntrustedConfirmationRequired");
     assert.deepStrictEqual(

@@ -36,7 +36,7 @@ const coveredIssues: ReadonlySet<Checks.IssueCode> = new Set([
 ]);
 
 const externalsPolicy =
-  "Published modules may only require shared libraries and the node built-ins declared in macrograph.json; bundle every other dependency";
+  "Published modules may only require shared libraries, and the node built-ins and native addons declared in macrograph.json; bundle every other dependency";
 
 const describeIssue = (issue: Checks.Issue) => {
   const location = issue.path === undefined ? "" : `${issue.path}: `;
@@ -47,8 +47,8 @@ const describeIssue = (issue: Checks.Issue) => {
 /**
  * The bundle checks from `@macrograph/module-build`: valid syntax, no top-level await, no bundled
  * copies of shared libraries, only resolvable `require`s and declared node built-ins, UI imports
- * limited to shared browser libraries, and size limits. Packages are checked without any
- * `build.external` allowance, so built-in style native externals are rejected.
+ * limited to shared browser libraries, native addons under `native/` that are declared, target
+ * a known platform and are real binaries, and size limits.
  */
 export const bundleChecks: ReadonlyArray<Check> = [
   {
@@ -79,7 +79,7 @@ export const apiCheck = (supportedApi: ReadonlyArray<number>): Check => ({
     ),
 });
 
-/** The folder layout from the package format: manifest, server entry, `ui/`, `assets/`. */
+/** The folder layout from the package format: manifest, server entry, `ui/`, `assets/`, `native/`. */
 export const layoutCheck: Check = {
   name: "layout",
   run: ({ manifest, files }) =>
@@ -102,10 +102,12 @@ export const layoutCheck: Check = {
       for (const path of files.keys()) {
         const inUi = path.startsWith(`${ModulePackage.UiDirectory}/`);
         const inAssets = path.startsWith(`${ModulePackage.AssetsDirectory}/`);
+        const isNative = ModulePackage.parseNativePath(path) !== undefined;
         const allowed =
           path === ModulePackage.ManifestFile ||
           path === manifest.server ||
           inAssets ||
+          isNative ||
           (inUi && manifest.ui !== undefined) ||
           (!path.includes("/") && extraTopLevelFiles.test(path));
         if (!allowed) problems.push(`${path} is not part of the module package layout`);

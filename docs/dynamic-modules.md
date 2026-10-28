@@ -94,6 +94,8 @@ A module package is a folder:
     *.js                 UI chunks
     styles.css           extracted CSS
   assets/                icon and other static files
+  native/<name>/         prebuilt native addons (optional)
+    <target>.node        one per target, e.g. darwin-arm64, linux-x64, linux-x64-musl, win32-x64
 ```
 
 Manifest fields (`macrograph.json`):
@@ -110,12 +112,15 @@ Manifest fields (`macrograph.json`):
 | `icon`                       | no       | Path to the icon                                                                    |
 | `requires`                   | no       | Host services the module needs (see [Host services](#10-host-services))             |
 | `node`                       | no       | Node built-in modules (`node:*`) the server entry may import                        |
+| `native`                     | no       | Native addons the package ships under `native/<name>/`                              |
 
 **What the server entry exports.** Its default export is the module's deployment, or the bare module if it has no engine. That replaces today's `macrograph.standaloneDeployment` field in `package.json`.
 
 **What the UI entry exports.** Its default export is a UI descriptor. For now that is just `settings`, today's `ClientSettings` descriptor without the `module` and `id` fields. The host already knows the id, and dropping `module` stops `Module.ts` from leaking into browser bundles. Other UI surfaces can be added later, such as custom property editors or node views.
 
 **No dependencies between modules at runtime.** If one module reuses another's code (GoXLR, SpeakerBot and Stream Deck reuse the websocket modules), that code is bundled into it. Modules can still use each other's types by full id.
+
+**Native addons.** A module that needs a Node-API addon ships its prebuilt binaries as `native/<name>/<target>.node`, where the target is `<platform>-<arch>` plus `-musl` on musl Linux (`ModulePackage.NativeTargets`), declares `<name>` in `native`, and loads it with `require("macrograph:native/<name>")`. In `package.json`, `macrograph.build.native` maps each name to a template such as `"@julusian/midi/prebuilds/midi-{target}/node-napi-v7.node"`, and `macrograph.build.alias` swaps a dependency's own loader for a module-local file that makes that `require` call (MIDI replaces `@julusian/midi/load-native.js`). Publish checks accept only declared names, known targets and real Mach-O, ELF or PE binaries, within size limits.
 
 **Host interface version (`api`).** This number goes up whenever a library shared with the host changes version, or the module-facing API in `@macrograph/module` changes incompatibly. A host supports a set of `api` versions and refuses to load anything else. Until we commit to semver compatibility for shared libraries, every Effect or Solid upgrade raises it.
 
@@ -186,6 +191,7 @@ The server entry is built as one self-contained file wrapped in a function, Comm
 3. Calls it with a `require` that only resolves:
    - **shared libraries**, returned from a table of the host's own instances. On the server these are `effect`, `effect/*`, `@macrograph/module` and `@macrograph/module/*`.
    - **Node built-ins**, if `node:*` modules are listed in the manifest's `node` field.
+   - **Native addons**, `macrograph:native/<name>` for names in the manifest's `native` field. The host picks `native/<name>/<target>.node` for its own platform, checks that it resolves inside the package folder, and opens it with `process.dlopen`. A missing binary fails with "MIDI has no native build for linux-riscv64".
    - Anything else throws.
 4. Reads the default export.
 
@@ -201,6 +207,7 @@ What this requires:
 - **All resources must belong to the module's scope.** A timer or listener created outside the scope keeps the old code alive.
 - **A test proves the code gets freed**: load and unload a fixture module many times, then check through a `WeakRef` that its exports get collected.
 - **The `node` allowlist is not a security boundary.** It keeps declarations honest, nothing more.
+- **Native addons can't be unloaded.** The host opens each addon file once per process and hands the same exports to every later load, so a reload reuses it. Native code is the one part of a module that unloading never frees.
 - **Dev mode is the one difference.** Built-ins are imported from source through Vite's server runner, so server hot reload keeps working. Everything after evaluation is the same code path.
 
 ### 7. HTTP surface
@@ -397,7 +404,7 @@ Rules:
 **The confirmation dialog** shows:
 
 - the publisher, the registry, and whether the release is trusted
-- the declared `requires` and `node` lists
+- the declared `requires`, `node` and `native` lists, with a note that native code runs as part of the server
 - a warning that the author isn't verified
 - a plain statement that these declarations are not a sandbox
 
@@ -412,7 +419,7 @@ Confirming requires ticking a checkbox.
 
 ### 16. Security model
 
-- **Modules are fully trusted code.** A module's server code runs inside the server process. Its UI runs on the editor's origin and can call any editor RPC as the signed-in user.
+- **Modules are fully trusted code.** A module's server code, including any native addons it ships, runs inside the server process. Its UI runs on the editor's origin and can call any editor RPC as the signed-in user.
 - **Admins control what runs.** The modules folder and installs are admin-only, and there is no upload endpoint.
 - **Trust flags and signatures say who vouches for a release.** They don't isolate anything. The UI must say so plainly.
 

@@ -19,7 +19,6 @@
   "dependencies": {
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@julusian/midi": "^3.8.1",
     "@macrograph/cloud-api": "workspace:*",
     "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",

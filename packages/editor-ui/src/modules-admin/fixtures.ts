@@ -165,6 +165,7 @@ const release = (
   status: "active",
   requires: [],
   node: [],
+  native: [],
   ...overrides,
 });
 
@@ -208,6 +209,6 @@ export const fixturePackages: ReadonlyArray<ModuleAdminRpc.RegistryPackage> = [
   {
     id: ModuleId.make({ namespace: "modules.example.com", publisher: "lumen", name: "timer" }),
     displayName: "Countdown timer",
-    releases: [release("0.2.0", { trust: "untrusted" })],
+    releases: [release("0.2.0", { trust: "untrusted", native: ["chime"] })],
   },
 ];

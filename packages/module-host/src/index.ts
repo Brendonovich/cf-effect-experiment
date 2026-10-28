@@ -11,6 +11,7 @@ export * as ModuleTrust from "./ModuleTrust.ts";
 export * as ModuleUrls from "./ModuleUrls.ts";
 export * as ModuleWatcher from "./ModuleWatcher.ts";
 export * as Mounter from "./Mounter.ts";
+export * as NativeAddons from "./NativeAddons.ts";
 export * as SharedLibraryTable from "./SharedLibraryTable.ts";
 export * as StaticRegistry from "./StaticRegistry.ts";
 export * as VersionSelection from "./VersionSelection.ts";

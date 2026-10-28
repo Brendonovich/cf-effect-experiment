@@ -235,7 +235,11 @@ function ReleaseRow(props: {
     return null;
   });
   const declarations = createMemo(() =>
-    [...props.release.requires, ...props.release.node.map((name) => `node:${name}`)].join(", "),
+    [
+      ...props.release.requires,
+      ...props.release.node.map((name) => `node:${name}`),
+      ...props.release.native.map((name) => `native:${name}`),
+    ].join(", "),
   );
   const install = () =>
     admin.requestInstall({
@@ -248,6 +252,7 @@ function ReleaseRow(props: {
               version: props.release.version,
               requires: props.release.requires,
               node: props.release.node,
+              native: props.release.native,
             },
           }
         : {}),

@@ -3,10 +3,10 @@ import type { Manifest } from "@macrograph/module/Manifest";
 import { ModulePackage } from "@macrograph/module/ModulePackage";
 import { SharedLibraries } from "@macrograph/module/SharedLibraries";
 import { Effect, Schema } from "effect";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { builtinModules } from "node:module";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { builtinModules, createRequire } from "node:module";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { rolldown, type Plugin as RolldownPlugin } from "rolldown";
 
 import { Checks } from "./Checks.ts";
@@ -52,14 +52,17 @@ const builtinName = (specifier: string) => {
 const missingPrefix = "\0macrograph-missing:";
 
 /**
- * Leaves shared server libraries and Node built-ins as `require(...)` calls and turns
- * unresolvable optional `require`s into stubs that throw, so the bundle only ever requires
- * what the host resolves.
+ * Leaves shared server libraries, Node built-ins and native addons (`macrograph:native/*`) as
+ * `require(...)` calls and turns unresolvable optional `require`s into stubs that throw, so the
+ * bundle only ever requires what the host resolves.
  */
-const serverExternals = (external: ReadonlySet<string>): RolldownPlugin => ({
+const serverExternals: RolldownPlugin = {
   name: "macrograph-module-server-externals",
   async resolveId(source, importer, extra) {
-    if (SharedLibraries.isShared(source, "server") || external.has(source))
+    if (
+      SharedLibraries.isShared(source, "server") ||
+      ModulePackage.parseNativeSpecifier(source) !== undefined
+    )
       return { id: source, external: true };
     const builtin = builtinName(source);
     if (builtin !== undefined) return { id: `node:${builtin}`, external: true };
@@ -73,7 +76,97 @@ const serverExternals = (external: ReadonlySet<string>): RolldownPlugin => ({
     const specifier = id.slice(missingPrefix.length);
     return `throw new Error(${JSON.stringify(`Cannot find module '${specifier}'`)});`;
   },
+};
+
+/**
+ * The absolute path of `<package>/<file>` resolved from a module's directory. Looks the package
+ * folder up directly so the file doesn't have to be in the package's `exports`.
+ */
+export const resolvePackageFile = (packageDirectory: string, specifier: string): string => {
+  const parts = specifier.split("/");
+  const count = specifier.startsWith("@") ? 2 : 1;
+  const name = parts.slice(0, count).join("/");
+  const file = parts.slice(count);
+  if (file.length === 0 || parts.some((part) => part === "" || part === "." || part === ".."))
+    throw new Error(`${specifier} is not a <package>/<file> path`);
+  const require = createRequire(join(packageDirectory, "package.json"));
+  const directory = (require.resolve.paths(name) ?? [])
+    .map((nodeModules) => join(nodeModules, name))
+    .find((candidate) => existsSync(join(candidate, "package.json")));
+  if (directory === undefined)
+    throw new Error(`Cannot find package ${name} from ${packageDirectory}`);
+  return join(realpathSync(directory), ...file);
+};
+
+interface Alias {
+  readonly key: string;
+  /** Real path of the dependency file being replaced. */
+  readonly target: string;
+  /** Matched against import specifiers before resolving them. */
+  readonly stem: string;
+  readonly replacement: string;
+}
+
+const resolveAliases = (packageDirectory: string, config: PackageConfig.Model) =>
+  Object.entries(config.build?.alias ?? {}).map(([key, replacement]): Alias => {
+    const file = resolvePackageFile(packageDirectory, key);
+    if (!existsSync(file)) throw new Error(`Alias ${key} points at missing file ${file}`);
+    const target = realpathSync(file);
+    return {
+      key,
+      target,
+      stem: basename(target, extname(target)),
+      replacement: resolve(packageDirectory, replacement),
+    };
+  });
+
+/** Replaces dependency files with module-local ones, comparing resolved paths. */
+const aliasPlugin = (aliases: ReadonlyArray<Alias>, used: Set<string>): RolldownPlugin => ({
+  name: "macrograph-module-alias",
+  async resolveId(source, importer, extra) {
+    const candidates = aliases.filter((alias) => source.includes(alias.stem));
+    if (candidates.length === 0) return null;
+    const resolved = await this.resolve(source, importer, { skipSelf: true, kind: extra.kind });
+    if (resolved === null || resolved.external) return null;
+    const id = resolved.id.split("?")[0] ?? resolved.id;
+    const alias = candidates.find((candidate) => candidate.target === id);
+    if (alias === undefined) return null;
+    used.add(alias.key);
+    return alias.replacement;
+  },
 });
+
+/** Copies each native addon's prebuilt binaries to `native/<name>/<target>.node`. */
+const copyNativeAddons = (
+  packageDirectory: string,
+  outDirectory: string,
+  config: PackageConfig.Model,
+) =>
+  Effect.tryPromise({
+    try: async () => {
+      for (const [name, template] of Object.entries(config.build?.native ?? {})) {
+        let copied = 0;
+        for (const target of ModulePackage.NativeTargets) {
+          const source = resolvePackageFile(
+            packageDirectory,
+            template.replaceAll(PackageConfig.TargetPlaceholder, target),
+          );
+          if (!existsSync(source)) continue;
+          const destination = join(outDirectory, ModulePackage.nativePath(name, target));
+          await mkdir(dirname(destination), { recursive: true });
+          await copyFile(source, destination);
+          copied++;
+        }
+        if (copied === 0)
+          throw new Error(`No prebuilt binaries match ${template} for any known target`);
+      }
+    },
+    catch: (cause) =>
+      fail(
+        packageDirectory,
+        `Unable to copy native addons: ${cause instanceof Error ? cause.message : String(cause)}`,
+      ),
+  });
 
 const packageNames = new Map<string, string | undefined>();
 /** The name of the package that owns a file, from its nearest `package.json`. */
@@ -128,12 +221,14 @@ const buildServer = (options: {
 }) =>
   Effect.tryPromise({
     try: async () => {
+      const aliases = resolveAliases(options.packageDirectory, options.config);
+      const usedAliases = new Set<string>();
       const bundle = await rolldown({
         input: resolve(options.packageDirectory, options.entry),
         cwd: options.packageDirectory,
         platform: "node",
         logLevel: "warn",
-        plugins: [serverExternals(new Set(options.config.build?.external ?? []))],
+        plugins: [aliasPlugin(aliases, usedAliases), serverExternals],
       });
       try {
         const output = await bundle.generate({
@@ -147,6 +242,11 @@ const buildServer = (options: {
         const [chunk] = chunks;
         if (chunk === undefined || chunks.length !== 1)
           throw new Error(`Expected one server chunk, got ${chunks.length}`);
+        const unused = aliases.filter((alias) => !usedAliases.has(alias.key));
+        if (unused.length > 0)
+          throw new Error(
+            `Aliases never matched a bundled file: ${unused.map((alias) => alias.key).join(", ")}`,
+          );
         await writeFile(options.outFile, chunk.code);
         return { code: chunk.code, moduleIds: chunk.moduleIds };
       } finally {
@@ -235,6 +335,7 @@ export const build = (options: Options) =>
       outFile: join(outDirectory, ModulePackage.ServerEntry),
       config,
     });
+    yield* copyNativeAddons(packageDirectory, outDirectory, config);
     const graphIssues: Array<Checks.Issue> = [
       ...Checks.sharedLibraryCopies(
         graphModules(server.moduleIds),
@@ -286,17 +387,21 @@ export const build = (options: Options) =>
       catch: (cause) => fail(packageDirectory, `Unable to write manifest: ${String(cause)}`),
     });
 
-    const nodeBuiltins = Checks.analyzeServerEntry(server.code)
-      .requires.filter((specifier) => specifier.startsWith("node:"))
+    const { requires } = Checks.analyzeServerEntry(server.code);
+    const nodeBuiltins = requires
+      .filter((specifier) => specifier.startsWith("node:"))
       .map((specifier) => specifier.slice("node:".length));
     const declared = new Set(config.node ?? []);
     const unusedNode = [...declared].filter((name) => !nodeBuiltins.includes(name));
+    const unusedNative = PackageConfig.nativeAddons(config).filter(
+      (name) => !requires.includes(ModulePackage.nativeSpecifier(name)),
+    );
 
     const files = yield* readPackageFiles(outDirectory);
-    const checked = Checks.checkPackage(files, {
-      ...(options.limits === undefined ? {} : { limits: options.limits }),
-      ...(config.build?.external === undefined ? {} : { external: config.build.external }),
-    });
+    const checked = Checks.checkPackage(
+      files,
+      options.limits === undefined ? {} : { limits: options.limits },
+    );
     const issues: ReadonlyArray<Checks.Issue> = [
       ...graphIssues,
       ...checked.issues,
@@ -305,6 +410,14 @@ export const build = (options: Options) =>
           severity: "warning",
           code: "undeclared-node-builtin",
           message: `The manifest declares node built-in ${name} but the server entry never requires it`,
+          path: ModulePackage.ManifestFile,
+        }),
+      ),
+      ...unusedNative.map(
+        (name): Checks.Issue => ({
+          severity: "warning",
+          code: "undeclared-native-addon",
+          message: `The package builds native addon ${name} but the server entry never requires ${ModulePackage.nativeSpecifier(name)}`,
           path: ModulePackage.ManifestFile,
         }),
       ),

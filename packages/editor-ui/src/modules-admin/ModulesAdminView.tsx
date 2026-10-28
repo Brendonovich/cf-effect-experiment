@@ -124,6 +124,7 @@ function ModulesAdminContent(props: Omit<ModulesAdminViewProps, "queryClient">) 
           registry: error.registry,
           requires: error.requires,
           node: error.node,
+          native: error.native,
         });
     },
   }));
@@ -139,6 +140,7 @@ function ModulesAdminContent(props: Omit<ModulesAdminViewProps, "queryClient">) 
         registry: ModuleId.namespace(request.id),
         requires: request.untrusted.requires,
         node: request.untrusted.node,
+        native: request.untrusted.native,
       });
       return;
     }

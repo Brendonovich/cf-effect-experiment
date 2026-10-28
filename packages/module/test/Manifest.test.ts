@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 
-import { HostService, Manifest, SharedLibraries } from "../src/index.ts";
+import { HostService, Manifest, ModulePackage, SharedLibraries } from "../src/index.ts";
 
 const valid = {
   manifest: Manifest.FormatVersion,
@@ -16,6 +16,7 @@ const valid = {
   icon: "assets/icon.svg",
   requires: ["http-client", "credentials"],
   node: ["fs", "fs/promises"],
+  native: ["midi"],
 } as const;
 
 const decode = (value: unknown) => Effect.runSync(Effect.exit(Manifest.decode(value)));
@@ -61,6 +62,8 @@ describe("Manifest", () => {
       ["icon", "assets/../../icon.svg"],
       ["requires", ["gpu"]],
       ["node", ["node:fs"]],
+      ["native", ["Midi"]],
+      ["native", ["../midi"]],
     ] as const)
       assert.isTrue(Exit.isFailure(decode({ ...valid, [field]: value })), `${field}: ${value}`);
 
@@ -79,6 +82,38 @@ describe("Manifest", () => {
     assert.isTrue(Manifest.allowsNodeBuiltin(manifest, "node:fs/promises"));
     assert.isFalse(Manifest.allowsNodeBuiltin(manifest, "node:net"));
     assert.isFalse(Manifest.allowsNodeBuiltin(manifest, "fs"));
+  });
+});
+
+describe("native addons", () => {
+  it("knows which addons a manifest declares", () => {
+    const manifest = Effect.runSync(Manifest.decode(valid));
+    assert.isTrue(Manifest.declaresNative(manifest, "midi"));
+    assert.isFalse(Manifest.declaresNative(manifest, "serial"));
+  });
+
+  it("builds targets, paths and specifiers", () => {
+    assert.strictEqual(
+      ModulePackage.nativeTarget({ platform: "linux", arch: "x64", musl: true }),
+      "linux-x64-musl",
+    );
+    assert.strictEqual(
+      ModulePackage.nativeTarget({ platform: "darwin", arch: "arm64", musl: true }),
+      "darwin-arm64",
+    );
+    assert.isTrue(ModulePackage.isNativeTarget("win32-ia32"));
+    assert.isFalse(ModulePackage.isNativeTarget("linux-riscv64"));
+    assert.strictEqual(ModulePackage.nativePath("midi", "linux-x64"), "native/midi/linux-x64.node");
+    assert.deepStrictEqual(ModulePackage.parseNativePath("native/midi/linux-x64.node"), {
+      name: "midi",
+      target: "linux-x64",
+    });
+    assert.isUndefined(ModulePackage.parseNativePath("native/midi/x/linux-x64.node"));
+    assert.isUndefined(ModulePackage.parseNativePath("native/midi/linux-x64.so"));
+    assert.isTrue(Manifest.isPackagePath(ModulePackage.nativePath("midi", "win32-x64")));
+    assert.strictEqual(ModulePackage.nativeSpecifier("midi"), "macrograph:native/midi");
+    assert.strictEqual(ModulePackage.parseNativeSpecifier("macrograph:native/midi"), "midi");
+    assert.isUndefined(ModulePackage.parseNativeSpecifier("@julusian/midi"));
   });
 });
 

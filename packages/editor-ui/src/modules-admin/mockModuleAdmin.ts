@@ -150,6 +150,7 @@ export const createMockModuleAdmin = (options: MockModuleAdminOptions = {}): Moc
           registry: ModuleId.namespace(payload.id),
           requires: release.requires,
           node: release.node,
+          native: release.native,
         });
       return replaceModule(toDetails(pkg, release));
     });

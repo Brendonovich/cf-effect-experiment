@@ -429,6 +429,63 @@ describe("official registry", () => {
     }),
   );
 
+  it.effect("accepts declared native addons and rejects undeclared or invalid ones", () =>
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const elf = new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]);
+      const machO = new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1]);
+      const server = {
+        path: "server.cjs",
+        contents: 'module.exports.default = require("macrograph:native/midi");',
+      };
+      const nativeManifest = (name: string) => JSON.stringify(manifest({ name, native: ["midi"] }));
+
+      const published = yield* registry.publish(
+        "maintainer",
+        yield* Pack.tarball([
+          server,
+          { path: "macrograph.json", contents: nativeManifest("native-ok") },
+          { path: "native/midi/linux-x64.node", contents: elf },
+          { path: "native/midi/darwin-arm64.node", contents: machO },
+        ]),
+      );
+      assert.strictEqual(published.status, 201);
+      const document = yield* registry.pkg("macrograph", "native-ok");
+      assert.deepStrictEqual(release(document, "1.0.0").manifest.native, ["midi"]);
+
+      const problems = (bytes: Uint8Array<ArrayBuffer>) =>
+        Effect.gen(function* () {
+          const response = yield* registry.publish("maintainer", bytes);
+          assert.strictEqual(response.status, 422);
+          return JSON.stringify(response.body.problems);
+        });
+      assert.include(
+        yield* problems(
+          yield* Pack.tarball([
+            server,
+            { path: "macrograph.json", contents: JSON.stringify(manifest({ name: "undeclared" })) },
+          ]),
+        ),
+        "native list does not declare midi",
+      );
+      const invalid = yield* problems(
+        yield* Pack.tarball([
+          server,
+          { path: "macrograph.json", contents: nativeManifest("invalid-native") },
+          { path: "native/midi/linux-x64.node", contents: "#!/bin/sh" },
+          { path: "native/midi/linux-riscv64.node", contents: elf },
+          { path: "native/midi/extra/linux-x64.node", contents: elf },
+        ]),
+      );
+      assert.include(invalid, "not a Mach-O, ELF or PE binary");
+      assert.include(invalid, "linux-riscv64 is not a known native target");
+      assert.include(
+        invalid,
+        "native/midi/extra/linux-x64.node is not part of the module package layout",
+      );
+    }),
+  );
+
   it.effect("runs extra bundle checks from the hook", () =>
     Effect.gen(function* () {
       const keys = yield* Signing.generateKeyPair;

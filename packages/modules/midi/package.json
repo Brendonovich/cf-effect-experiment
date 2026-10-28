@@ -45,10 +45,17 @@
       "server": "./src/Deployment.ts",
       "ui": "./src/UI.ts"
     },
+    "node": [
+      "events",
+      "stream"
+    ],
     "build": {
-      "external": [
-        "@julusian/midi"
-      ]
+      "native": {
+        "midi": "@julusian/midi/prebuilds/midi-{target}/node-napi-v7.node"
+      },
+      "alias": {
+        "@julusian/midi/load-native.js": "./src/native/loadMidi.ts"
+      }
     }
   }
 }

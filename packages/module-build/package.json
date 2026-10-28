@@ -43,6 +43,7 @@
     "@macrograph/module-fs": "workspace:*",
     "@macrograph/module-github": "workspace:*",
     "@macrograph/module-goxlr": "workspace:*",
+    "@macrograph/module-host": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-ikea-tradfri": "workspace:*",
     "@macrograph/module-installer": "workspace:*",

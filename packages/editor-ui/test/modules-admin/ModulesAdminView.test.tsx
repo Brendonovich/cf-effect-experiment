@@ -177,6 +177,10 @@ it("opens the confirmation before installing a release known to be untrusted", a
   await settle(() => expect(dialog()).not.toBeNull());
   expect(mock.calls.some((call) => call.tag === "InstallModule")).toBe(false);
   expect(dialog()!.textContent).toContain("Example community registry");
+  // Native code is called out: it runs with the server's full privileges.
+  expect(dialog()!.textContent).toContain("Native addons");
+  expect(dialog()!.textContent).toContain("chime");
+  expect(dialog()!.querySelector("[data-untrusted-native]")).not.toBeNull();
 
   // Cancelling sends nothing.
   button(dialog()!, "Cancel")!.click();
@@ -219,6 +223,7 @@ it("keeps the dialog open and shows the error when a confirmed install fails", a
                   registry: "modules.example.com",
                   requires: [],
                   node: [],
+                  native: [],
                 }),
               ),
       },

@@ -13,6 +13,7 @@ export interface UntrustedConfirmation {
   readonly registry: string;
   readonly requires: ReadonlyArray<string>;
   readonly node: ReadonlyArray<string>;
+  readonly native: ReadonlyArray<string>;
 }
 
 export interface UntrustedInstallDialogProps {
@@ -98,9 +99,16 @@ export function UntrustedInstallDialog(props: UntrustedInstallDialogProps) {
         </div>
         <DeclarationList label="Requires host services" items={props.confirmation.requires} />
         <DeclarationList label="Node built-ins" items={props.confirmation.node} />
+        <DeclarationList label="Native addons" items={props.confirmation.native} />
       </dl>
 
       <Notice tone="warning">{unverified()}</Notice>
+      <Show when={props.confirmation.native.length > 0}>
+        <p sx={styles.sandbox} data-untrusted-native>
+          This module ships native code, which runs as part of the server process and can do
+          anything the server can.
+        </p>
+      </Show>
       <p sx={styles.sandbox}>
         These declarations describe what the module says it uses. They are not a sandbox: the
         module's server code runs inside this server with full access, and its UI runs in the editor

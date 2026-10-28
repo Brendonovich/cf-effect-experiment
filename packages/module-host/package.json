@@ -20,6 +20,7 @@
     "./ModuleUrls": "./src/ModuleUrls.ts",
     "./ModuleWatcher": "./src/ModuleWatcher.ts",
     "./Mounter": "./src/Mounter.ts",
+    "./NativeAddons": "./src/NativeAddons.ts",
     "./SharedLibraryTable": "./src/SharedLibraryTable.ts",
     "./StaticRegistry": "./src/StaticRegistry.ts",
     "./VersionSelection": "./src/VersionSelection.ts",

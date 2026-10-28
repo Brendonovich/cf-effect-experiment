@@ -17,6 +17,8 @@ export type IssueCode =
   | "shared-library-copy"
   | "unresolvable-require"
   | "undeclared-node-builtin"
+  | "undeclared-native-addon"
+  | "invalid-native-addon"
   | "dynamic-require"
   | "unshared-import"
   | "module-scope-global"
@@ -36,6 +38,10 @@ export interface Limits {
   readonly uiBytes: number;
   /** Maximum combined size of everything under `assets/`. */
   readonly assetsBytes: number;
+  /** Maximum size of one native addon binary under `native/`. */
+  readonly nativeFileBytes: number;
+  /** Maximum combined size of everything under `native/`. */
+  readonly nativeBytes: number;
   /** Maximum size of the whole package folder. */
   readonly totalBytes: number;
 }
@@ -46,7 +52,9 @@ export const defaultLimits: Limits = {
   serverBytes: 16 * MiB,
   uiBytes: 8 * MiB,
   assetsBytes: 4 * MiB,
-  totalBytes: 24 * MiB,
+  nativeFileBytes: 16 * MiB,
+  nativeBytes: 32 * MiB,
+  totalBytes: 48 * MiB,
 };
 
 export interface File {
@@ -207,10 +215,8 @@ const isRequireCall = (node: Node) => {
 
 export interface ServerEntryOptions {
   readonly path?: string;
-  /** Used to check `node:*` requires against the declared `node` list. */
+  /** Used to check `node:*` and native addon requires against the declared lists. */
   readonly manifest?: Manifest.Model;
-  /** Extra specifiers the host is expected to resolve. */
-  readonly external?: ReadonlyArray<string>;
 }
 
 export interface ServerEntryAnalysis {
@@ -241,7 +247,6 @@ export const analyzeServerEntry = (
       requires: [],
     };
   }
-  const external = new Set(options.external ?? []);
   const reported = new Set<string>();
   const report = (issue: Issue) => {
     const key = `${issue.code}:${issue.message}`;
@@ -293,7 +298,19 @@ export const analyzeServerEntry = (
       return;
     }
     requires.add(specifier);
-    if (SharedLibraries.isShared(specifier, "server") || external.has(specifier)) return;
+    if (SharedLibraries.isShared(specifier, "server")) return;
+    const native = ModulePackage.parseNativeSpecifier(specifier);
+    if (native !== undefined) {
+      if (options.manifest !== undefined && !Manifest.declaresNative(options.manifest, native))
+        report(
+          error(
+            "undeclared-native-addon",
+            `Server entry requires ${specifier} but the manifest's native list does not declare ${native}`,
+            path,
+          ),
+        );
+      return;
+    }
     if (specifier.startsWith("node:")) {
       if (
         options.manifest !== undefined &&
@@ -311,7 +328,7 @@ export const analyzeServerEntry = (
     report(
       error(
         "unresolvable-require",
-        `Server entry requires ${specifier}, which is neither a shared library nor a node: built-in`,
+        `Server entry requires ${specifier}, which is neither a shared library, a node: built-in nor a native addon`,
         path,
       ),
     );
@@ -395,11 +412,88 @@ const isPackageFile = (path: string) =>
   path === ModulePackage.ManifestFile ||
   path === ModulePackage.ServerEntry ||
   path.startsWith(`${ModulePackage.UiDirectory}/`) ||
-  path.startsWith(`${ModulePackage.AssetsDirectory}/`);
+  path.startsWith(`${ModulePackage.AssetsDirectory}/`) ||
+  path.startsWith(`${ModulePackage.NativeDirectory}/`);
+
+const bytes = (contents: string | Uint8Array) =>
+  typeof contents === "string" ? textEncoder.encode(contents) : contents;
+
+type BinaryFormat = "mach-o" | "elf" | "pe";
+
+/** The executable format of a binary from its magic number. */
+export const binaryFormat = (contents: Uint8Array): BinaryFormat | undefined => {
+  if (contents.byteLength < 4) return undefined;
+  const [a = 0, b = 0, c = 0, d = 0] = contents;
+  if (a === 0x7f && b === 0x45 && c === 0x4c && d === 0x46) return "elf";
+  if (a === 0x4d && b === 0x5a) return "pe";
+  const magic = ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
+  return [0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(magic)
+    ? "mach-o"
+    : undefined;
+};
+
+const targetFormats: Readonly<Record<string, BinaryFormat>> = {
+  darwin: "mach-o",
+  linux: "elf",
+  win32: "pe",
+};
+
+/** Checks one `native/<name>/<target>.node` file against the manifest and its target. */
+export const checkNativeFile = (
+  file: File,
+  manifest: Manifest.Model | undefined,
+  limits: Pick<Limits, "nativeFileBytes"> = defaultLimits,
+): ReadonlyArray<Issue> => {
+  const parsed = ModulePackage.parseNativePath(file.path);
+  if (parsed === undefined)
+    return [
+      error(
+        "unexpected-file",
+        `Native addon files must be ${ModulePackage.nativePath("<name>", "<target>")}`,
+        file.path,
+      ),
+    ];
+  const issues: Array<Issue> = [];
+  if (manifest !== undefined && !Manifest.declaresNative(manifest, parsed.name))
+    issues.push(
+      error(
+        "undeclared-native-addon",
+        `Native addon ${parsed.name} is not declared in the manifest's native list`,
+        file.path,
+      ),
+    );
+  if (!ModulePackage.isNativeTarget(parsed.target)) {
+    issues.push(
+      error(
+        "invalid-native-addon",
+        `${parsed.target} is not a known native target (${ModulePackage.NativeTargets.join(", ")})`,
+        file.path,
+      ),
+    );
+  } else {
+    const expected = targetFormats[parsed.target.split("-")[0] ?? ""];
+    const format = binaryFormat(bytes(file.contents));
+    if (format === undefined)
+      issues.push(
+        error("invalid-native-addon", "Native addon is not a Mach-O, ELF or PE binary", file.path),
+      );
+    else if (format !== expected)
+      issues.push(
+        error(
+          "invalid-native-addon",
+          `Native addon for ${parsed.target} is a ${format} binary, expected ${expected}`,
+          file.path,
+        ),
+      );
+  }
+  issues.push(
+    ...sizeIssue("Native addon", byteLength(file.contents), limits.nativeFileBytes, file.path),
+  );
+  return issues;
+};
 
 export interface PackageOptions {
   readonly limits?: Partial<Limits>;
-  readonly external?: ReadonlyArray<string>;
   /** `api` versions the checker accepts; any when omitted. */
   readonly supportedApis?: ReadonlyArray<number>;
 }
@@ -474,7 +568,6 @@ export const checkPackage = (
       ...checkServerEntry(text(server.contents), {
         path: serverPath,
         ...(manifest === undefined ? {} : { manifest }),
-        ...(options.external === undefined ? {} : { external: options.external }),
       }),
       ...sizeIssue("Server entry", byteLength(server.contents), limits.serverBytes, serverPath),
     );
@@ -482,8 +575,26 @@ export const checkPackage = (
     issues.push(error("missing-file", "Package has no server entry", serverPath));
   }
 
+  const nativeNames = new Set<string>();
+  for (const file of files) {
+    if (!file.path.startsWith(`${ModulePackage.NativeDirectory}/`)) continue;
+    issues.push(...checkNativeFile(file, manifest, limits));
+    const parsed = ModulePackage.parseNativePath(file.path);
+    if (parsed !== undefined) nativeNames.add(parsed.name);
+  }
+  for (const name of manifest?.native ?? [])
+    if (!nativeNames.has(name))
+      issues.push(
+        error(
+          "missing-file",
+          `Manifest declares native addon ${name} but the package has no binaries for it`,
+          `${ModulePackage.NativeDirectory}/${name}`,
+        ),
+      );
+
   let uiBytes = 0;
   let assetsBytes = 0;
+  let nativeBytes = 0;
   let totalBytes = 0;
   for (const file of files) {
     const size = byteLength(file.contents);
@@ -493,10 +604,12 @@ export const checkPackage = (
       if (file.path.endsWith(".js")) issues.push(...checkUiChunk(text(file.contents), file.path));
     }
     if (file.path.startsWith(`${ModulePackage.AssetsDirectory}/`)) assetsBytes += size;
+    if (file.path.startsWith(`${ModulePackage.NativeDirectory}/`)) nativeBytes += size;
   }
   issues.push(
     ...sizeIssue("UI", uiBytes, limits.uiBytes, ModulePackage.UiDirectory),
     ...sizeIssue("Assets", assetsBytes, limits.assetsBytes, ModulePackage.AssetsDirectory),
+    ...sizeIssue("Native addons", nativeBytes, limits.nativeBytes, ModulePackage.NativeDirectory),
     ...sizeIssue("Package", totalBytes, limits.totalBytes),
   );
   return { manifest, issues };

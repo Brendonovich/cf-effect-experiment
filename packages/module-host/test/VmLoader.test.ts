@@ -72,8 +72,7 @@ describe("VmLoader", () => {
 
   it("resolves bare built-in names through the node allowlist", () => {
     const value = VmLoader.evaluateSource(
-      official("inline"),
-      manifest(["path"]),
+      { id: official("inline"), root: "/virtual", manifest: manifest(["path"]) },
       'exports.default = require("path").posix.join("x", "y");',
       "/virtual/server.cjs",
     );
@@ -84,8 +83,7 @@ describe("VmLoader", () => {
     assert.throws(
       () =>
         VmLoader.evaluateSource(
-          official("inline"),
-          manifest(),
+          { id: official("inline"), root: "/virtual", manifest: manifest() },
           'require("effect/internal/core");',
           "/virtual/server.cjs",
         ),
@@ -94,8 +92,7 @@ describe("VmLoader", () => {
     assert.throws(
       () =>
         VmLoader.evaluateSource(
-          official("inline"),
-          manifest(),
+          { id: official("inline"), root: "/virtual", manifest: manifest() },
           'require("@macrograph/module/vite");',
           "/virtual/server.cjs",
         ),
@@ -105,8 +102,7 @@ describe("VmLoader", () => {
 
   it("reads module.exports when there is no default export", () => {
     const value = VmLoader.evaluateSource(
-      official("inline"),
-      manifest(),
+      { id: official("inline"), root: "/virtual", manifest: manifest() },
       "module.exports = { plain: true };",
       "/virtual/server.cjs",
     );

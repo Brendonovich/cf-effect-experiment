@@ -26,8 +26,7 @@ assets/           icon
     "entries": { "server": "./src/Deployment/WebSocket.ts", "ui": "./src/UI.ts" },
     "icon": "./icon.svg",
     "requires": ["http-client", "socket"],
-    "node": ["crypto"],
-    "build": { "external": [] }
+    "node": ["crypto"]
   }
 }
 ```
@@ -36,14 +35,22 @@ assets/           icon
 - `entries.ui` default-exports `ModuleUI.make({ settings })`.
 - `node` lists the `node:*` built-ins the bundled server code requires; the build fails when a
   required built-in is undeclared.
-- `build.external` keeps extra specifiers as `require(...)` calls. The host's injected `require`
-  must resolve them or they throw (used by MIDI for its native addon).
+- `build.native` maps native addon names to a template for their prebuilt binaries, e.g.
+  `{ "midi": "@julusian/midi/prebuilds/midi-{target}/node-napi-v7.node" }`. The leading package
+  is resolved from the module directory, `{target}` is replaced by each of
+  `ModulePackage.NativeTargets`, and every binary that exists is copied to
+  `native/<name>/<target>.node` (the build fails if none do). The names go into the manifest's
+  `native` list; server code loads them with `require("macrograph:native/<name>")`.
+- `build.alias` replaces files inside dependencies in the server bundle, keyed by
+  `<package>/<file>` (it doesn't need to be exported) with a path relative to the module
+  directory. MIDI swaps `@julusian/midi/load-native.js` for `src/native/loadMidi.ts`, which
+  default-exports `() => require("macrograph:native/midi")`, so `pkg-prebuilds` isn't bundled.
 
 ## Server bundle
 
 Rolldown, `platform: "node"`, CommonJS, one chunk with dynamic imports inlined. Shared server
-specifiers (`SharedLibraries.isShared(spec, "server")`) and Node built-ins (normalised to
-`node:*`) stay as `require` calls; everything else is bundled. Optional `require`s of packages
+specifiers (`SharedLibraries.isShared(spec, "server")`), Node built-ins (normalised to
+`node:*`) and `macrograph:native/*` stay as `require` calls; everything else is bundled. Optional `require`s of packages
 that can't be resolved become stubs that throw `Cannot find module`. Top-level await fails the
 build.
 
@@ -51,10 +58,11 @@ build.
 
 `Checks` is platform-neutral (no Node APIs) so the registry can run it on uploaded packages:
 
-- `checkPackage(files, { limits, external, supportedApis })`: manifest, layout, referenced
-  files, server entry, UI chunks, size limits.
+- `checkPackage(files, { limits, supportedApis })`: manifest, layout, referenced files, server
+  entry, UI chunks, native addons (declared names, known targets, Mach-O/ELF/PE magic matching
+  the target, per-file and combined size limits), size limits.
 - `analyzeServerEntry` / `checkServerEntry`: syntax, top-level await, requires the host can't
-  resolve, undeclared `node:*` built-ins, bundled shared libraries.
+  resolve, undeclared `node:*` built-ins and native addons, bundled shared libraries.
 - `checkUiChunk`: bare imports outside the shared browser set, bundled shared libraries.
 - `sharedLibraryCopies(modules, target)`: the same check on a bundle graph; the build runs it on
   Rolldown's module ids with package names read from each file's nearest `package.json`.
