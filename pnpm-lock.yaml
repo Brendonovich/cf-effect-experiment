@@ -585,9 +585,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
-      '@julusian/midi':
-        specifier: ^3.8.1
-        version: 3.8.1
       '@macrograph/cloud-api':
         specifier: workspace:*
         version: link:../../packages/cloud-api
@@ -1267,6 +1264,9 @@ importers:
       '@macrograph/module-goxlr':
         specifier: workspace:*
         version: link:../modules/goxlr
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../modules/http-client

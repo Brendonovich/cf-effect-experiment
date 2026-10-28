@@ -15,6 +15,7 @@ import {
   httpClient,
   makeRegistry,
   manifest,
+  packageTarball,
   tarball,
   type FixtureRegistry,
 } from "./fixture.ts";
@@ -218,6 +219,33 @@ describe("Installer", () => {
       assert.strictEqual(result.record.trust, "untrusted");
       assert.strictEqual(result.record.confirmation?.actor, "admin-1");
       assert.isString(result.record.confirmation?.at);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("installs native addons and lists them in the untrusted confirmation", () =>
+    Effect.gen(function* () {
+      const { official, installer } = yield* setup();
+      const model = manifest("bob", "lights", "1.0.0", { native: ["midi"] });
+      yield* official.publish({
+        version: "1.0.0",
+        trust: "untrusted",
+        manifest: { native: ["midi"] },
+        archive: yield* packageTarball(model, [
+          directory("native/"),
+          directory("native/midi/"),
+          file("native/midi/linux-x64.node", "\u007fELF"),
+          file("native/midi/darwin-arm64.node", "\u00cf\u00fa\u00ed\u00fe"),
+        ]),
+      });
+
+      const error = failure(yield* Effect.exit(installer.install(request(officialId))));
+      assert.strictEqual(error?._tag, "UntrustedConfirmationRequired");
+      if (error?._tag === "UntrustedConfirmationRequired")
+        assert.deepStrictEqual(error.native, ["midi"]);
+
+      const result = yield* installer.install(request(officialId, { acknowledgeUntrusted: true }));
+      assert.isTrue(existsSync(join(result.path, "native", "midi", "linux-x64.node")));
+      assert.isTrue(existsSync(join(result.path, "native", "midi", "darwin-arm64.node")));
     }).pipe(Effect.scoped),
   );
 

@@ -17,6 +17,7 @@ export interface InstallRequest {
     readonly version: string;
     readonly requires: ReadonlyArray<string>;
     readonly node: ReadonlyArray<string>;
+    readonly native: ReadonlyArray<string>;
   };
 }
 

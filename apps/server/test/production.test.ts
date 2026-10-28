@@ -442,6 +442,37 @@ describe("built self-hosted server", () => {
     expect((await rpc("ListModules", {}, readerToken)).error).toBeDefined();
   });
 
+  it("loads MIDI's packaged native addon and lists ports through it", async () => {
+    const midi = "macrograph.app/macrograph/midi";
+    expect((await catalog()).find((entry) => entry.id === midi)).toMatchObject({
+      status: "loaded",
+    });
+    const binaries = await readdir(
+      join(appDirectory, "dist/modules", midi, "0.1.0", "native/midi"),
+    );
+    expect(binaries).toEqual(expect.arrayContaining(["linux-x64.node", "linux-x64-musl.node"]));
+
+    const rescan = await moduleRpc(midi, "MidiRescan", ownerToken);
+    expect(rescan.status).toBe(200);
+    const messages = (await rescan.text())
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => JSON.parse(line) as { _tag: string; exit?: { _tag: string } });
+    expect(messages.find((message) => message._tag === "Exit")?.exit?._tag).toBe("Success");
+
+    // Listing ports goes through the addon; without it the engine reports MIDI as unavailable.
+    const state = (await rpc("GetModuleClientState", { moduleId: midi }, ownerToken)).result as {
+      readonly available: boolean;
+      readonly error?: string;
+      readonly inputs: ReadonlyArray<unknown>;
+      readonly outputs: ReadonlyArray<unknown>;
+    };
+    expect(state.error).toBeUndefined();
+    expect(state.available).toBe(true);
+    expect(Array.isArray(state.inputs)).toBe(true);
+    expect(Array.isArray(state.outputs)).toBe(true);
+  });
+
   it("serves module UI files under content-hashed URLs", async () => {
     const entry = (await catalog()).find((value) => value.id === utilities);
     const ui = entry?.ui;

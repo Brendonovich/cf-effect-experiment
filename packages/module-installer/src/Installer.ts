@@ -444,6 +444,7 @@ export const layer = (
               ...(release.reason === undefined ? {} : { reason: release.reason }),
               requires: release.manifest.requires ?? [],
               node: release.manifest.node ?? [],
+              native: release.manifest.native ?? [],
             })),
           } satisfies ModuleAdminRpc.RegistryPackage;
         });
@@ -559,6 +560,7 @@ export const layer = (
               registry: registry.namespace,
               requires: release.manifest.requires ?? [],
               node: release.manifest.node ?? [],
+              native: release.manifest.native ?? [],
             });
 
           const bytes = yield* client

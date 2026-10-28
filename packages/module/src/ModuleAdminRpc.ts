@@ -23,6 +23,7 @@ export class UntrustedConfirmationRequired extends Schema.TaggedError<UntrustedC
     registry: ModuleId.Namespace,
     requires: Schema.Array(Schema.String),
     node: Schema.Array(Schema.String),
+    native: Schema.Array(Schema.String),
   },
 ) {}
 
@@ -141,6 +142,8 @@ export const RegistryRelease = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
   requires: Schema.Array(Schema.String),
   node: Schema.Array(Schema.String),
+  /** Native addons the release ships; they run with the server's full privileges. */
+  native: Schema.Array(Schema.String),
 });
 export type RegistryRelease = typeof RegistryRelease.Type;
 

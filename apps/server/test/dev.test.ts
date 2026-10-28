@@ -98,6 +98,24 @@ it("loads built-ins from source and points their UI at Vite-served sources", asy
   expect(await ui.text()).toContain("ModuleUI");
 });
 
+it("loads MIDI's native addon from source through its own dependency", async () => {
+  const response = await fetch(`${origin}${basePath}/rpc`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "GetModuleClientState",
+      params: { moduleId: "macrograph.app/macrograph/midi" },
+    }),
+  });
+  const { result } = (await response.json()) as {
+    readonly result?: { readonly available: boolean; readonly error?: string };
+  };
+  expect(result?.error).toBeUndefined();
+  expect(result?.available).toBe(true);
+});
+
 it.each([
   ["server code", "src/Server.ts"],
   ["workspace dependencies", "../../packages/modules/utilities/src/Engine.ts"],

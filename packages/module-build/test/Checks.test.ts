@@ -123,9 +123,18 @@ describe("requires", () => {
     expect(codes(Checks.checkServerEntry(code))).toEqual(["unresolvable-require"]);
   });
 
-  it("allows declared externals", () => {
-    const code = 'const midi = require("@julusian/midi");\nexports.default = midi;';
-    expect(Checks.checkServerEntry(code, { external: ["@julusian/midi"] })).toEqual([]);
+  it("allows only declared native addons", () => {
+    const code = 'const midi = require("macrograph:native/midi");\nexports.default = midi;';
+    expect(Checks.checkServerEntry(code, { manifest: manifest({ native: ["midi"] }) })).toEqual([]);
+    expect(codes(Checks.checkServerEntry(code, { manifest: manifest() }))).toEqual([
+      "undeclared-native-addon",
+    ]);
+    expect(
+      codes(Checks.checkServerEntry(code, { manifest: manifest({ native: ["serial"] }) })),
+    ).toEqual(["undeclared-native-addon"]);
+    expect(codes(Checks.checkServerEntry('require("@julusian/midi");'))).toEqual([
+      "unresolvable-require",
+    ]);
   });
 
   it("requires node built-ins to be declared", () => {
@@ -170,6 +179,80 @@ describe("package layout and limits", () => {
       limits: { serverBytes: 4 },
     });
     expect(codes(issues)).toEqual(["size-limit"]);
+  });
+
+  describe("native addons", () => {
+    const elf = new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]);
+    const machO = new Uint8Array([0xcf, 0xfa, 0xed, 0xfe, 7, 0, 0, 1]);
+    const pe = new Uint8Array([0x4d, 0x5a, 0x90, 0]);
+    const native = manifest({ native: ["midi"] });
+    const nativeServer = {
+      path: ModulePackage.ServerEntry,
+      contents: 'exports.default = require("macrograph:native/midi");',
+    };
+    const check = (
+      files: ReadonlyArray<Checks.File>,
+      value = native,
+      limits?: Partial<Checks.Limits>,
+    ) =>
+      codes(
+        Checks.checkPackage(
+          [manifestFile(value), nativeServer, ...files],
+          limits === undefined ? {} : { limits },
+        ).issues,
+      );
+
+    it("accepts declared addons for known targets", () => {
+      expect(
+        check([
+          { path: "native/midi/linux-x64.node", contents: elf },
+          { path: "native/midi/darwin-arm64.node", contents: machO },
+          { path: "native/midi/win32-x64.node", contents: pe },
+        ]),
+      ).toEqual([]);
+    });
+
+    it("rejects undeclared addons and declared addons without binaries", () => {
+      expect(check([{ path: "native/serial/linux-x64.node", contents: elf }])).toEqual([
+        "undeclared-native-addon",
+        "missing-file",
+      ]);
+    });
+
+    it("rejects unknown targets, bad layouts and files that aren't binaries", () => {
+      expect(
+        check([
+          { path: "native/midi/linux-x64.node", contents: elf },
+          { path: "native/midi/linux-riscv64.node", contents: elf },
+          { path: "native/midi/readme.txt", contents: "hi" },
+          { path: "native/midi/linux-arm64.node", contents: "#!/bin/sh" },
+          { path: "native/midi/win32-x64.node", contents: elf },
+        ]),
+      ).toEqual([
+        "invalid-native-addon",
+        "unexpected-file",
+        "invalid-native-addon",
+        "invalid-native-addon",
+      ]);
+    });
+
+    it("limits native addon sizes", () => {
+      expect(
+        check([{ path: "native/midi/linux-x64.node", contents: elf }], native, {
+          nativeFileBytes: 4,
+        }),
+      ).toEqual(["size-limit"]);
+      expect(
+        check(
+          [
+            { path: "native/midi/linux-x64.node", contents: elf },
+            { path: "native/midi/linux-arm64.node", contents: elf },
+          ],
+          native,
+          { nativeBytes: 12 },
+        ),
+      ).toEqual(["size-limit"]);
+    });
   });
 
   it("rejects unsupported api versions", () => {

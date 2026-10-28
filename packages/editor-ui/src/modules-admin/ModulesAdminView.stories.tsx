@@ -139,6 +139,7 @@ export const UntrustedInstall: StoryObj<typeof UntrustedInstallDialog> = {
       registry: ModuleId.OfficialNamespace,
       requires: ["http-client", "socket", "credentials"],
       node: ["net", "tls"],
+      native: [],
     },
     registryName: "MacroGraph",
     pending: false,

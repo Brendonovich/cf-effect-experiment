@@ -1,4 +1,7 @@
+import { NativeAddons } from "@macrograph/module-host/NativeAddons";
+import { VmLoader } from "@macrograph/module-host/VmLoader";
 import { Manifest } from "@macrograph/module/Manifest";
+import * as Module from "@macrograph/module/Module";
 import { ModulePackage } from "@macrograph/module/ModulePackage";
 import { SharedLibraries } from "@macrograph/module/SharedLibraries";
 import { Effect } from "effect";
@@ -81,9 +84,7 @@ describe.each(builtIns)("built-in %s", (name) => {
 
   it("passes the bundle checks", async () => {
     const files = await Effect.runPromise(Build.readPackageFiles(outDirectory()));
-    const result = results.get(name);
-    const external = result?.config.build?.external;
-    const { issues } = Checks.checkPackage(files, external === undefined ? {} : { external });
+    const { issues } = Checks.checkPackage(files);
     expect(Checks.errors(issues)).toEqual([]);
   });
 
@@ -122,5 +123,36 @@ describe.each(builtIns)("built-in %s", (name) => {
       const entry = readFileSync(join(outDirectory(), ModulePackage.UiEntry), "utf8");
       expect(entry).toMatch(/from\s*"@macrograph\/module\/ModuleUI"/);
     }
+  });
+});
+
+describe("MIDI native addon", () => {
+  const outDirectory = () => join(outRoot, "midi");
+
+  it("packages the prebuilt addon instead of bundling its loader", () => {
+    const manifest = results.get("midi")!.manifest;
+    expect(manifest.native).toEqual(["midi"]);
+    const binaries = readdirSync(join(outDirectory(), ModulePackage.NativeDirectory, "midi"));
+    expect(binaries).toContain("linux-x64.node");
+    expect(binaries).toContain("linux-x64-musl.node");
+    expect(binaries).toContain("darwin-arm64.node");
+    expect(binaries).toContain("win32-x64.node");
+    const code = readFileSync(join(outDirectory(), ModulePackage.ServerEntry), "utf8");
+    expect(code).toContain('require("macrograph:native/midi")');
+    expect(code).not.toMatch(/pkg-prebuilds|pkgPrebuilds|binding-options/);
+    expect(code).not.toContain('require("@julusian/midi")');
+  });
+
+  it("evaluates with the host's loader and loads the addon for this platform", () => {
+    const manifest = results.get("midi")!.manifest;
+    const input = { id: Module.builtinId("midi"), root: outDirectory(), manifest };
+    const filename = join(outDirectory(), ModulePackage.ServerEntry);
+    const deployment = VmLoader.evaluateSource(input, readFileSync(filename, "utf8"), filename);
+    expect(field(deployment, "layer")).toBeDefined();
+    const target = NativeAddons.currentTarget();
+    if (!existsSync(join(outDirectory(), ModulePackage.nativePath("midi", target)))) return;
+    const midi = NativeAddons.load(input, "midi");
+    const Input = field(midi, "Input");
+    expect(typeof Input).toBe("function");
   });
 });

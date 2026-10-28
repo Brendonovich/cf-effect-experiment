@@ -100,8 +100,8 @@ export interface PackResult {
 }
 
 /**
- * Reads a built package folder, runs the publish checks (no `build.external` allowance: published
- * modules may only require shared libraries and declared node built-ins) and packs it.
+ * Reads a built package folder, runs the publish checks (published modules may only require
+ * shared libraries, declared node built-ins and declared native addons) and packs it.
  */
 export const packFolder = (directory: string, limits: Partial<Checks.Limits> = {}) =>
   Effect.gen(function* () {

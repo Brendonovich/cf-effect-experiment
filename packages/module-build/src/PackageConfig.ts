@@ -15,12 +15,34 @@ export const Entries = Schema.Struct({
 });
 export type Entries = typeof Entries.Type;
 
+/** Marks where a native addon template takes the target, e.g. `linux-x64-musl`. */
+export const TargetPlaceholder = "{target}";
+
 export const BuildOptions = Schema.Struct({
   /**
-   * Server specifiers left as `require(...)` calls even though they are neither shared nor
-   * Node built-ins. The host's injected `require` must resolve them, otherwise they throw.
+   * Native addons by name, each mapped to a path template for its prebuilt binaries, e.g.
+   * `"@julusian/midi/prebuilds/midi-{target}/node-napi-v7.node"`. The leading package is
+   * resolved from the module's directory and `{target}` is replaced by every known target; each
+   * binary that exists is copied to `native/<name>/<target>.node`. The server entry loads it with
+   * `require("macrograph:native/<name>")`.
    */
-  external: Schema.optionalKey(Schema.Array(Schema.NonEmptyString)),
+  native: Schema.optionalKey(
+    Schema.Record(
+      Manifest.NativeAddon,
+      Schema.NonEmptyString.check(
+        Schema.makeFilter(
+          (value: string) =>
+            value.includes(TargetPlaceholder) || `Expected a path containing ${TargetPlaceholder}`,
+        ),
+      ),
+    ),
+  ),
+  /**
+   * Replaces files inside dependencies in the server bundle, keyed by `<package>/<file>` (the
+   * file doesn't have to be exported) and mapped to a path relative to the module's directory.
+   * Use it to swap a dependency's native loader for one that requires `macrograph:native/<name>`.
+   */
+  alias: Schema.optionalKey(Schema.Record(Schema.NonEmptyString, SourcePath)),
 });
 export type BuildOptions = typeof BuildOptions.Type;
 
@@ -66,6 +88,10 @@ export const iconPath = (config: Model) =>
     ? undefined
     : `${ModulePackage.AssetsDirectory}/${basename(config.icon)}`;
 
+/** The native addons a config builds, sorted by name. */
+export const nativeAddons = (config: Model): ReadonlyArray<string> =>
+  Object.keys(config.build?.native ?? {}).sort();
+
 /** Builds and validates `macrograph.json` for a package config. */
 export const toManifest = (
   config: Model,
@@ -86,6 +112,7 @@ export const toManifest = (
       ? {}
       : { requires: config.requires }),
     ...(config.node === undefined || config.node.length === 0 ? {} : { node: config.node }),
+    ...(nativeAddons(config).length === 0 ? {} : { native: nativeAddons(config) }),
   }).pipe(
     Effect.mapError(
       (error) => new InvalidConfig({ path: "macrograph.json", reason: error.message }),

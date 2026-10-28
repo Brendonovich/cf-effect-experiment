@@ -43,6 +43,10 @@ export const NodeBuiltin = Schema.String.check(
 );
 export type NodeBuiltin = typeof NodeBuiltin.Type;
 
+/** A native addon name, following the module name rules. Shipped under `native/<name>/`. */
+export const NativeAddon = ModuleId.Name;
+export type NativeAddon = typeof NativeAddon.Type;
+
 export const Ui = Schema.Struct({
   entry: PackagePath,
   styles: Schema.Array(PackagePath),
@@ -62,6 +66,8 @@ export const Model = Schema.Struct({
   icon: Schema.optionalKey(PackagePath),
   requires: Schema.optionalKey(Schema.Array(HostService.Id)),
   node: Schema.optionalKey(Schema.Array(NodeBuiltin)),
+  /** Native addons the server entry loads with `require("macrograph:native/<name>")`. */
+  native: Schema.optionalKey(Schema.Array(NativeAddon)),
 });
 export type Model = typeof Model.Type;
 
@@ -78,5 +84,9 @@ export const allowsNodeBuiltin = (manifest: Model, specifier: string) => {
   const name = specifier.slice("node:".length);
   return (manifest.node ?? []).some((allowed) => name === allowed);
 };
+
+/** Whether the manifest declares a native addon by name. */
+export const declaresNative = (manifest: Model, name: string) =>
+  (manifest.native ?? []).includes(name);
 
 export * as Manifest from "./Manifest.ts";

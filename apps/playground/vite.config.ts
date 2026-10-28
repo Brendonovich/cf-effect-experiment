@@ -18,6 +18,7 @@ const browserImportAudit: Plugin = {
       "/packages/module-host/src/ModuleRegistry.ts",
       "/packages/module-host/src/ModuleSources.ts",
       "/packages/module-host/src/VmLoader.ts",
+      "/packages/module-host/src/NativeAddons.ts",
       "/packages/module-host/src/ModuleWatcher.ts",
       "/packages/module/src/HttpIngress",
       "/packages/modules/twitch/src/Deployment/Webhook",
