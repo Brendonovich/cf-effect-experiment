@@ -38,36 +38,38 @@ const generateRsaPem = Effect.promise(async () => {
   return `-----BEGIN PRIVATE KEY-----\\n${body}\\n-----END PRIVATE KEY-----`;
 });
 
-// Every query finds nothing, which exercises the routes' not-found paths.
-const emptyDatabaseLayer = Layer.effect(Database.Service)(
-  Effect.gen(function* () {
-    const unsupported = () => Effect.die("Unexpected SQL operation");
-    const execute: SqlConnection.Connection["executeValues"] = () => Effect.succeed([]);
-    const connection: SqlConnection.Connection = {
-      execute: (sql, params) => execute(sql, params).pipe(Effect.as([])),
-      executeRaw: execute,
-      executeUnprepared: unsupported,
-      executeValuesUnprepared: unsupported,
-      executeStream: () => Stream.die("Unexpected SQL stream"),
-      executeValues: execute,
-    };
-    const sql = yield* SqlClient.make({
-      acquirer: Effect.succeed(connection),
-      compiler: PgClient.makeCompiler(),
-      spanAttributes: [],
-    });
-    const client: PgClient.PgClient = Object.assign(sql, {
-      [PgClient.TypeId]: PgClient.TypeId,
-      config: {},
-      json: (value: unknown) => JSON.stringify(value),
-      listen: () => Stream.die("Unexpected SQL listener"),
-      notify: unsupported,
-    });
-    return yield* PgDrizzle.makeWithDefaults().pipe(
-      Effect.provideService(PgClient.PgClient, client),
-    );
-  }),
-).pipe(Layer.provide(Reactivity.layer));
+// Queries return `rows(sql)`, which by default finds nothing to exercise the not-found paths.
+const databaseLayer = (rows: (sql: string) => ReadonlyArray<ReadonlyArray<unknown>> = () => []) =>
+  Layer.effect(Database.Service)(
+    Effect.gen(function* () {
+      const unsupported = () => Effect.die("Unexpected SQL operation");
+      const execute: SqlConnection.Connection["executeValues"] = (sql) =>
+        Effect.succeed(rows(sql).map((row) => [...row]));
+      const connection: SqlConnection.Connection = {
+        execute: (sql, params) => execute(sql, params).pipe(Effect.as([])),
+        executeRaw: execute,
+        executeUnprepared: unsupported,
+        executeValuesUnprepared: unsupported,
+        executeStream: () => Stream.die("Unexpected SQL stream"),
+        executeValues: execute,
+      };
+      const sql = yield* SqlClient.make({
+        acquirer: Effect.succeed(connection),
+        compiler: PgClient.makeCompiler(),
+        spanAttributes: [],
+      });
+      const client: PgClient.PgClient = Object.assign(sql, {
+        [PgClient.TypeId]: PgClient.TypeId,
+        config: {},
+        json: (value: unknown) => JSON.stringify(value),
+        listen: () => Stream.die("Unexpected SQL listener"),
+        notify: unsupported,
+      });
+      return yield* PgDrizzle.makeWithDefaults().pipe(
+        Effect.provideService(PgClient.PgClient, client),
+      );
+    }),
+  ).pipe(Layer.provide(Reactivity.layer));
 
 const providersLayer = OAuthProviders.layer.pipe(
   Layer.provide(
@@ -77,19 +79,28 @@ const providersLayer = OAuthProviders.layer.pipe(
   ),
 );
 
-const makeApp = Effect.gen(function* () {
-  const stateKey = yield* Jwt.hmacKey("state-secret");
-  return yield* WebsiteRoutes.layer({
-    stateKey: Effect.succeed(stateKey),
-    serverKey: Effect.succeed(undefined),
-    authRedirectOrigin: origin,
-    capture: Analytics.disabled,
-    fetch: async (url) =>
-      String(url).endsWith("/darwin-aarch64/latest")
-        ? Response.json({ version: "1.2.3" })
-        : new Response(null, { status: 404 }),
-  }).pipe(Layer.provide([emptyDatabaseLayer, providersLayer]), HttpRouter.toHttpEffect);
-});
+const makeApp = makeAppWith();
+
+function makeAppWith(
+  options: {
+    readonly serverKey?: CryptoKey;
+    readonly rows?: (sql: string) => ReadonlyArray<ReadonlyArray<unknown>>;
+  } = {},
+) {
+  return Effect.gen(function* () {
+    const stateKey = yield* Jwt.hmacKey("state-secret");
+    return yield* WebsiteRoutes.layer({
+      stateKey: Effect.succeed(stateKey),
+      serverKey: Effect.succeed(options.serverKey),
+      authRedirectOrigin: origin,
+      capture: Analytics.disabled,
+      fetch: async (url) =>
+        String(url).endsWith("/darwin-aarch64/latest")
+          ? Response.json({ version: "1.2.3" })
+          : new Response(null, { status: 404 }),
+    }).pipe(Layer.provide([databaseLayer(options.rows), providersLayer]), HttpRouter.toHttpEffect);
+  });
+}
 
 const send = (
   app: Effect.Effect<
@@ -202,6 +213,27 @@ describe("website routes", () => {
       assert.strictEqual(anonymous.status, 403);
       const user = yield* send(app, "/api/user");
       assert.isNull(yield* Effect.promise(() => user.json()));
+    }),
+  );
+
+  it.effect("rejects server tokens whose registration was deleted", () =>
+    Effect.gen(function* () {
+      const serverKey = yield* Jwt.rsaKey(yield* generateRsaPem);
+      const token = yield* Jwt.sign(serverKey, { oauthAppId: "app", ownerId: "user", iat: 1 });
+      const asServer = { headers: { authorization: `Bearer ${token}`, "client-id": "server" } };
+      const registered = (sql: string) => (sql.includes(`from "oauth_apps"`) ? [["app"]] : []);
+
+      const live = yield* makeAppWith({ serverKey, rows: registered });
+      assert.strictEqual((yield* send(live, "/api/credentials", asServer)).status, 200);
+
+      const revoked = yield* makeAppWith({ serverKey });
+      for (const path of ["/api/credentials", "/api/user", "/api/server/registration"])
+        assert.strictEqual((yield* send(revoked, path, asServer)).status, 401, path);
+      const refresh = yield* send(revoked, "/api/credentials/twitch/1/refresh", {
+        ...asServer,
+        method: "POST",
+      });
+      assert.strictEqual(refresh.status, 401);
     }),
   );
 
