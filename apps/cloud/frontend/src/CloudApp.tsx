@@ -50,7 +50,8 @@ const queryClient = new QueryClient({
   defaultOptions: { mutations: { networkMode: "always" } },
 });
 const Router = createRouter({
-  base: import.meta.env.BASE_URL,
+  // The router joins its own leading-slash paths onto the base, so drop Vite's trailing slash.
+  base: import.meta.env.BASE_URL.replace(/\/+$/, ""),
   routes: [
     { path: "/sign-in", component: SignInRoute },
     // Credentials are managed on the website.

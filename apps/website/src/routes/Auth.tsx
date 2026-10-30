@@ -61,7 +61,11 @@ export function AuthRoute(props: { readonly mode: "login" | "signup" }) {
 
   return (
     <main sx={styles.page}>
-      <Show when={!session.data || submit.isPending} fallback={<Redirect href={next()} />}>
+      <Show
+        // A successful submit already navigates; redirecting again would load the page twice.
+        when={!session.data || submit.isPending || submit.isSuccess}
+        fallback={<Redirect href={next()} />}
+      >
         <div sx={styles.card}>
           <a href="/" aria-label="MacroGraph home" sx={styles.logoLink}>
             <img src={macrographLogo} alt="" sx={styles.logo} />
