@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { Data, Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/http";
 
@@ -22,25 +22,15 @@ import * as Releases from "./Releases.ts";
 import * as Session from "./Session.ts";
 
 /** Public origins of the website, canonical first. */
-const websiteOrigins = [
-  "https://www.macrograph.app",
+export const websiteOrigins = [
   "https://macrograph.app",
+  "https://www.macrograph.app",
   "https://macrograph.brendonovich.dev",
 ];
-
-/** The canonical Cloud origin that may approve server registrations and log out of the website. */
-export const cloudOrigin = "https://cloud.macrograph.app";
 
 const deviceCodeLifetimeMs = 10 * 60 * 1000;
 const userAccessTokenLifetimeMs = 30 * 24 * 60 * 60 * 1000;
 const oauthStateLifetimeSeconds = 60 * 60;
-const maxShareBytes = 10 * 1024 * 1024;
-
-export interface ShareStore {
-  readonly get: (id: string) => Effect.Effect<string | null>;
-  readonly put: (id: string, value: string) => Effect.Effect<void>;
-}
-
 export interface Options {
   /** HMAC key for OAuth `state` values. */
   readonly stateKey: Effect.Effect<Jwt.SigningKey>;
@@ -48,7 +38,6 @@ export interface Options {
   readonly serverKey: Effect.Effect<Jwt.SigningKey | undefined>;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
-  readonly shares: ShareStore;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
 }
@@ -117,8 +106,6 @@ const generateUserCode = () => {
       if (byte < limit && code.length < 8) code += alphabet[byte % alphabet.length];
   return `${code.slice(0, 4)}-${code.slice(4)}`;
 };
-
-const userCodePattern = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 const userCodeFrom = (body: Readonly<Record<string, unknown>>) =>
   typeof body.userCode === "string" && body.userCode.length <= 10 ? body.userCode : undefined;
@@ -595,108 +582,7 @@ export const layer = (options: Options) =>
         ),
       );
 
-      // ---- Cross-origin session bridge for cloud.macrograph.app ----
-
-      const cloudCors = (
-        request: HttpServerRequest.HttpServerRequest,
-        run: () => Effect.Effect<HttpServerResponse.HttpServerResponse, Reject>,
-      ) =>
-        Effect.gen(function* () {
-          const allowedOrigin = request.headers.origin === cloudOrigin;
-          const withHeaders = (response: HttpServerResponse.HttpServerResponse) =>
-            HttpServerResponse.setHeaders(response, {
-              "cache-control": "no-store",
-              vary: "Origin",
-              ...(allowedOrigin
-                ? {
-                    "access-control-allow-origin": cloudOrigin,
-                    "access-control-allow-credentials": "true",
-                  }
-                : {}),
-            });
-          const response = yield* handle(
-            Effect.gen(function* () {
-              if (request.method !== "POST" && request.method !== "OPTIONS")
-                return HttpServerResponse.empty({
-                  status: 405,
-                  headers: { allow: "POST, OPTIONS" },
-                });
-              if (!allowedOrigin) return yield* reject(403);
-              if (request.method === "OPTIONS") {
-                const requestedHeaders = request.headers["access-control-request-headers"];
-                if (
-                  request.headers["access-control-request-method"] !== "POST" ||
-                  (requestedHeaders !== undefined &&
-                    requestedHeaders !== "" &&
-                    !requestedHeaders
-                      .split(",")
-                      .every((name) => name.trim().toLowerCase() === "content-type"))
-                )
-                  return yield* reject(403);
-                return HttpServerResponse.empty({
-                  status: 204,
-                  headers: {
-                    "access-control-allow-methods": "POST",
-                    "access-control-allow-headers": "Content-Type",
-                  },
-                });
-              }
-              if (
-                request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase() !==
-                "application/json"
-              )
-                return yield* reject(400);
-              return yield* run();
-            }),
-          );
-          return withHeaders(response);
-        });
-
-      yield* router.add("*", "/api/cloud-login", (request) =>
-        cloudCors(request, () =>
-          Effect.gen(function* () {
-            const sessionId = request.cookies[Session.cookieName];
-            if (!sessionId) return yield* reject(401);
-            const validated = yield* sessions.validate(sessionId);
-            if (validated === undefined) return yield* reject(401);
-            const body = yield* readJson(request);
-            const userCode = body.userCode;
-            if (typeof userCode !== "string" || !userCodePattern.test(userCode))
-              return yield* reject(400);
-            // Claim once, with expiry checked by the database in the same statement.
-            const claimed = yield* database
-              .update(serverRegistrationSessions)
-              .set({ userId: validated.user.id })
-              .where(
-                and(
-                  eq(serverRegistrationSessions.userCode, userCode),
-                  isNull(serverRegistrationSessions.userId),
-                  gt(serverRegistrationSessions.createdAt, sql`now() - interval '10 minutes'`),
-                ),
-              )
-              .returning({ id: serverRegistrationSessions.id })
-              .pipe(Effect.orDie);
-            return withRefreshedCookie(
-              request,
-              validated,
-              HttpServerResponse.empty({ status: claimed.length === 1 ? 204 : 409 }),
-            );
-          }),
-        ),
-      );
-
-      yield* router.add("*", "/api/cloud-logout", (request) =>
-        cloudCors(request, () =>
-          Effect.gen(function* () {
-            const sessionId = request.cookies[Session.cookieName];
-            // Invalidate even expired sessions.
-            if (sessionId) yield* sessions.invalidate(sessionId);
-            return Session.clearCookies(true)(HttpServerResponse.empty({ status: 204 }));
-          }),
-        ),
-      );
-
-      // ---- OAuth flows for desktop, the old playground, and account credentials ----
+      // ---- OAuth flows for desktop, web clients, and account credentials ----
 
       yield* router.add("GET", "/auth/:provider/login", (request) =>
         handle(
@@ -1064,29 +950,5 @@ export const layer = (options: Options) =>
 
       yield* userCodeRoutes("device", deviceCodeSessions);
       yield* userCodeRoutes("server-registration", serverRegistrationSessions);
-
-      yield* router.add("POST", "/api/website/playground", (request) =>
-        handle(
-          Effect.gen(function* () {
-            if (!sameOrigin(request)) return yield* reject(403);
-            const body = yield* readJson(request);
-            if (typeof body.project !== "string" || body.project.length > maxShareBytes)
-              return yield* reject(400);
-            const id = crypto.randomUUID();
-            yield* options.shares.put(id, body.project);
-            return json({ id });
-          }),
-        ),
-      );
-
-      yield* router.add("GET", "/api/website/playground/:id", () =>
-        handle(
-          Effect.gen(function* () {
-            const { id } = yield* HttpRouter.params;
-            if (id === undefined || !/^[0-9a-f-]{36}$/.test(id)) return json(null);
-            return json(yield* options.shares.get(id));
-          }),
-        ),
-      );
     }),
   );

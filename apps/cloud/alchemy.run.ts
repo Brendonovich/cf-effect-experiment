@@ -20,15 +20,15 @@ import {
   DeploymentObjectsBucket,
   LegacyLogicalDatabase,
 } from "./src/Storage.ts";
+import { CloudWorker } from "./src/worker/CloudWorker.ts";
 import CloudWorkerLayer, {
-  CloudWorker,
-  CredentialOAuthStateSecret,
   IngressPublicOrigin,
   WebAssetsDirectory,
-} from "./src/worker/CloudWorker.ts";
+} from "./src/worker/CloudWorkerLayer.ts";
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 import WebsiteWorkerLayer, {
+  WebsiteAssetsDirectory,
   WebsiteOAuthStateSecret,
   WebsiteWorker,
 } from "./src/worker/WebsiteWorker.ts";
@@ -55,7 +55,6 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const ctx = yield* Alchemy.AlchemyContext;
-    const credentialOAuthStateSecret = yield* Alchemy.makeRandom("CredentialOAuthStateSecret");
     yield* DatabaseHyperdrive;
     yield* DeploymentObjectsBucket;
     if ((yield* Alchemy.Stage) === "production") {
@@ -80,22 +79,31 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
-    const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
-      Effect.provide(WebsiteWorkerLayer),
-      Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
-    );
+    const websiteBuild = !ctx.dev
+      ? yield* Command.Build("WebsiteBuild", {
+          command: "pnpm run build",
+          cwd: "../website",
+          outdir: "dist",
+          memo: false,
+        })
+      : undefined;
 
     const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
       const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
       const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
         Effect.provide(CloudWorkerLayer),
-        Effect.provideService(CredentialOAuthStateSecret, credentialOAuthStateSecret),
         Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
         Effect.provideService(IngressPublicOrigin, ingressWorker.url),
       );
       return { cloudWorker, ingressWorker };
     }).pipe(Effect.provide(IngressWorkerLayer));
+
+    const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
+    const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
+      Effect.provide(WebsiteWorkerLayer),
+      Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
+      Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
+    );
 
     const github = yield* GitHub.GitHubEnv;
     if (github?.pr !== undefined) {
@@ -104,9 +112,10 @@ export default Alchemy.Stack(
         repository: github.repository,
         issueNumber: github.pr,
         body: Output.interpolate`
-					## MacroGraph Cloud preview
+					## MacroGraph preview
 
-					**App:** ${cloudWorker.url}
+					**Website:** ${websiteWorker.url}
+					**Cloud:** ${websiteWorker.url}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.

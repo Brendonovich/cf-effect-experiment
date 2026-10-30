@@ -31,10 +31,7 @@ export const makeApiClient = (publicWorkerOrigin: string, isSigningOut: () => bo
           ) {
             // Restart authentication without retaining any workspace state from the expired session.
             window.location.replace(
-              signInUrl(
-                `${location.pathname}${location.search}${location.hash}`,
-                import.meta.env.BASE_URL,
-              ),
+              signInUrl(`${location.pathname}${location.search}${location.hash}`),
             );
           }
         }),
@@ -43,7 +40,8 @@ export const makeApiClient = (publicWorkerOrigin: string, isSigningOut: () => bo
 
   return Effect.runSync(
     HttpApiClient.make(CloudApi, {
-      baseUrl: location.origin,
+      // Cloud's API lives under its mount, beside the website's own `/api`.
+      baseUrl: `${location.origin}${import.meta.env.BASE_URL.replace(/\/+$/, "")}`,
       transformClient,
     }).pipe(Effect.provide(BrowserHttpClient.layerFetch)),
   );

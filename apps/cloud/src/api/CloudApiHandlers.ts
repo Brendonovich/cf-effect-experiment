@@ -17,13 +17,6 @@ export const sessionHandlers = HttpApiBuilder.group(
     const authentication = yield* Authentication.Service;
     return handlers
       .handle("get", ({ request }) => authentication.sessionStatus(request))
-      .handle("start", ({ request }) => authentication.startSession(request))
-      .handle("startWebsite", ({ request }) => authentication.startWebsiteSession(request))
-      .handle("pollWebsite", ({ payload, request }) =>
-        authentication.pollWebsiteSession(payload.registrationId, request),
-      )
-      .handle("poll", ({ request }) => authentication.pollSession(request))
-      .handle("disconnect", ({ request }) => authentication.disconnectSession(request))
       .handle("issueApiKey", ({ payload, request }) =>
         authentication.issueApiKey(payload.name, request),
       )
@@ -148,18 +141,8 @@ export const credentialHandlers = HttpApiBuilder.group(
   Effect.fnUntraced(function* (handlers) {
     const credential = yield* Credential.Service;
     return handlers
-      .handle("providers", () => credential.providers)
       .handle("list", () => credential.list)
-      .handle("refetch", () => credential.refetch)
-      .handle("connect", ({ params, request }) =>
-        credential.connect(params.provider, credential.publicOrigin(request)),
-      )
-      .handle("complete", ({ payload }) =>
-        credential.complete(payload.provider, payload.code, payload.state),
-      )
-      .handle("remove", ({ params }) =>
-        credential.remove(params.provider, params.credentialId).pipe(Effect.asVoid),
-      );
+      .handle("refetch", () => credential.refetch);
   }),
 );
 

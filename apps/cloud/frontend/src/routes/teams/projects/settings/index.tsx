@@ -47,11 +47,6 @@ export const ProjectSettingsRoute = () => {
     },
     retry: false,
   }));
-  const credentialProvidersQuery = createQuery(() => ({
-    queryKey: ["credential-providers"],
-    queryFn: async () => (await runApi(workspace.api.credentials.providers())) ?? [],
-    staleTime: 5 * 60 * 1000,
-  }));
   const [rememberedUserIds, setRememberedUserIds] = createSignal<string[]>();
   const [optimisticAccess, setOptimisticAccess] = createOptimisticStore<State>(
     (): State => ({
@@ -163,63 +158,6 @@ export const ProjectSettingsRoute = () => {
       void workspace.refreshEditorModuleData(projectId());
     },
   }));
-  const connectCredential = useMutation(() => ({
-    networkMode: "always" as const,
-    mutationFn: async (provider: string) => {
-      const popup = window.open(
-        "about:blank",
-        "macrograph-credential",
-        "popup,width=720,height=760",
-      );
-      if (popup === null) throw new Error("Your browser blocked the credential window");
-      sessionStorage.setItem("macrograph-credential-provider", provider);
-      const connection = await runApi(workspace.api.credentials.connect({ params: { provider } }));
-      if (connection === undefined) {
-        popup.close();
-        throw new Error("Could not start credential connection");
-      }
-      popup.location.replace(connection.authorizationUrl);
-      await new Promise<void>((resolve, reject) => {
-        const receive = (event: MessageEvent) => {
-          if (
-            event.origin !== location.origin ||
-            event.source !== popup ||
-            event.data?.type !== "macrograph-credential-connected"
-          )
-            return;
-          window.removeEventListener("message", receive);
-          resolve();
-        };
-        window.addEventListener("message", receive);
-        const closed = window.setInterval(() => {
-          if (!popup.closed) return;
-          window.clearInterval(closed);
-          window.removeEventListener("message", receive);
-          reject(new Error("Credential connection was cancelled"));
-        }, 500);
-      });
-    },
-    onSuccess: () => {
-      void credentialsQuery.refetch();
-      void workspace.refreshEditorModuleData(projectId());
-    },
-  }));
-  const removeCredential = useMutation(() => ({
-    networkMode: "always" as const,
-    mutationFn: async (credential: { readonly provider: string; readonly id: string }) => {
-      const removed = await runApiResult(
-        workspace.api.credentials.remove({
-          params: { provider: credential.provider, credentialId: credential.id },
-        }),
-      );
-      if (!removed) throw new Error("Could not remove credential");
-    },
-    onSuccess: () => {
-      void credentialsQuery.refetch();
-      void workspace.refreshEditorModuleData(projectId());
-    },
-  }));
-
   return (
     <div sx={styles.root}>
       <div sx={styles.container}>
@@ -325,21 +263,9 @@ export const ProjectSettingsRoute = () => {
               </span>
             </div>
             <div sx={styles.credentialActions}>
-              <select
-                sx={styles.providerSelect}
-                disabled={connectCredential.isPending}
-                value=""
-                onChange={(event) => {
-                  const provider = event.currentTarget.value;
-                  event.currentTarget.value = "";
-                  if (provider !== "") connectCredential.mutate(provider);
-                }}
-              >
-                <option value="">Add credential...</option>
-                <For each={credentialProvidersQuery.data ?? []}>
-                  {(provider) => <option value={provider.id}>{provider.displayName}</option>}
-                </For>
-              </select>
+              <a href="/account/credentials" sx={styles.manage}>
+                Manage
+              </a>
               <button
                 type="button"
                 disabled={refetchCredentials.isPending || credentialsQuery.isPending}
@@ -369,15 +295,7 @@ export const ProjectSettingsRoute = () => {
                 <Show when={availableCredentials(catalog())}>
                   {(credentials) => (
                     <div sx={styles.tableContainer}>
-                      <CredentialTable
-                        credentials={credentials()}
-                        onRemove={(credential) => removeCredential.mutate(credential)}
-                        removing={(credential) =>
-                          removeCredential.isPending &&
-                          removeCredential.variables?.provider === credential.provider &&
-                          removeCredential.variables.id === credential.id
-                        }
-                      />
+                      <CredentialTable credentials={credentials()} />
                     </div>
                   )}
                 </Show>
@@ -516,14 +434,10 @@ const styles = stylex.create({
     gap: 16,
   },
   credentialActions: { display: "flex", alignItems: "center", gap: 8 },
-  providerSelect: {
-    border: `1px solid ${colors.gray7}`,
-    borderRadius: 6,
-    backgroundColor: colors.gray2,
-    paddingBlock: 6,
-    paddingInline: 9,
+  manage: {
     fontSize: 12,
-    color: colors.gray12,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+    textDecoration: "underline",
   },
   tableHeading: { display: "flex", alignItems: "center", gap: 6 },
   credentialHeading: { margin: 0, fontSize: 14, fontWeight: 500, color: colors.gray12 },

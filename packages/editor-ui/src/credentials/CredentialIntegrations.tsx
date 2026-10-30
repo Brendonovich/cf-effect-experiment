@@ -26,6 +26,8 @@ export interface CredentialIntegrationsProps {
   readonly notice?: JSX.Element;
   /** Providers expanded on first render. */
   readonly defaultExpanded?: ReadonlyArray<string>;
+  /** Show the status column. Hide it when the source does not report credential status. */
+  readonly showStatus?: boolean;
 }
 
 const amber = "#ffc53d";
@@ -169,6 +171,7 @@ const styles = stylex.create({
     paddingRight: 16,
     fontSize: 13,
   },
+  panelRowWithoutStatus: { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 160px) 28px" },
   panelHead: {
     minHeight: 28,
     fontSize: 11,
@@ -244,6 +247,7 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
   const [search, setSearch] = createSignal("");
   const [expanded, setExpanded] = createSignal<ReadonlyArray<string>>(props.defaultExpanded ?? []);
   const query = () => search().trim().toLowerCase();
+  const showStatus = () => props.showStatus ?? true;
   const isExpanded = (provider: string) => query() !== "" || expanded().includes(provider);
   const toggle = (provider: string) =>
     setExpanded((ids) =>
@@ -370,21 +374,38 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
                   </button>
                   <Show when={isExpanded(group.provider)}>
                     <div id={panelId} sx={styles.panel}>
-                      <div sx={[styles.panelRow, styles.panelHead]} aria-hidden="true">
+                      <div
+                        sx={[
+                          styles.panelRow,
+                          showStatus() ? null : styles.panelRowWithoutStatus,
+                          styles.panelHead,
+                        ]}
+                        aria-hidden="true"
+                      >
                         <span>Account</span>
                         <span>ID</span>
-                        <span>Status</span>
+                        <Show when={showStatus()}>
+                          <span>Status</span>
+                        </Show>
                         <span />
                       </div>
                       <For each={group.accounts}>
                         {(credential) => (
-                          <div sx={[credentialRowMarker, styles.panelRow]}>
+                          <div
+                            sx={[
+                              credentialRowMarker,
+                              styles.panelRow,
+                              showStatus() ? null : styles.panelRowWithoutStatus,
+                            ]}
+                          >
                             <span sx={styles.cell}>{accountName(credential)}</span>
                             <span sx={[styles.cell, styles.mono]}>{credential.id}</span>
-                            <span sx={[styles.status, statusStyle[credential.status]]}>
-                              <span sx={styles.statusDot} />
-                              {statusLabel[credential.status]}
-                            </span>
+                            <Show when={showStatus()}>
+                              <span sx={[styles.status, statusStyle[credential.status]]}>
+                                <span sx={styles.statusDot} />
+                                {statusLabel[credential.status]}
+                              </span>
+                            </Show>
                             <Show when={props.onRemove}>
                               {(onRemove) => (
                                 <button

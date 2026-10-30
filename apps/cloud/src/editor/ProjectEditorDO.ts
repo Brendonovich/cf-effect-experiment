@@ -2,6 +2,7 @@ import type * as S from "effect/Schema";
 
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
+import * as PgDrizzle from "@alchemy.run/drizzle/Postgres";
 import { Actor, Connection, Graph, Node, Package, Project } from "@macrograph/core";
 import {
   DualProtocol,
@@ -45,16 +46,28 @@ import { SqlitePersistence } from "@macrograph/persistence-sqlite";
 import { ProjectEditor } from "@macrograph/project-api";
 import { EngineHost } from "@macrograph/project-host";
 import { RuntimeContext as AlchemyRuntimeContext } from "alchemy";
-import { Cause, HashMap, Layer, Option, Queue, Redacted, Schema, Scope } from "effect";
+import {
+  Cause,
+  ConfigProvider,
+  HashMap,
+  Layer,
+  Option,
+  Queue,
+  Redacted,
+  Schema,
+  Scope,
+} from "effect";
 import * as Effect from "effect/Effect";
 import { constVoid } from "effect/Function";
 import { FetchHttpClient, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Rpc, RpcGroup, RpcMessage, RpcSerialization, RpcServer } from "effect/rpc";
 
+import type { CredentialTransfer } from "../auth/CredentialStore.ts";
 import type * as CloudWorkerOperations from "../worker/CloudWorkerOperations.ts";
 
 import { requestOrigin } from "../api/HttpOrigin.ts";
-import CloudAuthDO, { type CredentialTransfer } from "../auth/CloudAuthDO.ts";
+import * as CredentialStore from "../auth/CredentialStore.ts";
+import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as CloudModules from "../modules/CloudModules.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { canMutateProject } from "../team/TeamAccess.ts";
@@ -92,6 +105,22 @@ export type ProjectEditorError =
   | Package.InvalidPropertyError
   | Package.InvalidInputDefaultError;
 const editorCredentialsKey = "editor-credentials";
+const editorOwnerKey = "editor-owner";
+
+const isHyperdriveBinding = (value: unknown): value is { readonly connectionString: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "connectionString" in value &&
+  typeof value.connectionString === "string";
+
+const credentialSummary = (credential: CredentialTransfer): Credential.Summary => ({
+  provider: credential.provider,
+  id: credential.id,
+  displayName: credential.displayName ?? null,
+  status: "available",
+  scopes: [],
+  metadata: credential.clientId === undefined ? {} : { clientId: credential.clientId },
+});
 
 /**
  * Owns each project's live editing workspace. The DO keeps collaborators'
@@ -115,7 +144,40 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
     const ingress = Cloudflare.Workers.makeRpcStub<CloudWorkerOperations.Service>(
       workerEnvironment?.IngressWorker,
     );
-    const cloudAuths = yield* CloudAuthDO;
+    // Credentials belong to the project owner and live in the shared account database; the worker
+    // pushes them on connect, and refreshes read and update the stored tokens directly.
+    const accountDatabase = yield* Effect.cached(
+      Effect.gen(function* () {
+        const hyperdrive = workerEnvironment?.AppDatabaseHyperdrive;
+        if (!isHyperdriveBinding(hyperdrive))
+          return yield* Effect.die("AppDatabaseHyperdrive binding is unavailable");
+        return yield* PgDrizzle.Postgres(
+          Effect.succeed(Redacted.make(hyperdrive.connectionString)),
+        );
+      }),
+    );
+    // Durable Objects read configuration from their bindings rather than process.env.
+    const oauthProviders = yield* Effect.cached(
+      Effect.gen(function* () {
+        return yield* OAuthProviders.Service;
+      }).pipe(
+        Effect.provide(OAuthProviders.layer),
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown(
+              Object.fromEntries(
+                Object.entries(workerEnvironment ?? {}).flatMap(([key, value]) =>
+                  typeof value === "string" || typeof value === "number"
+                    ? [[key, String(value)]]
+                    : [],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Effect.orDie,
+      ),
+    );
     // Managed OpenCode instances are hosted by the production worker (CloudWorker binds its
     // namespace); the editor uses them directly instead of provisioning preview instances.
     const openCodeDos = OpenCodeInstances.bindNamespace(workerEnvironment?.OpenCodeDO);
@@ -161,7 +223,9 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         }>(editorIdentityKey)
         .pipe(Effect.provide(runtimeContext));
       activeProjectId = storedIdentity?.projectId;
-      let activeSessionId: string | undefined;
+      let ownerId = yield* durableState.storage
+        .get<string>(editorOwnerKey)
+        .pipe(Effect.provide(runtimeContext));
       let publicOrigin = storedIdentity?.publicOrigin ?? "http://localhost:1337";
       let persistedIdentity = storedIdentity;
       let reconciledEditorIngress:
@@ -180,15 +244,41 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         .get<ReadonlyArray<CredentialTransfer>>(editorCredentialsKey)
         .pipe(Effect.provide(runtimeContext));
       const setCredentials = (values: ReadonlyArray<CredentialTransfer>) =>
-        durableState.storage.put(editorCredentialsKey, values).pipe(
-          Effect.provide(runtimeContext),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              localCredentials = values;
+        // Every connect pushes the owner's credentials; only notify engines when they changed.
+        JSON.stringify(values) === JSON.stringify(localCredentials)
+          ? Effect.void
+          : durableState.storage.put(editorCredentialsKey, values).pipe(
+              Effect.provide(runtimeContext),
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  localCredentials = values;
+                }),
+              ),
+              Effect.andThen(credentialsChanged()),
+            );
+      const ownerCredentials = Effect.suspend(() =>
+        ownerId === undefined
+          ? Effect.succeed(undefined)
+          : Effect.gen(function* () {
+              const database = yield* accountDatabase;
+              const providers = yield* oauthProviders;
+              const rows = yield* CredentialStore.rowsFor(database, ownerId!);
+              return rows.map((row) => CredentialStore.toTransfer(row, providers));
             }),
-          ),
-          Effect.andThen(credentialsChanged()),
-        );
+      );
+      const catalog = Effect.suspend(() =>
+        Effect.succeed(
+          localCredentials === undefined
+            ? Credential.unavailable(
+                "not-connected",
+                "Credentials load when the project owner opens the editor.",
+              )
+            : {
+                _tag: "CredentialCatalogAvailable" as const,
+                credentials: localCredentials.map(credentialSummary),
+              },
+        ),
+      );
       const receiveCredential = (credential: CredentialTransfer): Engine.Credential => ({
         id: credential.id,
         provider: credential.provider,
@@ -197,35 +287,32 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
         token: { access: Redacted.make(credential.token.access) },
       });
       const credentials = {
-        get: Effect.suspend(() =>
-          localCredentials !== undefined
-            ? Effect.succeed(localCredentials.map(receiveCredential))
-            : activeSessionId === undefined
-              ? Effect.succeed([])
-              : cloudAuths
-                  .getByName(activeSessionId)
-                  .getCredentials()
-                  .pipe(Effect.map((values) => values.map(receiveCredential))),
-        ),
+        get: Effect.suspend(() => Effect.succeed((localCredentials ?? []).map(receiveCredential))),
         refresh: (provider: string, id: string) =>
-          localCredentials !== undefined
-            ? (() => {
-                const credential = localCredentials.find(
-                  (candidate) => candidate.provider === provider && candidate.id === id,
-                );
-                return credential === undefined
-                  ? Effect.die("Credential is unavailable")
-                  : Effect.succeed(receiveCredential(credential));
-              })()
-            : activeSessionId === undefined
-              ? Effect.die("MacroGraph Cloud is not connected")
-              : cloudAuths
-                  .getByName(activeSessionId)
-                  .refreshCredential(provider, id)
-                  .pipe(
-                    Effect.map(receiveCredential),
-                    Effect.tap(() => credentialsChanged()),
-                  ),
+          Effect.gen(function* () {
+            const cached = localCredentials?.find(
+              (candidate) => candidate.provider === provider && candidate.id === id,
+            );
+            if (ownerId === undefined) {
+              if (cached === undefined) return yield* Effect.die("Credential is unavailable");
+              return receiveCredential(cached);
+            }
+            const database = yield* accountDatabase;
+            const providers = yield* oauthProviders;
+            const row = yield* CredentialStore.refresh(database, providers, ownerId, provider, id);
+            if (row === undefined) return yield* Effect.die("Credential is unavailable");
+            const refreshed = CredentialStore.toTransfer(row, providers);
+            yield* setCredentials(
+              (localCredentials ?? []).some(
+                (candidate) => candidate.provider === provider && candidate.id === id,
+              )
+                ? (localCredentials ?? []).map((candidate) =>
+                    candidate.provider === provider && candidate.id === id ? refreshed : candidate,
+                  )
+                : [...(localCredentials ?? []), refreshed],
+            );
+            return receiveCredential(refreshed);
+          }),
         subscribe: (callback: () => Effect.Effect<void>) =>
           Effect.gen(function* () {
             const scope = yield* Effect.scope;
@@ -236,43 +323,25 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               }),
             );
           }),
-        catalog: Effect.suspend(() =>
-          activeSessionId === undefined
-            ? Effect.succeed(
-                Credential.unavailable("not-connected", "MacroGraph Cloud is not connected."),
-              )
-            : cloudAuths.getByName(activeSessionId).credentialCatalog(),
-        ),
-        refetch: Effect.suspend(() =>
-          activeSessionId === undefined
-            ? Effect.succeed(
-                Credential.unavailable("not-connected", "MacroGraph Cloud is not connected."),
-              )
-            : cloudAuths
-                .getByName(activeSessionId)
-                .refetchCredentials()
-                .pipe(Effect.tap(() => credentialsChanged())),
-        ),
+        catalog,
+        refetch: Effect.gen(function* () {
+          const latest = yield* ownerCredentials;
+          if (latest !== undefined) yield* setCredentials(latest);
+          return yield* catalog;
+        }),
       };
 
       const configureRequest = (request: HttpServerRequest.HttpServerRequest) =>
         Effect.gen(function* () {
-          let credentialsSessionChanged = false;
           const url = new URL(request.url, "http://localhost:1337");
           activeProjectId = url.searchParams.get("projectId") ?? activeProjectId;
-          const requestUserId = request.headers["x-macrograph-user-id"];
-          if (
-            requestUserId !== undefined &&
-            requestUserId === request.headers["x-macrograph-project-created-by"]
-          ) {
-            const nextSessionId =
-              url.searchParams.get("sessionId") ??
-              request.headers["x-macrograph-session-id"] ??
-              activeSessionId;
-            if (nextSessionId !== activeSessionId) {
-              activeSessionId = nextSessionId;
-              credentialsSessionChanged = true;
-            }
+          // EditorRpc always sets this header, so a client cannot supply its own.
+          const createdBy = request.headers["x-macrograph-project-created-by"];
+          if (createdBy !== undefined && createdBy !== ownerId) {
+            ownerId = createdBy;
+            yield* durableState.storage
+              .put(editorOwnerKey, createdBy)
+              .pipe(Effect.provide(runtimeContext));
           }
           publicOrigin =
             request.headers["x-macrograph-public-origin"] ??
@@ -291,7 +360,6 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
               .pipe(Effect.provide(runtimeContext));
             persistedIdentity = identity;
           }
-          return credentialsSessionChanged;
         });
 
       const reconcileEditorIngressRaw = Effect.fnUntraced(function* (
@@ -600,7 +668,7 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
 
       const fetch = Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const credentialsSessionChanged = yield* configureRequest(request);
+        yield* configureRequest(request);
         const name = request.headers["x-macrograph-project-name"] ?? "New Project";
         const storedProject = yield* persistence.loadProject().pipe(Effect.orDie);
         const project = storedProject.name === name ? storedProject : { ...storedProject, name };
@@ -614,18 +682,6 @@ export default class ProjectEditorDO extends Cloudflare.DurableObject<ProjectEdi
             Effect.logError("Failed to reconcile editor ingress", cause),
           ),
         );
-        if (credentialsSessionChanged) {
-          yield* durableState
-            .waitUntil(
-              credentialsChanged().pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logError("Failed to refresh editor credentials", cause),
-                ),
-              ),
-            )
-            .pipe(Effect.provide(runtimeContext));
-        }
-
         if (request.headers.upgrade?.toLowerCase() === "websocket") {
           return yield* rpcWs.httpEffect;
         }

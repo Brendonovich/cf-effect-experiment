@@ -1,26 +1,35 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
-import { HttpRouter } from "effect/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
+import * as CloudMount from "../api/CloudMount.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import { DatabaseHyperdrive, PlaygroundShares } from "../Storage.ts";
+import * as PublicHost from "../PublicHost.ts";
+import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
+import { CloudWorker } from "./CloudWorker.ts";
 
-/** Directory containing the prebuilt original website served at www.macrograph.app. */
-export const websiteAssetsDirectory = new URL("../../legacy-website/public", import.meta.url)
-  .pathname;
+/** The built `apps/website` app served at macrograph.app. Omitted while developing. */
+export class WebsiteAssetsDirectory extends Context.Service<
+  WebsiteAssetsDirectory,
+  Alchemy.Output<string> | undefined
+>()("WebsiteAssetsDirectory") {}
 
 export class WebsiteOAuthStateSecret extends Context.Service<
   WebsiteOAuthStateSecret,
   Alchemy.Output<Redacted.Redacted<string>>
 >()("WebsiteOAuthStateSecret") {}
 
-/** Serves the original MacroGraph website and the account APIs used by desktop and servers. */
+/**
+ * Serves the MacroGraph website and the account APIs used by desktop and servers. It owns the
+ * stage's hostname as a Custom Domain; Cloud claims `/cloud` on it with Worker Routes.
+ */
 export class WebsiteWorker extends Cloudflare.Worker<WebsiteWorker, {}>()("WebsiteWorker") {}
 
 const stateSecretKey = "WEBSITE_OAUTH_STATE_SECRET";
@@ -31,7 +40,9 @@ export default Layer.unwrap(
     const stateSecret = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteOAuthStateSecret));
     // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
-    const sharesNamespace = yield* PlaygroundShares(stage === "production");
+    const assetsDirectory = Option.getOrUndefined(
+      yield* Effect.serviceOption(WebsiteAssetsDirectory),
+    );
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
       [
@@ -50,19 +61,29 @@ export default Layer.unwrap(
       }),
     );
 
+    const publicHost = PublicHost.forStage(stage);
     return WebsiteWorker.make(
       {
-        ...(stage === "production"
-          ? {
-              name: productionWorkerName,
+        ...(stage === "production" ? { name: productionWorkerName } : {}),
+        ...(publicHost === undefined
+          ? // Explicitly detach: omitting `domain` would leave a previously attached one in place.
+            { domain: null }
+          : {
               domain: {
-                name: "www.macrograph.app",
-                // The OAuth redirect host every provider has registered (`/auth/proxy`).
-                aliases: ["macrograph.brendonovich.dev"],
-                redirects: ["macrograph.app"],
+                name: publicHost,
+                aliases:
+                  stage === "production"
+                    ? [
+                        // Desktop apps and servers call the account API here, so it must not
+                        // 301: that would turn their POSTs into GETs. Browsers are redirected
+                        // by the Worker instead.
+                        ...PublicHost.legacyBrowserHosts,
+                        // The OAuth redirect host every provider has registered (`/auth/proxy`).
+                        "macrograph.brendonovich.dev",
+                      ]
+                    : [],
               },
-            }
-          : {}),
+            }),
         main: import.meta.url,
         env: {
           ...environment,
@@ -70,20 +91,25 @@ export default Layer.unwrap(
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
         },
-        assets: {
-          directory: websiteAssetsDirectory,
-          notFoundHandling: "single-page-application",
-          // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
-          runWorkerFirst: ["/api/*", "/auth/*"],
-        },
+        assets: assetsDirectory
+          ? Output.map(assetsDirectory, (directory) => ({
+              directory,
+              htmlHandling: "auto-trailing-slash",
+              notFoundHandling: "single-page-application",
+              // Every request reaches the worker first so legacy hosts can redirect browsers; it
+              // serves pages from the ASSETS binding.
+              runWorkerFirst: true,
+            }))
+          : undefined,
         dev: { port: 1339, strictPort: true },
       },
       Effect.gen(function* () {
         const runtimeContext = yield* Alchemy.RuntimeContext;
         if (stateSecret !== undefined) yield* runtimeContext.set(stateSecretKey, stateSecret);
-        const shares = yield* Cloudflare.KV.ReadWriteNamespace(sharesNamespace);
-        const withRuntime = <A, E>(effect: Effect.Effect<A, E, Alchemy.RuntimeContext>) =>
-          effect.pipe(Effect.provideService(Alchemy.RuntimeContext, runtimeContext), Effect.orDie);
+        // Without a dedicated hostname there are no Worker Routes (they only run on zones we own),
+        // so this Worker forwards Cloud's paths and its workers.dev URL serves both apps.
+        const cloud =
+          publicHost === undefined ? yield* Cloudflare.Workers.bindWorker(CloudWorker) : undefined;
 
         const stateKey = yield* Effect.cached(
           Effect.gen(function* () {
@@ -117,21 +143,50 @@ export default Layer.unwrap(
           serverKey,
           authRedirectOrigin,
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
-          shares: {
-            get: (id) => withRuntime(shares.get(id, "text")),
-            put: (id, value) => withRuntime(shares.put(id, value)),
-          },
         }).pipe(
           Layer.provide(OAuthProviders.layer),
           Layer.provide(Database.layer(databaseResource)),
           HttpRouter.toHttpEffect,
         );
 
-        return { fetch: app };
+        return {
+          fetch: Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            const source = request.source;
+            if (!(source instanceof Request)) return yield* app;
+            const url = new URL(source.url);
+            if (cloud !== undefined && CloudMount.claims(url.pathname)) {
+              const environment = yield* Cloudflare.WorkerEnvironment;
+              // `bindWorker` names the service binding after the Worker's logical ID.
+              const binding: { fetch: (request: Request) => Promise<Response> } | undefined =
+                environment.CloudWorker;
+              if (binding === undefined) return HttpServerResponse.empty({ status: 503 });
+              // The full path and host go through unchanged; CloudWorker strips the mount itself.
+              const response = yield* Effect.promise(() => binding.fetch(source));
+              // A raw body passes the native response through untouched, including WebSockets.
+              return HttpServerResponse.raw(response, { status: response.status });
+            }
+            const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/");
+            if (isApi) return yield* app;
+            if (
+              PublicHost.legacyBrowserHosts.has(url.hostname) &&
+              (request.method === "GET" || request.method === "HEAD")
+            )
+              return HttpServerResponse.redirect(
+                `https://${PublicHost.zoneName}${url.pathname}${url.search}`,
+                { status: 301 },
+              );
+            const environment = yield* Cloudflare.WorkerEnvironment;
+            const assets: { fetch: (request: Request) => Promise<Response> } | undefined =
+              environment.ASSETS;
+            if (assets === undefined) return HttpServerResponse.empty({ status: 404 });
+            const response = yield* Effect.promise(() => assets.fetch(source));
+            return HttpServerResponse.raw(response, { status: response.status });
+          }),
+        };
       }).pipe(
         Effect.provide(Alchemy.RuntimeContext.phantom),
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
-        Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding),
         Effect.provide(ObservabilityLayer),
       ),
     );

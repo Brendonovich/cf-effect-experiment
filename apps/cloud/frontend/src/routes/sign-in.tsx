@@ -5,31 +5,31 @@ import * as stylex from "@stylexjs/stylex";
 import { Loading, Show } from "solid-js";
 
 import { useAuth } from "../Auth";
-import { isWorkerRoute, signInReturnPath } from "../authRedirect";
+import { isWorkerRoute, signInReturnPath, signInUrl } from "../authRedirect";
 import { Redirect } from "../Redirect";
 
+/**
+ * Sends visitors to the website's login and back. Signed-in visitors continue to their
+ * destination; a failed sign-out stays here so it can be retried.
+ */
 export function SignInRoute() {
   const auth = useAuth();
   const location = useLocation();
   const returnPath = () =>
     signInReturnPath(new URLSearchParams(location.search).get("next"), import.meta.env.BASE_URL);
   const logoutFailed = () => new URLSearchParams(location.search).get("logout") === "failed";
-  const verificationUrl = () => {
-    const status = auth.status();
-    return status.state === "pending" ? status.verificationUrl : undefined;
-  };
 
   return (
     <main sx={styles.root}>
       <div sx={styles.content}>
-        <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
         <Show
           when={!logoutFailed()}
           fallback={
             <>
+              <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
               <h1 sx={styles.title}>Could not finish signing out</h1>
               <p sx={styles.description}>
-                Your session could still be active on MacroGraph or Cloud. Please try again.
+                Your MacroGraph session could still be active. Please try again.
               </p>
               <button type="button" sx={styles.button} onClick={() => void auth.signOut()}>
                 Try signing out again
@@ -39,53 +39,30 @@ export function SignInRoute() {
         >
           <Loading fallback={<LoadingState label="Checking your session" />}>
             <Show
-              when={auth.status().state !== "connected"}
+              when={auth.status().state !== "failed"}
               fallback={
-                <Redirect
-                  href={returnPath()}
-                  replace
-                  resolve={false}
-                  document={isWorkerRoute(returnPath())}
-                />
+                <>
+                  <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
+                  <h1 sx={styles.title}>Failed to connect to MacroGraph Cloud</h1>
+                  <p sx={styles.description}>
+                    MacroGraph could not reach the cloud service. Check your connection and try
+                    again.
+                  </p>
+                  <button type="button" sx={styles.button} onClick={auth.retry}>
+                    Try again
+                  </button>
+                </>
               }
             >
-              <Show
-                when={auth.status().state !== "failed"}
-                fallback={
-                  <>
-                    <h1 sx={styles.title}>Failed to connect to MacroGraph Cloud</h1>
-                    <p sx={styles.description}>
-                      MacroGraph could not reach the cloud service. Check your connection and try
-                      again.
-                    </p>
-                    <button type="button" sx={styles.button} onClick={auth.retry}>
-                      Try again
-                    </button>
-                  </>
+              <Redirect
+                href={auth.status().state === "connected" ? returnPath() : signInUrl(returnPath())}
+                replace
+                resolve={false}
+                document={
+                  auth.status().state !== "connected" ||
+                  isWorkerRoute(returnPath(), import.meta.env.BASE_URL)
                 }
-              >
-                <h1 sx={styles.title}>Connect to MacroGraph Cloud</h1>
-                <p sx={styles.description}>
-                  Sign in in a new tab, then return here. Keep this tab open while MacroGraph
-                  completes the connection.
-                </p>
-                <a
-                  href={verificationUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-disabled={verificationUrl() === undefined ? "true" : "false"}
-                  onClick={(event) => {
-                    if (verificationUrl() === undefined) event.preventDefault();
-                  }}
-                  sx={styles.button}
-                >
-                  Continue to sign in
-                </a>
-                <div sx={styles.waiting}>
-                  <span sx={styles.waitingDot} />
-                  Waiting for authorization
-                </div>
-              </Show>
+              />
             </Show>
           </Loading>
         </Show>
@@ -94,7 +71,6 @@ export function SignInRoute() {
   );
 }
 
-const pulse = stylex.keyframes({ "50%": { opacity: 0.5 } });
 const styles = stylex.create({
   root: {
     display: "grid",
@@ -122,21 +98,5 @@ const styles = stylex.create({
     fontWeight: 600,
     color: colors.gray1,
     transition: "150ms",
-  },
-  waiting: {
-    marginTop: 20,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    fontSize: 12,
-    color: colors.gray9,
-  },
-  waitingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 9999,
-    backgroundColor: "#60a5fa",
-    animation: `${pulse} 2s infinite`,
   },
 });

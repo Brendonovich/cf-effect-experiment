@@ -191,7 +191,7 @@ describe("Event.make replay", () => {
               assert.deepStrictEqual(authorized, ["project", "project"]);
             }).pipe(
               Effect.withSpan("Replay request"),
-              Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined }),
+              Effect.provideService(CurrentUser, { id: "editor" }),
             ),
         );
       }
@@ -237,7 +237,7 @@ describe("Event.make replay", () => {
         assert.isTrue(dispatched);
       }).pipe(
         Effect.withSpan("Replay request"),
-        Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined }),
+        Effect.provideService(CurrentUser, { id: "editor" }),
       ),
     );
 
@@ -283,7 +283,7 @@ describe("Event.make replay", () => {
           );
           assert.strictEqual(queries, missing === "event" ? 1 : 2);
           assert.strictEqual(dispatches, 0);
-        }).pipe(Effect.provideService(CurrentUser, { id: "editor", sessionId: undefined })),
+        }).pipe(Effect.provideService(CurrentUser, { id: "editor" })),
       );
     }
 
@@ -319,7 +319,7 @@ describe("Event.make replay", () => {
         assert.deepStrictEqual(authorized, ["project"]);
         assert.strictEqual(queries, 0);
         assert.strictEqual(dispatches, 0);
-      }).pipe(Effect.provideService(CurrentUser, { id: "viewer", sessionId: undefined })),
+      }).pipe(Effect.provideService(CurrentUser, { id: "viewer" })),
     );
   }
 });
@@ -380,7 +380,7 @@ describe("Event.make list", () => {
         deliveryId: "delivery-1",
         payload: { action: "closed", number: 79 },
       });
-    }).pipe(Effect.provideService(CurrentUser, { id: "viewer", sessionId: undefined })),
+    }).pipe(Effect.provideService(CurrentUser, { id: "viewer" })),
   );
 });
 
@@ -422,7 +422,7 @@ describe("EventPolicy.layer", () => {
         else assert.strictEqual(yield* Effect.flip(edit), denied);
         assert.strictEqual(executed, allowed);
         assert.deepStrictEqual(checked, ["project"]);
-      }).pipe(Effect.provideService(CurrentUser, { id: "current-user", sessionId: undefined })),
+      }).pipe(Effect.provideService(CurrentUser, { id: "current-user" })),
     );
   }
 });

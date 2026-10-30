@@ -95,7 +95,7 @@ describe("Team email membership", () => {
         ],
       });
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "owner", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "owner" }),
       Effect.provide(
         testLayer([
           { sql: 'from "team_memberships"', params: ["team", "owner", 1], rows: owner },
@@ -120,7 +120,7 @@ describe("Team email membership", () => {
           member: { userId: "target", email: "member@example.com", role, createdAt },
         });
       }).pipe(
-        Effect.provideService(CurrentUser, { id: "owner", sessionId: undefined }),
+        Effect.provideService(CurrentUser, { id: "owner" }),
         Effect.provide(
           testLayer([
             { sql: 'from "team_memberships"', params: ["team", "owner", 1], rows: owner },
@@ -164,7 +164,7 @@ describe("Team email membership", () => {
       const error = yield* Effect.flip(team.addMember("team", "missing@example.com", "member"));
       assert.strictEqual(error._tag, "UserNotFound");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "owner", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "owner" }),
       Effect.provide(
         testLayer([
           { sql: 'from "team_memberships"', params: ["team", "owner", 1], rows: owner },
@@ -180,7 +180,7 @@ describe("Team email membership", () => {
       const error = yield* Effect.flip(team.addMember("team", "member@example.com", "member"));
       assert.strictEqual(error._tag, "Forbidden");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "viewer", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "viewer" }),
       Effect.provide(
         testLayer([
           {
@@ -199,7 +199,7 @@ describe("Team email membership", () => {
       const error = yield* Effect.flip(team.addMember("team", "owner@example.com", "viewer"));
       assert.strictEqual(error._tag, "Forbidden");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "owner", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "owner" }),
       Effect.provide(
         testLayer([
           { sql: 'from "team_memberships"', params: ["team", "owner", 1], rows: owner },

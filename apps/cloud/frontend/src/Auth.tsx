@@ -4,9 +4,7 @@ import type { JSX } from "@solidjs/web";
 import { Effect } from "effect";
 import { createContext, createMemo, refresh, useContext } from "solid-js";
 
-import { type ApiClient, makeApiClient, publicWorkerOrigin, runApiResult } from "./api";
-import { cloudLogin } from "./cloudLogin";
-import { logoutWebsite } from "./websiteLogout";
+import { type ApiClient, makeApiClient, publicWorkerOrigin, runApi } from "./api";
 
 interface AuthContextValue {
   readonly api: ApiClient;
@@ -18,26 +16,32 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>();
 export const useAuth = () => useContext(AuthContext);
 
+/** Ends the shared MacroGraph session, which signs out of the website and Cloud together. */
+const logOut = async () => {
+  try {
+    const response = await fetch("/api/website/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
 export function AuthProvider(props: { readonly children: JSX.Element }) {
   let signingOut = false;
   const api = makeApiClient(publicWorkerOrigin(), () => signingOut);
-  const status = createMemo<SessionStatus | { state: "failed" }>(() =>
-    cloudLogin(
-      api.session,
-      location.origin === "https://cloud.macrograph.app" &&
-        new URLSearchParams(location.search).get("logout") !== "failed",
-    ),
-  );
+  const status = createMemo<SessionStatus | { state: "failed" }>(async () => {
+    const result = await runApi(api.session.get().pipe(Effect.timeout("15 seconds")));
+    return result ?? { state: "failed" };
+  });
 
   const signOut = async () => {
     signingOut = true;
-    const [cloudSignedOut, websiteSignedOut] = await Promise.all([
-      runApiResult(api.session.disconnect().pipe(Effect.timeout("5 seconds"))),
-      location.origin === "https://cloud.macrograph.app" ? logoutWebsite() : Promise.resolve(true),
-    ]);
-    window.location.assign(
-      `${import.meta.env.BASE_URL}sign-in${cloudSignedOut && websiteSignedOut ? "" : "?logout=failed"}`,
-    );
+    if (await logOut()) window.location.assign("/");
+    else window.location.assign(`${import.meta.env.BASE_URL}sign-in?logout=failed`);
   };
 
   return (

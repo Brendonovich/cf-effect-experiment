@@ -1,42 +1,62 @@
-import {
-  Authentication,
-  CurrentUser,
-  sessionCookieName,
-  sessionSecurity,
-} from "@macrograph/cloud-api";
+import { Authentication, CurrentUser } from "@macrograph/cloud-api";
 import { ApiCaller, ApiKey, type ProjectMcp } from "@macrograph/project-api";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, ne } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { HttpApiBuilder, HttpApiError } from "effect/http-api";
+import { HttpEffect, HttpServerRequest } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 
 import { hasTrustedOrigin, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import { apiKeys, oauthAccessTokens, users } from "../database/DatabaseSchema.ts";
-import CloudAuthDO from "./CloudAuthDO.ts";
+import * as Session from "../website/Session.ts";
 import * as McpOAuthConfig from "./McpOAuthConfig.ts";
+
+export interface SessionUser {
+  readonly id: string;
+  readonly email: string;
+}
 
 export const make = Effect.gen(function* () {
   const database = yield* Database.Service;
-  const cloudAuths = yield* CloudAuthDO;
-  const cloudAuth = (sessionId: string) => cloudAuths.getByName(sessionId);
+  const sessions = yield* Session.make;
 
-  const saveUser = (status: { readonly userId: string; readonly email: string }) => {
-    const email = status.email.trim().toLowerCase();
+  /** Mirrors the account into Cloud's users table, writing only when it is new or changed. */
+  const ensureUser = (user: SessionUser) => {
+    const email = user.email.trim().toLowerCase();
     return database
       .insert(users)
-      .values({ id: status.userId, email, createdAt: new Date().toISOString() })
-      .onConflictDoUpdate({ target: users.id, set: { email } })
-      .pipe(Effect.orDie);
+      .values({ id: user.id, email, createdAt: new Date().toISOString() })
+      .onConflictDoUpdate({ target: users.id, set: { email }, setWhere: ne(users.email, email) })
+      .pipe(Effect.orDie, Effect.asVoid);
   };
+
+  /**
+   * The user signed in to the MacroGraph website, which shares Cloud's origin. Like the website,
+   * renewed sessions get a refreshed cookie so active Cloud users stay signed in.
+   */
+  const sessionUser = (request: HttpServerRequest.HttpServerRequest) =>
+    Effect.gen(function* (): Effect.fn.Return<SessionUser | undefined> {
+      const sessionId = request.cookies[Session.cookieName];
+      if (!sessionId) return undefined;
+      const validated = yield* sessions.validate(sessionId);
+      if (validated === undefined) return undefined;
+      if (validated.session.fresh) {
+        const secure = new URL(requestOrigin(request)).protocol === "https:";
+        const context = yield* Effect.context<never>();
+        HttpEffect.appendPreResponseHandlerUnsafe(context, (_request, response) =>
+          Effect.succeed(Session.refreshCookie(validated.session.id, secure)(response)),
+        );
+      }
+      return validated.user;
+    });
 
   const authenticateSession = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.gen(function* () {
-      const sessionId = request.cookies[sessionCookieName];
-      if (!sessionId || !hasTrustedOrigin(request)) return yield* new HttpApiError.Unauthorized();
-      const userId = yield* cloudAuth(sessionId).userId();
-      if (userId === undefined) return yield* new HttpApiError.Unauthorized();
-      return { userId, sessionId };
+      if (!hasTrustedOrigin(request)) return yield* new HttpApiError.Unauthorized();
+      const user = yield* sessionUser(request);
+      if (user === undefined) return yield* new HttpApiError.Unauthorized();
+      yield* ensureUser(user);
+      return { userId: user.id };
     });
 
   const issueApiKey = (name: string, request: HttpServerRequest.HttpServerRequest) =>
@@ -81,7 +101,7 @@ export const make = Effect.gen(function* () {
       const row = rows[0];
       if (row === undefined) return yield* new HttpApiError.Unauthorized();
       return {
-        user: { id: row.userId, sessionId: undefined },
+        user: { id: row.userId },
         caller: ApiCaller.forApiKey({ id: row.id, name: row.name }, row.email),
       };
     });
@@ -113,32 +133,15 @@ export const make = Effect.gen(function* () {
       const oauthUser = oauthRows[0];
       if (oauthUser !== undefined)
         return {
-          user: { id: oauthUser.userId, sessionId: undefined },
+          user: { id: oauthUser.userId },
           caller: { ...ApiCaller.anonymous, email: oauthUser.email },
         };
       return yield* authenticateBearer();
     });
 
-  const setSessionCookie = (request: HttpServerRequest.HttpServerRequest, sessionId: string) =>
-    HttpApiBuilder.securitySetCookie(sessionSecurity, sessionId, {
-      path: "/",
-      sameSite: "lax",
-      secure: new URL(requestOrigin(request)).protocol === "https:",
-    });
-
-  const requireWebsiteOrigin = Effect.fnUntraced(function* (
-    request: HttpServerRequest.HttpServerRequest,
-  ) {
-    const origin = "https://cloud.macrograph.app";
-    if (requestOrigin(request) !== origin || request.headers.origin !== origin)
-      return yield* new HttpApiError.Forbidden();
-    yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-      Effect.succeed(HttpServerResponse.setHeader(response, "cache-control", "no-store")),
-    );
-  });
-
   return {
-    cloudAuth,
+    sessionUser,
+    ensureUser,
     issueApiKey,
     revokeApiKey,
     authenticateSession,
@@ -146,71 +149,10 @@ export const make = Effect.gen(function* () {
     authenticateMcpBearer,
     sessionStatus: (request: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
-        const existingSessionId = request.cookies[sessionCookieName] || undefined;
-        const sessionId = existingSessionId ?? crypto.randomUUID();
-        if (existingSessionId === undefined) yield* setSessionCookie(request, sessionId);
-        const status = yield* cloudAuth(sessionId).status();
-        if (status.state !== "connected") return status;
-        const existingUsers = yield* database
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.id, status.userId))
-          .limit(1)
-          .pipe(Effect.orDie);
-        if (existingUsers[0] === undefined) return { state: "disconnected" as const };
-        yield* saveUser(status);
-        return status;
-      }),
-    startWebsiteSession: (request: HttpServerRequest.HttpServerRequest) =>
-      Effect.gen(function* () {
-        yield* requireWebsiteOrigin(request);
-
-        // Each tab gets a fresh attempt; never authorize a session supplied through a cookie.
-        const sessionId = crypto.randomUUID();
-        const status = yield* cloudAuth(sessionId).start();
-        if (status.state !== "pending")
-          return yield* Effect.die("A new website session must require authorization");
-        return { registrationId: sessionId, verificationUrl: status.verificationUrl };
-      }),
-    pollWebsiteSession: (sessionId: string, request: HttpServerRequest.HttpServerRequest) =>
-      Effect.gen(function* () {
-        yield* requireWebsiteOrigin(request);
-        const status = yield* cloudAuth(sessionId).poll();
-        if (status.state === "connected") {
-          yield* saveUser(status);
-          yield* setSessionCookie(request, sessionId);
-        }
-        return status;
-      }),
-    startSession: (request: HttpServerRequest.HttpServerRequest) =>
-      Effect.gen(function* () {
-        if (!hasTrustedOrigin(request)) return { state: "disconnected" as const };
-        const existingSessionId = request.cookies[sessionCookieName] || undefined;
-        const sessionId = existingSessionId ?? crypto.randomUUID();
-        if (existingSessionId === undefined) yield* setSessionCookie(request, sessionId);
-        const status = yield* cloudAuth(sessionId).start();
-        if (status.state === "connected") yield* saveUser(status);
-        return status;
-      }),
-    pollSession: (request: HttpServerRequest.HttpServerRequest) =>
-      Effect.gen(function* () {
-        const sessionId = request.cookies[sessionCookieName];
-        if (!sessionId || !hasTrustedOrigin(request)) return { state: "disconnected" as const };
-        const status = yield* cloudAuth(sessionId).poll();
-        if (status.state === "connected") yield* saveUser(status);
-        return status;
-      }),
-    disconnectSession: (request: HttpServerRequest.HttpServerRequest) =>
-      Effect.gen(function* () {
-        if (!hasTrustedOrigin(request)) return;
-        const sessionId = request.cookies[sessionCookieName];
-        if (sessionId) yield* cloudAuth(sessionId).disconnect();
-        yield* HttpApiBuilder.securitySetCookie(sessionSecurity, "", {
-          path: "/",
-          sameSite: "lax",
-          secure: new URL(requestOrigin(request)).protocol === "https:",
-          maxAge: 0,
-        });
+        const user = yield* sessionUser(request);
+        if (user === undefined) return { state: "disconnected" as const };
+        yield* ensureUser(user);
+        return { state: "connected" as const, userId: user.id, email: user.email };
       }),
   };
 });
@@ -237,11 +179,10 @@ export const middleware = Layer.effect(Authentication)(
           }
           if (request.method !== "GET" && request.method !== "HEAD" && !hasTrustedOrigin(request))
             return yield* new HttpApiError.Unauthorized();
-          const sessionId = request.cookies[sessionCookieName];
-          if (!sessionId) return yield* new HttpApiError.Unauthorized();
-          const userId = yield* authentication.cloudAuth(sessionId).userId();
-          if (userId === undefined) return yield* new HttpApiError.Unauthorized();
-          return yield* effect.pipe(Effect.provideService(CurrentUser, { id: userId, sessionId }));
+          const user = yield* authentication.sessionUser(request);
+          if (user === undefined) return yield* new HttpApiError.Unauthorized();
+          yield* authentication.ensureUser(user);
+          return yield* effect.pipe(Effect.provideService(CurrentUser, { id: user.id }));
         }),
     };
   }),

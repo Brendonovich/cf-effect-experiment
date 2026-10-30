@@ -1,0 +1,34 @@
+{
+  "name": "@macrograph/website",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vp test run",
+    "preview": "vite preview",
+    "typecheck": "tsgo --build"
+  },
+  "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@solidjs/router": "2.0.0-next.17",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/stylex": "catalog:",
+    "@tanstack/solid-query": "6.0.0-rc.0",
+    "solid-js": "2.0.0-rc.9"
+  },
+  "devDependencies": {
+    "@iconify/json": "2.2.196",
+    "@macrograph/icons": "workspace:*",
+    "@solidjs/diagnostics": "2.0.0-rc.9",
+    "@solidjs/vite-plugin": "3.0.0-next.44",
+    "@stylexjs/unplugin": "catalog:",
+    "@types/node": "^24",
+    "jsdom": "^27.0.0",
+    "typescript": "^5.8",
+    "vite": "^8.0.7",
+    "vitest": "npm:@voidzero-dev/vite-plus-test@^0.1.21"
+  }
+}

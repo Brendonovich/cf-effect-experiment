@@ -176,7 +176,7 @@ export function App(
     else navigate(`${projectPath}/${view}`);
   };
   const editorUrl = (projectId: string) => {
-    const url = new URL("/rpc", window.location.origin);
+    const url = new URL(`${import.meta.env.BASE_URL}rpc`, window.location.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.searchParams.set("projectId", projectId);
     url.searchParams.set("publicOrigin", publicWorkerOrigin());
@@ -473,7 +473,7 @@ export function App(
             <Loading fallback={null}>
               <AccountMenu
                 email={props.user.email}
-                onCredentials={() => navigate("/credentials")}
+                onCredentials={() => window.location.assign("/account/credentials")}
                 onSignOut={() => void auth.signOut()}
               />
             </Loading>
