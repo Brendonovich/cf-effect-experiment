@@ -2,17 +2,18 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
 import * as Output from "alchemy/Output";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
-import { HttpRouter } from "effect/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import { ObservabilityLayer } from "../Observability.ts";
+import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
 
-/** The built `apps/website` app served at www.macrograph.app. Omitted while developing. */
+/** The built `apps/website` app served at macrograph.app. Omitted while developing. */
 export class WebsiteAssetsDirectory extends Context.Service<
   WebsiteAssetsDirectory,
   Alchemy.Output<string> | undefined
@@ -23,7 +24,10 @@ export class WebsiteOAuthStateSecret extends Context.Service<
   Alchemy.Output<Redacted.Redacted<string>>
 >()("WebsiteOAuthStateSecret") {}
 
-/** Serves the MacroGraph website and the account APIs used by desktop and servers. */
+/**
+ * Serves the MacroGraph website and the account APIs used by desktop and servers. It owns the
+ * stage's hostname as a Custom Domain; Cloud claims `/cloud` on it with Worker Routes.
+ */
 export class WebsiteWorker extends Cloudflare.Worker<WebsiteWorker, {}>()("WebsiteWorker") {}
 
 const stateSecretKey = "WEBSITE_OAUTH_STATE_SECRET";
@@ -55,19 +59,28 @@ export default Layer.unwrap(
       }),
     );
 
+    const publicHost = PublicHost.forStage(stage);
     return WebsiteWorker.make(
       {
-        ...(stage === "production"
-          ? {
-              name: productionWorkerName,
+        ...(stage === "production" ? { name: productionWorkerName } : {}),
+        ...(publicHost === undefined
+          ? {}
+          : {
               domain: {
-                name: "www.macrograph.app",
-                // The OAuth redirect host every provider has registered (`/auth/proxy`).
-                aliases: ["macrograph.brendonovich.dev"],
-                redirects: ["macrograph.app"],
+                name: publicHost,
+                aliases:
+                  stage === "production"
+                    ? [
+                        // Desktop apps and servers call the account API here, so it must not
+                        // 301: that would turn their POSTs into GETs. Browsers are redirected
+                        // by the Worker instead.
+                        ...PublicHost.legacyBrowserHosts,
+                        // The OAuth redirect host every provider has registered (`/auth/proxy`).
+                        "macrograph.brendonovich.dev",
+                      ]
+                    : [],
               },
-            }
-          : {}),
+            }),
         main: import.meta.url,
         env: {
           ...environment,
@@ -80,8 +93,9 @@ export default Layer.unwrap(
               directory,
               htmlHandling: "auto-trailing-slash",
               notFoundHandling: "single-page-application",
-              // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
-              runWorkerFirst: ["/api/*", "/auth/*"],
+              // Every request reaches the worker first so legacy hosts can redirect browsers; it
+              // serves pages from the ASSETS binding.
+              runWorkerFirst: true,
             }))
           : undefined,
         dev: { port: 1339, strictPort: true },
@@ -128,7 +142,30 @@ export default Layer.unwrap(
           HttpRouter.toHttpEffect,
         );
 
-        return { fetch: app };
+        return {
+          fetch: Effect.gen(function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            const source = request.source;
+            if (!(source instanceof Request)) return yield* app;
+            const url = new URL(source.url);
+            const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/");
+            if (isApi) return yield* app;
+            if (
+              PublicHost.legacyBrowserHosts.has(url.hostname) &&
+              (request.method === "GET" || request.method === "HEAD")
+            )
+              return HttpServerResponse.redirect(
+                `https://${PublicHost.zoneName}${url.pathname}${url.search}`,
+                { status: 301 },
+              );
+            const environment = yield* Cloudflare.WorkerEnvironment;
+            const assets: { fetch: (request: Request) => Promise<Response> } | undefined =
+              environment.ASSETS;
+            if (assets === undefined) return HttpServerResponse.empty({ status: 404 });
+            const response = yield* Effect.promise(() => assets.fetch(source));
+            return HttpServerResponse.raw(response, { status: response.status });
+          }),
+        };
       }).pipe(
         Effect.provide(Alchemy.RuntimeContext.phantom),
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),

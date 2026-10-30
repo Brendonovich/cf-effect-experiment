@@ -39,7 +39,7 @@ describe("project callers", () => {
         version: "1.2.3",
         apiKeyName: "Laptop",
       });
-    }).pipe(Effect.provideService(CurrentUser, { id: "user-1", sessionId: undefined })),
+    }).pipe(Effect.provideService(CurrentUser, { id: "user-1" })),
   );
 
   it.effect("names users without an email like their browser tabs", () =>
@@ -57,6 +57,6 @@ describe("project callers", () => {
         version: null,
         apiKeyName: "CI",
       });
-    }).pipe(Effect.provideService(CurrentUser, { id: "user-1", sessionId: undefined })),
+    }).pipe(Effect.provideService(CurrentUser, { id: "user-1" })),
   );
 });

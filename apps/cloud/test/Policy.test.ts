@@ -57,12 +57,10 @@ describe("Policy", () => {
       const protectedEffect = Effect.succeed("protected").pipe(Policy.withPolicy(guard));
 
       const allowed = yield* protectedEffect.pipe(
-        Effect.provideService(CurrentUser, { id: "alice", sessionId: undefined }),
+        Effect.provideService(CurrentUser, { id: "alice" }),
       );
       const denied = yield* Effect.flip(
-        protectedEffect.pipe(
-          Effect.provideService(CurrentUser, { id: "bob", sessionId: undefined }),
-        ),
+        protectedEffect.pipe(Effect.provideService(CurrentUser, { id: "bob" })),
       );
 
       assert.strictEqual(allowed, "protected");
@@ -99,7 +97,7 @@ describe("Policy", () => {
       assert.strictEqual(roleDenial._tag, "Forbidden");
       assert.strictEqual(credentialDenial._tag, "Forbidden");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "creator", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "creator" }),
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(CredentialPolicy.Service, {
@@ -143,35 +141,29 @@ describe("Policy", () => {
       );
 
       for (const protectedEffect of [manageTeam, setRole, removeMember, manageCredentials]) {
-        yield* protectedEffect.pipe(
-          Effect.provideService(CurrentUser, { id: "alice", sessionId: undefined }),
-        );
+        yield* protectedEffect.pipe(Effect.provideService(CurrentUser, { id: "alice" }));
 
         const denial = yield* Effect.flip(
-          protectedEffect.pipe(
-            Effect.provideService(CurrentUser, { id: "bob", sessionId: undefined }),
-          ),
+          protectedEffect.pipe(Effect.provideService(CurrentUser, { id: "bob" })),
         );
 
         assert.strictEqual(denial._tag, "Forbidden");
       }
 
-      yield* viewTeam.pipe(
-        Effect.provideService(CurrentUser, { id: "alice", sessionId: undefined }),
-      );
+      yield* viewTeam.pipe(Effect.provideService(CurrentUser, { id: "alice" }));
       const hiddenTeam = yield* Effect.flip(
-        viewTeam.pipe(Effect.provideService(CurrentUser, { id: "bob", sessionId: undefined })),
+        viewTeam.pipe(Effect.provideService(CurrentUser, { id: "bob" })),
       );
       const missingTeam = yield* Effect.flip(
         Effect.void.pipe(
           Policy.withPolicy(teamPolicy.canManage("missing")),
-          Effect.provideService(CurrentUser, { id: "alice", sessionId: undefined }),
+          Effect.provideService(CurrentUser, { id: "alice" }),
         ),
       );
       const missingProject = yield* Effect.flip(
         Effect.void.pipe(
           Policy.withPolicy(credentialPolicy.canManage("missing")),
-          Effect.provideService(CurrentUser, { id: "alice", sessionId: undefined }),
+          Effect.provideService(CurrentUser, { id: "alice" }),
         ),
       );
 
@@ -236,7 +228,7 @@ describe("Policy", () => {
 
       assert.strictEqual(value, "protected");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "creator", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "creator" }),
       Effect.provide(
         Layer.succeed(ProjectPolicy.Service, {
           canView: () => Effect.void,
@@ -265,7 +257,7 @@ describe("Policy", () => {
       assert.strictEqual(eventDenial._tag, "ProjectNotFound");
       assert.strictEqual(viewed, "protected");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "creator", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "creator" }),
       Effect.provide(
         Layer.mergeAll(DeploymentPolicy.layer, EventPolicy.layer).pipe(
           Layer.provide(

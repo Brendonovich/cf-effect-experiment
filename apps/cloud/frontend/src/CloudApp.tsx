@@ -1,6 +1,6 @@
 import { LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
-import { createRouter, useLocation, type RouteSectionProps } from "@solidjs/router";
+import { createRouter, type RouteSectionProps } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { createMemo, Loading, Show } from "solid-js";
@@ -22,7 +22,6 @@ import { ProjectSettingsRoute } from "./routes/teams/projects/settings";
 
 function AuthenticatedApp(props: RouteSectionProps) {
   const auth = useAuth();
-  const location = useLocation();
   const user = createMemo(() => {
     const status = auth.status();
     return status.state === "connected" ? status : undefined;
@@ -35,11 +34,11 @@ function AuthenticatedApp(props: RouteSectionProps) {
         fallback={
           <Redirect
             href={signInUrl(
-              `${location.pathname}${location.search}${location.hash}`,
-              import.meta.env.BASE_URL,
+              `${window.location.pathname}${window.location.search}${window.location.hash}`,
             )}
             replace
             resolve={false}
+            document
           />
         }
       >

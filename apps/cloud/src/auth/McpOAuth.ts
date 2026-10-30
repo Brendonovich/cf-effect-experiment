@@ -2,6 +2,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
+import { forwardedPrefix } from "../api/HttpOrigin.ts";
 import * as Database from "../database/Database.ts";
 import {
   oauthAccessTokens,
@@ -114,13 +115,13 @@ const consentPage = (authorization: AuthorizationRequest) => {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Authorize MacroGraph</title><style>body{color-scheme:dark;background:#111;color:#eee;font:16px system-ui;display:grid;min-height:100vh;place-items:center;margin:0}.card{max-width:28rem;padding:2rem;border:1px solid #333;border-radius:12px;background:#181818}h1{font-size:1.4rem}p{color:#bbb;line-height:1.5}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{padding:.65rem 1rem;border-radius:6px;border:1px solid #555;font:inherit;cursor:pointer}.allow{background:#eee;color:#111;border-color:#eee}</style></head>
 <body><main class="card"><h1>Connect ${escapeHtml(authorization.clientName)}?</h1><p>This lets the client use MacroGraph Cloud MCP as you, including reading and changing projects you can access.</p>
-<form method="post" action="/oauth/authorize">${hidden}<div class="actions"><button name="decision" value="deny">Cancel</button><button class="allow" name="decision" value="allow">Allow</button></div></form></main></body></html>`);
+<form method="post" action="authorize">${hidden}<div class="actions"><button name="decision" value="deny">Cancel</button><button class="allow" name="decision" value="allow">Allow</button></div></form></main></body></html>`);
 };
 
 export const layer = <RateLimitError, RateLimitRequirements>(options: {
   readonly authenticateSession: (
     request: HttpServerRequest.HttpServerRequest,
-  ) => Effect.Effect<{ readonly userId: string; readonly sessionId: string }, unknown, never>;
+  ) => Effect.Effect<{ readonly userId: string }, unknown, never>;
   readonly limitRegistration: (
     key: string,
   ) => Effect.Effect<{ readonly success: boolean }, RateLimitError, RateLimitRequirements>;
@@ -286,8 +287,9 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
             });
           const session = yield* Effect.option(options.authenticateSession(request));
           if (Option.isNone(session)) {
-            const next = `${url.pathname}${url.search}`;
-            return HttpServerResponse.redirect(`/sign-in?next=${encodeURIComponent(next)}`);
+            // Accounts sign in on the MacroGraph website, which shares Cloud's origin.
+            const next = `${forwardedPrefix(request)}${url.pathname}${url.search}`;
+            return HttpServerResponse.redirect(`/login?next=${encodeURIComponent(next)}`);
           }
           return consentPage(authorization);
         }),

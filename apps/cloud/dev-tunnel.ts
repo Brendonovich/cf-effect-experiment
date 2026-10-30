@@ -4,7 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 
 const vitePort = 5175;
-console.log(`Local app: http://localhost:${vitePort}`);
+const websitePort = 5176;
+console.log(`Local app: http://localhost:${websitePort} (Cloud at /cloud/)`);
 
 const tunnel = spawn(
   "cloudflared",
@@ -13,6 +14,7 @@ const tunnel = spawn(
 );
 
 let vite: ReturnType<typeof spawn> | undefined;
+let website: ReturnType<typeof spawn> | undefined;
 const findTunnelUrl = async (stream: NodeJS.ReadableStream, output: NodeJS.WriteStream) => {
   for await (const line of createInterface({ input: stream })) {
     output.write(`${line}\n`);
@@ -25,6 +27,7 @@ const findTunnelUrl = async (stream: NodeJS.ReadableStream, output: NodeJS.Write
 const stop = () => {
   tunnel.kill();
   vite?.kill();
+  website?.kill();
 };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
@@ -71,12 +74,19 @@ vite = spawn(
         : { VITE_AXIOM_ORG_ID: process.env.AXIOM_ORG_ID }),
       VITE_AXIOM_TRACE_DATASET: "macrograph-traces",
       VITE_WORKER_URL: "http://localhost:1337",
-      VITE_PUBLIC_WORKER_ORIGIN: `http://localhost:${vitePort}`,
+      VITE_PUBLIC_WORKER_ORIGIN: `http://localhost:${websitePort}`,
       VITE_PUBLIC_INGRESS_ORIGIN: tunnelUrl,
     },
     stdio: "inherit",
   },
 );
 
-await Promise.race([once(tunnel, "exit"), once(vite, "exit")]);
+// The website serves `/cloud` from the Cloud dev server, so both share one origin as in production.
+website = spawn(
+  "pnpm",
+  ["exec", "vite", "--host", "0.0.0.0", "--port", String(websitePort), "--strictPort"],
+  { cwd: "../website", stdio: "inherit" },
+);
+
+await Promise.race([once(tunnel, "exit"), once(vite, "exit"), once(website, "exit")]);
 stop();

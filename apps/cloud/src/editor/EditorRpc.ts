@@ -1,4 +1,4 @@
-import { CurrentUser, sessionCookieName } from "@macrograph/cloud-api";
+import { CurrentUser } from "@macrograph/cloud-api";
 import { Policy } from "@macrograph/core";
 import { Presence } from "@macrograph/editor";
 import { and, eq } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { Headers, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import { hasTrustedOrigin } from "../api/HttpOrigin.ts";
 import * as Authentication from "../auth/Authentication.ts";
+import * as Credential from "../auth/Credential.ts";
 import * as Database from "../database/Database.ts";
 import { projects, teamMemberships, users } from "../database/DatabaseSchema.ts";
 import * as Deployment from "../deployment/Deployment.ts";
@@ -15,6 +16,7 @@ import ProjectEditorDO from "./ProjectEditorDO.ts";
 
 export const make = Effect.gen(function* () {
   const authentication = yield* Authentication.Service;
+  const credential = yield* Credential.Service;
   const database = yield* Database.Service;
   const editorRpcPolicy = yield* EditorRpcPolicy.Service;
   const deployment = yield* Deployment.Service;
@@ -25,11 +27,11 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         if (!hasTrustedOrigin(request)) return HttpServerResponse.empty({ status: 403 });
         const url = new URL(request.url, "http://main.local");
-        const sessionId = request.cookies[sessionCookieName];
         const projectId = url.searchParams.get("projectId");
-        if (!sessionId) return HttpServerResponse.empty({ status: 401 });
-        const userId = yield* authentication.cloudAuth(sessionId).userId();
-        if (userId === undefined) return HttpServerResponse.empty({ status: 401 });
+        const user = yield* authentication.sessionUser(request);
+        if (user === undefined) return HttpServerResponse.empty({ status: 401 });
+        yield* authentication.ensureUser(user);
+        const userId = user.id;
         if (projectId === null) return HttpServerResponse.empty({ status: 400 });
         return yield* Effect.gen(function* () {
           const rows = yield* database
@@ -50,6 +52,8 @@ export const make = Effect.gen(function* () {
           const displayName =
             emailName.length > 0 ? emailName : Presence.fallbackName(`${project.id}\0${userId}`);
           const editor = projectEditors.getByName(project.id);
+          // The editor's engines run with the owner's credentials, whoever is connected.
+          yield* credential.syncEditor(project.id, project.createdBy);
           if (!(request.source instanceof Request))
             return yield* Effect.die("Cloudflare request source is not a native Request");
           const headers = Headers.setAll(request.headers, {
@@ -61,7 +65,6 @@ export const make = Effect.gen(function* () {
             "x-macrograph-email": email ?? "",
             "x-macrograph-project-id": project.id,
             "x-macrograph-role": role,
-            "x-macrograph-session-id": sessionId,
             "x-macrograph-public-origin": deployment.publicOrigin(request),
           });
           return yield* editor
@@ -69,7 +72,7 @@ export const make = Effect.gen(function* () {
             .pipe(Effect.orDie);
         }).pipe(
           Policy.withPolicy(editorRpcPolicy.canView(projectId)),
-          Effect.provideService(CurrentUser, { id: userId, sessionId }),
+          Effect.provideService(CurrentUser, { id: userId }),
           Effect.catchTag("ProjectNotFound", () =>
             Effect.succeed(HttpServerResponse.empty({ status: 404 })),
           ),

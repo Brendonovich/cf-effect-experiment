@@ -68,7 +68,7 @@ const send = (
     yield* HttpEffect.toHandled(app, (_, value) => Ref.set(response, Option.some(value))).pipe(
       Effect.provideService(
         HttpServerRequest.HttpServerRequest,
-        HttpServerRequest.fromWeb(new Request(`https://cloud.macrograph.app${path}`, init)),
+        HttpServerRequest.fromWeb(new Request(`https://macrograph.app${path}`, init)),
       ),
     );
     return Option.getOrThrow(yield* Ref.get(response));
@@ -79,13 +79,13 @@ describe("MCP OAuth", () => {
     Effect.scoped(
       Effect.gen(function* () {
         const app = yield* McpOAuth.layer({
-          authenticateSession: () => Effect.succeed({ userId: "user-1", sessionId: "session-1" }),
+          authenticateSession: () => Effect.succeed({ userId: "user-1" }),
           limitRegistration: () => Effect.succeed({ success: true }),
         }).pipe(Layer.provide(databaseLayer), HttpRouter.toHttpEffect);
 
         const metadata = yield* send(app, "/.well-known/oauth-protected-resource/api/mcp");
         const metadataBody = yield* Effect.promise(() => HttpServerResponse.toWeb(metadata).json());
-        assert.strictEqual(metadataBody.resource, "https://cloud.macrograph.app/api/mcp");
+        assert.strictEqual(metadataBody.resource, "https://macrograph.app/cloud/api/mcp");
 
         const registered = yield* send(app, "/oauth/register", {
           method: "POST",
@@ -130,7 +130,7 @@ describe("MCP OAuth", () => {
           redirect_uri: redirectUri,
           code_challenge: challenge,
           code_challenge_method: "S256",
-          resource: "https://cloud.macrograph.app/api/mcp",
+          resource: "https://macrograph.app/cloud/api/mcp",
           scope: "mcp",
           state: "state-1",
         });
@@ -161,7 +161,7 @@ describe("MCP OAuth", () => {
           redirect_uri: redirectUri,
           code,
           code_verifier: verifier,
-          resource: "https://cloud.macrograph.app/api/mcp",
+          resource: "https://macrograph.app/cloud/api/mcp",
         }).toString();
         const token = yield* send(app, "/oauth/token", {
           method: "POST",

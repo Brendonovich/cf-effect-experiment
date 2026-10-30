@@ -13,6 +13,21 @@ export const requestOrigin = (request: OriginRequest) => {
   return `${protocol}://${host}`;
 };
 
+/** The path Cloud is mounted at on the main site, claimed by CloudWorker's Worker Routes. */
+export const cloudPathPrefix = "/cloud";
+
+/**
+ * The mount CloudWorker stripped from this request, or "" when Cloud was reached directly (its
+ * workers.dev URL, or the Vite proxy's own header in development). CloudWorker replaces any
+ * client-supplied value, and only the known mount is accepted.
+ */
+export const forwardedPrefix = (request: OriginRequest) =>
+  request.headers["x-forwarded-prefix"] === cloudPathPrefix ? cloudPathPrefix : "";
+
+/** Cloud's public base URL, including the mount prefix when served from the main site. */
+export const publicBaseUrl = (request: OriginRequest) =>
+  `${requestOrigin(request)}${forwardedPrefix(request)}`;
+
 export const hasTrustedOrigin = (request: OriginRequest) => {
   const origin = request.headers.origin;
   if (origin === undefined) return true;

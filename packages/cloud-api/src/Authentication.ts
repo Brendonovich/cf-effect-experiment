@@ -1,13 +1,12 @@
 import { Context } from "effect";
 import { HttpApiError, HttpApiMiddleware, HttpApiSecurity } from "effect/http-api";
 
-export const sessionCookieName = "macrograph_session";
-export const sessionSecurity = HttpApiSecurity.apiKey({ key: sessionCookieName, in: "cookie" });
+/** The MacroGraph account session cookie, issued by the website and shared by Cloud. */
+export const sessionCookieName = "auth_session";
 
-export class CurrentUser extends Context.Service<
-  CurrentUser,
-  { readonly id: string; readonly sessionId: string | undefined }
->()("CurrentUser") {}
+export class CurrentUser extends Context.Service<CurrentUser, { readonly id: string }>()(
+  "CurrentUser",
+) {}
 
 export class Authentication extends HttpApiMiddleware.Service<
   Authentication,

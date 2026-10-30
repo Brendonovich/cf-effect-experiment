@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Dns from "./src/Dns.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
+import * as PublicHost from "./src/PublicHost.ts";
 import {
   DatabaseHyperdrive,
   DeploymentObjectsBucket,
@@ -90,13 +91,6 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
-    const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
-      Effect.provide(WebsiteWorkerLayer),
-      Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
-      Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
-    );
-
     const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
       const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
       const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
@@ -108,8 +102,16 @@ export default Alchemy.Stack(
       return { cloudWorker, ingressWorker };
     }).pipe(Effect.provide(IngressWorkerLayer));
 
+    const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
+    const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
+      Effect.provide(WebsiteWorkerLayer),
+      Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
+      Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
+    );
+
     const github = yield* GitHub.GitHubEnv;
-    if (github?.pr !== undefined) {
+    const previewHost = PublicHost.forStage(yield* Alchemy.Stage);
+    if (github?.pr !== undefined && previewHost !== undefined) {
       yield* GitHub.Comment("CloudPreviewComment", {
         owner: github.owner,
         repository: github.repository,
@@ -117,7 +119,7 @@ export default Alchemy.Stack(
         body: Output.interpolate`
 					## MacroGraph Cloud preview
 
-					**App:** ${cloudWorker.url}
+					**App:** https://${previewHost}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.

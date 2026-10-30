@@ -15,7 +15,7 @@ import * as Jwt from "../src/website/Jwt.ts";
 import * as Password from "../src/website/Password.ts";
 import * as WebsiteRoutes from "../src/website/WebsiteRoutes.ts";
 
-const origin = "https://www.macrograph.app";
+const origin = "https://macrograph.app";
 
 // Produced by the original website's `new Argon2id().hash("correct horse battery")` (oslo).
 const osloHash =
@@ -202,40 +202,6 @@ describe("website routes", () => {
       assert.strictEqual(anonymous.status, 403);
       const user = yield* send(app, "/api/user");
       assert.isNull(yield* Effect.promise(() => user.json()));
-    }),
-  );
-
-  it.effect("only lets the Cloud origin use the session bridge", () =>
-    Effect.gen(function* () {
-      const app = yield* makeApp;
-      const preflight = yield* send(app, "/api/cloud-login", {
-        method: "OPTIONS",
-        headers: {
-          origin: WebsiteRoutes.cloudOrigin,
-          "access-control-request-method": "POST",
-          "access-control-request-headers": "content-type",
-        },
-      });
-      assert.strictEqual(preflight.status, 204);
-      assert.strictEqual(
-        preflight.headers.get("access-control-allow-origin"),
-        WebsiteRoutes.cloudOrigin,
-      );
-
-      const foreign = yield* send(
-        app,
-        "/api/cloud-login",
-        json({ userCode: "ABCD-EFGH" }, { origin: "https://example.com" }),
-      );
-      assert.strictEqual(foreign.status, 403);
-      assert.isNull(foreign.headers.get("access-control-allow-origin"));
-
-      const signedOut = yield* send(
-        app,
-        "/api/cloud-login",
-        json({ userCode: "ABCD-EFGH" }, { origin: WebsiteRoutes.cloudOrigin }),
-      );
-      assert.strictEqual(signedOut.status, 401);
     }),
   );
 

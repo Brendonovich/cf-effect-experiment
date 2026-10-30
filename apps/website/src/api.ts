@@ -148,3 +148,6 @@ export const safeNextPath = (next: string | null | undefined) =>
     : "/";
 
 export const loginPath = (next: string) => `/login?next=${encodeURIComponent(next)}`;
+
+/** Whether a same-site path belongs to another app on this origin, such as Cloud at `/cloud`. */
+export const isExternalPath = (path: string) => /^\/(cloud|api|auth)(\/|$|\?|#)/.test(path);

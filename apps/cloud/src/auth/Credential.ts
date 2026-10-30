@@ -5,12 +5,12 @@ import { and, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { HttpApiError } from "effect/http-api";
 
-import { requestOrigin } from "../api/HttpOrigin.ts";
-import { oauthCredentials, type OAuthToken } from "../database/AccountDatabaseSchema.ts";
+import { publicBaseUrl } from "../api/HttpOrigin.ts";
+import { oauthCredentials } from "../database/AccountDatabaseSchema.ts";
 import * as Database from "../database/Database.ts";
 import { projects } from "../database/DatabaseSchema.ts";
 import ProjectEditorDO from "../editor/ProjectEditorDO.ts";
-import * as Authentication from "./Authentication.ts";
+import * as CredentialStore from "./CredentialStore.ts";
 import * as OAuthProviders from "./OAuthProviders.ts";
 
 const OAuthState = Schema.Struct({
@@ -47,7 +47,6 @@ const summary = (
 });
 
 export const make = Effect.gen(function* () {
-  const authentication = yield* Authentication.Service;
   const database = yield* Database.Service;
   const providers = yield* OAuthProviders.Service;
   const projectEditors = yield* ProjectEditorDO;
@@ -69,12 +68,11 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  const rowsFor = (userId: string) =>
-    database
-      .select()
-      .from(oauthCredentials)
-      .where(eq(oauthCredentials.userId, userId))
-      .pipe(Effect.orDie);
+  const rowsFor = (userId: string) => CredentialStore.rowsFor(database, userId);
+  const transfersFor = (userId: string) =>
+    rowsFor(userId).pipe(
+      Effect.map((rows) => rows.map((row) => CredentialStore.toTransfer(row, providers))),
+    );
 
   const catalogFor = (userId: string) =>
     rowsFor(userId).pipe(
@@ -118,23 +116,9 @@ export const make = Effect.gen(function* () {
       });
     });
 
-  const notifyProjects = (userId: string, sessionId: string | undefined) =>
+  const notifyProjects = (userId: string) =>
     Effect.gen(function* () {
-      if (sessionId !== undefined)
-        yield* authentication
-          .cloudAuth(sessionId)
-          .refetchCredentials()
-          .pipe(Effect.catchCause(() => Effect.void));
-      const credentials = (yield* rowsFor(userId)).map((row) => {
-        const provider = providers.get(row.providerId);
-        return {
-          id: row.providerUserId,
-          provider: row.providerId,
-          ...(row.displayName === null ? {} : { displayName: row.displayName }),
-          ...(provider === undefined ? {} : { clientId: provider.clientId }),
-          token: { access: row.token.access_token },
-        };
-      });
+      const credentials = yield* transfersFor(userId);
       const owned = yield* database
         .select({ id: projects.id })
         .from(projects)
@@ -151,11 +135,7 @@ export const make = Effect.gen(function* () {
       );
     });
 
-  const startConnection = (
-    user: { readonly id: string; readonly sessionId: string | undefined },
-    providerId: string,
-    origin: string,
-  ) => {
+  const startConnection = (user: { readonly id: string }, providerId: string, origin: string) => {
     const provider = providers.get(providerId);
     if (provider === undefined) return Effect.fail(new HttpApiError.BadRequest());
     const redirectUri = `${origin}/credential-oauth/callback`;
@@ -173,17 +153,21 @@ export const make = Effect.gen(function* () {
   };
 
   return {
-    publicOrigin: requestOrigin,
+    publicOrigin: publicBaseUrl,
+    /** Gives a project's editor its owner's current credentials. */
+    syncEditor: (projectId: string, ownerId: string) =>
+      transfersFor(ownerId).pipe(
+        Effect.flatMap((credentials) =>
+          projectEditors.getByName(projectId).setCredentials(credentials),
+        ),
+        Effect.catchCause(() => Effect.void),
+      ),
     providers: Effect.succeed(providers.list),
     list: CurrentUser.pipe(
-      Effect.flatMap((user) =>
-        catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id, user.sessionId))),
-      ),
+      Effect.flatMap((user) => catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id)))),
     ),
     refetch: CurrentUser.pipe(
-      Effect.flatMap((user) =>
-        catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id, user.sessionId))),
-      ),
+      Effect.flatMap((user) => catalogFor(user.id).pipe(Effect.tap(() => notifyProjects(user.id)))),
     ),
     connect: (providerId: string, origin: string) =>
       CurrentUser.pipe(Effect.flatMap((user) => startConnection(user, providerId, origin))),
@@ -221,7 +205,7 @@ export const make = Effect.gen(function* () {
             set: { token, issuedAt, displayName: identity.displayName },
           })
           .pipe(Effect.orDie);
-        yield* notifyProjects(user.id, user.sessionId);
+        yield* notifyProjects(user.id);
         return {
           credential: summary(
             {
@@ -248,45 +232,9 @@ export const make = Effect.gen(function* () {
                 eq(oauthCredentials.providerUserId, credentialId),
               ),
             )
-            .pipe(Effect.orDie, Effect.andThen(notifyProjects(user.id, user.sessionId))),
+            .pipe(Effect.orDie, Effect.andThen(notifyProjects(user.id))),
         ),
       ),
-    refreshCredential: (userId: string, providerId: string, credentialId: string) =>
-      Effect.gen(function* () {
-        const matches = yield* database
-          .select()
-          .from(oauthCredentials)
-          .where(
-            and(
-              eq(oauthCredentials.userId, userId),
-              eq(oauthCredentials.providerId, providerId),
-              eq(oauthCredentials.providerUserId, credentialId),
-            ),
-          )
-          .limit(1)
-          .pipe(Effect.orDie);
-        const row = matches[0];
-        const provider = providers.get(providerId);
-        if (row === undefined || provider === undefined) return undefined;
-        const refreshToken = row.token.refresh_token;
-        if (refreshToken === undefined) return row;
-        const refreshed = yield* providers.refresh(provider, refreshToken);
-        if (refreshed === undefined) return row;
-        const token: OAuthToken = refreshed;
-        const issuedAt = new Date();
-        yield* database
-          .update(oauthCredentials)
-          .set({ token, issuedAt })
-          .where(
-            and(
-              eq(oauthCredentials.userId, userId),
-              eq(oauthCredentials.providerId, providerId),
-              eq(oauthCredentials.providerUserId, credentialId),
-            ),
-          )
-          .pipe(Effect.orDie);
-        return { ...row, token, issuedAt };
-      }),
   };
 });
 

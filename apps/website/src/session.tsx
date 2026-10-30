@@ -7,7 +7,7 @@ import * as stylex from "@stylexjs/stylex";
 import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { Show, untrack } from "solid-js";
 
-import { type Session, getSession, logOut, loginPath, sessionKey } from "./api";
+import { type Session, getSession, isExternalPath, logOut, loginPath, sessionKey } from "./api";
 import { showToast } from "./Toasts";
 
 export const useSession = () =>
@@ -27,12 +27,18 @@ export function useLogOut() {
   }));
 }
 
-export function Redirect(props: { readonly href: string }) {
+/** Navigates within the website, or loads the page when the path belongs to another app. */
+export function useGoTo() {
   const navigate = useNavigate();
-  navigate(
-    untrack(() => props.href),
-    { replace: true },
-  );
+  return (href: string) => {
+    if (isExternalPath(href)) window.location.replace(href);
+    else navigate(href, { replace: true });
+  };
+}
+
+export function Redirect(props: { readonly href: string }) {
+  const goTo = useGoTo();
+  goTo(untrack(() => props.href));
   return null;
 }
 

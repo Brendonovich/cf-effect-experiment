@@ -2,13 +2,22 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
 import * as Output from "alchemy/Output";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
-import { Etag, HttpMiddleware, HttpPlatform, HttpRouter, HttpServerRequest } from "effect/http";
+import {
+  Etag,
+  HttpMiddleware,
+  HttpPlatform,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import * as Path from "effect/Path";
 
 import { Api } from "../api/Api.ts";
 import * as CloudApiHandlers from "../api/CloudApiHandlers.ts";
 import * as CloudMcp from "../api/CloudMcp.ts";
+import * as CloudMount from "../api/CloudMount.ts";
+import { cloudPathPrefix } from "../api/HttpOrigin.ts";
 import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
@@ -25,6 +34,7 @@ import { ObservabilityLayer } from "../Observability.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as Project from "../project/Project.ts";
 import * as ProjectPolicy from "../project/ProjectPolicy.ts";
+import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
 import * as Team from "../team/Team.ts";
 import * as TeamPolicy from "../team/TeamPolicy.ts";
@@ -46,7 +56,10 @@ export class CredentialOAuthStateSecret extends Context.Service<
   Alchemy.Output<Redacted.Redacted<string>>
 >()("CredentialOAuthStateSecret") {}
 
-/** Defines the Cloudflare Worker hosting cloud APIs, editor connections, and web assets. */
+/**
+ * Hosts Cloud's APIs, editor connections, and web app at `/cloud` on the main site, via Worker
+ * Routes that run ahead of WebsiteWorker's Custom Domain.
+ */
 export class CloudWorker extends Cloudflare.Worker<CloudWorker, {}>()("CloudWorker") {}
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
@@ -84,15 +97,22 @@ export default Layer.unwrap(
         },
       ),
     );
+    // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
+    const publicHost = PublicHost.forStage(stage);
     return CloudWorker.make(
       {
-        ...(stage === "production" ? { domain: "cloud.macrograph.app" } : {}),
+        // Cloud claims `/cloud` on the stage's hostname with Worker Routes, which Cloudflare runs
+        // before WebsiteWorker's Custom Domain, so both apps share the origin and session cookie.
+        ...(publicHost === undefined
+          ? {}
+          : { routes: CloudMount.routePatterns(publicHost).map((pattern) => ({ pattern })) }),
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
           MCP_OAUTH_PUBLIC_ORIGIN:
-            process.env.MCP_OAUTH_PUBLIC_ORIGIN ?? "https://cloud.macrograph.app",
+            process.env.MCP_OAUTH_PUBLIC_ORIGIN ??
+            `https://${publicHost ?? PublicHost.zoneName}${cloudPathPrefix}`,
           ...(ingressPublicOrigin === undefined
             ? {}
             : {
@@ -104,8 +124,8 @@ export default Layer.unwrap(
               directory,
               htmlHandling: "auto-trailing-slash",
               notFoundHandling: "single-page-application",
-              // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
-              runWorkerFirst: ["/api/*", "/oauth/*", "/.well-known/*", "/rpc", "/rpc/*"],
+              // Requests arrive under `/cloud`, which the worker strips before serving assets.
+              runWorkerFirst: true,
             }))
           : undefined,
         dev: { port: 1337, strictPort: true },
@@ -130,11 +150,8 @@ export default Layer.unwrap(
           EditorRpcPolicy.layer,
           EventPolicy.layer,
         ).pipe(Layer.provideMerge(Layer.mergeAll(ProjectPolicy.layer, TeamPolicy.layer)));
-        const services = Layer.mergeAll(
-          Credential.layer,
-          EditorRpc.layer,
-          Event.layer(workerOperations),
-        ).pipe(
+        const services = Layer.mergeAll(EditorRpc.layer, Event.layer(workerOperations)).pipe(
+          Layer.provideMerge(Credential.layer),
           Layer.provideMerge(Deployment.layer(workerOperations, deploymentsResource)),
           Layer.provideMerge(Project.layer(workerOperations, deploymentsResource)),
           Layer.provideMerge(Team.layer),
@@ -220,14 +237,41 @@ export default Layer.unwrap(
           return {
             fetch: Effect.gen(function* () {
               const request = yield* HttpServerRequest.HttpServerRequest;
-              if (new URL(request.url, "http://main.local").pathname === "/api/mcp") {
-                return yield* CloudMcp.authenticated(
-                  app,
-                  authentication.authenticateMcpBearer(),
-                ).pipe(HttpMiddleware.cors());
+              if (!(request.source instanceof Request)) return yield* app;
+              const url = new URL(request.source.url);
+              const resolved = CloudMount.resolve(url.pathname, url.search);
+              if (resolved._tag === "Redirect")
+                return HttpServerResponse.redirect(resolved.location, { status: 301 });
+              const target = new URL(url);
+              target.pathname = resolved.path;
+              const forwarded = new Request(target, request.source);
+              // Only CloudWorker decides the mount; never trust a client-supplied prefix.
+              forwarded.headers.delete("x-forwarded-prefix");
+              if (resolved.mounted) forwarded.headers.set("x-forwarded-prefix", cloudPathPrefix);
+              if (resolved._tag === "Assets") {
+                const environment = yield* Cloudflare.WorkerEnvironment;
+                const assets: { fetch: (request: Request) => Promise<Response> } | undefined =
+                  environment.ASSETS;
+                if (assets === undefined) return HttpServerResponse.empty({ status: 404 });
+                const response = yield* Effect.promise(() => assets.fetch(forwarded));
+                return HttpServerResponse.raw(response, { status: response.status });
               }
-              if (request.headers.upgrade?.toLowerCase() === "websocket") return yield* app;
-              return yield* app.pipe(HttpMiddleware.cors());
+              const application = Effect.gen(function* () {
+                if (resolved.path === "/api/mcp")
+                  return yield* CloudMcp.authenticated(
+                    app,
+                    authentication.authenticateMcpBearer(),
+                  ).pipe(HttpMiddleware.cors());
+                if (forwarded.headers.get("upgrade")?.toLowerCase() === "websocket")
+                  return yield* app;
+                return yield* app.pipe(HttpMiddleware.cors());
+              });
+              return yield* application.pipe(
+                Effect.provideService(
+                  HttpServerRequest.HttpServerRequest,
+                  HttpServerRequest.fromWeb(forwarded),
+                ),
+              );
             }),
           };
         }).pipe(Effect.provide(services));

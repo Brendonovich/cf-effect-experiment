@@ -17,13 +17,6 @@ export const sessionHandlers = HttpApiBuilder.group(
     const authentication = yield* Authentication.Service;
     return handlers
       .handle("get", ({ request }) => authentication.sessionStatus(request))
-      .handle("start", ({ request }) => authentication.startSession(request))
-      .handle("startWebsite", ({ request }) => authentication.startWebsiteSession(request))
-      .handle("pollWebsite", ({ payload, request }) =>
-        authentication.pollWebsiteSession(payload.registrationId, request),
-      )
-      .handle("poll", ({ request }) => authentication.pollSession(request))
-      .handle("disconnect", ({ request }) => authentication.disconnectSession(request))
       .handle("issueApiKey", ({ payload, request }) =>
         authentication.issueApiKey(payload.name, request),
       )

@@ -5,8 +5,10 @@ import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
 
-// `pnpm alchemy dev` serves WebsiteWorker, which owns every /api and /auth route.
+// `pnpm alchemy dev` serves WebsiteWorker, which owns every /api and /auth route. Cloud's dev
+// server serves `/cloud`, as WebsiteWorker forwards it in production.
 const workerUrl = process.env.VITE_WEBSITE_WORKER_URL ?? "http://localhost:1339";
+const cloudUrl = process.env.VITE_CLOUD_DEV_URL ?? "http://localhost:5175";
 
 export default defineConfig({
   appType: "spa",
@@ -32,6 +34,7 @@ export default defineConfig({
     proxy: {
       "/api": { target: workerUrl, changeOrigin: true },
       "/auth": { target: workerUrl, changeOrigin: true },
+      "/cloud": { target: cloudUrl, ws: true },
     },
   },
   preview: { port: 4176, strictPort: true },

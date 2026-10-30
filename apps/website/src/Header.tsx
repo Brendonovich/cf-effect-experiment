@@ -35,6 +35,9 @@ export function Header() {
           >
             {(current) => (
               <>
+                <a href="/cloud/" sx={[styles.link]}>
+                  Cloud
+                </a>
                 <a href="/account/credentials" sx={[styles.link]}>
                   Account
                 </a>
