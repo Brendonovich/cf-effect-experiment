@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Array, Effect, Schema } from "effect";
+import { Array, Cause, Effect, Exit, Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/rpc";
 import { expectTypeOf } from "vitest";
 
@@ -33,6 +33,38 @@ describe("Module.make", () => {
       );
       for (const schema of schemas)
         assert.strictEqual(schema.replay, schema.id.endsWith("/safe") ? "safe" : "unsafe");
+    }),
+  );
+
+  it.effect("rejects event schemas that declare inputs", () =>
+    Effect.gen(function* () {
+      // IO typed as unknown escapes the compile-time guard, so registration checks it too.
+      const register = (io: (context: Registration.IOContext) => unknown) =>
+        Registration.collect<never>((context) =>
+          context.schema.register({
+            id: "event",
+            type: "event",
+            event: () => Effect.succeed(true),
+            io,
+            run: () => Effect.void,
+          }),
+        ).pipe(Effect.exit);
+
+      for (const io of [
+        (context: Registration.IOContext) => ({ value: context.data.in("value", t.String) }),
+        (context: Registration.IOContext) => ({ go: context.exec.in("go") }),
+        (context: Registration.IOContext) => ({ scope: context.scope.in("scope", []) }),
+      ]) {
+        const exit = yield* register(io);
+        assert.isTrue(Exit.isFailure(exit));
+        if (Exit.isFailure(exit))
+          assert.instanceOf(Cause.squash(exit.cause), Registration.EventInputsError);
+      }
+      assert.isTrue(
+        Exit.isSuccess(
+          yield* register((context) => ({ value: context.data.out("value", t.String) })),
+        ),
+      );
     }),
   );
 
@@ -172,6 +204,11 @@ describe("Module.make", () => {
               expectTypeOf(event).toEqualTypeOf<Trigger>();
               return Effect.succeed(event._tag === "Trigger");
             },
+            io: (io) => ({ value: io.data.out("value", t.String) }),
+            run: () => Effect.void,
+          });
+          yield* context.schema.register({
+            id: "Lookup",
             io: (io) => ({
               value: io.data.in("value", t.String, {
                 suggestions: ({ engine }) => {
@@ -186,7 +223,7 @@ describe("Module.make", () => {
       });
       expectTypeOf(module).toEqualTypeOf<Module.Module<typeof TestEngine>>();
       assert.strictEqual(module.engine, TestEngine);
-      assert.lengthOf(yield* Registration.collect(module.effect), 1);
+      assert.lengthOf(yield* Registration.collect(module.effect), 2);
     }),
   );
 });

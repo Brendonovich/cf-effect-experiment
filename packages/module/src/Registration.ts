@@ -308,10 +308,29 @@ export type SchemaRegistration<
     | { readonly type?: "base" | "exec" | "pure" }
   );
 
+/** Whether an IO value declares any data, execution or scope input. */
+type HasInputs<IO> = IO extends DataInputRef | ExecutionInputRef
+  ? true
+  : IO extends DataOutputRef | ExecutionOutputRef | t.Type
+    ? false
+    : IO extends ReadonlyArray<infer Item>
+      ? HasInputs<Item>
+      : IO extends object
+        ? true extends { [Key in keyof IO]: HasInputs<IO[Key]> }[keyof IO]
+          ? true
+          : false
+        : false;
+
+/** Rejects event registrations whose IO declares inputs; see `EventInputsError`. */
+export type EventInputsGuard<IO> =
+  true extends HasInputs<IO>
+    ? { readonly type?: "base" | "exec" | "pure"; readonly eventNodesCannotHaveInputs?: never }
+    : unknown;
+
 export type ModuleContext<Definition extends Engine.AnyDef> = {
   readonly schema: {
     readonly register: <IO, const Properties extends PropertyDefinitions = {}>(
-      schema: SchemaRegistration<IO, Definition, Properties>,
+      schema: SchemaRegistration<IO, Definition, Properties> & EventInputsGuard<IO>,
     ) => Effect.Effect<void>;
   };
   readonly conversion: {
@@ -435,6 +454,19 @@ function materialize(value: unknown, context: Parameters<RegisteredSchema["run"]
   return value;
 }
 
+/** Event nodes start executions, so nothing can flow into them: they declare outputs only. */
+export class EventInputsError extends Error {
+  constructor(
+    readonly schemaId: string,
+    readonly inputs: ReadonlyArray<DataInputRef | ExecutionInputRef>,
+  ) {
+    super(
+      `Event schema "${schemaId}" declares inputs (${inputs.map((input) => input.id).join(", ")}); event nodes can only have outputs`,
+    );
+    this.name = "EventInputsError";
+  }
+}
+
 const makeRegistered = <
   IO,
   Definition extends Engine.AnyDef,
@@ -468,6 +500,10 @@ const makeRegistered = <
     );
     const executionInputs = refs.filter(isExecutionInput);
     const executionOutputs = refs.filter(isExecutionOutput);
+    if (type === "event") {
+      const inputs = refs.filter((ref) => isDataInput(ref) || isExecutionInput(ref));
+      if (inputs.length > 0) throw new EventInputsError(schema.id, inputs);
+    }
     if (type === "exec" && !executionInputs.some((input) => input.id === "exec"))
       executionInputs.unshift(new ExecutionInputRef("exec"));
     if (
@@ -638,10 +674,13 @@ export const collectModule = <Definition extends Engine.AnyDef>(
     const context: ModuleContext<Definition> = {
       schema: {
         register: (schema) =>
-          Ref.update(schemas, (registered) => [
-            ...registered.filter((item) => item.id !== schema.id),
-            makeRegistered(schema),
-          ]),
+          Effect.suspend(() => {
+            const registered = makeRegistered(schema);
+            return Ref.update(schemas, (current) => [
+              ...current.filter((item) => item.id !== schema.id),
+              registered,
+            ]);
+          }),
       },
       conversion: {
         register: (conversion) =>
