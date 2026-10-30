@@ -94,6 +94,9 @@ export default Layer.unwrap(
         ...(publicHost === undefined
           ? {}
           : { routes: CloudMount.routePatterns(publicHost).map((pattern) => ({ pattern })) }),
+        // Cloud has no hostname of its own; this detaches the retired `cloud.macrograph.app`,
+        // which omitting `domain` would leave attached.
+        domain: null,
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
