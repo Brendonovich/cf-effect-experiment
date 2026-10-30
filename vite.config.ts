@@ -2,7 +2,7 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   lint: {
-    ignorePatterns: ["lib/**", "apps/cloud/legacy-website/public/**"],
+    ignorePatterns: ["lib/**"],
     jsPlugins: [{ name: "macrograph", specifier: "./tooling/oxlint/macrograph.mjs" }],
     rules: {
       "macrograph/no-cross-package-relative-imports": "error",
@@ -69,7 +69,7 @@ export default defineConfig({
     },
   },
   fmt: {
-    ignorePatterns: ["lib/**", "apps/cloud/legacy-website/public/**"],
+    ignorePatterns: ["lib/**"],
     sortImports: {
       groups: [
         "type-import",

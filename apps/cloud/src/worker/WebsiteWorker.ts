@@ -1,26 +1,29 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/http";
 
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import { ObservabilityLayer } from "../Observability.ts";
-import { DatabaseHyperdrive, PlaygroundShares } from "../Storage.ts";
+import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
 
-/** Directory containing the prebuilt original website served at www.macrograph.app. */
-export const websiteAssetsDirectory = new URL("../../legacy-website/public", import.meta.url)
-  .pathname;
+/** The built `apps/website` app served at www.macrograph.app. Omitted while developing. */
+export class WebsiteAssetsDirectory extends Context.Service<
+  WebsiteAssetsDirectory,
+  Alchemy.Output<string> | undefined
+>()("WebsiteAssetsDirectory") {}
 
 export class WebsiteOAuthStateSecret extends Context.Service<
   WebsiteOAuthStateSecret,
   Alchemy.Output<Redacted.Redacted<string>>
 >()("WebsiteOAuthStateSecret") {}
 
-/** Serves the original MacroGraph website and the account APIs used by desktop and servers. */
+/** Serves the MacroGraph website and the account APIs used by desktop and servers. */
 export class WebsiteWorker extends Cloudflare.Worker<WebsiteWorker, {}>()("WebsiteWorker") {}
 
 const stateSecretKey = "WEBSITE_OAUTH_STATE_SECRET";
@@ -31,7 +34,9 @@ export default Layer.unwrap(
     const stateSecret = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteOAuthStateSecret));
     // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
-    const sharesNamespace = yield* PlaygroundShares(stage === "production");
+    const assetsDirectory = Option.getOrUndefined(
+      yield* Effect.serviceOption(WebsiteAssetsDirectory),
+    );
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
       [
@@ -70,20 +75,20 @@ export default Layer.unwrap(
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
         },
-        assets: {
-          directory: websiteAssetsDirectory,
-          notFoundHandling: "single-page-application",
-          // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
-          runWorkerFirst: ["/api/*", "/auth/*"],
-        },
+        assets: assetsDirectory
+          ? Output.map(assetsDirectory, (directory) => ({
+              directory,
+              htmlHandling: "auto-trailing-slash",
+              notFoundHandling: "single-page-application",
+              // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
+              runWorkerFirst: ["/api/*", "/auth/*"],
+            }))
+          : undefined,
         dev: { port: 1339, strictPort: true },
       },
       Effect.gen(function* () {
         const runtimeContext = yield* Alchemy.RuntimeContext;
         if (stateSecret !== undefined) yield* runtimeContext.set(stateSecretKey, stateSecret);
-        const shares = yield* Cloudflare.KV.ReadWriteNamespace(sharesNamespace);
-        const withRuntime = <A, E>(effect: Effect.Effect<A, E, Alchemy.RuntimeContext>) =>
-          effect.pipe(Effect.provideService(Alchemy.RuntimeContext, runtimeContext), Effect.orDie);
 
         const stateKey = yield* Effect.cached(
           Effect.gen(function* () {
@@ -117,10 +122,6 @@ export default Layer.unwrap(
           serverKey,
           authRedirectOrigin,
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
-          shares: {
-            get: (id) => withRuntime(shares.get(id, "text")),
-            put: (id, value) => withRuntime(shares.put(id, value)),
-          },
         }).pipe(
           Layer.provide(OAuthProviders.layer),
           Layer.provide(Database.layer(databaseResource)),
@@ -131,7 +132,6 @@ export default Layer.unwrap(
       }).pipe(
         Effect.provide(Alchemy.RuntimeContext.phantom),
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
-        Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding),
         Effect.provide(ObservabilityLayer),
       ),
     );

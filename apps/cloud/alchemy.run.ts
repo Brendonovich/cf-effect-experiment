@@ -29,6 +29,7 @@ import CloudWorkerLayer, {
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 import WebsiteWorkerLayer, {
+  WebsiteAssetsDirectory,
   WebsiteOAuthStateSecret,
   WebsiteWorker,
 } from "./src/worker/WebsiteWorker.ts";
@@ -80,10 +81,20 @@ export default Alchemy.Stack(
         })
       : undefined;
 
+    const websiteBuild = !ctx.dev
+      ? yield* Command.Build("WebsiteBuild", {
+          command: "pnpm run build",
+          cwd: "../website",
+          outdir: "dist",
+          memo: false,
+        })
+      : undefined;
+
     const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
     const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
       Effect.provide(WebsiteWorkerLayer),
       Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
+      Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
     );
 
     const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {

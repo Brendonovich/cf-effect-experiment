@@ -34,13 +34,6 @@ export const cloudOrigin = "https://cloud.macrograph.app";
 const deviceCodeLifetimeMs = 10 * 60 * 1000;
 const userAccessTokenLifetimeMs = 30 * 24 * 60 * 60 * 1000;
 const oauthStateLifetimeSeconds = 60 * 60;
-const maxShareBytes = 10 * 1024 * 1024;
-
-export interface ShareStore {
-  readonly get: (id: string) => Effect.Effect<string | null>;
-  readonly put: (id: string, value: string) => Effect.Effect<void>;
-}
-
 export interface Options {
   /** HMAC key for OAuth `state` values. */
   readonly stateKey: Effect.Effect<Jwt.SigningKey>;
@@ -48,7 +41,6 @@ export interface Options {
   readonly serverKey: Effect.Effect<Jwt.SigningKey | undefined>;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
-  readonly shares: ShareStore;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
 }
@@ -696,7 +688,7 @@ export const layer = (options: Options) =>
         ),
       );
 
-      // ---- OAuth flows for desktop, the old playground, and account credentials ----
+      // ---- OAuth flows for desktop, web clients, and account credentials ----
 
       yield* router.add("GET", "/auth/:provider/login", (request) =>
         handle(
@@ -1064,29 +1056,5 @@ export const layer = (options: Options) =>
 
       yield* userCodeRoutes("device", deviceCodeSessions);
       yield* userCodeRoutes("server-registration", serverRegistrationSessions);
-
-      yield* router.add("POST", "/api/website/playground", (request) =>
-        handle(
-          Effect.gen(function* () {
-            if (!sameOrigin(request)) return yield* reject(403);
-            const body = yield* readJson(request);
-            if (typeof body.project !== "string" || body.project.length > maxShareBytes)
-              return yield* reject(400);
-            const id = crypto.randomUUID();
-            yield* options.shares.put(id, body.project);
-            return json({ id });
-          }),
-        ),
-      );
-
-      yield* router.add("GET", "/api/website/playground/:id", () =>
-        handle(
-          Effect.gen(function* () {
-            const { id } = yield* HttpRouter.params;
-            if (id === undefined || !/^[0-9a-f-]{36}$/.test(id)) return json(null);
-            return json(yield* options.shares.get(id));
-          }),
-        ),
-      );
     }),
   );

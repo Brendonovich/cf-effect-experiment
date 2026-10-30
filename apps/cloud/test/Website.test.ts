@@ -78,17 +78,12 @@ const providersLayer = OAuthProviders.layer.pipe(
 );
 
 const makeApp = Effect.gen(function* () {
-  const shares = new Map<string, string>();
   const stateKey = yield* Jwt.hmacKey("state-secret");
   return yield* WebsiteRoutes.layer({
     stateKey: Effect.succeed(stateKey),
     serverKey: Effect.succeed(undefined),
     authRedirectOrigin: origin,
     capture: Analytics.disabled,
-    shares: {
-      get: (id) => Effect.sync(() => shares.get(id) ?? null),
-      put: (id, value) => Effect.sync(() => void shares.set(id, value)),
-    },
     fetch: async (url) =>
       String(url).endsWith("/darwin-aarch64/latest")
         ? Response.json({ version: "1.2.3" })
@@ -282,7 +277,7 @@ describe("website routes", () => {
     }),
   );
 
-  it.effect("redirects desktop downloads and stores playground shares", () =>
+  it.effect("redirects desktop downloads", () =>
     Effect.gen(function* () {
       const app = yield* makeApp;
       const download = yield* send(app, "/api/desktop/download/latest/darwin-aarch64");
@@ -293,21 +288,6 @@ describe("website routes", () => {
       );
       const unknown = yield* send(app, "/api/desktop/download/latest/amiga");
       assert.strictEqual(unknown.status, 404);
-
-      const crossOrigin = yield* send(
-        app,
-        "/api/website/playground",
-        json({ project: "{}" }, { origin: "https://example.com" }),
-      );
-      assert.strictEqual(crossOrigin.status, 403);
-      const saved = yield* send(
-        app,
-        "/api/website/playground",
-        json({ project: '{"name":"Shared"}' }, { origin }),
-      );
-      const { id } = yield* Effect.promise(() => saved.json());
-      const loaded = yield* send(app, `/api/website/playground/${id}`);
-      assert.strictEqual(yield* Effect.promise(() => loaded.json()), '{"name":"Shared"}');
     }),
   );
 });

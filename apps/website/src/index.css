@@ -1,0 +1,14 @@
+@import "@macrograph/editor-ui/styles.css";
+
+/* The editor styles fill a fixed viewport; website pages scroll like a document. */
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+body {
+  overscroll-behavior: auto;
+}
