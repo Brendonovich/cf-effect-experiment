@@ -5,3 +5,4 @@ node_modules/
 .DS_STORE
 .alchemy
 *.db
+apps/server/modules/
