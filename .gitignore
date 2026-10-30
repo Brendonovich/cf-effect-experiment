@@ -5,3 +5,9 @@ node_modules/
 .DS_STORE
 .alchemy
 *.db
+
+# Self-hosted server auth state, written to its data directory (defaults to the working directory)
+macrograph-auth.json
+macrograph-client-auth.json
+macrograph-owner.json
+macrograph-api-keys.json
