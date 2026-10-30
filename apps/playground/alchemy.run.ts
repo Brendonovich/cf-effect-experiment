@@ -7,7 +7,8 @@ import * as Effect from "effect/Effect";
 export default Alchemy.Stack(
   "MacroGraphPlayground",
   {
-    // The GitHub provider stays registered so previews can delete the comment they used to post.
+    // Stays registered so stages that still track the old preview comment can drop it from state;
+    // GitHub.Comment keeps the comment itself on removal.
     providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
     state: Cloudflare.state(),
   },
