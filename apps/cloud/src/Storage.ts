@@ -1,10 +1,16 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Planetscale from "@alchemy.run/planetscale";
 import * as PlanetscaleLogicalDb from "@macrograph/planetscale-logical-db";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
-import * as Planetscale from "alchemy/Planetscale";
 import { retain } from "alchemy/RemovalPolicy";
 import { Effect } from "effect";
+
+const pullRequest = process.env.PULL_REQUEST;
+const previewLogicalDatabaseName =
+  pullRequest !== undefined && /^\d+$/.test(pullRequest)
+    ? `macrograph_pr_${pullRequest}`
+    : undefined;
 
 export const Database = Planetscale.PostgresDatabase("AppPostgresDatabase", {
   name: "macrograph",
@@ -42,6 +48,7 @@ const LogicalDatabase = PlanetscaleLogicalDb.PostgresLogicalDatabase(
     const appRole = yield* DatabaseRole;
 
     return {
+      ...(previewLogicalDatabaseName === undefined ? {} : { name: previewLogicalDatabaseName }),
       adminOrigin: adminRole.origin,
       appRoleName: Output.map(appRole.username, PlanetscaleLogicalDb.postgresRoleNameFromUsername),
       migrationsDir: "./migrations-postgres",
@@ -97,3 +104,15 @@ export const DatabaseHyperdrive = Cloudflare.Hyperdrive.Connection(
 );
 
 export const DeploymentObjectsBucket = Cloudflare.R2.Bucket("RevisionSnapshots");
+
+/**
+ * Shared projects from the original website's playground. Production adopts and retains the
+ * namespace the website has always used; other stages get their own.
+ */
+export const PlaygroundShares = (production: boolean) =>
+  production
+    ? Cloudflare.KV.Namespace("PlaygroundShares", { title: "macrograph-saved-shares" }).pipe(
+        adopt(true),
+        retain(),
+      )
+    : Cloudflare.KV.Namespace("PlaygroundShares");

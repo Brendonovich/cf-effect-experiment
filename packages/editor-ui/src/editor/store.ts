@@ -13,6 +13,7 @@ import {
   Scopes,
 } from "@macrograph/core";
 import { EditorEvent, type ProjectSnapshot } from "@macrograph/editor";
+import { Conversion } from "@macrograph/module";
 import { createStore, runWithOwner } from "solid-js";
 
 type MutableGraph = {
@@ -46,8 +47,25 @@ type MutableEditorStore = {
 export const resourceValuesKey = (packageId: string, resourceId: string) =>
   JSON.stringify([packageId, resourceId]);
 
+export type ConversionRules = Conversion.Rules;
+
 export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry) {
   const resolvers = new Map<string, SchemaAuthoring.GraphResolver>();
+  // Packages carry their conversion pairs; core defaults always apply. Reuse rules per catalog.
+  let conversionCache:
+    | { readonly packages: ReadonlyArray<Package.Model>; readonly rules: ConversionRules }
+    | undefined;
+  const conversionsFor = (packages: ReadonlyArray<Package.Model>): ConversionRules => {
+    if (conversionCache?.packages !== packages)
+      conversionCache = {
+        packages,
+        rules: Conversion.rules([
+          ...Conversion.defaults,
+          ...packages.flatMap((pkg) => pkg.conversions ?? []),
+        ]),
+      };
+    return conversionCache.rules;
+  };
   const [store, setStoreValue] = createStore<MutableEditorStore>({
     project: null,
     packages: [],
@@ -109,7 +127,12 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
           ...next.project!.types,
           ...Object.fromEntries(next.packages.flatMap((pkg) => Object.entries(pkg.types ?? {}))),
         };
-        const result = resolver.resolve(graph, declarations, definitions);
+        const result = resolver.resolve(
+          graph,
+          declarations,
+          definitions,
+          conversionsFor(next.packages),
+        );
         next.nodeIO[graph.id] = { ...result.io };
         for (const projection of Object.values(graph.scopeProjections ?? {}))
           next.nodeIO[graph.id]![projection.id] = Scopes.projectionIO(
@@ -557,5 +580,13 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
     });
   }
 
-  return { store, authoring, applyEvent, updateNodePosition, setProject, setPackages };
+  return {
+    store,
+    authoring,
+    conversions: () => conversionsFor(store.packages),
+    applyEvent,
+    updateNodePosition,
+    setProject,
+    setPackages,
+  };
 }

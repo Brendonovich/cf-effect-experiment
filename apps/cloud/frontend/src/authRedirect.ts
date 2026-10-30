@@ -1,6 +1,9 @@
 export const signInUrl = (destination: string, basePath = "/") =>
   `${basePath.replace(/\/+$/, "")}/sign-in?next=${encodeURIComponent(destination)}`;
 
+/** Paths served by the worker rather than the frontend router, which require a full navigation. */
+export const isWorkerRoute = (path: string) => /^\/oauth(\/|$|\?)/i.test(path);
+
 export const signInReturnPath = (next: string | null, basePath = "/") => {
   const base = basePath.replace(/\/+$/, "");
   const fallback = `${base}/`;

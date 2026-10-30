@@ -1,6 +1,6 @@
 import { Engine, Resource } from "@macrograph/module";
 import { Array, Effect, Schema, SchemaGetter } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 export const AccountId = Schema.String.pipe(Schema.brand("GitHubAccountId"));
 export type AccountId = typeof AccountId.Type;

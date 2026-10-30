@@ -10,7 +10,10 @@ const cloudSettings = new Set([
   "@macrograph/module-github",
   "@macrograph/module-twitch",
   "@macrograph/module-openai",
+  "@macrograph/module-opencode",
+  "@macrograph/module-sendblue",
   "@macrograph/module-elevenlabs",
+  "@macrograph/module-discord",
 ]);
 const workerUrl =
   process.env.VITE_WORKER_URL ??

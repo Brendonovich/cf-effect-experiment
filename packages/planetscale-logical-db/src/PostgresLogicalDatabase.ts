@@ -1,4 +1,4 @@
-import type { PostgresOrigin } from "alchemy/Planetscale";
+import type { PostgresOrigin } from "@alchemy.run/planetscale";
 
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";

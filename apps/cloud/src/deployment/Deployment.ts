@@ -1,9 +1,9 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CurrentUser, DeploymentNotFound, ProjectNotFound } from "@macrograph/cloud-api";
 import { Policy, Project, RenderedProject } from "@macrograph/core";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { and, desc, eq } from "drizzle-orm";
 import { Context, Effect, Layer, Schema } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { HttpServerRequest } from "effect/http";
 
 import type { Service as WorkerOperations } from "../worker/CloudWorkerOperations.ts";
 

@@ -14,6 +14,12 @@
       "headers": {
         "Authorization": "Bearer AOp0CSJtHfLoQ3hfpvOEJKwQtPXlHVdofLUQlrYA0d4"
       }
+    },
+    "servers": {
+      "axiom-personal": {
+        "type": "remote",
+        "url": "https://mcp.axiom.co/mcp"
+      }
     }
   }
 }

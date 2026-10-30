@@ -207,7 +207,8 @@ it.effect(
       );
       const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
       expect(error._tag).toBe("InvalidGraph");
-      if (error._tag === "InvalidGraph") expect(error.reasons.join(" ")).toContain("Conflicting");
+      if (error._tag === "InvalidGraph")
+        expect(error.reasons.join(" ")).toContain("no registered conversion");
       expect(captured).toEqual([]);
     }),
 );

@@ -48,6 +48,55 @@ const numberFromEnv = (value: string | undefined, fallback: number) => {
 const optionalEnv = (value: string | undefined) =>
   value === undefined || value.trim() === "" ? undefined : value;
 
+/** An OTLP/HTTP trace destination: where to POST spans and with which headers. */
+export interface OtlpTraceDestination {
+  readonly url: string;
+  readonly headers: Record<string, string>;
+}
+
+const parseOtlpUrl = (value: string, label: string): URL => {
+  const url = URL.parse(value.trim());
+  if (
+    url === null ||
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.hash !== ""
+  )
+    throw new Error(`${label} must be an HTTP(S) URL without credentials or a fragment`);
+  return url;
+};
+
+/** Appends `/v1/traces` to a collector base URL, preserving full trace URLs. */
+const otlpTracesUrl = (base: URL): string => {
+  const path = base.pathname.replace(/\/+$/, "");
+  const url = new URL(base.href);
+  url.pathname = path.endsWith("/v1/traces") ? path : `${path}/v1/traces`;
+  return url.href;
+};
+
+const parseOtlpHeaders = (value: string | undefined): Record<string, string> => {
+  const headers = new Headers();
+  for (const entry of value?.split(",") ?? []) {
+    const separator = entry.indexOf("=");
+    if (separator <= 0) throw new Error("OTLP headers must be comma-separated name=value pairs");
+    const decoded = decodeURIComponent(entry.slice(separator + 1).trim());
+    const name = entry.slice(0, separator).trim();
+    if (!/^[!#$%&'*+.^_`|~\da-z-]+$/i.test(name) || !/^[\t\x20-\x7e\x80-\xff]*$/.test(decoded))
+      throw new Error("OTLP headers must contain valid HTTP header names and values");
+    headers.set(name, decoded);
+  }
+  return Object.fromEntries(headers);
+};
+
+/** Axiom authenticates with a bearer token and routes by dataset header. */
+const axiomHeaders = (token: string, dataset: string): Record<string, string> => {
+  const headers = new Headers();
+  headers.set("authorization", `Bearer ${token}`);
+  headers.set("x-axiom-dataset", dataset);
+  return Object.fromEntries(headers);
+};
+
 export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
   const basePath = normalizeBasePath(env.MACROGRAPH_BASE_PATH);
   const port = numberFromEnv(env.PORT, 3001);
@@ -56,40 +105,38 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     env.MACROGRAPH_PUBLIC_ORIGIN ?? `http://localhost:${port}`,
   );
   const tracesEndpoint = optionalEnv(env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT);
-  const collectorEndpoint = tracesEndpoint ?? optionalEnv(env.OTEL_EXPORTER_OTLP_ENDPOINT);
-  let otlpEndpoint: string | undefined;
-  if (collectorEndpoint !== undefined) {
-    const url = URL.parse(collectorEndpoint.trim());
-    if (
-      url === null ||
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      url.username !== "" ||
-      url.password !== "" ||
-      url.hash !== ""
-    )
-      throw new Error("OTLP endpoint must be an HTTP(S) URL without credentials or a fragment");
-    if (tracesEndpoint === undefined) {
-      const path = url.pathname.replace(/\/+$/, "");
-      // Preserve full trace URLs accepted by earlier server versions.
-      url.pathname = path.endsWith("/v1/traces") ? path : `${path}/v1/traces`;
-    }
-    otlpEndpoint = url.href;
-  }
-  const otlpHeaders = new Headers();
-  if (otlpEndpoint !== undefined) {
-    const headers =
-      optionalEnv(env.OTEL_EXPORTER_OTLP_TRACES_HEADERS) ??
-      optionalEnv(env.OTEL_EXPORTER_OTLP_HEADERS);
-    for (const entry of headers?.split(",") ?? []) {
-      const separator = entry.indexOf("=");
-      if (separator <= 0) throw new Error("OTLP headers must be comma-separated name=value pairs");
-      const value = entry.slice(separator + 1).trim();
-      const decoded = decodeURIComponent(value);
-      const name = entry.slice(0, separator).trim();
-      if (!/^[!#$%&'*+.^_`|~\da-z-]+$/i.test(name) || !/^[\t\x20-\x7e\x80-\xff]*$/.test(decoded))
-        throw new Error("OTLP headers must contain valid HTTP header names and values");
-      otlpHeaders.set(name, decoded);
-    }
+  const collectorEndpoint = optionalEnv(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  const otlpEndpoint =
+    tracesEndpoint !== undefined
+      ? parseOtlpUrl(tracesEndpoint, "OTLP endpoint").href
+      : collectorEndpoint !== undefined
+        ? otlpTracesUrl(parseOtlpUrl(collectorEndpoint, "OTLP endpoint"))
+        : undefined;
+  const otlpHeaders =
+    otlpEndpoint === undefined
+      ? {}
+      : parseOtlpHeaders(
+          optionalEnv(env.OTEL_EXPORTER_OTLP_TRACES_HEADERS) ??
+            optionalEnv(env.OTEL_EXPORTER_OTLP_HEADERS),
+        );
+
+  const axiomToken = optionalEnv(env.AXIOM_TOKEN);
+  const otlpDestinations: Array<OtlpTraceDestination> = [];
+  if (otlpEndpoint !== undefined)
+    otlpDestinations.push({ url: otlpEndpoint, headers: otlpHeaders });
+  if (axiomToken !== undefined) {
+    const dataset = optionalEnv(env.AXIOM_DATASET)?.trim() ?? "macrograph-traces";
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(dataset))
+      throw new Error("AXIOM_DATASET must be an Axiom dataset name");
+    otlpDestinations.push({
+      url: otlpTracesUrl(
+        parseOtlpUrl(
+          optionalEnv(env.AXIOM_OTLP_ENDPOINT) ?? "https://api.axiom.co",
+          "AXIOM_OTLP_ENDPOINT",
+        ),
+      ),
+      headers: axiomHeaders(axiomToken, dataset),
+    });
   }
   return {
     basePath,
@@ -100,6 +147,7 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     cloudAuthPath: resolve(dataDirectory, "macrograph-auth.json"),
     clientAuthPath: resolve(dataDirectory, "macrograph-client-auth.json"),
     ownerPath: resolve(dataDirectory, "macrograph-owner.json"),
+    apiKeysPath: resolve(dataDirectory, "macrograph-api-keys.json"),
     cloudBaseUrl: optionalEnv(env.MACROGRAPH_CLOUD_BASE_URL) ?? "https://www.macrograph.app/api",
     adminIds: new Set(
       (optionalEnv(env.MACROGRAPH_ADMIN_IDS) ?? "")
@@ -115,7 +163,8 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     ),
     publicOrigin,
     otlpEndpoint,
-    otlpHeaders: Object.fromEntries(otlpHeaders),
+    otlpHeaders,
+    otlpDestinations,
     otlpServiceName: optionalEnv(env.OTEL_SERVICE_NAME)?.trim() ?? "macrograph-server",
     browserOtlpEndpoint: optionalEnv(env.MACROGRAPH_BROWSER_OTLP_ENDPOINT),
   };

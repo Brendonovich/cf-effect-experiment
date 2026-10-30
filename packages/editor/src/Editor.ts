@@ -25,7 +25,7 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import * as Registration from "@macrograph/module/Registration";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
@@ -450,6 +450,9 @@ export const layer = Layer.effect(Service)(
     const scope = yield* Effect.scope;
     const events = yield* EditorEvents.Service;
     const packages = yield* Packages.Service;
+    // Core defaults plus every mounted module's pairs; replaced (and caches cleared) on mount.
+    const modulePairs = new Map<string, ReadonlyArray<Conversion.Pair>>();
+    let conversions = Conversion.defaultRules;
     const lock = yield* Semaphore.make(1);
     const initialProject = yield* persistence.loadProject().pipe(
       Effect.catchTag("ProjectNotFoundError", () => Effect.succeed(undefined)),
@@ -598,7 +601,7 @@ export const layer = Layer.effect(Service)(
     const graphWildcards = Effect.fnUntraced(function* (
       graph: Canvas.Model,
       overrides: Readonly<Record<string, NodeIO>> = {},
-      cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(),
+      cache: Wildcards.Cache = wildcardCaches.get(graph.id) ?? new Wildcards.Cache(conversions),
       definitions?: t.Definitions,
     ): Effect.fn.Return<
       {
@@ -722,7 +725,7 @@ export const layer = Layer.effect(Service)(
       const dataInput = dataInputs[0];
       return dataOutput === undefined || dataInput === undefined
         ? dataOutput === undefined && dataInput === undefined
-        : t.compatible(dataOutput.type, dataInput.type);
+        : Conversion.connectable(dataOutput.type, dataInput.type, conversions);
     };
 
     const proposedTypes = Effect.fnUntraced(function* (
@@ -1973,7 +1976,7 @@ export const layer = Layer.effect(Service)(
       if (
         dataOutputs[0] !== undefined &&
         dataInputs[0] !== undefined &&
-        (!t.compatible(dataOutputs[0].type, dataInputs[0].type) ||
+        (!Conversion.connectable(dataOutputs[0].type, dataInputs[0].type, conversions) ||
           (outNode !== undefined &&
             !(yield* packages.acceptsOutput(
               outNode.schema,
@@ -2308,7 +2311,19 @@ export const layer = Layer.effect(Service)(
             deployment.definition !== definition.engine)
         )
           return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-        const schemas = yield* Registration.collect(definition.effect);
+        const collected = yield* Registration.collectModule(definition.effect);
+        const schemas = collected.schemas;
+        const pairs = collected.conversions.map(({ from, to }) => ({ from, to }));
+        const invalidConversion =
+          Conversion.validateModule(definition.id, definition.types ?? {}, pairs) ??
+          Conversion.duplicate([
+            { owner: "core", pairs: Conversion.defaults },
+            ...[...modulePairs]
+              .filter(([id]) => id !== definition.id)
+              .map(([owner, pairs]) => ({ owner, pairs })),
+            { owner: definition.id, pairs },
+          ]);
+        if (invalidConversion !== undefined) return yield* Effect.die(invalidConversion);
         const resources = definition.engine?.Resource ?? [];
         const resourceIds = new Set<string>();
         for (const resource of resources) {
@@ -2346,6 +2361,7 @@ export const layer = Layer.effect(Service)(
           id: PackageId.make(definition.id),
           name: definition.name ?? definition.id,
           types: definition.types ?? {},
+          ...(pairs.length === 0 ? {} : { conversions: pairs }),
           ...(definition.description === undefined ? {} : { description: definition.description }),
           resources: resources.map((resource) => ({
             id: resource.key,
@@ -2408,6 +2424,13 @@ export const layer = Layer.effect(Service)(
             executionOutputs: schema.executionOutputs.map(Scopes.executionPort),
           })),
         };
+        modulePairs.set(definition.id, pairs);
+        conversions = Conversion.rules([
+          ...Conversion.defaults,
+          ...[...modulePairs.values()].flat(),
+        ]);
+        // Inference depends on the rules, so cached groups from before this mount are stale.
+        wildcardCaches.clear();
         yield* packages.loadPackage(
           pkg,
           new Map(

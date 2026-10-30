@@ -1,6 +1,6 @@
 import { BrowserSocket } from "@effect/platform-browser";
 import { Crypto, Effect, Layer, PlatformError } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 const cryptoLayer = Layer.succeed(
   Crypto.Crypto,

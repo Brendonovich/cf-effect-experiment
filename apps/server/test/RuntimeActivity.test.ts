@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { CustomTypes, Function as GraphFunction, Project } from "@macrograph/core";
+import { Actor, CustomTypes, Function as GraphFunction, Project } from "@macrograph/core";
 import {
   Editor,
   EditorAccess,
@@ -12,7 +12,7 @@ import { Executor, RuntimeActivity } from "@macrograph/execution";
 import { Engine, Module } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Array, Cause, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { RpcTest } from "effect/rpc";
 
 const WorkspaceRpcs = EditorRpc.EditorRpcs.merge(RuntimeActivity.Rpcs).middleware(
   EditorRpc.ConnectionMiddleware,
@@ -113,9 +113,9 @@ describe("workspace runtime activity access", () => {
           Effect.provideService(EditorAccess.Policy, {
             resolve: (_headers, clientId) =>
               Effect.succeed({
-                actor: { type: "CLIENT", id: String(clientId) },
-                connectionId: String(clientId),
+                actor: Actor.client("browser", String(clientId)),
                 displayName: "Test",
+                email: null,
                 projectId: "test",
                 canEdit,
                 canManageCredentials: canEdit,

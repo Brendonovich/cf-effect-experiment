@@ -88,7 +88,11 @@ it.effect("persists node lifecycle transitions in separate steps, including fail
       );
       assert.equal(states[0]!.startedAt, states[1]!.startedAt);
       assert.isString(states[1]!.completedAt);
-      if (value === "fail") assert.equal(states[1]!.error, "NodeExecutionError");
+      if (value === "fail")
+        assert.equal(
+          states[1]!.error,
+          "NodeExecutionError: Node trigger failed: Intentional infrastructure test failure",
+        );
     }
   }),
 );

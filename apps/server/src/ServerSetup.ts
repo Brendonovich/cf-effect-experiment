@@ -16,11 +16,22 @@ export class SetupError extends Schema.TaggedError<SetupError>()("SetupError", {
   reason: Schema.String,
 }) {}
 
+export type SetupReason = "unclaimed" | "disconnected";
+
+export interface Status {
+  readonly ownerId: string | undefined;
+  readonly setupRequired: boolean;
+}
+
 export const make = (options: {
   readonly store: AtomicFileStore;
   readonly legacyAuthStore: AtomicFileStore;
   readonly auth: Credential.AuthController;
+  readonly pollOwner: (
+    ownerId: string,
+  ) => Effect.Effect<Credential.AuthStatus, Credential.AuthError>;
   readonly sessions: ClientSessions;
+  readonly onKeyIssued?: (key: string, reason: SetupReason) => Effect.Effect<void>;
 }) => {
   const lock = Semaphore.makeUnsafe(1);
   let loaded = false;
@@ -58,13 +69,32 @@ export const make = (options: {
         if (authorization.state === "connected") yield* saveOwner(authorization.userId);
       }
     }
-    if (ownerId === undefined) key = randomBytes(32).toString("base64url");
     loaded = true;
   });
 
-  const validate = Effect.fnUntraced(function* (provided: string) {
+  // Setup is required until the server has an owner and a MacroGraph connection. A key exists only
+  // while setup is required, so reconnecting needs the same proof of server access as claiming it.
+  const refresh = Effect.gen(function* () {
     yield* load;
-    if (ownerId !== undefined)
+    const connected = yield* options.auth.status.pipe(
+      Effect.map((status) => status.state === "connected"),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    const setupRequired = ownerId === undefined || !connected;
+    if (!setupRequired) {
+      key = undefined;
+    } else if (key === undefined) {
+      key = randomBytes(32).toString("base64url");
+      started = false;
+      if (options.onKeyIssued !== undefined)
+        yield* options.onKeyIssued(key, ownerId === undefined ? "unclaimed" : "disconnected");
+    }
+    return { ownerId, setupRequired } satisfies Status;
+  });
+
+  const validate = Effect.fnUntraced(function* (provided: string) {
+    const { setupRequired } = yield* refresh;
+    if (!setupRequired)
       return yield* new SetupError({ reason: "This server has already been configured" });
     if (
       key === undefined ||
@@ -76,7 +106,8 @@ export const make = (options: {
 
   return {
     ownerId: lock.withPermit(load.pipe(Effect.map(() => ownerId))),
-    setupKey: lock.withPermit(load.pipe(Effect.map(() => key))),
+    status: lock.withPermit(refresh),
+    setupKey: lock.withPermit(refresh.pipe(Effect.map(() => key))),
     start: (provided: string) =>
       lock.withPermit(
         Effect.gen(function* () {
@@ -97,10 +128,15 @@ export const make = (options: {
             yield* validate(provided);
             if (!started)
               return yield* new SetupError({ reason: "Start setup before approving it" });
-            const status = yield* restore(options.auth.poll);
+            const owner = ownerId;
+            // Reconnecting an owned server must be approved by the owner's account.
+            const status = yield* restore(
+              owner === undefined ? options.auth.poll : options.pollOwner(owner),
+            );
             if (status.state !== "connected") return status;
             // Serialize claim and session creation so only one setup request can succeed.
-            yield* saveOwner(status.identity.id);
+            if (owner === undefined) yield* saveOwner(status.identity.id);
+            else key = undefined;
             const token = yield* options.sessions.create({
               userId: status.identity.id,
               email: status.identity.displayName,

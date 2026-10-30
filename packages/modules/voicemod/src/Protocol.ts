@@ -1,5 +1,5 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope, Semaphore } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import { ConnectionFailed, RequestFailed, type Failure } from "./Definition.ts";
 
@@ -50,7 +50,7 @@ export const make = Effect.fnUntraced(function* (
   address: string,
 ): Effect.fn.Return<Client, Failure, Scope.Scope | Socket.WebSocketConstructor> {
   const url = yield* validateUrl(address);
-  const socket = yield* Socket.makeWebSocket(url, { closeCodeIsError: () => true });
+  const socket = yield* Socket.makeWebSocket(url);
   const write = yield* socket.writer;
   const opened = yield* Deferred.make<void, Failure>();
   const closed = yield* Deferred.make<void>();
@@ -77,47 +77,55 @@ export const make = Effect.fnUntraced(function* (
   yield* Effect.addFinalizer(() =>
     fail(new ConnectionFailed({ reason: "Voicemod is disconnected." })),
   );
-  const reader = yield* socket
-    .runRaw(
-      (input) =>
-        decode(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
-          Effect.mapError(
-            () => new ConnectionFailed({ reason: "Invalid Voicemod protocol message." }),
-          ),
-          Effect.flatMap((packet) => {
-            const request = pending;
-            const type = packet.action ?? packet.actionType;
-            const id = packet.id ?? packet.actionID ?? packet.actionId;
-            const changerCompletion =
-              request?.action === "toggleVoiceChanger" &&
-              (type === "voiceChangerEnabledEvent" || type === "voiceChangerDisabledEvent");
-            if (
-              !request ||
-              (type !== request.responseType && !changerCompletion) ||
-              (id != null && id !== request.id)
-            )
-              return Effect.void;
-            const data = changerCompletion
-              ? { value: type === "voiceChangerEnabledEvent" }
-              : (packet.payload ?? packet.actionObject);
-            if (!data)
-              return Deferred.fail(
-                request.response,
-                new RequestFailed({
-                  action: request.action,
-                  reason: "Voicemod response has no payload.",
-                }),
-              ).pipe(Effect.asVoid);
-            return Deferred.succeed(request.response, data).pipe(Effect.asVoid);
-          }),
-        ),
-      { onOpen: Deferred.succeed(opened, undefined).pipe(Effect.asVoid) },
-    )
-    .pipe(
-      Effect.catchCause(() => fail(new ConnectionFailed({ reason: "Voicemod connection lost." }))),
-      Effect.ensuring(fail(new ConnectionFailed({ reason: "Voicemod is disconnected." }))),
-      Effect.forkScoped,
-    );
+  const reader = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const socketReader = yield* socket.reader;
+      yield* Deferred.succeed(opened, undefined);
+      while (true) {
+        const batch = yield* socketReader.pull;
+        yield* Effect.forEach(
+          batch,
+          (input) =>
+            decode(typeof input === "string" ? input : new TextDecoder().decode(input)).pipe(
+              Effect.mapError(
+                () => new ConnectionFailed({ reason: "Invalid Voicemod protocol message." }),
+              ),
+              Effect.flatMap((packet) => {
+                const request = pending;
+                const type = packet.action ?? packet.actionType;
+                const id = packet.id ?? packet.actionID ?? packet.actionId;
+                const changerCompletion =
+                  request?.action === "toggleVoiceChanger" &&
+                  (type === "voiceChangerEnabledEvent" || type === "voiceChangerDisabledEvent");
+                if (
+                  !request ||
+                  (type !== request.responseType && !changerCompletion) ||
+                  (id != null && id !== request.id)
+                )
+                  return Effect.void;
+                const data = changerCompletion
+                  ? { value: type === "voiceChangerEnabledEvent" }
+                  : (packet.payload ?? packet.actionObject);
+                if (!data)
+                  return Deferred.fail(
+                    request.response,
+                    new RequestFailed({
+                      action: request.action,
+                      reason: "Voicemod response has no payload.",
+                    }),
+                  ).pipe(Effect.asVoid);
+                return Deferred.succeed(request.response, data).pipe(Effect.asVoid);
+              }),
+            ),
+          { discard: true },
+        );
+      }
+    }),
+  ).pipe(
+    Effect.catchCause(() => fail(new ConnectionFailed({ reason: "Voicemod connection lost." }))),
+    Effect.ensuring(fail(new ConnectionFailed({ reason: "Voicemod is disconnected." }))),
+    Effect.forkScoped,
+  );
   yield* Deferred.await(opened);
   const send = Effect.fnUntraced(function* (
     action: string,
@@ -125,7 +133,7 @@ export const make = Effect.fnUntraced(function* (
     id = `macrograph-${sequence++}`,
   ) {
     if (!connected) return yield* new ConnectionFailed({ reason: "Voicemod is disconnected." });
-    yield* Effect.suspend(() => write(JSON.stringify({ action, id, payload }))).pipe(
+    yield* Effect.suspend(() => write.write(JSON.stringify({ action, id, payload }))).pipe(
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.interrupt
@@ -171,7 +179,16 @@ export const make = Effect.fnUntraced(function* (
                 new ConnectionFailed({
                   reason: "Voicemod query was canceled or failed. Reconnect to continue.",
                 }),
-              ).pipe(Effect.andThen(Fiber.interrupt(reader)))
+              ).pipe(
+                Effect.andThen(
+                  Effect.raceFirst(
+                    Effect.ignoreCause(
+                      Effect.suspend(() => write.write(new Socket.CloseEvent(1000))),
+                    ),
+                    Fiber.interrupt(reader),
+                  ),
+                ),
+              )
             : Effect.void,
         ),
         Effect.ensuring(

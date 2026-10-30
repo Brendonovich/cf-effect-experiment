@@ -1,4 +1,6 @@
 import { Editor } from "@macrograph/editor";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
+import DiscordDeployment from "@macrograph/module-discord/RestDeployment";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import ElevenLabsDeployment from "@macrograph/module-elevenlabs/Deployment";
 import JsonModule from "@macrograph/module-json";
@@ -7,6 +9,7 @@ import LogicModule from "@macrograph/module-logic";
 import MathModule from "@macrograph/module-math";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
 import OpenAIDeployment from "@macrograph/module-openai/Deployment";
+import OpenCodeModule from "@macrograph/module-opencode";
 import StringModule from "@macrograph/module-string";
 import { EngineHost } from "@macrograph/project-host/EngineHost";
 import { Effect, Layer } from "effect";
@@ -18,7 +21,10 @@ export const statelessModules = [
   MathModule,
   StringModule,
 ] as const;
-export const apiDeployments = [OpenAIDeployment, ElevenLabsDeployment] as const;
+// Discord runs only its REST and webhook actions; gateway events need a long-lived connection.
+export const apiDeployments = [OpenAIDeployment, ElevenLabsDeployment, DiscordDeployment] as const;
+/** Engine modules whose deployment needs a project-scoped service supplied by ProjectEditorDO. */
+export const projectScopedModules = [OpenCodeModule] as const;
 
 export const editorLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -26,12 +32,14 @@ export const editorLayer = Layer.effectDiscard(
     for (const module of statelessModules) yield* editor.module(module);
     const openai = yield* OpenAIEngine;
     const elevenlabs = yield* ElevenLabsEngine;
+    const discord = yield* DiscordEngine;
     yield* EngineHost.mount(OpenAIDeployment.module, OpenAIDeployment, openai.client.state);
     yield* EngineHost.mount(
       ElevenLabsDeployment.module,
       ElevenLabsDeployment,
       elevenlabs.client.state,
     );
+    yield* EngineHost.mount(DiscordDeployment.module, DiscordDeployment, discord.client.state);
   }),
 ).pipe(
   Layer.provideMerge(
@@ -43,6 +51,10 @@ export const editorLayer = Layer.effectDiscard(
       EngineHost.layer(
         ElevenLabsDeployment,
         EngineHost.editorContextLayer(ElevenLabsDeployment, { emit: () => Effect.void }),
+      ),
+      EngineHost.layer(
+        DiscordDeployment,
+        EngineHost.editorContextLayer(DiscordDeployment, { emit: () => Effect.void }),
       ),
     ),
   ),

@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { Actor } from "@macrograph/core";
 import { EditorRpc } from "@macrograph/editor";
 import { Effect } from "effect";
 
@@ -82,9 +83,9 @@ describe("TeamAccess", () => {
     Effect.gen(function* () {
       for (const role of ["owner", "member", "viewer"] as const) {
         const identity = {
-          actor: { type: "CLIENT" as const, id: role },
-          connectionId: role,
+          actor: Actor.client("browser", role),
           displayName: role,
+          email: null,
           projectId: "project",
           canEdit: canMutateProject(role),
           canManageCredentials: canManageProjectCredentials(role, "creator", "collaborator"),

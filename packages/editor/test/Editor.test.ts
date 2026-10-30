@@ -17,7 +17,7 @@ import UtilitiesModule from "@macrograph/module-utilities";
 import UtilitiesDeployment from "@macrograph/module-utilities/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, Option, PubSub, Result, Schema, Stream } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 
 import { Editor, EditorEvents, Packages } from "../src/index";
 
@@ -1359,9 +1359,10 @@ it.layer(TestLayer)((it) => {
             graphID: graphEvent.graph.id,
             connection: {
               outNodeId: source.id,
-              outIo: { _tag: "Port" as const, id: IoId.make("count") },
+              outIo: { _tag: "Port" as const, id: IoId.make("text") },
               inNodeId: target.id,
-              inIoId: IoId.make("text"),
+              // String -> Int has no core conversion (Int -> String does).
+              inIoId: IoId.make("count"),
             },
           }),
         );

@@ -17,8 +17,11 @@ import LIFX from "@macrograph/module-lifx/Deployment";
 import List from "@macrograph/module-list";
 import Logic from "@macrograph/module-logic";
 import Math from "@macrograph/module-math";
+import Midi from "@macrograph/module-midi/Deployment";
 import OBS from "@macrograph/module-obs/Deployment/WebSocket";
 import OpenAI from "@macrograph/module-openai/Deployment";
+import OpenCode from "@macrograph/module-opencode/Deployment/Server";
+import Sendblue from "@macrograph/module-sendblue/Deployment";
 import Shell from "@macrograph/module-shell/Deployment";
 import SpeakerBot from "@macrograph/module-speakerbot/Deployment";
 import StreamDeck from "@macrograph/module-streamdeck/Deployment";
@@ -33,8 +36,8 @@ import WebSocketClient from "@macrograph/module-websocket-client/Deployment/Loca
 import WebSocketServer from "@macrograph/module-websocket-server/Deployment";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
-import { RpcSerialization } from "effect/unstable/rpc";
+import { FetchHttpClient } from "effect/http";
+import { RpcSerialization } from "effect/rpc";
 
 import { ModuleHost } from "../src/ModuleHost.ts";
 
@@ -47,8 +50,11 @@ const deployments = [
   HttpClient,
   IkeaTradfri,
   LIFX,
+  Midi,
   OBS,
   OpenAI,
+  OpenCode,
+  Sendblue,
   Shell,
   SpeakerBot,
   StreamDeck,
@@ -73,8 +79,11 @@ const mounted = Layer.mergeAll(
   ModuleHost.deploymentLayer(HttpClient),
   ModuleHost.deploymentLayer(IkeaTradfri),
   ModuleHost.deploymentLayer(LIFX),
+  ModuleHost.deploymentLayer(Midi),
   ModuleHost.deploymentLayer(OBS),
   ModuleHost.deploymentLayer(OpenAI),
+  ModuleHost.deploymentLayer(OpenCode),
+  ModuleHost.deploymentLayer(Sendblue),
   ModuleHost.deploymentLayer(Shell),
   ModuleHost.deploymentLayer(SpeakerBot),
   ModuleHost.deploymentLayer(StreamDeck),
@@ -157,8 +166,10 @@ describe("Self-hosted modules", () => {
         ["list", 11],
         ["logic", 18],
         ["math", 33],
+        ["midi", 18],
         ["obs", 209],
         ["openai", 2],
+        ["opencode", 1],
         ["shell", 1],
         ["speakerbot", 6],
         ["streamdeck", 2],

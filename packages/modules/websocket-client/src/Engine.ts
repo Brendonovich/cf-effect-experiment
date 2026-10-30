@@ -13,7 +13,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { Socket } from "effect/unstable/socket";
+import { Socket } from "effect/socket";
 
 import {
   ClientRpcs,
@@ -199,36 +199,44 @@ export const make = Effect.fnUntraced(function* (
         ),
       ),
     );
-    const run = socket
-      .runRaw(
-        (data) =>
-          Effect.gen(function* () {
-            if (typeof data !== "string") return Effect.void;
-            const current = yield* getEntry(id);
-            if (
-              Option.isNone(current) ||
-              current.value.generation !== generation ||
-              current.value.status !== "connected"
-            )
-              return;
-            const size = utf8Size(data);
-            if (size > MAX_MESSAGE_BYTES)
-              return yield* Effect.logWarning("Dropped oversized WebSocket message", {
-                connectionId: id,
-                size,
-                limit: MAX_MESSAGE_BYTES,
-              });
-            yield* mg.emit(new MessageReceived({ connectionId: id, data }));
-          }),
-        { onOpen: Deferred.succeed(opened, undefined).pipe(Effect.asVoid) },
-      )
-      .pipe(
-        Effect.catchCause(() => {
-          const error = failed();
-          return Deferred.fail(opened, error).pipe(Effect.andThen(Effect.fail(error)));
-        }),
-        Effect.ensuring(finish),
-      );
+    const run = Effect.scoped(
+      Effect.gen(function* () {
+        const reader = yield* socket.reader;
+        yield* Deferred.succeed(opened, undefined);
+        while (true) {
+          const batch = yield* reader.pull;
+          yield* Effect.forEach(
+            batch,
+            (data) =>
+              Effect.gen(function* () {
+                if (typeof data !== "string") return Effect.void;
+                const current = yield* getEntry(id);
+                if (
+                  Option.isNone(current) ||
+                  current.value.generation !== generation ||
+                  current.value.status !== "connected"
+                )
+                  return;
+                const size = utf8Size(data);
+                if (size > MAX_MESSAGE_BYTES)
+                  return yield* Effect.logWarning("Dropped oversized WebSocket message", {
+                    connectionId: id,
+                    size,
+                    limit: MAX_MESSAGE_BYTES,
+                  });
+                yield* mg.emit(new MessageReceived({ connectionId: id, data }));
+              }),
+            { discard: true },
+          );
+        }
+      }),
+    ).pipe(
+      Effect.catchCause(() => {
+        const error = failed();
+        return Deferred.fail(opened, error).pipe(Effect.andThen(Effect.fail(error)));
+      }),
+      Effect.ensuring(finish),
+    );
     const fiber = yield* run.pipe(Effect.forkScoped, Effect.provideContext(socketContext));
     const close = Deferred.fail(opened, failed()).pipe(
       Effect.andThen(Fiber.interrupt(fiber)),
@@ -244,7 +252,7 @@ export const make = Effect.fnUntraced(function* (
         return [false, entries];
       const session: Session = {
         generation,
-        write,
+        write: write.write,
         closed: Deferred.await(closed),
         close,
       };

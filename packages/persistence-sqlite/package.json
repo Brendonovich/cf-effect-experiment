@@ -18,13 +18,13 @@
     "@macrograph/core": "workspace:*",
     "@macrograph/module": "workspace:*",
     "@macrograph/persistence": "workspace:*",
-    "drizzle-orm": "1.0.0-rc.5-ab785fc",
+    "drizzle-orm": "1.0.0-rc.5",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/node": "^24",
-    "drizzle-kit": "1.0.0-rc.5-ab785fc",
+    "drizzle-kit": "1.0.0-rc.5",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
   }

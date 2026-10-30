@@ -20,7 +20,10 @@ const serverDeployments = new Set([
   "@macrograph/module-list",
   "@macrograph/module-logic",
   "@macrograph/module-math",
+  "@macrograph/module-midi",
   "@macrograph/module-openai",
+  "@macrograph/module-opencode",
+  "@macrograph/module-sendblue",
   "@macrograph/module-shell",
   "@macrograph/module-speakerbot",
   "@macrograph/module-streamdeck",
@@ -35,6 +38,8 @@ export default defineConfig({
   platform: "node",
   plugins: [moduleDeployments(undefined, serverDeployments)],
   input: "src/index.ts",
+  // Native addon; resolved from node_modules at runtime and loaded lazily by the MIDI module.
+  external: ["@julusian/midi"],
   output: {
     dir: "dist/esm",
     format: "esm",

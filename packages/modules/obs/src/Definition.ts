@@ -1,8 +1,8 @@
 import * as Engine from "@macrograph/module/Engine";
 import * as Resource from "@macrograph/module/Resource";
 import { Array, Schema } from "effect";
+import { Rpc, RpcGroup } from "effect/rpc";
 import * as S from "effect/Schema";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 import * as ObsEvent from "./Events.ts";
 import { SocketAddress } from "./Types.ts";

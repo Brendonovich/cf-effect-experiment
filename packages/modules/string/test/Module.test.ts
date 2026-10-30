@@ -345,4 +345,30 @@ describe("String module", () => {
       assert.deepStrictEqual((yield* run(parse)).get("timeOut"), Option.none());
     }),
   );
+  it.effect(
+    "declares conversion nodes with exactly one input and one output of the converted types",
+    () =>
+      Effect.gen(function* () {
+        const registered = yield* schemas;
+        for (const [id, from, to] of [
+          ["IntToString", t.Int, t.String],
+          ["FloatToString", t.Float, t.String],
+          ["BoolToString", t.Bool, t.String],
+          ["StringToInt", t.String, t.Option(t.Int)],
+          ["StringToFloat", t.String, t.Option(t.Float)],
+        ] as const) {
+          const item = schema(registered, id);
+          assert.deepStrictEqual(
+            item.dataInputs.map((input) => input.type),
+            [from],
+            id,
+          );
+          assert.deepStrictEqual(
+            item.dataOutputs.map((output) => output.type),
+            [to],
+            id,
+          );
+        }
+      }),
+  );
 });

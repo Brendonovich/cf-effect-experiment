@@ -1,7 +1,7 @@
 import type { Canvas, NodeIO } from "@macrograph/core";
 
 import { OutputRef } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import { scopesCompatible } from "@macrograph/module/Registration";
 
 import { visiblePorts, type PortDirection } from "./connectionAuthoring";
@@ -260,6 +260,7 @@ export const graphConnections = (
   graph: Canvas.Model,
   ioForNode: NodeIOFor,
   widthForNode?: NodeWidthFor,
+  conversions: Conversion.Rules = Conversion.defaultRules,
 ) => {
   // Index once per pass; scanning all connections for each endpoint is quadratic.
   const connected = new Map<string, Record<PortDirection, Set<string>>>();
@@ -348,25 +349,118 @@ export const graphConnections = (
             ? "Execution/data pin mismatch"
             : from.port.kind === "data" &&
                 to.port.kind === "data" &&
-                !t.equals(from.port.type, to.port.type)
+                !Conversion.connectable(from.port.type, to.port.type, conversions)
               ? "Nominal data types do not match"
               : undefined;
     if (invalid !== undefined) return [];
+    const converted =
+      from.port.kind === "data" &&
+      to.port.kind === "data" &&
+      !t.equals(from.port.type, to.port.type)
+        ? to.port.type
+        : undefined;
     return [
       {
         connection,
         from: from.position,
         to: to.position,
         type: from.port.kind === "data" ? from.port.type : undefined,
+        ...(converted === undefined ? {} : { targetType: converted }),
         ...(from.port.kind === "scope" ? { scope: true } : {}),
       },
     ];
   });
 };
 
-export const connectionPath = (from: Position, to: Position): string => {
+type Curve = readonly [Position, Position, Position, Position];
+
+const connectionCurve = (from: Position, to: Position): Curve => {
   const control = Math.min(180, Math.hypot(to.x - from.x, to.y - from.y) / 2);
-  return `M ${from.x} ${from.y} C ${from.x + control} ${from.y}, ${to.x - control} ${to.y}, ${to.x} ${to.y}`;
+  return [from, { x: from.x + control, y: from.y }, { x: to.x - control, y: to.y }, to];
+};
+
+const curvePath = ([a, b, c, d]: Curve): string =>
+  `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
+
+const interpolate = (a: Position, b: Position, t: number): Position => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
+});
+
+// De Casteljau split: the two resulting curves trace exactly the original curve.
+const splitCurve = (curve: Curve, t: number): readonly [Curve, Curve] => {
+  const [p0, p1, p2, p3] = curve;
+  const p01 = interpolate(p0, p1, t),
+    p12 = interpolate(p1, p2, t),
+    p23 = interpolate(p2, p3, t),
+    p012 = interpolate(p01, p12, t),
+    p123 = interpolate(p12, p23, t),
+    middle = interpolate(p012, p123, t);
+  return [
+    [p0, p01, p012, middle],
+    [middle, p123, p23, p3],
+  ];
+};
+
+export const connectionPath = (from: Position, to: Position): string =>
+  curvePath(connectionCurve(from, to));
+
+export interface WireSegment {
+  readonly path: string;
+  readonly stroke: string;
+}
+
+/** A converted wire is drawn in its source color for the first half and its destination color after. */
+export const wireSegments = (edge: {
+  readonly from: Position;
+  readonly to: Position;
+  readonly type?: t | undefined;
+  readonly targetType?: t | undefined;
+  readonly scope?: boolean | undefined;
+}): ReadonlyArray<WireSegment> => {
+  const source = wireColor(edge.type, edge.scope);
+  const target = edge.targetType === undefined ? source : wireColor(edge.targetType);
+  const curve = connectionCurve(edge.from, edge.to);
+  if (target === source) return [{ path: curvePath(curve), stroke: source }];
+  const [first, second] = splitCurve(curve, 0.5);
+  return [
+    { path: curvePath(first), stroke: source },
+    { path: curvePath(second), stroke: target },
+  ];
+};
+
+export interface ConversionMarker {
+  readonly x: number;
+  readonly y: number;
+  /** Direction of travel at the midpoint, in degrees. */
+  readonly angle: number;
+  readonly source: string;
+  readonly target: string;
+}
+
+export interface WireGeometry {
+  readonly segments: ReadonlyArray<WireSegment>;
+  /** Present on converted wires: a diamond at the color change, half in each type's color. */
+  readonly marker?: ConversionMarker;
+}
+
+export const wireGeometry = (edge: Parameters<typeof wireSegments>[0]): WireGeometry => {
+  const segments = wireSegments(edge);
+  if (segments.length === 1) return { segments };
+  const [first, second] = splitCurve(connectionCurve(edge.from, edge.to), 0.5);
+  const middle = first[3];
+  // Tangent at the split point, from the adjacent control points of each half.
+  const angle = (Math.atan2(second[1].y - first[2].y, second[1].x - first[2].x) * 180) / Math.PI;
+  return {
+    segments,
+    marker: {
+      x: middle.x,
+      y: middle.y,
+      angle,
+      source: segments[0]!.stroke,
+      target: segments[1]!.stroke,
+    },
+  };
 };
 
 export const wireColor = (type: t | undefined, scope = false): string => {

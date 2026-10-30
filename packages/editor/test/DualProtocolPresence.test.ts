@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Persistence } from "@macrograph/persistence";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Stream } from "effect";
+import { Rpc, RpcClient, RpcGroup, RpcSerialization, RpcServer } from "effect/rpc";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { Rpc, RpcClient, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
 
 import { makeDualClientProtocol, makeDualServerProtocol } from "../src/DualProtocol.ts";
 import { EditorAccess } from "../src/EditorAccess.ts";
@@ -58,23 +58,28 @@ const makeServer = Effect.gen(function* () {
       output: Queue.Queue<Frame, Cause.Done>,
     ) =>
       Socket.make({
-        runRaw: (handler, options) =>
-          Effect.gen(function* () {
-            yield* options?.onOpen ?? Effect.void;
-            yield* Stream.fromQueue(input).pipe(
-              Stream.runForEach((data) =>
-                Effect.gen(function* () {
-                  if (Socket.isCloseEvent(data)) {
-                    return yield* new Socket.SocketError({
-                      reason: new Socket.SocketCloseError({ code: data.code }),
-                    });
-                  }
-                  yield* handler(data) ?? Effect.void;
-                }),
+        reader: Effect.succeed({
+          pull: Effect.gen(function* () {
+            const data = yield* Queue.take(input).pipe(
+              Effect.mapError(
+                () =>
+                  new Socket.SocketError({
+                    reason: new Socket.SocketCloseError({ code: 1000 }),
+                  }),
               ),
             );
+            if (Socket.isCloseEvent(data))
+              return yield* new Socket.SocketError({
+                reason: new Socket.SocketCloseError({ code: data.code }),
+              });
+            return [data] as const;
           }),
-        writer: Effect.succeed((data) => Queue.offer(output, data).pipe(Effect.asVoid)),
+          upgrade: Socket.SocketUpgradeError.unsupported,
+        }),
+        writer: Effect.succeed({
+          write: (data) => Queue.offer(output, data).pipe(Effect.asVoid),
+          writeAll: (data) => Queue.offerAll(output, data).pipe(Effect.asVoid),
+        }),
       });
 
     const connection = yield* dual
@@ -133,26 +138,30 @@ describe("DualProtocol presence cleanup", () => {
         const observer = yield* (yield* server.connect()).subscribe();
         const connection = yield* server.connect();
         const departing = yield* connection.subscribe();
-        const observerId = observer.snapshot.selfConnectionId;
-        const departingId = departing.snapshot.selfConnectionId;
+        const observerId = observer.snapshot.selfId;
+        const departingId = departing.snapshot.selfId;
         assert.notStrictEqual(departingId, observerId);
         assert.deepStrictEqual(
-          departing.snapshot.clients.map((client) => client.connectionId),
+          departing.snapshot.clients.map((client) => client.id),
           [observerId, departingId],
         );
 
         yield* connection.client.UpdatePresence({
           activeGraph: "graph",
           cursor: { x: 42, y: 24 },
+          viewport: null,
           selectedNodeIds: ["node"],
         });
         yield* TestClock.adjust("20 millis");
+        yield* Effect.yieldNow;
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.find((client) => client.connectionId === departingId)
-            ?.cursor,
+          observer.changes.at(-1)?.clients.find((client) => client.id === departingId)?.cursor,
           { x: 42, y: 24 },
         );
-        yield* TestClock.adjust("15 seconds");
+        for (let tick = 0; tick < 3; tick++) {
+          yield* TestClock.adjust("5 seconds");
+          yield* Effect.yieldNow;
+        }
         assert.isUndefined(observer.fiber.pollUnsafe());
         assert.isUndefined(departing.fiber.pollUnsafe());
         const beforeRemoval = observer.changes.length;
@@ -164,48 +173,72 @@ describe("DualProtocol presence cleanup", () => {
         } else {
           yield* Fiber.interrupt(departing.fiber);
         }
-        yield* TestClock.adjust("20 millis");
+        for (
+          let attempt = 0;
+          attempt < 10 && observer.changes.length === beforeRemoval;
+          attempt++
+        ) {
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust("20 millis");
+        }
         assert.isAbove(observer.changes.length, beforeRemoval);
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.map((client) => client.connectionId),
+          observer.changes.at(-1)?.clients.map((client) => client.id),
           [observerId],
         );
         assert.strictEqual((yield* server.clientIds).size, socketDisconnected ? 1 : 2);
 
         // HMR restarts a subscription on the existing socket; a reconnect opens a new socket.
         const reconnected = socketDisconnected ? yield* server.connect() : connection;
+        const beforeFresh = observer.changes.length;
         const fresh = yield* reconnected.subscribe();
-        const freshId = fresh.snapshot.selfConnectionId;
+        const freshId = fresh.snapshot.selfId;
         if (socketDisconnected) {
           assert.notStrictEqual(freshId, departingId);
         } else {
           assert.strictEqual(freshId, departingId);
         }
         assert.deepStrictEqual(
-          fresh.snapshot.clients.map((client) => client.connectionId),
+          fresh.snapshot.clients.map((client) => client.id),
           [observerId, freshId],
         );
-        assert.deepStrictEqual(
-          fresh.snapshot.clients.find((client) => client.connectionId === freshId),
-          {
-            connectionId: freshId,
-            displayName: socketDisconnected ? "Local 3" : "Local 2",
-            color: Presence.colorFor(socketDisconnected ? "Local 3" : "Local 2"),
-            canEdit: true,
-            activeGraph: null,
-            cursor: null,
-            selectedNodeIds: [],
-          },
-        );
-        yield* TestClock.adjust("20 millis");
+        const { lastActiveAt: _, ...freshClient } = fresh.snapshot.clients.find(
+          (client) => client.id === freshId,
+        )!;
+        assert.deepStrictEqual(freshClient, {
+          id: freshId,
+          kind: "browser",
+          userId: null,
+          displayName: socketDisconnected ? "Local 3" : "Local 2",
+          email: null,
+          color: Presence.colorFor(socketDisconnected ? "Local 3" : "Local 2"),
+          canEdit: true,
+          activeGraph: null,
+          cursor: null,
+          viewport: null,
+          selectedNodeIds: [],
+          remote: null,
+          expiresAt: null,
+        });
+        for (let attempt = 0; attempt < 10 && observer.changes.length === beforeFresh; attempt++) {
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust("20 millis");
+        }
         assert.deepStrictEqual(observer.changes.at(-1)?.clients, fresh.snapshot.clients);
 
         const beforeFinalRemoval = observer.changes.length;
         yield* Fiber.interrupt(fresh.fiber);
-        yield* TestClock.adjust("20 millis");
+        for (
+          let attempt = 0;
+          attempt < 10 && observer.changes.length === beforeFinalRemoval;
+          attempt++
+        ) {
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust("20 millis");
+        }
         assert.isAbove(observer.changes.length, beforeFinalRemoval);
         assert.deepStrictEqual(
-          observer.changes.at(-1)?.clients.map((client) => client.connectionId),
+          observer.changes.at(-1)?.clients.map((client) => client.id),
           [observerId],
         );
         if (closed !== undefined) {

@@ -9,7 +9,7 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Engine, Module } from "@macrograph/module";
-import { Array, Effect, Fiber, Option, Ref, Schema, Tracer } from "effect";
+import { Array, Effect, Option, Ref, Schema, Tracer } from "effect";
 
 import { Executor } from "../src/index.ts";
 
@@ -82,12 +82,7 @@ describe("schema execution context", () => {
             type: "event",
             event: () => Effect.succeed(true),
             io: () => ({}),
-            run: ({ execution, node }) => {
-              const span = Fiber.getCurrent()?.currentSpan;
-              assert.strictEqual(span?._tag, "Span");
-              if (span?._tag === "Span") assert.strictEqual(span.name, "Schema.run context.event");
-              return capture(execution, node);
-            },
+            run: ({ execution, node }) => capture(execution, node),
           });
           yield* registration.schema.register({
             id: "action",
@@ -167,6 +162,7 @@ describe("schema execution context", () => {
       };
       const executor = yield* Executor.make(project, {
         projectId: "project-123",
+        executionId: "execution-123",
         executionEnvironment,
       });
       yield* executor.module(module, deployment);
@@ -184,6 +180,10 @@ describe("schema execution context", () => {
         ),
       );
       assert.lengthOf(spans, 12);
+      for (const span of spans.filter(
+        (span) => span.name.startsWith("Executor.") || span.name.startsWith("Schema.run "),
+      ))
+        assert.strictEqual(span.attributes.get("macrograph.execution.id"), "execution-123");
       const eventSpan = spans[0]!;
       assert.strictEqual(eventSpan.name, "Executor.handleEvent");
       const matchSpan = spans.find((span) => span.name === "Executor.matchEvent")!;
@@ -229,7 +229,7 @@ describe("schema execution context", () => {
       const seen = yield* Ref.get(contexts);
       assert.strictEqual(seen.length, 3);
       assert.strictEqual(
-        graphSpan.attributes.get("macrograph.execution.id"),
+        graphSpan.attributes.get("macrograph.execution.trace.id"),
         seen[0]?.executionTraceId,
       );
       for (const [index, span] of nodeSpans.entries()) {

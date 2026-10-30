@@ -1,16 +1,10 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Output from "alchemy/Output";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
+import { Etag, HttpMiddleware, HttpPlatform, HttpRouter, HttpServerRequest } from "effect/http";
+import { HttpApiBuilder, HttpApiScalar } from "effect/http-api";
 import * as Path from "effect/Path";
-import {
-  Etag,
-  HttpMiddleware,
-  HttpPlatform,
-  HttpRouter,
-  HttpServerRequest,
-} from "effect/unstable/http";
-import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 
 import { Api } from "../api/Api.ts";
 import * as CloudApiHandlers from "../api/CloudApiHandlers.ts";
@@ -18,6 +12,7 @@ import * as CloudMcp from "../api/CloudMcp.ts";
 import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
+import * as McpOAuth from "../auth/McpOAuth.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
@@ -27,6 +22,7 @@ import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
 import * as EventPolicy from "../execution/EventPolicy.ts";
 import { ObservabilityLayer } from "../Observability.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as Project from "../project/Project.ts";
 import * as ProjectPolicy from "../project/ProjectPolicy.ts";
 import { DatabaseHyperdrive, DeploymentObjectsBucket } from "../Storage.ts";
@@ -88,11 +84,15 @@ export default Layer.unwrap(
         },
       ),
     );
+    const { stage } = yield* Alchemy.Stack;
     return CloudWorker.make(
       {
+        ...(stage === "production" ? { domain: "cloud.macrograph.app" } : {}),
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
+          MCP_OAUTH_PUBLIC_ORIGIN:
+            process.env.MCP_OAUTH_PUBLIC_ORIGIN ?? "https://cloud.macrograph.app",
           ...(ingressPublicOrigin === undefined
             ? {}
             : {
@@ -104,6 +104,8 @@ export default Layer.unwrap(
               directory,
               htmlHandling: "auto-trailing-slash",
               notFoundHandling: "single-page-application",
+              // Unlisted paths fall back to the SPA's index.html, so every worker route must be listed.
+              runWorkerFirst: ["/api/*", "/oauth/*", "/.well-known/*", "/rpc", "/rpc/*"],
             }))
           : undefined,
         dev: { port: 1337, strictPort: true },
@@ -113,6 +115,15 @@ export default Layer.unwrap(
         if (credentialOAuthStateSecret !== undefined)
           yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
+        // Binds IngressWorker's OpenCodeDO namespace for ProjectEditorDO's managed connections.
+        yield* OpenCodeDO.from(IngressWorker);
+        const mcpOAuthRegistrationRateLimit = yield* Cloudflare.RateLimit(
+          "MCP_OAUTH_REGISTRATION_RATE_LIMIT",
+          {
+            namespaceId: 1001,
+            simple: { limit: 10, period: 60 },
+          },
+        );
         const policies = Layer.mergeAll(
           CredentialPolicy.layer,
           DeploymentPolicy.layer,
@@ -136,6 +147,7 @@ export default Layer.unwrap(
         return yield* Effect.gen(function* () {
           const authentication = yield* Authentication.Service;
           const project = yield* Project.Service;
+          const event = yield* Event.Service;
           const cloudHandlers = CloudApiHandlers.layer.pipe(
             Layer.provide(Authentication.middleware),
           );
@@ -159,6 +171,32 @@ export default Layer.unwrap(
             listProjects: project.list,
             getProject: project.get,
             createProject: project.create,
+            listExecutions: ({ projectId, deploymentId, status, limit }) =>
+              event.listExecutions(projectId, deploymentId).pipe(
+                Effect.map(({ executions, events }) => {
+                  const eventsById = new Map(events.map((record) => [record.id, record]));
+                  return {
+                    executions: executions
+                      .filter((execution) => status === undefined || execution.status === status)
+                      .slice(0, limit ?? 20)
+                      .map((execution) => {
+                        const record = eventsById.get(execution.projectEventId);
+                        return {
+                          ...execution,
+                          eventType: record?.eventType ?? null,
+                          traceId: record?.traceId ?? null,
+                        };
+                      }),
+                  };
+                }),
+              ),
+            getExecution: ({ projectId, executionId }) =>
+              event.getExecution(projectId, executionId).pipe(
+                Effect.map((result) => ({
+                  ...result,
+                  trace: CloudMcp.executionTrace(result.event.traceId),
+                })),
+              ),
             listGraphs: project.listGraphs,
             getGraph: project.getGraph,
             createGraph: project.createGraph,
@@ -168,16 +206,25 @@ export default Layer.unwrap(
             createNode: project.createNode,
             createConnection: project.createConnection,
           });
-          const routes = Layer.mergeAll(apiRoutes, docsRoutes, mcpRoutes);
+          const routes = Layer.mergeAll(
+            apiRoutes,
+            docsRoutes,
+            mcpRoutes,
+            McpOAuth.layer({
+              authenticateSession: authentication.authenticateSession,
+              limitRegistration: (key) => mcpOAuthRegistrationRateLimit.limit({ key }),
+            }),
+          );
           const app = yield* routes.pipe(HttpRouter.toHttpEffect);
 
           return {
             fetch: Effect.gen(function* () {
               const request = yield* HttpServerRequest.HttpServerRequest;
               if (new URL(request.url, "http://main.local").pathname === "/api/mcp") {
-                return yield* CloudMcp.authenticated(app, authentication.authenticateBearer()).pipe(
-                  HttpMiddleware.cors(),
-                );
+                return yield* CloudMcp.authenticated(
+                  app,
+                  authentication.authenticateMcpBearer(),
+                ).pipe(HttpMiddleware.cors());
               }
               if (request.headers.upgrade?.toLowerCase() === "websocket") return yield* app;
               return yield* app.pipe(HttpMiddleware.cors());
@@ -189,6 +236,7 @@ export default Layer.unwrap(
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
         Effect.provide(Cloudflare.R2.ReadBucketBinding),
         Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
+        Effect.provide(Cloudflare.Workers.RateLimitBinding),
         Effect.provide(ObservabilityLayer),
       ),
     );

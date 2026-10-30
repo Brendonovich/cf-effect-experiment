@@ -3,9 +3,9 @@ import { Actor, GraphId, Project } from "@macrograph/core";
 import { Engine } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
-import { RpcGroup, RpcSerialization, RpcTest } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { HttpServerRequest } from "effect/http";
+import { RpcGroup, RpcSerialization, RpcTest } from "effect/rpc";
+import { Socket } from "effect/socket";
 
 import {
   Editor,
@@ -34,9 +34,9 @@ const policy = (canEdit: boolean) =>
   Layer.succeed(EditorAccess.Policy, {
     resolve: () =>
       Effect.succeed({
-        actor: { type: "CLIENT" as const, id: "privacy-client" },
-        connectionId: "privacy-client",
+        actor: Actor.client("browser", "privacy-client"),
         displayName: "Privacy test",
+        email: null,
         projectId: "privacy-project",
         canEdit,
         canManageCredentials: canEdit,
@@ -60,10 +60,20 @@ describe("Engine storage privacy", () => {
       const frames = yield* Queue.make<Uint8Array>();
       const opened = yield* Deferred.make<void>();
       const socket = Socket.make({
-        runRaw: () => Deferred.succeed(opened, undefined).pipe(Effect.andThen(Effect.never)),
-        writer: Effect.succeed((data) =>
-          data instanceof Uint8Array ? Queue.offer(frames, data).pipe(Effect.asVoid) : Effect.void,
+        reader: Deferred.succeed(opened, undefined).pipe(
+          Effect.as({ pull: Effect.never, upgrade: Socket.SocketUpgradeError.unsupported }),
         ),
+        writer: Effect.succeed({
+          write: (data) =>
+            data instanceof Uint8Array
+              ? Queue.offer(frames, data).pipe(Effect.asVoid)
+              : Effect.void,
+          writeAll: (data) =>
+            Queue.offerAll(
+              frames,
+              data.filter((item): item is Uint8Array => item instanceof Uint8Array),
+            ).pipe(Effect.asVoid),
+        }),
       });
       const { httpEffect } = yield* EditorServer.toDualHttpEffectWebsocket(RpcGroup.make());
       const request = HttpServerRequest.fromWeb(new Request("http://localhost/rpc-ws"));

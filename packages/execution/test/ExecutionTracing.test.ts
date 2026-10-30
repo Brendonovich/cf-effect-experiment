@@ -1,7 +1,18 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { t, Engine, Module } from "@macrograph/module";
-import { Array, Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Tracer } from "effect";
+import {
+  Array,
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Option,
+  Schema,
+  Tracer,
+} from "effect";
 
 import { Executor } from "../src/index.ts";
 
@@ -108,7 +119,10 @@ describe("execution tracing", () => {
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause);
         assert.instanceOf(error, Executor.NodeExecutionError);
-        if (error instanceof Executor.NodeExecutionError) assert.strictEqual(error.nodeId, nodeId);
+        if (error instanceof Executor.NodeExecutionError) {
+          assert.strictEqual(error.nodeId, nodeId);
+          assert.strictEqual(error.message, `Node ${nodeId} failed: node failed`);
+        }
       }
       const [eventSpan, graphSpan, nodeSpan] = executionSpanNames.map((name) =>
         assertSpanExit(spans, name, exit),
@@ -189,6 +203,21 @@ describe("execution tracing", () => {
         ),
       );
       assert.isFalse(spans.some((span) => span.name.startsWith("Schema.run ")));
+    }),
+  );
+
+  it.effect("records node logs as schema span events when default loggers are replaced", () =>
+    Effect.gen(function* () {
+      const { spans, dispatch } = yield* setup(Effect.logInfo("node output"));
+      // Runtimes such as Cloudflare Workers install their own loggers, dropping the tracer logger.
+      yield* dispatch.pipe(Effect.provide(Logger.layer([])));
+      const schemaSpan = spans.find((span) => span.name === "Schema.run tracing.event");
+      assert.instanceOf(schemaSpan, Tracer.NativeSpan);
+      if (schemaSpan instanceof Tracer.NativeSpan)
+        assert.deepStrictEqual(
+          schemaSpan.events.map(([name]) => name),
+          ["node output"],
+        );
     }),
   );
 });

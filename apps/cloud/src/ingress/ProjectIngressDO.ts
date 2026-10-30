@@ -1,16 +1,21 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { HttpIngressRuntime } from "@macrograph/http-ingress";
 import { HttpEndpoint } from "@macrograph/module";
-import * as HttpIngress from "@macrograph/module/HttpIngress";
 import githubDeployment from "@macrograph/module-github/Deployment/Webhook";
 import kofiDeployment from "@macrograph/module-kofi/Deployment/Webhook";
+import sendblueDeployment from "@macrograph/module-sendblue/Deployment/Webhook";
 import twitchDeployment from "@macrograph/module-twitch/Deployment/Webhook";
 import { layerWebCrypto } from "@macrograph/module-twitch/EventSub/Webhook";
 import UtilitiesModule from "@macrograph/module-utilities";
 import { TickEvent } from "@macrograph/module-utilities/Definition";
-import * as Cloudflare from "alchemy/Cloudflare";
-import { Clock, Effect, Option, Redacted, Schema, Tracer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import * as HttpIngress from "@macrograph/module/HttpIngress";
+import * as PollingIngress from "@macrograph/module/PollingIngress";
+import { and, eq } from "drizzle-orm";
+import { Clock, Effect, Option, Redacted, Result, Schema, Tracer } from "effect";
+import { FetchHttpClient } from "effect/http";
 
+import { projectIngressEndpoints, projectIngressEvents } from "../database/DatabaseSchema.ts";
 import { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 import { appCredentialsLayerFromEnvironment } from "../GitHubCredentials.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
@@ -87,14 +92,17 @@ const AppliedDeployment = Schema.Struct({
   deploymentId: Schema.String,
   r2Key: DeploymentObjectKey,
   manifest: HttpIngress.Manifest,
+  pollingManifest: PollingIngress.Manifest.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   endpoints: Schema.Array(MountedEndpoint),
 });
 type AppliedDeployment = typeof AppliedDeployment.Type;
 const PreviewDeployment = Schema.Struct({
+  projectId: Schema.optionalKey(Schema.String),
   generation: Schema.optionalKey(Schema.String),
   reconciliationPending: Schema.optionalKey(Schema.Boolean),
   previewIds: Schema.Array(Schema.String),
   manifest: HttpIngress.Manifest,
+  pollingManifest: PollingIngress.Manifest.pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   endpoints: Schema.Array(MountedEndpoint),
 });
 type PreviewDeployment = typeof PreviewDeployment.Type;
@@ -102,6 +110,15 @@ const appliedDeploymentKey = "active-deployment";
 const previewDeploymentKey = "preview-deployment";
 const utilitiesTickEventId = "utilities:tick";
 const utilitiesTickCountKey = "utilities:tick-count";
+const pollingManifestKey = "polling-ingress:manifest";
+const pollingEventPrefix = "polling-ingress:";
+const pollingCursorPrefix = "polling-ingress:cursor:";
+const pollingDeployments = [sendblueDeployment] as const;
+const pollingHandlers = new Map(
+  pollingDeployments.flatMap((deployment) =>
+    deployment.pollingIngress.handlers.map((handler) => [handler.id, handler] as const),
+  ),
+);
 
 interface WorkflowBinding {
   readonly create: (options: {
@@ -116,6 +133,16 @@ const isWorkflowBinding = (value: unknown): value is WorkflowBinding =>
   "create" in value &&
   typeof value.create === "function";
 
+interface HyperdriveBinding {
+  readonly connectionString: string;
+}
+
+const isHyperdriveBinding = (value: unknown): value is HyperdriveBinding =>
+  typeof value === "object" &&
+  value !== null &&
+  "connectionString" in value &&
+  typeof value.connectionString === "string";
+
 export const projectIngressImplementation = Effect.gen(function* () {
   const durableState = yield* Cloudflare.DurableObjectState;
   const workerEnvironment = yield* Cloudflare.WorkerEnvironment;
@@ -129,17 +156,98 @@ export const projectIngressImplementation = Effect.gen(function* () {
 
   return Effect.gen(function* () {
     const endpointHost = yield* HttpEndpoint.Host;
+    const pollingDatabase = Effect.gen(function* () {
+      const hyperdrive = workerEnvironment?.AppDatabaseHyperdrive;
+      if (!isHyperdriveBinding(hyperdrive))
+        return yield* Effect.die("AppDatabaseHyperdrive binding is unavailable");
+      return yield* Drizzle.Postgres(Effect.succeed(Redacted.make(hyperdrive.connectionString)));
+    });
 
     const ingressRegistry = yield* HttpIngress.makeRegistry([
       ...twitchDeployment.httpIngress.handlers,
       ...kofiDeployment.httpIngress.handlers,
       ...githubDeployment.httpIngress.handlers,
+      ...sendblueDeployment.httpIngress.handlers,
     ]).pipe(Effect.provide(layerWebCrypto(globalThis.crypto)), Effect.orDie);
     const ingressRuntime = yield* HttpIngressRuntime.make(
-      [twitchDeployment, kofiDeployment, githubDeployment],
+      [twitchDeployment, kofiDeployment, githubDeployment, sendblueDeployment],
       ingressRegistry,
       endpointHost,
     ).pipe(Effect.orDie);
+
+    const pollingKey = PollingIngress.requirementKey;
+    const pollingEventId = (requirement: PollingIngress.Requirement) =>
+      `${pollingEventPrefix}${pollingKey(requirement)}`;
+    const pollingCursorKey = (requirement: PollingIngress.Requirement) =>
+      `${pollingCursorPrefix}${pollingKey(requirement)}`;
+    const pollingEndpointId = (requirement: PollingIngress.Requirement) =>
+      HttpEndpoint.Id.make(`polling:${pollingKey(requirement)}`);
+    const loadPollingManifest = durableState.storage.get(pollingManifestKey).pipe(
+      Effect.flatMap((stored) =>
+        stored === undefined
+          ? Effect.succeed([])
+          : Schema.decodeUnknownEffect(PollingIngress.Manifest)(stored),
+      ),
+      Effect.orElseSucceed(() => []),
+    );
+    const resolvePollingManifest = (engines: Readonly<Record<string, unknown>>) =>
+      Effect.forEach(pollingDeployments, (deployment) =>
+        deployment.pollingIngress.resolveRequirements(
+          engines[deployment.moduleId] ?? deployment.definition.InitialStorage,
+        ),
+      ).pipe(Effect.map((requirements) => requirements.flat()));
+    const providerPollingManifest = (
+      production: Option.Option<AppliedDeployment>,
+      preview: Option.Option<PreviewDeployment>,
+    ): PollingIngress.Manifest => [
+      ...new Map(
+        [
+          ...Option.match(production, {
+            onNone: () => [],
+            onSome: (value) => value.pollingManifest,
+          }),
+          ...Option.match(preview, {
+            onNone: () => [],
+            onSome: (value) => value.pollingManifest,
+          }),
+        ].map((requirement) => [pollingKey(requirement), requirement]),
+      ).values(),
+    ];
+
+    const reconcilePollingIngress = Effect.fnUntraced(function* (desired: PollingIngress.Manifest) {
+      const previous = yield* loadPollingManifest;
+      for (const requirement of previous) {
+        if (desired.some((candidate) => pollingKey(candidate) === pollingKey(requirement)))
+          continue;
+        yield* Cloudflare.Workers.cancelEvent(pollingEventId(requirement));
+        yield* durableState.storage.delete(pollingCursorKey(requirement));
+      }
+      const now = yield* Clock.currentTimeMillis;
+      for (const requirement of desired) {
+        const handler = pollingHandlers.get(requirement.handlerId);
+        if (handler === undefined)
+          return yield* Effect.die(
+            `Polling ingress handler ${requirement.handlerId} is unavailable`,
+          );
+        const current = previous.find(
+          (candidate) => pollingKey(candidate) === pollingKey(requirement),
+        );
+        if (
+          current === undefined ||
+          JSON.stringify(current.configuration) !== JSON.stringify(requirement.configuration)
+        ) {
+          const cursor = yield* handler.initialCursor(requirement.configuration).pipe(Effect.orDie);
+          yield* durableState.storage.put(pollingCursorKey(requirement), cursor);
+        }
+        yield* Cloudflare.Workers.scheduleEvent(
+          pollingEventId(requirement),
+          new Date(now + requirement.intervalMs),
+          {},
+          requirement.intervalMs,
+        );
+      }
+      yield* durableState.storage.put(pollingManifestKey, desired);
+    });
 
     const loadAppliedDeployment = Effect.fnUntraced(function* () {
       const stored = yield* durableState.storage.get(appliedDeploymentKey);
@@ -365,6 +473,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       activeProjectId = request.projectId;
       publicOrigin = request.publicOrigin;
       const desired = yield* ingressRuntime.resolveManifest(request.engines).pipe(Effect.orDie);
+      const desiredPolling = yield* resolvePollingManifest(request.engines).pipe(Effect.orDie);
       const previous = yield* loadAppliedDeployment();
       const preview = yield* loadPreview();
       const previousProvider = yield* providerManifest(previous, preview).pipe(Effect.orDie);
@@ -373,6 +482,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
         deploymentId: request.deploymentId,
         r2Key: request.r2Key,
         manifest: desired,
+        pollingManifest: desiredPolling,
         endpoints: [],
       };
       yield* durableState.storage.put(appliedDeploymentKey, active);
@@ -420,6 +530,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       } else {
         yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
       }
+      yield* reconcilePollingIngress(providerPollingManifest(Option.some(deployed), preview));
       return { deploymentId: deployed.deploymentId, endpoints: deployed.endpoints };
     });
 
@@ -430,7 +541,9 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const previous = yield* loadPreview();
       const previousProvider = yield* providerManifest(production, previous).pipe(Effect.orDie);
       const manifest = yield* ingressRuntime.resolveManifest(request.engines).pipe(Effect.orDie);
+      const pollingManifest = yield* resolvePollingManifest(request.engines).pipe(Effect.orDie);
       const next: PreviewDeployment = {
+        projectId: request.projectId,
         generation: crypto.randomUUID(),
         reconciliationPending: true,
         previewIds: [
@@ -443,6 +556,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
           ]),
         ],
         manifest,
+        pollingManifest,
         endpoints: Option.match(previous, {
           onNone: () => [],
           onSome: (value) =>
@@ -485,6 +599,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
           ),
         } satisfies AppliedDeployment);
       }
+      yield* reconcilePollingIngress(providerPollingManifest(production, Option.some(active)));
       return { endpoints: active.endpoints };
     });
 
@@ -506,6 +621,7 @@ export const projectIngressImplementation = Effect.gen(function* () {
       yield* durableState.storage.delete(previewDeploymentKey);
       const desiredProvider = yield* providerManifest(production, Option.none()).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
+      yield* reconcilePollingIngress(providerPollingManifest(production, Option.none()));
     });
 
     const undeploy = Effect.fn("ProjectIngressDO.undeploy")(function* () {
@@ -516,11 +632,10 @@ export const projectIngressImplementation = Effect.gen(function* () {
       const desiredProvider = yield* providerManifest(Option.none(), preview).pipe(Effect.orDie);
       yield* ingressRuntime.reconcile(previousProvider, desiredProvider).pipe(Effect.orDie);
       yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
+      yield* reconcilePollingIngress(providerPollingManifest(Option.none(), preview));
     });
 
-    const alarm = Effect.gen(function* () {
-      const events = yield* Cloudflare.Workers.processScheduledEvents;
-      if (!events.some((event) => event.id === utilitiesTickEventId)) return;
+    const handleUtilitiesTick = Effect.gen(function* () {
       const deployment = yield* loadAppliedDeployment();
       if (Option.isNone(deployment) || deployment.value.projectId === undefined) {
         yield* Cloudflare.Workers.cancelEvent(utilitiesTickEventId);
@@ -535,7 +650,8 @@ export const projectIngressImplementation = Effect.gen(function* () {
       if (!Number.isSafeInteger(tick))
         return yield* Effect.die("Utilities tick counter exceeded the safe integer range");
       yield* durableState.storage.put(utilitiesTickCountKey, tick);
-      const executionId = `${deployment.value.projectId}:utilities:tick:${tick}`;
+      // Workflow instance IDs only allow letters, digits, "-" and "_".
+      const executionId = `${deployment.value.projectId}-utilities-tick-${tick}`;
       yield* Effect.tryPromise({
         try: () =>
           binding.create({
@@ -555,6 +671,155 @@ export const projectIngressImplementation = Effect.gen(function* () {
           }),
         catch: (cause) => cause,
       });
+    });
+
+    const handlePollingIngress = Effect.fnUntraced(
+      function* (requirement: PollingIngress.Requirement) {
+        const deployment = yield* loadAppliedDeployment();
+        const preview = yield* loadPreview();
+        const projectId =
+          Option.isSome(deployment) && deployment.value.projectId !== undefined
+            ? deployment.value.projectId
+            : Option.isSome(preview)
+              ? preview.value.projectId
+              : undefined;
+        if (projectId === undefined) {
+          yield* Cloudflare.Workers.cancelEvent(pollingEventId(requirement));
+          return;
+        }
+        const handler = pollingHandlers.get(requirement.handlerId);
+        if (handler === undefined)
+          return yield* Effect.die(
+            `Polling ingress handler ${requirement.handlerId} is unavailable`,
+          );
+        const storedCursor = yield* durableState.storage.get(pollingCursorKey(requirement));
+        const cursor =
+          storedCursor === undefined
+            ? yield* handler.initialCursor(requirement.configuration)
+            : storedCursor;
+        const productionAllowed =
+          Option.isSome(deployment) &&
+          deployment.value.pollingManifest.some(
+            (candidate) => pollingKey(candidate) === pollingKey(requirement),
+          );
+        const previewAllowed =
+          Option.isSome(preview) &&
+          preview.value.pollingManifest.some(
+            (candidate) => pollingKey(candidate) === pollingKey(requirement),
+          );
+        if (!productionAllowed && !previewAllowed) return;
+        const binding = workerEnvironment?.GraphExecutionWorkflow;
+        if (productionAllowed && !isWorkflowBinding(binding))
+          return yield* Effect.die("GraphExecutionWorkflow binding is unavailable");
+        const database = yield* pollingDatabase;
+        const pollResult = yield* handler
+          .poll(requirement.configuration, cursor)
+          .pipe(Effect.result);
+        if (Result.isFailure(pollResult)) {
+          const reason =
+            typeof pollResult.failure === "object" &&
+            pollResult.failure !== null &&
+            "_tag" in pollResult.failure &&
+            typeof pollResult.failure._tag === "string"
+              ? pollResult.failure._tag
+              : "Polling failed";
+          yield* database
+            .update(projectIngressEndpoints)
+            .set({ metadata: { _tag: "PollingIngress", status: "error", error: reason } })
+            .where(
+              and(
+                eq(projectIngressEndpoints.projectId, projectId),
+                eq(projectIngressEndpoints.endpointId, pollingEndpointId(requirement)),
+              ),
+            )
+            .pipe(Effect.orDie);
+          yield* Effect.logWarning("Polling ingress request failed", pollResult.failure);
+          return;
+        }
+        const result = pollResult.success;
+        yield* Effect.logInfo("Polling ingress completed", {
+          projectId,
+          handlerId: requirement.handlerId,
+          instanceKey: requirement.instanceKey,
+          eventCount: result.events.length,
+        });
+        yield* database
+          .update(projectIngressEndpoints)
+          .set({
+            metadata: {
+              _tag: "PollingIngress",
+              status: "ok",
+              lastPolledAt: new Date().toISOString(),
+            },
+          })
+          .where(
+            and(
+              eq(projectIngressEndpoints.projectId, projectId),
+              eq(projectIngressEndpoints.endpointId, pollingEndpointId(requirement)),
+            ),
+          )
+          .pipe(Effect.orDie);
+        for (const event of result.events) {
+          const stableId = event.eventId ?? crypto.randomUUID();
+          const ingressEventId = `${projectId}:polling:${event.moduleId}:${stableId}`;
+          const payloadJson = JSON.stringify(event.payload);
+          yield* database
+            .insert(projectIngressEvents)
+            .values({
+              id: ingressEventId,
+              projectId,
+              endpointId: pollingEndpointId(requirement),
+              moduleId: event.moduleId,
+              eventType: event.eventType,
+              eventId: event.eventId ?? null,
+              eventPayload: payloadJson,
+              previewOnly: !productionAllowed,
+              previewGeneration: Option.isSome(preview) ? (preview.value.generation ?? null) : null,
+              receivedAt: new Date().toISOString(),
+            })
+            .onConflictDoNothing()
+            .pipe(Effect.orDie);
+          if (productionAllowed && Option.isSome(deployment) && isWorkflowBinding(binding)) {
+            const executionId = crypto.randomUUID();
+            const projectEventId = crypto.randomUUID();
+            yield* Effect.tryPromise({
+              try: () =>
+                binding.create({
+                  id: executionId,
+                  params: {
+                    executionId,
+                    projectId,
+                    projectEventId,
+                    source: "ingress",
+                    ingressEventId,
+                    deploymentId: deployment.value.deploymentId,
+                    r2Key: deployment.value.r2Key,
+                    moduleId: event.moduleId,
+                    eventType: event.eventType,
+                    ...(event.eventId === undefined ? {} : { providerEventId: event.eventId }),
+                    event: payloadJson,
+                  },
+                }),
+              catch: (cause) => cause,
+            });
+          }
+        }
+        yield* durableState.storage.put(pollingCursorKey(requirement), result.cursor);
+      },
+      (effect) =>
+        effect.pipe(
+          Effect.catchCause((cause) => Effect.logWarning("Polling ingress failed", cause)),
+        ),
+    );
+
+    const alarm = Effect.gen(function* () {
+      const events = yield* Cloudflare.Workers.processScheduledEvents;
+      if (events.some((event) => event.id === utilitiesTickEventId)) yield* handleUtilitiesTick;
+      const manifest = yield* loadPollingManifest;
+      for (const event of events) {
+        const requirement = manifest.find((candidate) => event.id === pollingEventId(candidate));
+        if (requirement !== undefined) yield* handlePollingIngress(requirement);
+      }
     }).pipe(Effect.withSpan("ProjectIngressDO.alarm"), Effect.orDie);
 
     const getEndpoint = Effect.fn("ProjectIngressDO.getEndpoint")(
@@ -574,6 +839,19 @@ export const projectIngressImplementation = Effect.gen(function* () {
         endpointHost.secret(endpointId).pipe(Effect.map(Redacted.value)),
     );
 
+    const pollingEndpoint = (requirement: PollingIngress.Requirement): HttpEndpoint.Routed => ({
+      id: pollingEndpointId(requirement),
+      url: "",
+      schema: {
+        id: HttpEndpoint.HandlerId.make(requirement.handlerId),
+        displayName:
+          pollingHandlers.get(requirement.handlerId)?.displayName ?? requirement.handlerId,
+      },
+      instanceKey: HttpEndpoint.InstanceKey.make(requirement.instanceKey),
+      displayName: requirement.displayName,
+      metadata: { _tag: "PollingIngress" },
+    });
+
     const ingressState = Effect.fn("ProjectIngressDO.ingressState")(function* () {
       const deployment = yield* loadAppliedDeployment();
       const previewDeployment = yield* loadPreview();
@@ -582,24 +860,30 @@ export const projectIngressImplementation = Effect.gen(function* () {
           onNone: () => undefined,
           onSome: (active) => ({
             deploymentId: active.deploymentId,
-            endpoints: active.endpoints.filter(
-              (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
-            ),
+            endpoints: [
+              ...active.endpoints.filter(
+                (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
+              ),
+              ...active.pollingManifest.map(pollingEndpoint),
+            ],
           }),
         }),
         preview: Option.match(previewDeployment, {
           onNone: () => undefined,
           onSome: (active) => ({
-            endpoints: active.endpoints.filter(
-              (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
-            ),
+            endpoints: [
+              ...active.endpoints.filter(
+                (endpoint) => entryFor(active.manifest, endpoint) !== undefined,
+              ),
+              ...active.pollingManifest.map(pollingEndpoint),
+            ],
           }),
         }),
       };
     });
 
     return {
-      alarm,
+      alarm: () => alarm,
       httpIngress: handleIngress,
       deploy,
       preview,
@@ -630,4 +914,4 @@ export default class ProjectIngressDO extends Cloudflare.DurableObject<
   ProjectIngressShape
 >()("ProjectIngressDO", { transferredFrom: "CloudWorker" }) {}
 
-export const ProjectIngressDOLayer = ProjectIngressDO.make<never>(projectIngressImplementation);
+export const ProjectIngressDOLayer = ProjectIngressDO.make(projectIngressImplementation);

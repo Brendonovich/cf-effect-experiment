@@ -12,12 +12,12 @@ import {
   TypeDefinition,
   Wildcards,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
+import { Conversion, t } from "@macrograph/module";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
 import * as Registration from "@macrograph/module/Registration";
 import { Retry } from "@macrograph/module/Retry";
-import { Cause, Effect, Ref, Result, Schema } from "effect";
+import { Cause, Effect, Logger, Ref, Result, Schema } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
@@ -61,6 +61,11 @@ export class InvalidInputValue extends Schema.TaggedError<InvalidInputValue>()(
   { nodeId: Schema.String, inputId: Schema.String, reason: Schema.String },
 ) {}
 
+export class ConversionFailed extends Schema.TaggedError<ConversionFailed>()("ConversionFailed", {
+  connectionId: Schema.String,
+  reason: Schema.String,
+}) {}
+
 export class InvalidOutputValue extends Schema.TaggedError<InvalidOutputValue>()(
   "InvalidOutputValue",
   { nodeId: Schema.String, outputId: Schema.String, reason: Schema.String },
@@ -83,7 +88,24 @@ export class EngineClientUnavailable extends Schema.TaggedError<EngineClientUnav
 export class NodeExecutionError extends Schema.TaggedError<NodeExecutionError>()(
   "NodeExecutionError",
   { nodeId: Schema.String, cause: Schema.Unknown },
-) {}
+) {
+  override get message() {
+    const error = Cause.isCause(this.cause) ? Cause.squash(this.cause) : this.cause;
+    const reason =
+      typeof error === "object" &&
+      error !== null &&
+      "message" in error &&
+      typeof error.message === "string" &&
+      error.message !== ""
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : undefined;
+    return reason === undefined
+      ? `Node ${this.nodeId} failed`
+      : `Node ${this.nodeId} failed: ${reason}`;
+  }
+}
 
 export class NodeExecutionNotPending extends Schema.TaggedError<NodeExecutionNotPending>()(
   "NodeExecutionNotPending",
@@ -130,6 +152,7 @@ export type ExecutorError =
   | MissingOutput
   | ScopeNotActive
   | InvalidInputValue
+  | ConversionFailed
   | InvalidOutputValue
   | ExecutionCycle
   | ResourceResolutionError
@@ -143,6 +166,7 @@ interface RegisteredModule {
   readonly schemas: ReadonlyMap<string, Registration.RegisteredSchema>;
   readonly engineClient: unknown;
   readonly types: t.Definitions;
+  readonly conversions: ReadonlyArray<Conversion.Conversion>;
 }
 
 interface ExecutionState {
@@ -303,6 +327,8 @@ export interface MakeOptions {
     invocation: QueueInvocation,
   ) => Effect.Effect<Readonly<Record<string, unknown>>, ExecutorError>;
   readonly projectId?: string;
+  /** Host-assigned execution ID (e.g. a workflow run), recorded as `macrograph.execution.id` on every span. */
+  readonly executionId?: string;
   readonly executionEnvironment?: ExecutionEnvironment;
   readonly engineClient?: (moduleId: string) => Effect.Effect<unknown>;
   readonly resourceValues?: (
@@ -329,11 +355,14 @@ export const make = Effect.fnUntraced(function* (
           schemas: new Map(customTypeSchemas.map((schema) => [schema.id, schema])),
           engineClient: undefined,
           types: {},
+          conversions: [],
         },
       ],
     ]),
   );
   const projectId = options?.projectId ?? "local";
+  const executionIdAttributes =
+    options?.executionId === undefined ? {} : { "macrograph.execution.id": options.executionId };
   const pendingNodes = new Map<
     string,
     {
@@ -363,7 +392,20 @@ export const make = Effect.fnUntraced(function* (
         deployment.definition !== definition.engine)
     )
       return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-    const registered = yield* Registration.collect(definition.effect);
+    const { schemas: registered, conversions } = yield* Registration.collectModule(
+      definition.effect,
+    );
+    const types = definition.types ?? {};
+    const invalid =
+      Conversion.validateModule(definition.id, types, conversions) ??
+      Conversion.duplicate([
+        { owner: "core", pairs: Conversion.defaults },
+        ...[...(yield* Ref.get(modules))]
+          .filter(([id]) => id !== definition.id)
+          .map(([owner, module]) => ({ owner, pairs: module.conversions })),
+        { owner: definition.id, pairs: conversions },
+      ]);
+    if (invalid !== undefined) return yield* Effect.die(invalid);
     const engineClient =
       definition.engine === undefined
         ? undefined
@@ -381,7 +423,8 @@ export const make = Effect.fnUntraced(function* (
       next.set(definition.id, {
         schemas: new Map(registered.map((schema) => [schema.id, schema])),
         engineClient,
-        types: definition.types ?? {},
+        types,
+        conversions,
       });
       return next;
     });
@@ -485,7 +528,8 @@ export const make = Effect.fnUntraced(function* (
         "macrograph.project.id": request.key.projectId,
         "macrograph.graph.id": request.key.graphId,
         "macrograph.event_node.id": request.key.eventNodeId,
-        "macrograph.execution.id": request.key.executionTraceId,
+        ...executionIdAttributes,
+        "macrograph.execution.trace.id": request.key.executionTraceId,
         "macrograph.trace.id": request.key.traceId,
         "macrograph.node.id": request.key.nodeId,
         "macrograph.node.kind": request.key.kind,
@@ -530,6 +574,9 @@ export const make = Effect.fnUntraced(function* (
           },
         }),
       ).pipe(
+        // Record node logs (e.g. Print) as span events even when a runtime replaces
+        // Effect's default loggers.
+        Effect.withLogger(Logger.tracerLogger),
         Effect.withSpan(`Schema.run ${request.moduleId}.${request.schemaId}`, {
           attributes: nodeAttributes,
         }),
@@ -607,6 +654,10 @@ export const make = Effect.fnUntraced(function* (
       invocation?.options?.stack ?? (invocation === undefined ? [] : [invocation.canvasId]);
     const invocationResult: Record<string, unknown> = {};
     const registeredModules = new Map(yield* Ref.get(modules));
+    const conversions = Conversion.registry([
+      ...Conversion.defaults,
+      ...[...registeredModules.values()].flatMap((registered) => registered.conversions),
+    ]);
     const definitions: t.Definitions = {
       ...currentProject.types,
       ...Object.fromEntries(
@@ -798,7 +849,7 @@ export const make = Effect.fnUntraced(function* (
       const io = yield* generateUnresolvedNodeIO(graph, node, schema, properties);
       let cache = wildcardGraphs.get(graph.id);
       if (cache?.group(node.id) === undefined) {
-        cache ??= new Wildcards.Cache();
+        cache ??= new Wildcards.Cache(conversions);
         const currentCache = cache;
         const declarations = new Map<string, Registration.RegisteredNodeIO>();
         for (const candidate of Object.values(graph.nodes)) {
@@ -1070,7 +1121,8 @@ export const make = Effect.fnUntraced(function* (
           if (
             targetData.length + targetExec.length !== 1 ||
             (output.kind === "data"
-              ? targetData.length !== 1 || !t.equals(output.port.type, targetData[0]!.type)
+              ? targetData.length !== 1 ||
+                !Conversion.connectable(output.port.type, targetData[0]!.type, conversions)
               : targetExec.length !== 1 ||
                 !Registration.scopesCompatible(output.port.scope, targetExec[0]?.scope) ||
                 (target.schema.type !== "exec" && target.schema.type !== "base"))
@@ -1143,7 +1195,8 @@ export const make = Effect.fnUntraced(function* (
         "macrograph.project.id": projectId,
         "macrograph.graph.id": graph.id,
         "macrograph.event_node.id": rootEventNodeId,
-        "macrograph.execution.id": executionTraceId,
+        ...executionIdAttributes,
+        "macrograph.execution.trace.id": executionTraceId,
       };
       yield* Effect.annotateCurrentSpan({
         ...executionAttributes,
@@ -1319,6 +1372,7 @@ export const make = Effect.fnUntraced(function* (
                 },
               }),
             ).pipe(
+              Effect.withLogger(Logger.tracerLogger),
               Effect.withSpan(`Schema.run ${node.schema.package}.${node.schema.schema}`, {
                 attributes: nodeAttributes,
               }),
@@ -1743,7 +1797,8 @@ export const make = Effect.fnUntraced(function* (
             reason: `Output ${OutputRef.key(connection.outIo)} is not a data output`,
           });
         const output = resolved.port;
-        if (!t.equals(output.type, input.type))
+        const conversion = conversions.find(output.type, input.type);
+        if (conversion === undefined)
           return yield* new InvalidConnection({
             connectionId: connection.id,
             reason: `Output ${OutputRef.key(connection.outIo)} is incompatible with input ${input.id}`,
@@ -1766,8 +1821,18 @@ export const make = Effect.fnUntraced(function* (
             });
           value = state.outputs.get(key);
         }
+        // Conversion failures are run failures: consumers cannot supply a fallback value.
+        const converted = yield* conversion.convert(value).pipe(
+          Effect.catchCause(
+            () =>
+              new ConversionFailed({
+                connectionId: connection.id,
+                reason: `Conversion from ${output.type._tag} to ${input.type._tag} failed`,
+              }),
+          ),
+        );
         return yield* Schema.decodeUnknownEffect(t.ValueSchema(input.type, definitions))(
-          value,
+          converted,
         ).pipe(
           Effect.catchCause(
             () =>
@@ -1942,6 +2007,7 @@ export const make = Effect.fnUntraced(function* (
                 Effect.withSpan("Executor.matchEvent", {
                   attributes: {
                     "macrograph.project.id": projectId,
+                    ...executionIdAttributes,
                     "macrograph.graph.id": canvas.id,
                     "macrograph.node.id": node.id,
                     "macrograph.module.id": node.schema.package,
@@ -1972,6 +2038,7 @@ export const make = Effect.fnUntraced(function* (
           kind: "consumer",
           attributes: {
             "macrograph.project.id": projectId,
+            ...executionIdAttributes,
             "macrograph.module.id": module.id,
             "macrograph.event.type": emittedEvent._tag,
           },

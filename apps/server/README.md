@@ -54,6 +54,18 @@ Cloud authorization expiry or disconnection does not reopen setup or remove the 
 Existing registered installations retain their owner automatically when upgrading. Keep the owner
 file along with the authorization files when backing up or moving the server.
 
+### REST API and MCP
+
+The server exposes the same project editing REST API as MacroGraph Cloud under `/api` (the
+OpenAPI document is at `/api/openapi.json`) and an MCP server at `/api/mcp`. The server's single
+project has the ID `local`. Both authenticate with `Authorization: Bearer <api key>`.
+
+The owner and admins create and revoke API keys under **Settings → API keys**, which also shows
+the endpoints and an MCP client configuration snippet. A key is shown once, acts as the person who
+created it, and can only edit while that person is the owner or an admin. Edits appear live in
+connected editors. Keys are stored as SHA-256 hashes in `MACROGRAPH_DATA_DIR/macrograph-api-keys.json`,
+with the same file protections as the authorization files.
+
 ### Environment
 
 - `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.
@@ -73,6 +85,10 @@ file along with the authorization files when backing up or moving the server.
   may be percent-encoded, e.g. `Authorization=Bearer%20token`.
 - `OTEL_EXPORTER_OTLP_TRACES_HEADERS`: trace-specific headers, replacing the general headers.
 - `OTEL_SERVICE_NAME`: server trace service name, default `macrograph-server`.
+- `AXIOM_TOKEN`: optional Axiom API token with ingest permission. When set, traces are also sent
+  to Axiom, alongside any OTLP collector.
+- `AXIOM_DATASET`: Axiom traces dataset, default `macrograph-traces`.
+- `AXIOM_OTLP_ENDPOINT`: Axiom base URL for edge deployments, default `https://api.axiom.co`.
 - `VITE_OTEL_EXPORTER_OTLP_ENDPOINT`: optional browser OTLP/HTTP trace endpoint, set at build time.
 - `MACROGRAPH_BROWSER_OTLP_ENDPOINT`: browser collector URL used by the runtime CSP; the image sets
   this from the browser build argument.
@@ -106,6 +122,11 @@ hits that skip the callback do not produce a schema-run span. Input spans
 identify connections or default sources without recording input/output values. These boundaries
 apply to every runtime using the shared executor, not just Cloudflare workflows.
 
+Effect logs emitted inside a span, such as Print node output, are recorded as span events on that
+span (for example `Schema.run util.Print`). No separate OTLP log export is used. Each trace payload
+is serialized once and sent to every destination, so trace and span IDs match across the collector
+and Axiom. Each destination receives only its own headers.
+
 For example, set these in `apps/server/.env` for development or production startup:
 
 ```dotenv
@@ -113,6 +134,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=macrograph-server
 # Optional for authenticated collectors:
 # OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20your-token
+# Also send traces to Axiom:
+# AXIOM_TOKEN=xaat-...
 ```
 
 For Docker, pass these as container environment variables and use a collector address reachable

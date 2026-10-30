@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Engine, EngineTest, HttpEndpoint } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, HashMap, Layer, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
 
 import { AccountId, TwitchEngine } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
@@ -186,7 +186,9 @@ describe("WebhookEventSub", () => {
                   max_total_cost: 10_000,
                 });
           assert.strictEqual(request.method, "DELETE");
-          const id = Object.fromEntries(request.urlParams).id!;
+          const id = Object.fromEntries(
+            new URLSearchParams(UrlParams.toString(request.urlParams)),
+          ).id!;
           if (failDelete && id === "channel.unban") return json({ message: "Delete failed" }, 503);
           subscriptions = subscriptions.filter((subscription) => subscription.id !== id);
           deleted.push(id);
@@ -384,7 +386,12 @@ describe("WebhookEventSub", () => {
                     token_type: "bearer",
                   }
                 : request.method === "GET"
-                  ? Object.hasOwn(Object.fromEntries(request.urlParams), "after")
+                  ? Object.hasOwn(
+                      Object.fromEntries(
+                        new URLSearchParams(UrlParams.toString(request.urlParams)),
+                      ),
+                      "after",
+                    )
                     ? {
                         data: [],
                         total: 1,

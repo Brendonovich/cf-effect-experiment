@@ -84,7 +84,7 @@ const Settings: Component<SettingsProps> = (props) => {
           void run(
             props.rpc.DiscordConfigure({
               token: token(),
-              gatewayEnabled: true,
+              gatewayEnabled: props.state().gatewayAvailable,
               messageContent: props.state().messageContent,
             }),
             true,
@@ -109,37 +109,41 @@ const Settings: Component<SettingsProps> = (props) => {
         </label>
         <p sx={styles.hint}>
           The token is stored privately on the engine and is never returned to this settings page.
-          Saving starts the gateway.
+          {props.state().gatewayAvailable
+            ? " Saving starts the gateway."
+            : " Real-time events are unavailable here, so the gateway is never started."}
         </p>
         <Button type="submit" disabled={busy() || !token()}>
-          Save Token And Connect
+          {props.state().gatewayAvailable ? "Save Token And Connect" : "Save Token"}
         </Button>
       </form>
-      <label sx={styles.check}>
-        <input
-          type="checkbox"
-          checked={props.state().messageContent}
-          disabled={busy()}
-          onChange={(event) => {
-            void run(
-              props.rpc.DiscordSetGateway({
-                enabled: props.state().gatewayEnabled,
-                messageContent: event.currentTarget.checked,
-              }),
-            );
-          }}
-        />{" "}
-        Request Message Content Intent
-      </label>
-      <p sx={styles.hint}>
-        Guild and direct-message intents are requested. Enable the privileged MESSAGE_CONTENT intent
-        in the Discord developer portal as well to receive guild message text. Without it, Discord
-        limits content to exceptions such as DMs and mentions. Changing this option restarts the
-        gateway.
-      </p>
+      <Show when={props.state().gatewayAvailable}>
+        <label sx={styles.check}>
+          <input
+            type="checkbox"
+            checked={props.state().messageContent}
+            disabled={busy()}
+            onChange={(event) => {
+              void run(
+                props.rpc.DiscordSetGateway({
+                  enabled: props.state().gatewayEnabled,
+                  messageContent: event.currentTarget.checked,
+                }),
+              );
+            }}
+          />{" "}
+          Request Message Content Intent
+        </label>
+        <p sx={styles.hint}>
+          Guild and direct-message intents are requested. Enable the privileged MESSAGE_CONTENT
+          intent in the Discord developer portal as well to receive guild message text. Without it,
+          Discord limits content to exceptions such as DMs and mentions. Changing this option
+          restarts the gateway.
+        </p>
+      </Show>
       <p sx={styles.hint} role="status">
-        {props.state().configured ? "Token configured" : "No token configured"} | Gateway:{" "}
-        {props.state().status}
+        {props.state().configured ? "Token configured" : "No token configured"}
+        {props.state().gatewayAvailable ? ` | Gateway: ${props.state().status}` : ""}
       </p>
       <Show when={props.state().error}>
         <p sx={styles.error}>
@@ -148,22 +152,24 @@ const Settings: Component<SettingsProps> = (props) => {
         </p>
       </Show>
       <div sx={styles.actions}>
-        <Button
-          disabled={busy() || !props.state().configured}
-          onClick={() =>
-            void run(
-              props.rpc.DiscordSetGateway({
-                enabled:
-                  props.state().status !== "connected" && props.state().status !== "connecting",
-                messageContent: props.state().messageContent,
-              }),
-            )
-          }
-        >
-          {props.state().status === "connected" || props.state().status === "connecting"
-            ? "Disconnect"
-            : "Connect"}
-        </Button>
+        <Show when={props.state().gatewayAvailable}>
+          <Button
+            disabled={busy() || !props.state().configured}
+            onClick={() =>
+              void run(
+                props.rpc.DiscordSetGateway({
+                  enabled:
+                    props.state().status !== "connected" && props.state().status !== "connecting",
+                  messageContent: props.state().messageContent,
+                }),
+              )
+            }
+          >
+            {props.state().status === "connected" || props.state().status === "connecting"
+              ? "Disconnect"
+              : "Connect"}
+          </Button>
+        </Show>
         <Button
           disabled={busy() || !props.state().configured}
           onClick={() => void run(props.rpc.DiscordClear(), true)}

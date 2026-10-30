@@ -4,6 +4,7 @@ import type * as Engine from "./Engine.ts";
 import type { ExecutionContext, NodeExecutionContext } from "./ExecutionContext.ts";
 import type * as Resource from "./Resource.ts";
 
+import * as Conversion from "./Conversion.ts";
 import * as t from "./DataType.ts";
 
 export type SuggestionContext<
@@ -273,6 +274,10 @@ export type ModuleContext<Definition extends Engine.AnyDef> = {
       schema: SchemaRegistration<IO, Definition, Properties>,
     ) => Effect.Effect<void>;
   };
+  readonly conversion: {
+    /** At least one endpoint must be a type this module declares; checked when it mounts. */
+    readonly register: (conversion: Conversion.Conversion) => Effect.Effect<void>;
+  };
 };
 
 export interface RegisteredScalarProperty {
@@ -509,11 +514,17 @@ const makeRegistered = <
   };
 };
 
-export const collect = <Definition extends Engine.AnyDef>(
+export interface Collected {
+  readonly schemas: ReadonlyArray<RegisteredSchema>;
+  readonly conversions: ReadonlyArray<Conversion.Conversion>;
+}
+
+export const collectModule = <Definition extends Engine.AnyDef>(
   effect: (context: ModuleContext<Definition>) => Effect.Effect<void>,
-): Effect.Effect<ReadonlyArray<RegisteredSchema>> =>
+): Effect.Effect<Collected> =>
   Effect.gen(function* () {
     const schemas = yield* Ref.make<ReadonlyArray<RegisteredSchema>>([]);
+    const conversions = yield* Ref.make<ReadonlyArray<Conversion.Conversion>>([]);
     const context: ModuleContext<Definition> = {
       schema: {
         register: (schema) =>
@@ -522,7 +533,16 @@ export const collect = <Definition extends Engine.AnyDef>(
             makeRegistered(schema),
           ]),
       },
+      conversion: {
+        register: (conversion) =>
+          Ref.update(conversions, (registered) => [...registered, conversion]),
+      },
     };
     yield* effect(context);
-    return yield* Ref.get(schemas);
+    return { schemas: yield* Ref.get(schemas), conversions: yield* Ref.get(conversions) };
   });
+
+export const collect = <Definition extends Engine.AnyDef>(
+  effect: (context: ModuleContext<Definition>) => Effect.Effect<void>,
+): Effect.Effect<ReadonlyArray<RegisteredSchema>> =>
+  Effect.map(collectModule(effect), (collected) => collected.schemas);

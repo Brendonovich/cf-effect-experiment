@@ -1,9 +1,9 @@
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import { EngineTest } from "@macrograph/module";
 import { Clock, Deferred, Effect, Exit, Layer, Option, Queue, Redacted, Tracer } from "effect";
+import { HttpClient, HttpClientError, HttpClientResponse, UrlParams } from "effect/http";
+import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
-import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
-import { Socket } from "effect/unstable/socket";
 
 import { AccountId, TwitchEngine, TwitchEventSub } from "../src/Definition.ts";
 import deployment from "../src/Deployment/WebSocket.ts";
@@ -86,7 +86,7 @@ describe("TwitchEngine", () => {
               method: request.method,
               url: request.url,
               headers: { ...request.headers },
-              query: Object.fromEntries(request.urlParams),
+              query: Object.fromEntries(new URLSearchParams(UrlParams.toString(request.urlParams))),
               body: body === undefined ? undefined : JSON.parse(body),
             });
 

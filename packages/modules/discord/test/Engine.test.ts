@@ -13,7 +13,7 @@ function harness(
     gatewayEnabled: false,
     messageContent: false,
   },
-  gateway?: ReturnType<typeof makeGateway>,
+  gateway?: ReturnType<typeof makeGateway> | "unavailable",
 ) {
   let storage = initial;
   let storageDefect: unknown;
@@ -22,6 +22,7 @@ function harness(
   const emitted: MessageReceived[] = [];
   const closed = vi.fn();
   let response = () => Response.json({ id: "42" });
+  let clientRefreshes = 0;
   const context = Layer.succeed(
     DiscordEngine.EngineContext,
     DiscordEngine.EngineContext.of({
@@ -43,33 +44,41 @@ function harness(
         refresh: () => Effect.die("Unused credentials"),
         subscribe: () => Effect.void,
       },
-      client: { refresh: Effect.void },
+      client: {
+        refresh: Effect.sync(() => {
+          clientRefreshes++;
+        }),
+      },
       emit: (event) =>
         Effect.sync(() => {
           emitted.push(event);
         }),
     }),
   );
-  const services = Layer.mergeAll(
-    Layer.succeed(Http, {
-      request: (url, init) =>
-        Effect.sync(() => {
-          requests.push({ url, init });
-          return response();
-        }),
-    }),
-    Layer.succeed(
-      Gateway,
-      gateway ?? {
-        start: (options) => {
-          sessions.push(options);
-          options.onStatus("connecting");
-          return closed;
-        },
-      },
-    ),
-    context,
-  );
+  const http = Layer.succeed(Http, {
+    request: (url, init) =>
+      Effect.sync(() => {
+        requests.push({ url, init });
+        return response();
+      }),
+  });
+  const services =
+    gateway === "unavailable"
+      ? Layer.mergeAll(http, context)
+      : Layer.mergeAll(
+          http,
+          Layer.succeed(
+            Gateway,
+            gateway ?? {
+              start: (options) => {
+                sessions.push(options);
+                options.onStatus("connecting");
+                return closed;
+              },
+            },
+          ),
+          context,
+        );
   return {
     make: Layer.build(layer.pipe(Layer.provide(services))).pipe(
       Effect.flatMap((context) =>
@@ -77,6 +86,7 @@ function harness(
       ),
     ),
     storage: () => storage,
+    clientRefreshes: () => clientRefreshes,
     requests,
     sessions,
     emitted,
@@ -216,6 +226,7 @@ describe("Discord engine", () => {
           assert.strictEqual(h.storage().token, "private-token");
           assert.deepStrictEqual(yield* engine.client.state, {
             configured: true,
+            gatewayAvailable: true,
             gatewayEnabled: true,
             messageContent: true,
             status: "connecting",
@@ -254,6 +265,52 @@ describe("Discord engine", () => {
       assert.strictEqual(h.sessions.length, 1);
       assert.strictEqual(h.sessions[0]!.token, "stored-token");
       assert.isFalse("token" in (yield* engine.client.state));
+    }),
+  );
+
+  it.effect("runs REST actions without a gateway and never starts one", () =>
+    Effect.gen(function* () {
+      const h = harness(
+        { token: "stored-token", gatewayEnabled: true, messageContent: false },
+        "unavailable",
+      );
+      const { engine, client, runtime } = yield* h.make;
+      assert.strictEqual(h.clientRefreshes(), 0);
+      assert.deepStrictEqual(yield* engine.client.state, {
+        configured: true,
+        gatewayAvailable: false,
+        gatewayEnabled: false,
+        messageContent: false,
+        status: "disconnected",
+      });
+      const enable = yield* client
+        .DiscordSetGateway({ enabled: true, messageContent: false })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(enable));
+      if (Result.isFailure(enable))
+        assert.strictEqual(enable.failure.reason, "gateway-unavailable");
+      yield* client.DiscordConfigure({
+        token: "replacement-token",
+        gatewayEnabled: true,
+        messageContent: false,
+      });
+      assert.deepStrictEqual(h.storage(), {
+        token: "replacement-token",
+        gatewayEnabled: false,
+        messageContent: false,
+      });
+      assert.strictEqual((yield* engine.client.state).status, "disconnected");
+      const sent = yield* runtime.DiscordSendMessage({
+        channelId: "1",
+        message: "hello",
+        everyone: false,
+      });
+      assert.strictEqual(sent.messageId, "42");
+      assert.strictEqual(
+        new Headers(h.requests[0]!.init.headers).get("Authorization"),
+        "Bot replacement-token",
+      );
+      assert.strictEqual(h.sessions.length, 0);
     }),
   );
 
@@ -304,7 +361,7 @@ describe("Discord engine", () => {
           new Headers(request.init.headers).get("Authorization"),
           "Bot private-token",
         );
-        assert.strictEqual(request.init.redirect, "error");
+        assert.strictEqual(request.init.redirect, "manual");
       }
     }),
   );
@@ -339,7 +396,7 @@ describe("Discord engine", () => {
       assert.strictEqual(status, 204);
       assert.strictEqual(h.requests[2]!.url, `${API_ORIGIN}/webhooks/1/private-webhook`);
       assert.isNull(new Headers(h.requests[2]!.init.headers).get("Authorization"));
-      assert.strictEqual(h.requests[2]!.init.redirect, "error");
+      assert.strictEqual(h.requests[2]!.init.redirect, "manual");
     }),
   );
 
@@ -467,6 +524,21 @@ describe("Discord engine", () => {
           assert.isFalse(JSON.stringify(result.failure).includes("secret-error-body"));
         }
       }
+    }),
+  );
+
+  it.effect("fails on redirects instead of following them with the bot token", () =>
+    Effect.gen(function* () {
+      const h = harness({ token: "private-token", gatewayEnabled: false, messageContent: false });
+      const { runtime } = yield* h.make;
+      h.respond(
+        () => new Response(null, { status: 302, headers: { location: "https://example.com" } }),
+      );
+      const result = yield* runtime
+        .DiscordSendMessage({ channelId: "1", message: "hello", everyone: false })
+        .pipe(Effect.result);
+      assert.isTrue(Result.isFailure(result));
+      assert.strictEqual(h.requests.length, 1);
     }),
   );
 

@@ -8,6 +8,7 @@
     "./Definition": "./src/Definition.ts",
     "./Engine": "./src/Engine.ts",
     "./Deployment": "./src/Deployment.ts",
+    "./RestDeployment": "./src/RestDeployment.ts",
     "./Settings": "./src/Settings.tsx"
   },
   "scripts": {

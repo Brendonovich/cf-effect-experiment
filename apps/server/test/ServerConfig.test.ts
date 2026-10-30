@@ -74,6 +74,25 @@ describe("server configuration", () => {
     ).toEqual({ authorization: "traces" });
   });
 
+  it("adds an Axiom trace destination after the collector", () => {
+    expect(makeServerConfig({}).otlpDestinations).toEqual([]);
+    const config = makeServerConfig({
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318",
+      AXIOM_TOKEN: "xaat-secret",
+      AXIOM_DATASET: "dev-traces",
+    });
+    expect(config.otlpDestinations).toEqual([
+      { url: "http://localhost:4318/v1/traces", headers: {} },
+      {
+        url: "https://api.axiom.co/v1/traces",
+        headers: { authorization: "Bearer xaat-secret", "x-axiom-dataset": "dev-traces" },
+      },
+    ]);
+    expect(() => makeServerConfig({ AXIOM_TOKEN: "x", AXIOM_DATASET: "bad name" })).toThrow(
+      "AXIOM_DATASET",
+    );
+  });
+
   it("rejects malformed collector headers without exposing their values", () => {
     for (const headers of [
       "secret",

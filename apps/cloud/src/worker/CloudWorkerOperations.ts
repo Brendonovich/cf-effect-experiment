@@ -1,9 +1,10 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Project } from "@macrograph/core";
 import { HttpEndpoint } from "@macrograph/module";
 import UtilitiesModule from "@macrograph/module-utilities";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { Cause, Effect, Schema } from "effect";
+import { HttpClient } from "effect/http";
 
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 
@@ -19,6 +20,8 @@ import GraphExecutionWorkflow, {
   type GraphExecutionWorkflowInput,
 } from "../execution/GraphExecutionWorkflow.ts";
 import ProjectIngressDO from "../ingress/ProjectIngressDO.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
+import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 
 interface DesiredDeployment {
   readonly deploymentId: string;
@@ -50,12 +53,17 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
   Effect.gen(function* () {
     const executionWorkflow = yield* GraphExecutionWorkflow;
     const projectIngressDos = yield* ProjectIngressDO;
+    const openCodeDos = yield* OpenCodeDO;
     const database = yield* Database.Service;
     const deployments = yield* Cloudflare.R2.ReadBucket(deploymentsResource);
 
     // Durable object state is provided inside the remote object, not by its RPC caller.
     const callIngress = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      effect as Effect.Effect<A, E, Exclude<R, Cloudflare.DurableObjectState>>;
+      effect as Effect.Effect<
+        A,
+        E,
+        Exclude<R, Cloudflare.DurableObjectState | HttpClient.HttpClient>
+      >;
 
     const endpointFromRow = (
       row: typeof projectIngressEndpoints.$inferSelect,
@@ -72,7 +80,10 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
     });
 
     const updateActualEndpoints = Effect.fnUntraced(function* (projectId: string) {
-      const state = yield* projectIngressDos.getByName(projectId).ingressState().pipe(Effect.orDie);
+      const state = yield* projectIngressDos
+        .getByName(projectId)
+        .ingressState()
+        .pipe(callIngress, Effect.orDie);
       const deployed = state.deployment?.endpoints ?? [];
       const preview = state.preview?.endpoints ?? [];
       const endpoints = [
@@ -188,6 +199,16 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             })
             .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(request.projectId);
+          // Managed OpenCode config edits are queued in the editor and only reach production here.
+          yield* OpenCodeInstances.applyDeployment(
+            request.projectId,
+            deployment.project.engines,
+            openCodeDos,
+          ).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning(`Failed to apply OpenCode connection config: ${error.reason}`),
+            ),
+          );
           return result;
         }),
       );
@@ -228,7 +249,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
           const result = yield* projectIngressDos
             .getByName(request.projectId)
             .preview(request)
-            .pipe(Effect.orDie);
+            .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(request.projectId);
           return result.endpoints;
         }),
@@ -292,7 +313,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
             sampled: ingressSpan.sampled,
           },
         })
-        .pipe(Effect.orDie);
+        .pipe(callIngress, Effect.orDie);
       yield* Effect.logInfo("HttpIngress dispatch completed", {
         projectId: request.projectId,
         endpointId: request.endpointId,
@@ -429,7 +450,7 @@ export const make = (deploymentsResource: Cloudflare.R2.Bucket) =>
           yield* projectIngressDos
             .getByName(projectId)
             .stopPreview({ previewId })
-            .pipe(Effect.orDie);
+            .pipe(callIngress, Effect.orDie);
           yield* updateActualEndpoints(projectId);
         }),
       );

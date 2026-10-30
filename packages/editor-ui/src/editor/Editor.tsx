@@ -3,14 +3,15 @@ import type { RuntimeActivity } from "@macrograph/execution";
 import type { ClientSettings } from "@macrograph/module";
 import type { JSX } from "@solidjs/web";
 import type { Effect, Stream } from "effect";
-import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
+import type { RpcClient, RpcClientError } from "effect/rpc";
 
 import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
 import * as stylex from "@stylexjs/stylex";
-import { createMemo, createSignal, Errored, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Errored, For, Show } from "solid-js";
 
 import type { EditorController } from "./createEditorController";
 
+import { FollowIndicator } from "../presence/FollowIndicator";
 import { colors } from "../tokens.stylex.ts";
 import { Button } from "../ui/Button";
 import { LoadingState } from "../ui/LoadingState";
@@ -30,13 +31,27 @@ import {
   wireColor,
 } from "./graph/graphPresentation";
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
+import { Wire } from "./graph/Wire";
 import { Inspector } from "./inspector/Inspector";
 import { ModuleSettingsView } from "./modules/ModuleSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
 import { selectedTab as selectedWorkspaceTab, type WorkspaceTab } from "./workspace/workspace";
 
+const activityFade = stylex.keyframes({
+  "0%": { opacity: 0.9 },
+  "40%": { opacity: 0.8 },
+  "100%": { opacity: 0 },
+});
+
 const styles = stylex.create({
+  wireActivity: {
+    opacity: 0,
+    animationName: activityFade,
+    animationDuration: "1.8s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
+  },
   errorPage: {
     display: "flex",
     width: "100%",
@@ -275,11 +290,6 @@ const styles = stylex.create({
   },
   scaledLayer: { transformOrigin: "top left" },
   wires: { pointerEvents: "none", overflow: "visible" },
-  smoothWire: {
-    transitionDuration: { default: "40ms", "@media (prefers-reduced-motion: reduce)": "0ms" },
-    transitionProperty: "d",
-    transitionTimingFunction: "linear",
-  },
   remoteCursor: {
     pointerEvents: "none",
     position: "absolute",
@@ -717,16 +727,39 @@ function EditorContent(
                     const value = graph();
                     return value === undefined
                       ? []
-                      : graphConnections(value, ioForNode, (nodeId) => nodeWidths().get(nodeId));
+                      : graphConnections(
+                          value,
+                          ioForNode,
+                          (nodeId) => nodeWidths().get(nodeId),
+                          controller.editor.conversions(),
+                        );
                   });
                   const remotePresence = () =>
                     controller.connection
                       .presenceClients()
                       .filter(
                         (entry) =>
-                          entry.connectionId !== controller.connection.selfConnectionId() &&
+                          entry.id !== controller.connection.selfId() &&
                           entry.activeGraph === tab().graphId,
                       );
+                  const remoteCursors = () =>
+                    remotePresence().filter((entry) => entry.kind === "browser");
+                  let canvasElement: HTMLDivElement | undefined;
+                  const reportCanvasSize = () => {
+                    if (canvasElement === undefined) return;
+                    controller.presence.setCanvasSize({
+                      width: canvasElement.clientWidth,
+                      height: canvasElement.clientHeight,
+                    });
+                  };
+                  createEffect(active, (isActive) => {
+                    if (!isActive || canvasElement === undefined) return;
+                    reportCanvasSize();
+                    if (typeof ResizeObserver === "undefined") return;
+                    const observer = new ResizeObserver(reportCanvasSize);
+                    observer.observe(canvasElement);
+                    return () => observer.disconnect();
+                  });
                   const connectionPreview = () =>
                     active() ? canvas.connectionPreview() : undefined;
                   const connectionDrag = () => (active() ? canvas.connectionDrag() : undefined);
@@ -737,6 +770,7 @@ function EditorContent(
                     <div sx={styles.graphPane}>
                       <div
                         ref={(element) => {
+                          canvasElement = element;
                           canvas.setGraphCanvas(element);
                           element.addEventListener(
                             "pointerdown",
@@ -817,18 +851,34 @@ function EditorContent(
                               <svg sx={[styles.canvasLayer, styles.wires]} aria-hidden="true">
                                 <For each={edges()} keyed={(edge) => edge.connection.id}>
                                   {(edge) => (
-                                    <path
-                                      sx={
-                                        !isNodeDragging(edge().connection.outNodeId) &&
-                                        !isNodeDragging(edge().connection.inNodeId) &&
-                                        styles.smoothWire
-                                      }
-                                      d={connectionPath(edge().from, edge().to)}
-                                      fill="none"
-                                      stroke={wireColor(edge().type, edge().scope)}
-                                      stroke-width="2"
-                                      opacity="0.75"
-                                    />
+                                    <>
+                                      <Show
+                                        when={controller.activity.connectionHighlight(
+                                          tab().graphId,
+                                          edge().connection.id,
+                                        )}
+                                        keyed
+                                      >
+                                        {(activity) => (
+                                          <path
+                                            sx={styles.wireActivity}
+                                            d={connectionPath(edge().from, edge().to)}
+                                            fill="none"
+                                            stroke={activity.color}
+                                            stroke-width="6"
+                                            stroke-linecap="round"
+                                            data-remote-activity=""
+                                          />
+                                        )}
+                                      </Show>
+                                      <Wire
+                                        edge={edge()}
+                                        smooth={
+                                          !isNodeDragging(edge().connection.outNodeId) &&
+                                          !isNodeDragging(edge().connection.inNodeId)
+                                        }
+                                      />
+                                    </>
                                   )}
                                 </For>
                                 <Show when={connectionPreview()} keyed>
@@ -893,6 +943,10 @@ function EditorContent(
                                         entry.selectedNodeIds.includes(node().id),
                                       )?.color
                                     }
+                                    activity={controller.activity.nodeHighlight(
+                                      tab().graphId,
+                                      node().id,
+                                    )}
                                     connectionSource={
                                       connectionPreview() === undefined
                                         ? undefined
@@ -970,7 +1024,7 @@ function EditorContent(
                                   />
                                 )}
                               </For>
-                              <For each={remotePresence()} keyed={(entry) => entry.connectionId}>
+                              <For each={remoteCursors()} keyed={(entry) => entry.id}>
                                 {(entry) => (
                                   <Show when={entry().cursor}>
                                     {(cursor) => (
@@ -1041,6 +1095,7 @@ function EditorContent(
                                         packageId,
                                         runtimeDefinitions(),
                                         controller.editor.authoring,
+                                        controller.editor.conversions(),
                                       ).length > 0
                               }
                               screenPosition={menu().screen}
@@ -1184,6 +1239,8 @@ function EditorContent(
                 }}
               />
             </main>
+
+            <FollowIndicator follow={controller.follow} />
 
             <Show when={!controller.layout.inspectorOpen()}>
               <button

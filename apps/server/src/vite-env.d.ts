@@ -4,7 +4,7 @@ declare module "virtual:macrograph-module-deployments" {
   import type { Engine, Module } from "@macrograph/module";
   import type { Resource } from "@macrograph/module";
   import type { Layer, Schema } from "effect";
-  import type { Rpc } from "effect/unstable/rpc";
+  import type { Rpc } from "effect/rpc";
 
   type ResourceType = Resource.ResourceClass<unknown, string, Schema.Json>;
   type Event = { readonly _tag: string };

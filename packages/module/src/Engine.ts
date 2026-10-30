@@ -1,11 +1,12 @@
 import { Cause, Context, Effect, Layer, Redacted, Schema } from "effect";
+import { RpcClient, RpcGroup, type Rpc } from "effect/rpc";
 import * as S from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { RpcClient, RpcGroup, type Rpc } from "effect/unstable/rpc";
 
 import type { Catalog } from "./Credential.ts";
 import type { Live, Requirement } from "./HttpIngress.ts";
 import type { Module } from "./Module.ts";
+import type * as PollingIngress from "./PollingIngress.ts";
 import type { ResourceClass, ToHandler } from "./Resource.ts";
 
 import { unavailable } from "./Credential.ts";
@@ -317,6 +318,62 @@ export const withHttpIngress = <
 ): HttpIngressDeployment<Definition, EngineLayer, Handlers, RequirementsError> => ({
   ...deployment,
   httpIngress: {
+    handlers: options.handlers,
+    requirements: options.requirements,
+    resolveRequirements: (state) =>
+      Schema.decodeUnknownEffect(deployment.definition.Storage)(state).pipe(
+        Effect.flatMap(options.requirements),
+        Effect.catchCause((cause) =>
+          Effect.fail(
+            new DeploymentError({ moduleId: deployment.moduleId, cause: Cause.squash(cause) }),
+          ),
+        ),
+      ),
+  },
+});
+
+export type PollingIngressDeployment<
+  Base extends Deployment<AnyDef, Layer.Any>,
+  Handlers extends ReadonlyArray<PollingIngress.AnyHandler>,
+  RequirementsError,
+> = Base & {
+  readonly pollingIngress: {
+    readonly handlers: Handlers;
+    readonly requirements: (
+      state: Base["definition"]["Storage"]["Type"],
+    ) => Effect.Effect<ReadonlyArray<PollingIngress.Requirement>, RequirementsError>;
+    readonly resolveRequirements: (
+      state: unknown,
+    ) => Effect.Effect<ReadonlyArray<PollingIngress.Requirement>, DeploymentError>;
+  };
+};
+
+export interface AnyPollingIngressDeployment {
+  readonly moduleId: string;
+  readonly definition: AnyDef;
+  readonly pollingIngress: {
+    readonly handlers: ReadonlyArray<PollingIngress.AnyHandler>;
+    readonly resolveRequirements: (
+      state: unknown,
+    ) => Effect.Effect<ReadonlyArray<PollingIngress.Requirement>, DeploymentError>;
+  };
+}
+
+export const withPollingIngress = <
+  Base extends Deployment<AnyDef, Layer.Any>,
+  const Handlers extends ReadonlyArray<PollingIngress.AnyHandler>,
+  RequirementsError,
+>(
+  deployment: Base,
+  options: {
+    readonly handlers: Handlers;
+    readonly requirements: (
+      state: Base["definition"]["Storage"]["Type"],
+    ) => Effect.Effect<ReadonlyArray<PollingIngress.Requirement>, RequirementsError>;
+  },
+): PollingIngressDeployment<Base, Handlers, RequirementsError> => ({
+  ...deployment,
+  pollingIngress: {
     handlers: options.handlers,
     requirements: options.requirements,
     resolveRequirements: (state) =>

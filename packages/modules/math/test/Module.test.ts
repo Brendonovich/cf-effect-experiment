@@ -228,4 +228,27 @@ describe("Math module", () => {
         assert.strictEqual((yield* run(schema(registered, id))).get("out"), before + 1234);
     }),
   );
+  it.effect(
+    "declares conversion nodes with exactly one input and one output of the converted types",
+    () =>
+      Effect.gen(function* () {
+        const registered = yield* schemas;
+        for (const [id, from, to] of [
+          ["IntToFloat", t.Int, t.Float],
+          ["FloatToInt", t.Float, t.Int],
+        ] as const) {
+          const item = schema(registered, id);
+          assert.deepStrictEqual(
+            item.dataInputs.map((input) => input.type),
+            [from],
+            id,
+          );
+          assert.deepStrictEqual(
+            item.dataOutputs.map((output) => output.type),
+            [to],
+            id,
+          );
+        }
+      }),
+  );
 });

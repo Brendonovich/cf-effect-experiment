@@ -2,16 +2,18 @@ import { assert, describe, it } from "@effect/vitest";
 import { GraphId, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, EditorEvents, EditorRpc, EditorServer, Packages } from "@macrograph/editor";
 import { Engine } from "@macrograph/module";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { KofiEngine } from "@macrograph/module-kofi/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { TwitchEngine } from "@macrograph/module-twitch/Definition";
 import { UtilitiesEngine } from "@macrograph/module-utilities/Definition";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
-import { HttpClient } from "effect/unstable/http";
-import { RpcTest } from "effect/unstable/rpc";
+import { HttpClient } from "effect/http";
+import { RpcTest } from "effect/rpc";
 
 import { registry } from "../src/execution/ExecutorModules.ts";
 import * as CloudModules from "../src/modules/CloudModules.ts";
@@ -23,13 +25,32 @@ const services = Editor.layer.pipe(
 const http = Layer.succeed(HttpClient.HttpClient)(
   HttpClient.make(() => Effect.die("Editor startup must not call a provider")),
 );
-const newIds = ["elevenlabs", "json", "list", "logic", "math", "openai", "string"];
+const newIds = [
+  "discord",
+  "elevenlabs",
+  "json",
+  "list",
+  "logic",
+  "math",
+  "openai",
+  "opencode",
+  "string",
+];
+const staticEditorIds = newIds.filter((id) => id !== "opencode");
+const discordState = (configured: boolean) => ({
+  configured,
+  gatewayAvailable: false,
+  gatewayEnabled: false,
+  messageContent: false,
+  status: "disconnected",
+});
 
 describe("Cloud modules", () => {
   it("shares supported modules with execution and keeps settings RPCs distinct and write-only", () => {
     const ids = [
       ...CloudModules.statelessModules.map((module) => module.id),
       ...CloudModules.apiDeployments.map((deployment) => deployment.moduleId),
+      ...CloudModules.projectScopedModules.map((module) => module.id),
     ];
     assert.deepStrictEqual(ids.sort(), newIds);
     for (const id of ids)
@@ -44,12 +65,15 @@ describe("Cloud modules", () => {
         TwitchEngine.ClientRpcs,
         UtilitiesEngine.ClientRpcs,
         HttpClientEngine.ClientRpcs,
+        OpenCodeEngine.ClientRpcs,
         ...CloudModules.apiDeployments.map((deployment) => deployment.definition.ClientRpcs),
       ),
     );
     for (const deployment of CloudModules.apiDeployments)
       for (const tag of deployment.definition.ClientRpcs.requests.keys())
         assert.isTrue(EditorRpc.requiresWriteAccess(tag), tag);
+    for (const tag of OpenCodeEngine.ClientRpcs.requests.keys())
+      assert.isTrue(EditorRpc.requiresWriteAccess(tag), tag);
   });
 
   it.effect(
@@ -76,7 +100,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
             );
             assert.deepStrictEqual(yield* editor.project.get(), original);
             assert.deepStrictEqual(yield* editor.engine.getClientState("openai"), {
@@ -85,6 +109,20 @@ describe("Cloud modules", () => {
             assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
               configured: false,
             });
+            assert.deepStrictEqual(
+              yield* editor.engine.getClientState("discord"),
+              discordState(false),
+            );
+            const discordPackage = (yield* packages.getPackages()).find(
+              (pkg) => pkg.id === "discord",
+            );
+            assert.deepStrictEqual(discordPackage?.schemas.map((schema) => schema.id).sort(), [
+              "DiscordGetGuildMember",
+              "DiscordGetRole",
+              "DiscordGetUser",
+              "DiscordSendMessage",
+              "DiscordSendWebhook",
+            ]);
             for (const module of CloudModules.statelessModules)
               assert.strictEqual(
                 (yield* editor.engine.getRuntimeClient(module.id).pipe(Effect.flip))._tag,
@@ -98,6 +136,20 @@ describe("Cloud modules", () => {
             );
             yield* openai.OpenAIUpdateKey({ apiKey: "openai-secret" });
             yield* elevenlabs.ElevenLabsUpdateKey({ apiKey: "elevenlabs-secret" });
+            const discord = yield* RpcTest.makeClient(DiscordEngine.ClientRpcs).pipe(
+              Effect.provide(context),
+            );
+            yield* discord.DiscordConfigure({
+              token: "discord-secret",
+              gatewayEnabled: true,
+              messageContent: true,
+            });
+            assert.strictEqual(
+              (yield* discord
+                .DiscordSetGateway({ enabled: true, messageContent: true })
+                .pipe(Effect.flip)).reason,
+              "gateway-unavailable",
+            );
             yield* editor.node.create({
               graphID: graphId,
               node: {
@@ -116,6 +168,11 @@ describe("Cloud modules", () => {
         assert.deepStrictEqual(saved.engines.twitch, original.engines.twitch);
         assert.deepStrictEqual(saved.engines.openai, { apiKey: "openai-secret" });
         assert.deepStrictEqual(saved.engines.elevenlabs, { apiKey: "elevenlabs-secret" });
+        assert.deepStrictEqual(saved.engines.discord, {
+          token: "discord-secret",
+          gatewayEnabled: false,
+          messageContent: true,
+        });
         yield* Effect.scoped(
           Effect.gen(function* () {
             yield* Layer.build(CloudModules.editorLayer);
@@ -123,7 +180,7 @@ describe("Cloud modules", () => {
             const packages = yield* Packages.Service;
             assert.deepStrictEqual(
               (yield* packages.getPackages()).map((pkg) => pkg.id).sort(),
-              ["CustomTypes", "macrograph-functions", ...newIds].sort(),
+              ["CustomTypes", "macrograph-functions", ...staticEditorIds].sort(),
             );
             const snapshot = yield* editor.project.snapshot();
             assert.deepStrictEqual(snapshot.project, {
@@ -137,6 +194,10 @@ describe("Cloud modules", () => {
             });
             assert.deepStrictEqual(yield* editor.engine.getClientState("elevenlabs"), {
               configured: true,
+            });
+            assert.deepStrictEqual(yield* editor.engine.getClientState("discord"), {
+              ...discordState(true),
+              messageContent: true,
             });
           }).pipe(
             Effect.provide(services),

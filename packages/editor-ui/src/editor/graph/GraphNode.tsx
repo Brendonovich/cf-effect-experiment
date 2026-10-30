@@ -28,7 +28,26 @@ export {
   type GraphPort,
 } from "./graphPresentation";
 
+const activityFade = stylex.keyframes({
+  "0%": { opacity: 1 },
+  "40%": { opacity: 0.9 },
+  "100%": { opacity: 0 },
+});
+
 const styles = stylex.create({
+  activityRing: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 1,
+    pointerEvents: "none",
+    borderRadius: 6,
+    boxShadow: "inset 0 0 0 2px var(--activity-color), inset 0 0 14px var(--activity-color)",
+    opacity: 0,
+    animationName: activityFade,
+    animationDuration: "1.8s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
+  },
   pinTarget: {
     position: "relative",
     width: 14,
@@ -261,6 +280,8 @@ interface GraphNodeProps {
   positioning?: boolean;
   allowInputDefaults?: boolean;
   presenceColor?: string | undefined;
+  /** A recent edit by another actor; a new token replays the highlight. */
+  activity?: { readonly color: string; readonly token: number } | undefined;
   connectionSource?:
     | {
         readonly nodeId: string;
@@ -647,6 +668,7 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
         !props.dragging && !props.positioning && styles.smoothPosition,
       ]}
       data-graph-node-id={props.node.id}
+      data-remote-activity={props.activity === undefined ? undefined : ""}
       style={{
         transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)`,
         "box-shadow":
@@ -704,6 +726,15 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
           </For>
         </div>
       </div>
+      <Show when={props.activity} keyed>
+        {(activity) => (
+          <div
+            sx={styles.activityRing}
+            style={{ "--activity-color": activity.color }}
+            aria-hidden="true"
+          />
+        )}
+      </Show>
       {hasHiddenPins() && (
         <div sx={styles.expandRow}>
           <button

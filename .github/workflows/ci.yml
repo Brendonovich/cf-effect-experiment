@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -155,7 +155,7 @@ jobs:
             pnpm-lock.yaml
             apps/playground/package.json
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --filter '@macrograph/playground...'
+        run: pnpm install --frozen-lockfile
       - name: Validate preview stage
         run: '[[ "$STAGE" =~ ^pr-[0-9]+$ ]]'
       - name: Deploy playground preview
@@ -165,6 +165,72 @@ jobs:
       - name: Destroy playground preview
         if: github.event.action == 'closed'
         working-directory: apps/playground
+        run: pnpm alchemy destroy --stage "$STAGE" --yes
+
+  cloud-preview:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: cloud-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      CI: "true"
+      STAGE: pr${{ github.event.pull_request.number }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PLANETSCALE_API_TOKEN_ID: ${{ secrets.PLANETSCALE_API_TOKEN_ID }}
+      PLANETSCALE_API_TOKEN: ${{ secrets.PLANETSCALE_API_TOKEN }}
+      PLANETSCALE_ORGANIZATION: ${{ secrets.PLANETSCALE_ORGANIZATION }}
+      AXIOM_TOKEN: ${{ secrets.AXIOM_TOKEN }}
+      AXIOM_ORG_ID: ${{ secrets.AXIOM_ORG_ID }}
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+      GITHUB_APP_ID: ${{ secrets.MACROGRAPH_GITHUB_APP_ID }}
+      GITHUB_APP_PRIVATE_KEY: ${{ secrets.MACROGRAPH_GITHUB_APP_PRIVATE_KEY }}
+      SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+      SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      PATREON_CLIENT_ID: ${{ secrets.PATREON_CLIENT_ID }}
+      PATREON_CLIENT_SECRET: ${{ secrets.PATREON_CLIENT_SECRET }}
+      STREAMLABS_CLIENT_ID: ${{ secrets.STREAMLABS_CLIENT_ID }}
+      STREAMLABS_CLIENT_SECRET: ${{ secrets.STREAMLABS_CLIENT_SECRET }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+      PULL_REQUEST: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            apps/cloud/package.json
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate preview stage
+        run: '[[ "$STAGE" =~ ^pr[0-9]+$ ]]'
+      - name: Deploy Cloud preview
+        if: github.event.action != 'closed'
+        working-directory: apps/cloud
+        run: pnpm alchemy deploy --stage "$STAGE" --yes
+      - name: Destroy Cloud preview
+        if: github.event.action == 'closed'
+        working-directory: apps/cloud
         run: pnpm alchemy destroy --stage "$STAGE" --yes
 
   playground-production:
@@ -281,6 +347,18 @@ jobs:
           PATREON_CLIENT_SECRET: ${{ secrets.PATREON_CLIENT_SECRET }}
           STREAMLABS_CLIENT_ID: ${{ secrets.STREAMLABS_CLIENT_ID }}
           STREAMLABS_CLIENT_SECRET: ${{ secrets.STREAMLABS_CLIENT_SECRET }}
+          WEBSITE_JWT_PRIVATE_KEY: ${{ secrets.WEBSITE_JWT_PRIVATE_KEY }}
+          WEBSITE_AUTH_SECRET: ${{ secrets.WEBSITE_AUTH_SECRET }}
+          WEBSITE_DISCORD_CLIENT_ID: ${{ secrets.WEBSITE_DISCORD_CLIENT_ID }}
+          WEBSITE_DISCORD_CLIENT_SECRET: ${{ secrets.WEBSITE_DISCORD_CLIENT_SECRET }}
+          WEBSITE_SPOTIFY_CLIENT_ID: ${{ secrets.WEBSITE_SPOTIFY_CLIENT_ID }}
+          WEBSITE_SPOTIFY_CLIENT_SECRET: ${{ secrets.WEBSITE_SPOTIFY_CLIENT_SECRET }}
+          WEBSITE_GOOGLE_CLIENT_ID: ${{ secrets.WEBSITE_GOOGLE_CLIENT_ID }}
+          WEBSITE_GOOGLE_CLIENT_SECRET: ${{ secrets.WEBSITE_GOOGLE_CLIENT_SECRET }}
+          WEBSITE_PATREON_CLIENT_ID: ${{ secrets.WEBSITE_PATREON_CLIENT_ID }}
+          WEBSITE_PATREON_CLIENT_SECRET: ${{ secrets.WEBSITE_PATREON_CLIENT_SECRET }}
+          WEBSITE_STREAMLABS_CLIENT_ID: ${{ secrets.WEBSITE_STREAMLABS_CLIENT_ID }}
+          WEBSITE_STREAMLABS_CLIENT_SECRET: ${{ secrets.WEBSITE_STREAMLABS_CLIENT_SECRET }}
 
   deploy-opencode-bot:
     needs: [quality, unit-tests, e2e]

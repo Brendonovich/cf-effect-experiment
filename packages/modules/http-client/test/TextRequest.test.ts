@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Result, Schema } from "effect";
-import { TestClock } from "effect/testing";
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
+import { TestClock } from "effect/testing";
 
 import { TextRequest, TextResponse } from "../src/Definition.ts";
 import { makeRuntimeClient, maxBodyBytes, maxHeaderBytes } from "../src/Engine.ts";

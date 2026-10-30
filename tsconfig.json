@@ -23,6 +23,9 @@
       "path": "packages/module"
     },
     {
+      "path": "packages/opencode-workerd"
+    },
+    {
       "path": "packages/cloud-credentials"
     },
     {
@@ -48,6 +51,9 @@
     },
     {
       "path": "packages/editor-ui"
+    },
+    {
+      "path": "packages/project-api"
     },
     {
       "path": "packages/http-ingress"
@@ -112,7 +118,9 @@
     { "path": "packages/modules/list" },
     { "path": "packages/modules/logic" },
     { "path": "packages/modules/math" },
+    { "path": "packages/modules/midi" },
     { "path": "packages/modules/openai" },
+    { "path": "packages/modules/opencode" },
     { "path": "packages/modules/shell" },
     { "path": "packages/modules/speakerbot" },
     { "path": "packages/modules/streamdeck" },

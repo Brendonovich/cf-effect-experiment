@@ -1,10 +1,5 @@
 import { Effect, Layer } from "effect";
-import {
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-  HttpStaticServer,
-} from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse, HttpStaticServer } from "effect/http";
 import { realpathSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 

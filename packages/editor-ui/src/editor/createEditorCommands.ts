@@ -11,6 +11,7 @@ import {
   type SchemaRef,
   type TypeDefinition,
 } from "@macrograph/core";
+import { Conversion } from "@macrograph/module";
 import { QueryClient, useMutation } from "@tanstack/solid-query";
 import { Effect, Result, type Schema } from "effect";
 import { createMemo, createSignal, onCleanup } from "solid-js";
@@ -20,7 +21,7 @@ import type { createEditorStore } from "./store";
 import type { createEditorWorkspace } from "./workspace/createEditorWorkspace";
 
 import { runFork, runPromise } from "../observability/browserTracing";
-import { portsCompatible, type PortEndpoint } from "./graph/connectionAuthoring";
+import { endpointsCompatible, type PortEndpoint } from "./graph/connectionAuthoring";
 import { outputRefForPort } from "./graph/GraphPort";
 import {
   graphNodeInputs,
@@ -29,6 +30,8 @@ import {
   graphPortOffset,
   snapGraphPosition,
 } from "./graph/graphPresentation";
+
+const exactOnly = Conversion.rules([]);
 
 export function createEditorCommands(
   editor: ReturnType<typeof createEditorStore>,
@@ -443,7 +446,14 @@ export function createEditorCommands(
           if (source === undefined) return Effect.void;
           const targetPorts =
             source.direction === "output" ? graphNodeInputs(event.io) : graphNodeOutputs(event.io);
-          const targetPort = targetPorts.find((port) => portsCompatible(source.port, port));
+          const compatible = targetPorts.filter((port) =>
+            endpointsCompatible(source.port, source.direction, port, editor.conversions()),
+          );
+          // Prefer a port that matches without a conversion over the first convertible one.
+          const targetPort =
+            compatible.find((port) =>
+              endpointsCompatible(source.port, source.direction, port, exactOnly),
+            ) ?? compatible[0];
           if (targetPort === undefined)
             return applyMutation(c.DeleteNode({ graphId, nodeId: event.node.id })).pipe(
               Effect.asVoid,

@@ -1,11 +1,14 @@
 import type * as Executor from "@macrograph/execution/Executor";
+import type { Instances as OpenCodeInstances } from "@macrograph/module-opencode/Instance";
 
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Project } from "@macrograph/core";
 import { Engine } from "@macrograph/module";
+import { DiscordEngine } from "@macrograph/module-discord/Definition";
 import { ElevenLabsEngine } from "@macrograph/module-elevenlabs/Definition";
 import { HttpClientEngine } from "@macrograph/module-http-client/Definition";
 import { OpenAIEngine } from "@macrograph/module-openai/Definition";
+import { ConnectionId, OpenCodeEngine } from "@macrograph/module-opencode/Definition";
 import { unavailableRuntimeClient as unavailableTwitchRuntime } from "@macrograph/module-twitch/Engine";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Cause, Effect, Option } from "effect";
@@ -15,7 +18,7 @@ import {
   HttpClient,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";
@@ -38,8 +41,9 @@ const mock = (respond: (request: HttpClientRequest.HttpClientRequest) => Respons
 const setup = Effect.fnUntraced(function* (
   project: Project.Model,
   httpClient: HttpClient.HttpClient,
+  openCodeInstances?: OpenCodeInstances,
 ) {
-  const engineClient = yield* WorkflowRuntime.make(project).pipe(
+  const engineClient = yield* WorkflowRuntime.make(project, openCodeInstances).pipe(
     Effect.provideService(HttpClient.HttpClient, httpClient),
   );
   return {
@@ -49,6 +53,7 @@ const setup = Effect.fnUntraced(function* (
       typeof ElevenLabsEngine
     >,
     http: (yield* engineClient("http-client")) as Engine.RuntimeClientOf<typeof HttpClientEngine>,
+    opencode: (yield* engineClient("opencode")) as Engine.RuntimeClientOf<typeof OpenCodeEngine>,
   };
 });
 
@@ -167,6 +172,67 @@ describe("WorkflowRuntime", () => {
         "second-elevenlabs",
         "Bearer first-openai",
         "first-elevenlabs",
+      ]);
+    }),
+  );
+
+  it.effect("routes OpenCode generation to the deployed connection bound by the node", () =>
+    Effect.gen(function* () {
+      const calls: Array<unknown> = [];
+      const connectionId = ConnectionId.make("writer");
+      const instances: OpenCodeInstances = {
+        connectionTypes: ["managed", "remote"],
+        resolve: (connection) =>
+          Effect.succeed({
+            generateText: (input) =>
+              Effect.sync(() => {
+                calls.push([connection, input]);
+                return "Cloud response";
+              }),
+            listModels: Effect.succeed(["opencode/model"]),
+            listCredentials: Effect.succeed([]),
+            listOAuthMethods: Effect.succeed([]),
+            connectKey: () => Effect.void,
+            removeCredential: () => Effect.void,
+            startOAuth: () => Effect.die("unused"),
+            oauthStatus: () => Effect.die("unused"),
+            completeOAuth: () => Effect.die("unused"),
+            cancelOAuth: () => Effect.die("unused"),
+          }),
+      };
+      const { opencode } = yield* setup(
+        {
+          ...Project.empty(),
+          engines: {
+            opencode: {
+              connections: {
+                [connectionId]: {
+                  name: "Writer",
+                  target: { type: "managed", config: '{"model":"p/m"}' },
+                },
+              },
+            },
+          },
+        },
+        mock(() => new Response()),
+        instances,
+      );
+      assert.strictEqual(
+        yield* opencode.OpenCodeGenerateText({
+          connectionId,
+          prompt: "Hello",
+          model: "opencode/model",
+        }),
+        "Cloud response",
+      );
+      assert.deepStrictEqual(yield* opencode.OpenCodeListModels({ connectionId }), [
+        "opencode/model",
+      ]);
+      assert.deepStrictEqual(calls, [
+        [
+          { id: connectionId, target: { type: "managed", config: '{"model":"p/m"}' } },
+          { prompt: "Hello", model: "opencode/model" },
+        ],
       ]);
     }),
   );
@@ -290,6 +356,61 @@ describe("WorkflowRuntime", () => {
       const unavailable = yield* Effect.flip(unknown.SomeRuntimeRpc!());
       assert.strictEqual(unavailable._tag, "EngineClientUnavailable");
       assert.strictEqual(unavailable.moduleId, "unknown-module");
+    }),
+  );
+
+  it.effect("sends Discord messages with the snapshot bot token and tolerates bad settings", () =>
+    Effect.gen(function* () {
+      const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        requests.push({ url: String(input), init });
+        return Response.json({ id: "message-1" });
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(() => fetchMock.mockRestore()));
+      const discordClient = (project: Project.Model) =>
+        setup(
+          project,
+          mock(() => new Response()),
+        ).pipe(
+          Effect.flatMap(({ engineClient }) => engineClient("discord")),
+          Effect.map((client) => client as Engine.RuntimeClientOf<typeof DiscordEngine>),
+        );
+
+      const discord = yield* discordClient({
+        ...Project.empty(),
+        engines: {
+          discord: { token: "snapshot-discord", gatewayEnabled: true, messageContent: false },
+        },
+      });
+      assert.sameMembers(Object.keys(discord), [
+        "DiscordSendMessage",
+        "DiscordGetUser",
+        "DiscordGetGuildMember",
+        "DiscordGetRole",
+        "DiscordSendWebhook",
+      ]);
+      const sent = yield* discord.DiscordSendMessage({
+        channelId: "123",
+        message: "Pushed to main",
+        everyone: false,
+      });
+      assert.strictEqual(sent.messageId, "message-1");
+      assert.strictEqual(requests[0]!.url, "https://discord.com/api/v10/channels/123/messages");
+      assert.strictEqual(
+        new globalThis.Headers(requests[0]!.init?.headers).get("authorization"),
+        "Bot snapshot-discord",
+      );
+      assert.strictEqual(requests[0]!.init?.redirect, "manual");
+
+      const malformed = yield* discordClient({
+        ...Project.empty(),
+        engines: { discord: { token: 42 } },
+      });
+      const failure = yield* Effect.flip(
+        malformed.DiscordSendMessage({ channelId: "123", message: "hi", everyone: false }),
+      );
+      assert.strictEqual(failure.reason, "not-configured");
+      assert.strictEqual(requests.length, 1);
     }),
   );
 });

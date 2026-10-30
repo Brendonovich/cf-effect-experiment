@@ -1,14 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { CurrentUser } from "@macrograph/cloud-api";
+import { ApiCaller } from "@macrograph/project-api";
 import { Context, Effect, Option, Ref } from "effect";
-import { Tool } from "effect/unstable/ai";
-import {
-  HttpEffect,
-  HttpRouter,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "effect/unstable/http";
-import { HttpApiError } from "effect/unstable/httpapi";
+import { Tool } from "effect/ai";
+import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpApiError } from "effect/http-api";
 
 import * as CloudMcp from "../src/api/CloudMcp.ts";
 
@@ -20,6 +16,8 @@ describe("Cloud MCP toolkit", () => {
       "listProjects",
       "getProject",
       "createProject",
+      "listExecutions",
+      "getExecution",
       "listGraphs",
       "getGraph",
       "createGraph",
@@ -46,6 +44,21 @@ describe("Cloud MCP toolkit", () => {
     assert.isTrue(Context.get(toolkit.tools.searchSchemas.annotations, Tool.Readonly));
     assert.isTrue(Context.get(toolkit.tools.listResources.annotations, Tool.Readonly));
     assert.isTrue(Context.get(toolkit.tools.deleteGraph.annotations, Tool.Destructive));
+    assert.isTrue(Context.get(toolkit.tools.listExecutions.annotations, Tool.Readonly));
+    assert.isTrue(Context.get(toolkit.tools.getExecution.annotations, Tool.Readonly));
+  });
+
+  it("looks up executions by ID and points at their trace", () => {
+    const schema = Tool.getJsonSchema(toolkit.tools.getExecution);
+
+    assert.containsAllKeys(schema.properties, ["projectId", "executionId"]);
+    assert.include(schema.required, "executionId");
+    assert.deepStrictEqual(CloudMcp.executionTrace("abc123"), {
+      traceId: "abc123",
+      dataset: "macrograph-traces",
+      query: `['macrograph-traces'] | where trace_id == "abc123" | order by _time asc`,
+    });
+    assert.isNull(CloudMcp.executionTrace(null));
   });
 
   it("exposes bounded multi-query schema discovery with required project context", () => {
@@ -83,14 +96,14 @@ describe("Cloud MCP toolkit", () => {
       Effect.gen(function* () {
         const handlers = toolkit.of({
           listProjects: () =>
-            Effect.map(CurrentUser, (user) => ({
+            Effect.map(Effect.all([CurrentUser, ApiCaller.Current]), ([user, caller]) => ({
               projects: [
                 {
                   id: "project-1",
                   teamId: "team-1",
                   createdBy: user.id,
                   access: "team" as const,
-                  name: user.id,
+                  name: JSON.stringify(caller),
                   currentDeploymentId: null,
                   createdAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -99,6 +112,8 @@ describe("Cloud MCP toolkit", () => {
             })),
           getProject: () => Effect.die("unused"),
           createProject: () => Effect.die("unused"),
+          listExecutions: () => Effect.die("unused"),
+          getExecution: () => Effect.die("unused"),
           listGraphs: () => Effect.die("unused"),
           getGraph: () => Effect.die("unused"),
           createGraph: () => Effect.die("unused"),
@@ -114,12 +129,16 @@ describe("Cloud MCP toolkit", () => {
           const authorization = request.headers.authorization;
           if (authorization !== "Bearer alice" && authorization !== "Bearer bob")
             return yield* new HttpApiError.Unauthorized();
-          return { id: authorization.slice("Bearer ".length), sessionId: undefined };
+          const id = authorization.slice("Bearer ".length);
+          return {
+            user: { id, sessionId: undefined },
+            caller: ApiCaller.forApiKey({ id: `key-${id}`, name: `${id}'s key` }, null),
+          };
         });
-        const send = (body: object, authorization?: string, sessionId?: string) =>
+        const send = (body: object, authorization?: string, sessionId?: string, target = app) =>
           Effect.gen(function* () {
             const response = yield* Ref.make(Option.none<HttpServerResponse.HttpServerResponse>());
-            yield* HttpEffect.toHandled(CloudMcp.authenticated(app, authenticate), (_, value) =>
+            yield* HttpEffect.toHandled(CloudMcp.authenticated(target, authenticate), (_, value) =>
               Ref.set(response, Option.some(value)),
             ).pipe(
               Effect.provideService(
@@ -158,6 +177,11 @@ describe("Cloud MCP toolkit", () => {
 
         const rejected = yield* send(initialize);
         assert.strictEqual(rejected.status, 401);
+        assert.include(
+          rejected.headers["www-authenticate"],
+          'resource_metadata="https://cloud.macrograph.app/.well-known/oauth-protected-resource/api/mcp"',
+        );
+        assert.include(rejected.headers["www-authenticate"], 'scope="mcp"');
         const invalidKey = yield* send(initialize, "Bearer invalid");
         assert.strictEqual(invalidKey.status, 401);
 
@@ -172,7 +196,7 @@ describe("Cloud MCP toolkit", () => {
 
         const listed = yield* send(listRequest, "Bearer alice", sessionId);
         const listedBody = yield* Effect.promise(() => HttpServerResponse.toWeb(listed).json());
-        assert.lengthOf(listedBody.result.tools, 11);
+        assert.lengthOf(listedBody.result.tools, 13);
         assert.include(
           listedBody.result.tools.map((tool: { name: string }) => tool.name),
           "createGraph",
@@ -201,6 +225,15 @@ describe("Cloud MCP toolkit", () => {
         const calledBody = yield* Effect.promise(() => HttpServerResponse.toWeb(called).json());
         assert.strictEqual(calledBody.result.isError, false);
         assert.strictEqual(calledBody.result.structuredContent.projects[0].createdBy, "bob");
+        // MCP calls are attributed to the MCP session and client, not just the API key.
+        assert.deepStrictEqual(JSON.parse(calledBody.result.structuredContent.projects[0].name), {
+          kind: "mcp",
+          id: sessionId,
+          email: null,
+          apiKey: { id: "key-bob", name: "bob's key" },
+          mcpSessionId: sessionId,
+          mcpClient: { name: "test-client", version: "1.0.0" },
+        });
 
         const calledAgain = yield* send({ ...callRequest, id: 4 }, "Bearer alice", sessionId);
         const calledAgainBody = yield* Effect.promise(() =>
@@ -208,6 +241,24 @@ describe("Cloud MCP toolkit", () => {
         );
         assert.strictEqual(calledAgainBody.result.isError, false);
         assert.strictEqual(calledAgainBody.result.structuredContent.projects[0].createdBy, "alice");
+
+        // Workers handle each request on any isolate, so sessions must not depend on server memory.
+        const otherInstance = yield* CloudMcp.layer(handlers).pipe(HttpRouter.toHttpEffect);
+        const calledElsewhere = yield* send(
+          { ...callRequest, id: 5 },
+          "Bearer bob",
+          sessionId,
+          otherInstance,
+        );
+        assert.strictEqual(calledElsewhere.status, 200);
+        const calledElsewhereBody = yield* Effect.promise(() =>
+          HttpServerResponse.toWeb(calledElsewhere).json(),
+        );
+        assert.strictEqual(calledElsewhereBody.result.isError, false);
+        assert.deepStrictEqual(
+          JSON.parse(calledElsewhereBody.result.structuredContent.projects[0].name).mcpClient,
+          { name: "test-client", version: "1.0.0" },
+        );
       }),
     ),
   );

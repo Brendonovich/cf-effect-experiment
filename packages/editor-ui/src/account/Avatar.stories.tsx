@@ -34,6 +34,14 @@ export const Variants: Story = {
           <Avatar email="moderator@example.com" />
         </div>
       </section>
+      <section class="storybook-showcase__item">
+        <span class="storybook-showcase__label">Initials (no email)</span>
+        <div class="storybook-showcase__control" style={{ gap: "8px" }}>
+          <Avatar name="Calm Fox" color="#14b8a6" />
+          <Avatar name="ada" color="#a855f7" />
+          <Avatar name="Quiet Moth" color="#f97316" size={32} />
+        </div>
+      </section>
     </div>
   ),
 };

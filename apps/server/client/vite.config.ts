@@ -24,7 +24,10 @@ export const serverModules = new Set([
   "@macrograph/module-list",
   "@macrograph/module-logic",
   "@macrograph/module-math",
+  "@macrograph/module-midi",
   "@macrograph/module-openai",
+  "@macrograph/module-opencode",
+  "@macrograph/module-sendblue",
   "@macrograph/module-shell",
   "@macrograph/module-speakerbot",
   "@macrograph/module-streamdeck",
@@ -69,7 +72,7 @@ export default defineConfig((): UserConfig => {
       strictPort: true,
       allowedHosts: true,
       proxy: Object.fromEntries(
-        ["/health", "/auth", "/rpc", "/rpc-ws", "/module"].map((path) => [
+        ["/health", "/auth", "/api", "/rpc", "/rpc-ws", "/module"].map((path) => [
           `${prefix}${path}`,
           { target: backend, changeOrigin: true, ws: true },
         ]),

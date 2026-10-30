@@ -2,13 +2,13 @@ import type { EventTraceContext } from "@macrograph/cloud-api";
 import type * as Executor from "@macrograph/execution/Executor";
 import type { ExecutionStep } from "@macrograph/workflow-runtime";
 
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { Project } from "@macrograph/core";
 import { GraphExecution } from "@macrograph/workflow-runtime";
 import * as CloudflareRuntime from "@macrograph/workflow-runtime-cloudflare/Alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Schema, Tracer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
+import { FetchHttpClient } from "effect/http";
 
 import type { DeploymentObjectKey } from "../deployment/DeploymentObjectKey.ts";
 
@@ -21,6 +21,8 @@ import {
   projectExecutions,
 } from "../database/DatabaseSchema.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
+import OpenCodeDO from "../opencode/OpenCodeDO.ts";
+import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
 import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
@@ -52,6 +54,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
   Effect.gen(function* () {
     const deploymentObjectsResource = yield* DeploymentObjectsBucket;
     const database = yield* Database.Service;
+    const openCodeDos = yield* OpenCodeDO;
     const deploymentObjects = yield* Cloudflare.R2.ReadBucket(deploymentObjectsResource);
 
     const updateExecution = (
@@ -206,12 +209,18 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
               ),
             ),
         });
-        const engineClient = yield* WorkflowRuntime.make(project).pipe(
-          Effect.provide(FetchHttpClient.layer),
-        );
+        const engineClient = yield* WorkflowRuntime.make(
+          project,
+          OpenCodeInstances.make(Effect.succeed(input.projectId), openCodeDos, "production"),
+        ).pipe(Effect.provide(FetchHttpClient.layer));
         yield* GraphExecution.run(
           project,
-          { projectId: input.projectId, moduleId: input.moduleId, event },
+          {
+            projectId: input.projectId,
+            executionId: input.executionId,
+            moduleId: input.moduleId,
+            event,
+          },
           {
             executionEnvironment,
             modules: ExecutorModules.registry,

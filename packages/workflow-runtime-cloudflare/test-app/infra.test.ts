@@ -1,5 +1,5 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { verify } from "@macrograph/workflow-runtime-test/verify";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Vitest";
 import { Effect } from "effect";
 

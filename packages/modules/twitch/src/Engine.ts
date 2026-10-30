@@ -1,13 +1,8 @@
 import { Cache, Exit, HashMap, Layer, Option, Redacted } from "effect";
 import * as Effect from "effect/Effect";
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
 import * as S from "effect/Schema";
-import {
-  HttpClient,
-  HttpClientError,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
 
 import type { Make as MakeEventSub } from "./EventSubImplementation.ts";
 
@@ -246,12 +241,12 @@ export const make = <R>(makeEventSub: MakeEventSub<R>) =>
         });
       });
 
-      const helixRpc = <A, RX>(
+      const helixRpc = <A>(
         accountId: AccountId,
         requiredScopes: ReadonlyArray<string>,
         callback: (
           helix: HttpApiClient.ForApi<typeof Helix.Api.HelixApi>,
-        ) => Effect.Effect<A, HttpClientError.HttpClientError | S.SchemaError, RX>,
+        ) => Effect.Effect<A, HttpClientError.HttpClientError | S.SchemaError>,
       ) =>
         Effect.gen(function* () {
           const grantedScopes = yield* Cache.get(authorizations, accountId);

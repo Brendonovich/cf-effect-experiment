@@ -19,6 +19,8 @@
     { "path": "../../packages/modules/logic" },
     { "path": "../../packages/modules/math" },
     { "path": "../../packages/modules/openai" },
+    { "path": "../../packages/modules/opencode" },
+    { "path": "../../packages/opencode-workerd" },
     { "path": "../../packages/modules/string" },
     {
       "path": "../../packages/cloud-credentials"
@@ -49,6 +51,9 @@
     },
     {
       "path": "../../packages/http-ingress"
+    },
+    {
+      "path": "../../packages/project-api"
     },
     {
       "path": "../../packages/project-host"

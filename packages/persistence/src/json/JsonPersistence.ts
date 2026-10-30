@@ -220,9 +220,12 @@ export const layer = (dir: string) =>
         const graph = yield* Schema.decodeUnknownEffect(Canvas.Model)(JSON.parse(content)).pipe(
           PersistenceError.refail,
         );
+        const existing = graph.connections.some((c) => c.id === connection.id);
         const updatedGraph = {
           ...graph,
-          connections: [...graph.connections, connection],
+          connections: existing
+            ? graph.connections.map((c) => (c.id === connection.id ? connection : c))
+            : [...graph.connections, connection],
         };
         yield* fs
           .writeFileString(graphFile, JSON.stringify(updatedGraph, null, 2))

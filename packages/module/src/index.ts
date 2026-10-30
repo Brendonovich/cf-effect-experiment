@@ -1,5 +1,6 @@
 export * as t from "./DataType.ts";
 export * as ClientSettings from "./ClientSettings.ts";
+export * as Conversion from "./Conversion.ts";
 export * as Credential from "./Credential.ts";
 export * as Engine from "./Engine.ts";
 export * as EngineTest from "./EngineTest.ts";

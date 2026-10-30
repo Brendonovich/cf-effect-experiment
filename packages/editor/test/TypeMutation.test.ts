@@ -18,8 +18,8 @@ import { t } from "@macrograph/module";
 import ListModule from "@macrograph/module-list";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
+import { RpcTest } from "effect/rpc";
 import { TestClock } from "effect/testing";
-import { RpcTest } from "effect/unstable/rpc";
 
 import {
   Editor,
@@ -525,12 +525,12 @@ describe("type authoring preserve-invalid", () => {
         const editor = yield* Editor.Service;
         const events = yield* EditorEvents.Service;
         const subscription = yield* events.subscribe;
-        const actor: Actor.Model = { type: "CLIENT", id: "alice" };
+        const actor = Actor.client("browser", "alice");
         const event = yield* events.withActor(mutate(editor, removingField), actor);
         expect(yield* PubSub.take(subscription)).toEqual(event);
         expect(event.actor).toEqual(actor);
-        expect(EditorRpc.isEventVisibleTo(event, "alice")).toBe(false);
-        expect(EditorRpc.isEventVisibleTo(event, "bob")).toBe(true);
+        expect(EditorRpc.isEventVisibleTo(event, actor)).toBe(false);
+        expect(EditorRpc.isEventVisibleTo(event, Actor.client("browser", "bob"))).toBe(true);
         expect(
           Schema.decodeUnknownSync(EditorEvent.TypeDefinitionsUpdated)(
             JSON.parse(JSON.stringify(event)),
@@ -608,7 +608,8 @@ describe("type authoring preserve-invalid", () => {
       const editor = yield* Editor.Service;
       const event = yield* mutate(editor, {
         _tag: "Upsert",
-        definition: { ...person, fields: [{ name: "name", type: t.Int }] },
+        // List<Int> has no conversion to the String input, unlike Int.
+        definition: { ...person, fields: [{ name: "name", type: t.List(t.Int) }] },
       });
       expect(Project.canvases(yield* editor.project.get()).first!.connections).toEqual(
         anchoredConnections,
@@ -624,13 +625,13 @@ describe("type authoring preserve-invalid", () => {
         graphID: "first",
         nodeID: "make",
         input: field,
-        value: Option.some(42),
+        value: Option.some([42]),
       });
       yield* editor.node.setInputDefault({
         graphID: "first",
         nodeID: "break",
         input: "value",
-        value: { _type: "person", name: 42 },
+        value: { _type: "person", name: [42] },
       });
       const repaired = yield* editor.project.snapshot();
       expect(
@@ -1048,8 +1049,8 @@ describe("type authoring preserve-invalid", () => {
   it.effect("readers can preview but cannot confirm; editors can confirm", () =>
     Effect.gen(function* () {
       const reader: EditorAccess.ConnectionIdentity = {
-        actor: { type: "CLIENT", id: "reader" },
-        connectionId: "reader",
+        actor: Actor.client("browser", "reader"),
+        email: null,
         projectId: "project",
         displayName: "Reader",
         canEdit: false,
@@ -1089,7 +1090,7 @@ describe("type authoring preserve-invalid", () => {
         yield* Deferred.await(received);
         const event = yield* events.withActor(
           editor.typeDefinition.confirm({ token: preview.token }),
-          { type: "CLIENT", id: "author" },
+          Actor.client("browser", "author"),
         );
         const results = yield* Fiber.join(stream);
         expect(results[0]!._tag).toBe("ProjectSnapshot");
@@ -1109,8 +1110,8 @@ describe("type authoring preserve-invalid", () => {
               Layer.succeed(EditorAccess.Policy, {
                 resolve: () =>
                   Effect.succeed({
-                    actor: { type: "CLIENT", id: "reader" },
-                    connectionId: "reader",
+                    actor: Actor.client("browser", "reader"),
+                    email: null,
                     projectId: "project",
                     displayName: "Reader",
                     canEdit: false,
