@@ -4,7 +4,7 @@ import type { ModuleId } from "@macrograph/module/ModuleId";
 import { assert, describe, it } from "@effect/vitest";
 import { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
 import { Effect, Exit, Fiber, Layer, Option, Stream } from "effect";
-import { appendFileSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ModuleRegistry } from "../src/ModuleRegistry.ts";
@@ -498,6 +498,81 @@ describe("ModuleRegistry", () => {
       assert.strictEqual((yield* getEntry(id)).status, "loaded");
     }).pipe(Effect.provide(registryLayer({ dataDir, watch: { debounce: "50 millis" } })));
   });
+
+  it.live("reloads changed local modules when auto reload is on", () => {
+    const dataDir = tempDir();
+    const folder = writeModule(join(dataDir, "modules", "local", "fixtures", "reloaded"), {
+      name: "reloaded",
+      version: "1.0.0",
+    });
+    const id = local("reloaded");
+    return Effect.gen(function* () {
+      const registry = yield* ModuleRegistry.Service;
+      const before = Option.getOrUndefined((yield* getEntry(id)).contentHash);
+      yield* Effect.sleep("300 millis");
+      appendFileSync(join(folder, "server.cjs"), "// reloaded change\n");
+      const reloaded = yield* registry.changes.pipe(
+        Stream.map((entries) => entries.get(id)),
+        Stream.filter(
+          (entry) =>
+            entry?.status === "loaded" && Option.getOrUndefined(entry.contentHash) !== before,
+        ),
+        Stream.runHead,
+        Effect.timeout("10 seconds"),
+      );
+      assert.isTrue(Option.isSome(reloaded));
+      const entry = yield* getEntry(id);
+      assert.isFalse(entry.flags.stale);
+      assert.strictEqual(entry.status, "loaded");
+    }).pipe(
+      Effect.provide(
+        registryLayer({ dataDir, watch: { debounce: "50 millis", autoReload: true } }),
+      ),
+    );
+  });
+
+  it.live(
+    "auto reload waits out a rebuild that empties the folder and writes the manifest last",
+    () => {
+      const dataDir = tempDir();
+      const folder = writeModule(join(dataDir, "modules", "local", "fixtures", "rebuilt"), {
+        name: "rebuilt",
+        version: "1.0.0",
+      });
+      const id = local("rebuilt");
+      return Effect.gen(function* () {
+        const registry = yield* ModuleRegistry.Service;
+        yield* Effect.sleep("300 millis");
+        const manifest = readFileSync(join(folder, "macrograph.json"), "utf8");
+        // Like `macrograph-module dev`: empty the folder, write the bundle, then the manifest.
+        rmSync(folder, { recursive: true, force: true });
+        yield* Effect.sleep("200 millis");
+        assert.isTrue(Option.isSome(yield* registry.get(id)), "kept while the folder is empty");
+        mkdirSync(folder, { recursive: true });
+        writeFileSync(join(folder, "server.cjs"), `exports.default = { tag: "rebuilt" };\n`);
+        yield* Effect.sleep("200 millis");
+        assert.isTrue(Option.isSome(yield* registry.get(id)), "kept until the manifest is back");
+        writeFileSync(join(folder, "macrograph.json"), manifest);
+        const reloaded = yield* registry.changes.pipe(
+          Stream.map((entries) => entries.get(id)),
+          Stream.filter(
+            (entry) =>
+              entry?.status === "loaded" &&
+              !entry.flags.stale &&
+              deploymentField(entry, "tag") === "rebuilt",
+          ),
+          Stream.runHead,
+          Effect.timeout("10 seconds"),
+        );
+        assert.isTrue(Option.isSome(reloaded));
+      }).pipe(
+        Effect.provide(
+          registryLayer({ dataDir, watch: { debounce: "50 millis", autoReload: true } }),
+        ),
+      );
+    },
+    15000,
+  );
 
   it.live("watches a local folder created after startup once a rescan loads it", () => {
     const dataDir = tempDir();

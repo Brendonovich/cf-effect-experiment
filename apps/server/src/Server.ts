@@ -333,6 +333,8 @@ export interface ModuleOptions {
   readonly evaluator: Layer.Layer<ModuleEvaluator.Service>;
   /** More folders to watch for staleness, e.g. built-in sources in dev. */
   readonly extraWatchDirs?: ReadonlyArray<{ readonly dir: string; readonly id: ModuleId.Id }>;
+  /** Reload local modules when their files change instead of marking them stale, e.g. in dev. */
+  readonly autoReloadLocalModules?: boolean;
   /** Adjusts catalog entries after the base path is applied, e.g. dev UI source URLs. */
   readonly mapEntry?: (entry: ModuleCatalog.Entry) => ModuleCatalog.Entry;
 }
@@ -419,7 +421,10 @@ export const make = (modules: ModuleOptions) => {
         dataDir: config.dataDirectory,
         shippedDirs: modules.shippedDirs,
         hostServices: ModuleHost.hostServices,
-        watch: { extraDirs: modules.extraWatchDirs ?? [] },
+        watch: {
+          extraDirs: modules.extraWatchDirs ?? [],
+          ...(modules.autoReloadLocalModules === true ? { autoReload: true } : {}),
+        },
       }).pipe(Layer.provide([ModuleHost.mounterLayer, modules.evaluator, ModuleAdmin.trustLayer])),
     ),
     Layer.provideMerge(InstallerLayer),
