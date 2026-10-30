@@ -23,4 +23,5 @@ the original toolchain (pnpm 10 through Corepack), and replaces `public/`. Set
 reproducible; an unchanged patch produces identical output.
 
 To edit the patch, apply it to a checkout of the pinned commit, make changes, and regenerate it
-with `git diff HEAD -- . ':!pnpm-lock.yaml' ':!packages/icons/auto-imports.d.ts'`.
+with `git diff HEAD -- . ':!pnpm-lock.yaml' ':!packages/icons/auto-imports.d.ts'`. Run
+`git add -N` on files the patch creates first, or the diff omits them.

@@ -364,10 +364,27 @@ index 53079fc8..30fd430f 100644
 +	"fetchPlaygroundProject",
 +);
 diff --git a/apps/web/src/app/(app)/account/credentials.tsx b/apps/web/src/app/(app)/account/credentials.tsx
-index 1f55042b..ebad81dd 100644
+index 1f55042b..323548d0 100644
 --- a/apps/web/src/app/(app)/account/credentials.tsx
 +++ b/apps/web/src/app/(app)/account/credentials.tsx
-@@ -15,13 +15,13 @@ import { For, Show, Suspense } from "solid-js/web";
+@@ -1,165 +1,376 @@
+-import {
+-	Button,
+-	DropdownMenu,
+-	DropdownMenuContent,
+-	DropdownMenuItem,
+-	DropdownMenuTrigger,
+-} from "@macrograph/ui";
++import { Button } from "@macrograph/ui";
+ import {
+ 	createAsync,
+ 	useAction,
+ 	useSubmission,
+ 	useSubmissions,
+ } from "@solidjs/router";
+-import { For, Show, Suspense } from "solid-js/web";
++import { createSignal, For, type JSX, Show, Suspense } from "solid-js";
++import { Dynamic } from "solid-js/web";
  import { toast } from "solid-sonner";
  
  import {
@@ -379,9 +396,475 @@ index 1f55042b..ebad81dd 100644
  	WINDOW_OPEN_FAILED,
  } from "~/api";
 -import type { AuthProvider } from "../../auth/providers";
++
++type Credential = {
++	providerId: AuthProvider;
++	providerUserId: string;
++	displayName: string | null;
++};
++
++const PROVIDER_LIST: Array<AuthProvider> = [
++	"twitch",
++	"discord",
++	// "spotify",
++	// "patreon",
++	// "github",
++];
++
++const PROVIDER_BRANDS: Record<
++	AuthProvider,
++	{
++		icon: (props: JSX.SvgSVGAttributes<SVGSVGElement>) => JSX.Element;
++		tile: string;
++		description: string;
++	}
++> = {
++	twitch: {
++		icon: IconSimpleIconsTwitch,
++		tile: "bg-[#9146ff] text-white",
++		description: "Chat, channel points, and stream events",
++	},
++	discord: {
++		icon: IconSimpleIconsDiscord,
++		tile: "bg-[#5865f2] text-white",
++		description: "Servers, channels, and messages",
++	},
++	spotify: {
++		icon: IconSimpleIconsSpotify,
++		tile: "bg-black text-[#1ed760]",
++		description: "Playback and listening activity",
++	},
++	patreon: {
++		icon: IconSimpleIconsPatreon,
++		tile: "bg-[#ff424d] text-white",
++		description: "Memberships and pledges",
++	},
++	github: {
++		icon: IconSimpleIconsGithub,
++		tile: "bg-black text-white",
++		description: "Repositories, issues, and webhooks",
++	},
++};
++
++const accountName = (credential: Credential) =>
++	credential.displayName ?? credential.providerUserId;
++
++const matches = (query: string, ...values: Array<string | null>) =>
++	query === "" || values.some((value) => value?.toLowerCase().includes(query));
  
  export default function () {
++	const [search, setSearch] = createSignal("");
++
  	return (
+-		<div class="h-full w-full max-w-3xl p-4 space-y-4">
+-			<header class="flex flex-row justify-between items-start text-white">
+-				<div class="space-y-1.5">
+-					<h1 class="text-3xl font-medium">Credentials</h1>
++		<div class="h-full w-full max-w-3xl p-4 space-y-8 text-white">
++			<header class="flex flex-row flex-wrap justify-between items-start gap-4">
++				<div class="space-y-1">
++					<h1 class="text-2xl font-medium">Credentials</h1>
+ 					<p class="text-sm text-neutral-400">
+ 						Add credentials to your account to use them within MacroGraph.
+ 					</p>
+ 				</div>
+-				<AddCredentialButton />
++				<label class="flex flex-row items-center gap-2 w-60 h-9 px-3 rounded-lg border border-neutral-800 bg-neutral-900 focus-within:border-neutral-600">
++					<IconTablerSearch class="size-4 shrink-0 text-neutral-500" />
++					<input
++						type="search"
++						aria-label="Search credentials"
++						placeholder="Search"
++						class="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-neutral-500 [&::-webkit-search-cancel-button]:hidden"
++						value={search()}
++						onInput={(e) => setSearch(e.currentTarget.value)}
++					/>
++				</label>
+ 			</header>
+ 			<Suspense>
+-				<CredentialsList />
++				<CredentialsList query={search().trim().toLowerCase()} />
+ 			</Suspense>
+ 		</div>
+ 	);
+ }
+ 
+-const PROVIDER_LIST: Array<AuthProvider> = [
+-	"twitch",
+-	"discord",
+-	// "spotify",
+-	// "patreon",
+-	// "github",
+-];
+-
+-function AddCredentialButton() {
++function useConnect() {
+ 	const doAddCredential = useAction(addCredential);
+ 
+-	return (
+-		<DropdownMenu>
+-			<DropdownMenuTrigger as={Button}>Add Credential</DropdownMenuTrigger>
+-			<DropdownMenuContent>
+-				<For each={PROVIDER_LIST}>
+-					{(provider) => (
+-						<DropdownMenuItem
+-							onClick={() => {
+-								doAddCredential(provider)
+-									.then((cred) => {
+-										toast.success(
+-											<>
+-												Credential <b>{cred.user.displayName}</b> added for{" "}
+-												<b>{PROVIDER_DISPLAY_NAMES[provider]}</b>
+-											</>,
+-										);
+-									})
+-									.catch((e) => {
+-										if (
+-											e instanceof Error &&
+-											e.message === WINDOW_OPEN_FAILED
+-										) {
+-											toast.error(
+-												"Failed to open login window. Make sure your browser isn't blocking popups.",
+-											);
+-										}
+-									});
+-							}}
+-						>
+-							{PROVIDER_DISPLAY_NAMES[provider]}
+-						</DropdownMenuItem>
+-					)}
+-				</For>
+-			</DropdownMenuContent>
+-		</DropdownMenu>
+-	);
++	return (provider: AuthProvider) =>
++		doAddCredential(provider)
++			.then((cred) => {
++				toast.success(
++					<>
++						Credential <b>{cred.user.displayName}</b> added for{" "}
++						<b>{PROVIDER_DISPLAY_NAMES[provider]}</b>
++					</>,
++				);
++			})
++			.catch((e) => {
++				if (e instanceof Error && e.message === WINDOW_OPEN_FAILED) {
++					toast.error(
++						"Failed to open login window. Make sure your browser isn't blocking popups.",
++					);
++				}
++			});
+ }
+ 
+-function CredentialsList() {
++function CredentialsList(props: { query: string }) {
+ 	const credentials = createAsync(() => getCredentials());
+ 	const submissions = useSubmissions(addCredential);
++	const connect = useConnect();
++	const [expanded, setExpanded] = createSignal<Array<AuthProvider>>([]);
+ 
+-	const pendingsubmissions = () => [...submissions].filter((s) => s.pending);
++	const pendingFor = (provider: AuthProvider) =>
++		[...submissions].find((s) => s.pending && s.input[0] === provider);
+ 
+-	return (
+-		<ul class="border border-neutral-800 rounded-lg divide-y divide-neutral-800">
+-			<Show
+-				when={credentials()?.length === 0 && pendingsubmissions().length === 0}
+-			>
+-				<p class="p-4 text-sm text-medium text-center">No connections found</p>
+-			</Show>
+-			<For each={pendingsubmissions()}>
+-				{(submission) => (
+-					<li class="p-4 flex flex-row items-center space-x-4 text-base">
+-						<div>
+-							<h3 class="font-medium">Connecting...</h3>
+-							<span class=" text-sm text-neutral-400">
+-								{PROVIDER_DISPLAY_NAMES[submission.input[0]]}
+-							</span>
+-						</div>
+-						<div class="flex-1" />
+-						<Button size="sm" onClick={() => submission.clear()}>
+-							Cancel
+-						</Button>
+-					</li>
+-				)}
+-			</For>
+-			<For each={credentials()}>
+-				{(connection) => {
+-					const removeSubmission = useSubmission(
+-						removeCredential,
+-						(s) =>
+-							s[0] === connection.providerId &&
+-							s[1] === connection.providerUserId,
++	const providers = () => {
++		const ids = [...PROVIDER_LIST];
++		for (const credential of credentials() ?? [])
++			if (!ids.includes(credential.providerId)) ids.push(credential.providerId);
++		return ids;
++	};
++
++	const groups = () =>
++		providers().flatMap((provider) => {
++			const all = (credentials() ?? []).filter(
++				(c) => c.providerId === provider,
++			);
++			if (all.length === 0) return [];
++			const accounts = matches(
++				props.query,
++				provider,
++				PROVIDER_DISPLAY_NAMES[provider],
++			)
++				? all
++				: all.filter((c) =>
++						matches(props.query, c.displayName, c.providerUserId),
+ 					);
++			return accounts.length === 0 ? [] : [{ provider, all, accounts }];
++		});
++
++	const available = () =>
++		PROVIDER_LIST.filter(
++			(provider) =>
++				!(credentials() ?? []).some((c) => c.providerId === provider) &&
++				matches(
++					props.query,
++					provider,
++					PROVIDER_DISPLAY_NAMES[provider],
++					PROVIDER_BRANDS[provider].description,
++				),
++		);
+ 
+-					return (
+-						<li class="p-4 flex flex-row items-center space-x-4 text-base">
++	const isExpanded = (provider: AuthProvider) =>
++		props.query !== "" || expanded().includes(provider);
++	const toggle = (provider: AuthProvider) =>
++		setExpanded((ids) =>
++			ids.includes(provider)
++				? ids.filter((id) => id !== provider)
++				: [...ids, provider],
++		);
++
++	return (
++		<>
++			<section class="space-y-3">
++				<h2 class="text-[15px] font-medium">Connected</h2>
++				<div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-hidden divide-y divide-neutral-800">
++					<For
++						each={groups()}
++						fallback={
++							<p class="p-5 text-sm text-neutral-500">
++								{props.query === ""
++									? "No credentials yet. Connect one below."
++									: "No credentials match your search."}
++							</p>
++						}
++					>
++						{(group) => (
+ 							<div>
+-								<h3 class="font-medium">{connection.displayName}</h3>
+-								<span class=" text-sm text-neutral-400">
+-									{PROVIDER_DISPLAY_NAMES[connection.providerId]}
+-								</span>
++								<button
++									type="button"
++									class="w-full flex flex-row items-center gap-3.5 px-4 py-3.5 text-left hover:bg-white/[0.03] focus-visible:outline-none focus-visible:bg-white/[0.05]"
++									aria-expanded={isExpanded(group.provider)}
++									onClick={() => toggle(group.provider)}
++								>
++									<ProviderTile provider={group.provider} />
++									<ProviderText provider={group.provider} />
++									<div class="flex flex-row items-center" aria-hidden="true">
++										<For each={group.all.slice(0, 3)}>
++											{(credential) => (
++												<span class="size-6 -ml-1.5 first:ml-0 grid place-items-center rounded-full border-2 border-neutral-900 bg-neutral-700 text-[10px] font-semibold uppercase text-neutral-300">
++													{accountName(credential).slice(0, 1)}
++												</span>
++											)}
++										</For>
++									</div>
++									<span class="min-w-3 text-sm tabular-nums text-neutral-500">
++										{group.all.length}
++									</span>
++									<IconTablerChevronDown
++										class="size-4 text-neutral-500 transition-transform"
++										classList={{ "rotate-180": isExpanded(group.provider) }}
++									/>
++								</button>
++								<Show when={isExpanded(group.provider)}>
++									<div class="border-t border-neutral-800 bg-black/20 py-1.5">
++										<div class="grid grid-cols-[minmax(0,1fr)_minmax(0,12rem)_2rem] items-center gap-3 pl-[62px] pr-4 h-7 text-[11px] uppercase tracking-wider text-neutral-500">
++											<span>Account</span>
++											<span>ID</span>
++											<span />
++										</div>
++										<For each={group.accounts}>
++											{(credential) => <AccountRow credential={credential} />}
++										</For>
++										<Show
++											when={pendingFor(group.provider)}
++											fallback={
++												<button
++													type="button"
++													class="flex flex-row items-center gap-1.5 pl-[62px] pr-4 py-2 text-sm text-neutral-400 hover:text-white focus-visible:outline-none focus-visible:underline"
++													onClick={() => connect(group.provider)}
++												>
++													<IconTablerPlus class="size-3.5" />
++													Add another {PROVIDER_DISPLAY_NAMES[group.provider]}{" "}
++													account
++												</button>
++											}
++										>
++											{(submission) => (
++												<div class="flex flex-row items-center gap-2 pl-[62px] pr-4 py-1.5 text-sm text-neutral-400">
++													<IconSvgSpinners90Ring class="size-3.5" />
++													Connecting...
++													<button
++														type="button"
++														class="ml-1 text-neutral-500 underline-offset-2 hover:text-white hover:underline"
++														onClick={() => submission().clear()}
++													>
++														Cancel
++													</button>
++												</div>
++											)}
++										</Show>
++									</div>
++								</Show>
+ 							</div>
+-							<div class="flex-1" />
+-							<form
+-								method="post"
+-								action={removeCredential.with(
+-									connection.providerId,
+-									connection.providerUserId,
+-								)}
+-							>
+-								<Button
+-									variant="destructive"
+-									type="submit"
+-									size="sm"
+-									disabled={removeSubmission.pending}
++						)}
++					</For>
++				</div>
++			</section>
++
++			<section class="space-y-3">
++				<h2 class="text-[15px] font-medium">Available</h2>
++				<div class="rounded-lg border border-neutral-800 bg-neutral-900/60 overflow-hidden divide-y divide-neutral-800">
++					<For
++						each={available()}
++						fallback={
++							<p class="p-5 text-sm text-neutral-500">
++								{props.query === ""
++									? "Every provider is connected."
++									: "No providers match your search."}
++							</p>
++						}
++					>
++						{(provider) => (
++							<div class="flex flex-row items-center gap-3.5 px-4 py-3.5">
++								<ProviderTile provider={provider} />
++								<ProviderText provider={provider} />
++								<Show
++									when={pendingFor(provider)}
++									fallback={
++										<Button variant="secondary" onClick={() => connect(provider)}>
++											Connect
++										</Button>
++									}
+ 								>
+-									<Show when={removeSubmission.pending} fallback="Remove">
+-										Removing...
+-									</Show>
+-								</Button>
+-							</form>
+-						</li>
+-					);
+-				}}
+-			</For>
+-		</ul>
++									{(submission) => (
++										<Button variant="ghost" onClick={() => submission().clear()}>
++											<IconSvgSpinners90Ring class="size-3.5 mr-2" />
++											Cancel
++										</Button>
++									)}
++								</Show>
++							</div>
++						)}
++					</For>
++				</div>
++			</section>
++		</>
++	);
++}
++
++function ProviderTile(props: { provider: AuthProvider }) {
++	const brand = () => PROVIDER_BRANDS[props.provider];
++	return (
++		<span
++			aria-hidden="true"
++			class={`size-8 shrink-0 grid place-items-center rounded-[7px] border border-white/10 ${brand().tile}`}
++		>
++			<Dynamic component={brand().icon} class="size-[17px]" />
++		</span>
++	);
++}
++
++function ProviderText(props: { provider: AuthProvider }) {
++	return (
++		<span class="flex-1 min-w-0 flex flex-col gap-0.5">
++			<span class="text-[15px] font-medium truncate">
++				{PROVIDER_DISPLAY_NAMES[props.provider]}
++			</span>
++			<span class="text-[13px] text-neutral-400 truncate">
++				{PROVIDER_BRANDS[props.provider].description}
++			</span>
++		</span>
++	);
++}
++
++function AccountRow(props: { credential: Credential }) {
++	const removeSubmission = useSubmission(
++		removeCredential,
++		(s) =>
++			s[0] === props.credential.providerId &&
++			s[1] === props.credential.providerUserId,
++	);
++
++	return (
++		<div class="group grid grid-cols-[minmax(0,1fr)_minmax(0,12rem)_2rem] items-center gap-3 pl-[62px] pr-4 min-h-9 text-sm hover:bg-white/[0.03]">
++			<span class="truncate">{accountName(props.credential)}</span>
++			<span class="truncate font-mono text-[13px] text-neutral-500">
++				{props.credential.providerUserId}
++			</span>
++			<form
++				method="post"
++				action={removeCredential.with(
++					props.credential.providerId,
++					props.credential.providerUserId,
++				)}
++			>
++				<button
++					type="submit"
++					title="Remove"
++					aria-label={`Remove ${accountName(props.credential)}`}
++					disabled={removeSubmission.pending}
++					class="size-7 grid place-items-center rounded-md text-neutral-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-100 hover:bg-red-500/15 hover:text-red-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
++				>
++					<Show
++						when={removeSubmission.pending}
++						fallback={<IconTablerTrash class="size-[15px]" />}
++					>
++						<IconSvgSpinners90Ring class="size-[15px]" />
++					</Show>
++				</button>
++			</form>
++		</div>
+ 	);
+ }
 diff --git a/apps/web/src/app/(app)/account/servers.tsx b/apps/web/src/app/(app)/account/servers.tsx
 index c3c5a603..e8ecd5e2 100644
 --- a/apps/web/src/app/(app)/account/servers.tsx
