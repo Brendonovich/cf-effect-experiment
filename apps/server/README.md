@@ -80,7 +80,9 @@ Every module, including the built-ins, is loaded at runtime from a folder. Built
 `MACROGRAPH_DATA_DIR/modules/local/<publisher>/<name>/` and load as `local/<publisher>/<name>`;
 installs from registries go under `MACROGRAPH_DATA_DIR/modules/installed/`. Admins manage modules
 under **Settings → Modules**: reload, enable or disable, rescan, browse registries and install. Changing
-a local module's files marks it stale; nothing reloads until an admin reloads it.
+a local module's files marks it stale; nothing reloads until an admin reloads it. The dev server
+(`pnpm dev`) instead reloads a changed local module as soon as its folder is complete again, so
+`macrograph-module dev --watch` rebuilds take effect without a manual reload.
 
 Each module is served under `/module/<namespace>/<publisher>/<name>/`: `rpc` (editors only), and
 content-hashed `ui/` and `assets/` files.
