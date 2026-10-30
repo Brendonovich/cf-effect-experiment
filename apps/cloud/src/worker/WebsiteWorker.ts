@@ -66,7 +66,8 @@ export default Layer.unwrap(
       {
         ...(stage === "production" ? { name: productionWorkerName } : {}),
         ...(publicHost === undefined
-          ? {}
+          ? // Explicitly detach: omitting `domain` would leave a previously attached one in place.
+            { domain: null }
           : {
               domain: {
                 name: publicHost,
