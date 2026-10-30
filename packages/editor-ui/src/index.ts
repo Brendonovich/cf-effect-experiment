@@ -29,6 +29,11 @@ export {
   type EditorControllerOptions,
 } from "./editor/createEditorController.ts";
 export { macrographLogo };
+export {
+  CredentialIntegrations,
+  type CredentialIntegrationsProps,
+  type CredentialProvider,
+} from "./credentials/CredentialIntegrations.tsx";
 export { CredentialSettings } from "./credentials/CredentialSettings.tsx";
 export {
   ApiKeySettings,
