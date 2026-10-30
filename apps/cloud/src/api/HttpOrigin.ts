@@ -24,10 +24,6 @@ export const cloudPathPrefix = "/cloud";
 export const forwardedPrefix = (request: OriginRequest) =>
   request.headers["x-forwarded-prefix"] === cloudPathPrefix ? cloudPathPrefix : "";
 
-/** Cloud's public base URL, including the mount prefix when served from the main site. */
-export const publicBaseUrl = (request: OriginRequest) =>
-  `${requestOrigin(request)}${forwardedPrefix(request)}`;
-
 export const hasTrustedOrigin = (request: OriginRequest) => {
   const origin = request.headers.origin;
   if (origin === undefined) return true;

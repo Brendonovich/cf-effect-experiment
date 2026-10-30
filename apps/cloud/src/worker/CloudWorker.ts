@@ -51,11 +51,6 @@ export class IngressPublicOrigin extends Context.Service<
   Alchemy.Output<string | undefined>
 >()("IngressPublicOrigin") {}
 
-export class CredentialOAuthStateSecret extends Context.Service<
-  CredentialOAuthStateSecret,
-  Alchemy.Output<Redacted.Redacted<string>>
->()("CredentialOAuthStateSecret") {}
-
 /**
  * Hosts Cloud's APIs, editor connections, and web app at `/cloud` on the main site, via Worker
  * Routes that run ahead of WebsiteWorker's Custom Domain.
@@ -77,9 +72,6 @@ export default Layer.unwrap(
     const assetsDir = Option.getOrUndefined(yield* Effect.serviceOption(WebAssetsDirectory));
     const ingressPublicOrigin = Option.getOrUndefined(
       yield* Effect.serviceOption(IngressPublicOrigin),
-    );
-    const credentialOAuthStateSecret = Option.getOrUndefined(
-      yield* Effect.serviceOption(CredentialOAuthStateSecret),
     );
     const databaseResource = yield* DatabaseHyperdrive;
     const deploymentsResource = yield* DeploymentObjectsBucket;
@@ -131,9 +123,6 @@ export default Layer.unwrap(
         dev: { port: 1337, strictPort: true },
       },
       Effect.gen(function* () {
-        const runtimeContext = yield* Alchemy.RuntimeContext;
-        if (credentialOAuthStateSecret !== undefined)
-          yield* runtimeContext.set("CREDENTIAL_OAUTH_STATE_SECRET", credentialOAuthStateSecret);
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
         // Binds IngressWorker's OpenCodeDO namespace for ProjectEditorDO's managed connections.
         yield* OpenCodeDO.from(IngressWorker);

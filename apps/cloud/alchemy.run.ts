@@ -23,7 +23,6 @@ import {
 } from "./src/Storage.ts";
 import CloudWorkerLayer, {
   CloudWorker,
-  CredentialOAuthStateSecret,
   IngressPublicOrigin,
   WebAssetsDirectory,
 } from "./src/worker/CloudWorker.ts";
@@ -57,7 +56,6 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const ctx = yield* Alchemy.AlchemyContext;
-    const credentialOAuthStateSecret = yield* Alchemy.makeRandom("CredentialOAuthStateSecret");
     yield* DatabaseHyperdrive;
     yield* DeploymentObjectsBucket;
     if ((yield* Alchemy.Stage) === "production") {
@@ -95,7 +93,6 @@ export default Alchemy.Stack(
       const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
       const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
         Effect.provide(CloudWorkerLayer),
-        Effect.provideService(CredentialOAuthStateSecret, credentialOAuthStateSecret),
         Effect.provideService(WebAssetsDirectory, frontendBuild?.outdir),
         Effect.provideService(IngressPublicOrigin, ingressWorker.url),
       );

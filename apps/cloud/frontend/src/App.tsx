@@ -473,7 +473,7 @@ export function App(
             <Loading fallback={null}>
               <AccountMenu
                 email={props.user.email}
-                onCredentials={() => navigate("/credentials")}
+                onCredentials={() => window.location.assign("/account/credentials")}
                 onSignOut={() => void auth.signOut()}
               />
             </Loading>

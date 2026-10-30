@@ -80,11 +80,10 @@ keep working, and the Worker 301s browsers to the bare domain.
 Cloud signs in with the website's `auth_session` cookie, so the two share one login. Cloud's
 `users` rows already use website account IDs. `CloudAuthDO` and its per-session credential cache
 are gone: deploying deletes the class, and project editors read the owner's credentials from the
-account database instead.
+account database instead. Cloud only lists credentials; they are connected and removed on the
+website's `/account/credentials` page.
 
 Before deploying:
 
-1. Add `https://macrograph.app/cloud/credential-oauth/callback` as a redirect URI for each OAuth
-   provider Cloud connects credentials with (Twitch, GitHub, and any others configured).
-2. Tell MCP users to reconnect with `https://macrograph.app/cloud/api/mcp`. Tokens issued for the
+1. Tell MCP users to reconnect with `https://macrograph.app/cloud/api/mcp`. Tokens issued for the
    old resource URL are no longer accepted.
