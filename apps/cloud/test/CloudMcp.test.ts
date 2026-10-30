@@ -131,7 +131,7 @@ describe("Cloud MCP toolkit", () => {
             return yield* new HttpApiError.Unauthorized();
           const id = authorization.slice("Bearer ".length);
           return {
-            user: { id, sessionId: undefined },
+            user: { id },
             caller: ApiCaller.forApiKey({ id: `key-${id}`, name: `${id}'s key` }, null),
           };
         });
@@ -179,7 +179,7 @@ describe("Cloud MCP toolkit", () => {
         assert.strictEqual(rejected.status, 401);
         assert.include(
           rejected.headers["www-authenticate"],
-          'resource_metadata="https://cloud.macrograph.app/.well-known/oauth-protected-resource/api/mcp"',
+          'resource_metadata="https://macrograph.app/.well-known/oauth-protected-resource/cloud/api/mcp"',
         );
         assert.include(rejected.headers["www-authenticate"], 'scope="mcp"');
         const invalidKey = yield* send(initialize, "Bearer invalid");

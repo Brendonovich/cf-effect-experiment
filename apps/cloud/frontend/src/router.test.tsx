@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createRouter, memoryHistory, type RouteSectionProps } from "@solidjs/router";
+import { createRouter, memoryHistory, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import { render } from "@solidjs/web";
 import { flush, onCleanup } from "solid-js";
 import { expect, it } from "vitest";
@@ -117,4 +117,41 @@ it("keeps shared layouts mounted across sibling routes and parameter changes", (
     parent: { mounts: 2, disposals: 2 },
     project: { mounts: 2, disposals: 2 },
   });
+});
+
+it("navigates within the /cloud mount without doubling the slash", async () => {
+  const history = memoryHistory("/cloud/");
+  let navigate!: (path: string) => void;
+  const Router = createRouter({
+    // Mirrors CloudApp, which strips Vite's trailing slash from BASE_URL.
+    base: "/cloud/".replace(/\/+$/, ""),
+    history,
+    routes: [
+      {
+        path: "/",
+        component: () => {
+          navigate = useNavigate();
+          return <p>Home</p>;
+        },
+      },
+      {
+        path: "/teams/:teamId",
+        component: (props: RouteSectionProps) => <p>{props.params.teamId}</p>,
+      },
+    ],
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const dispose = render(() => <Router />, container);
+  try {
+    flush();
+    navigate("/teams/team-1");
+    await Promise.resolve();
+    flush();
+    expect(history.get()).toBe("/cloud/teams/team-1");
+    expect(container.textContent).toBe("team-1");
+  } finally {
+    dispose();
+    container.remove();
+  }
 });

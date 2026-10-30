@@ -1,6 +1,6 @@
 import { LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
-import { createRouter, useLocation, type RouteSectionProps } from "@solidjs/router";
+import { createRouter, type RouteSectionProps } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { createMemo, Loading, Show } from "solid-js";
@@ -10,8 +10,6 @@ import { AuthProvider, useAuth } from "./Auth";
 import { signInUrl } from "./authRedirect";
 import { Redirect } from "./Redirect";
 import { WorkspaceHomeRoute } from "./routes";
-import { CredentialOAuthCallbackRoute } from "./routes/credential-oauth-callback";
-import { CredentialsRoute } from "./routes/credentials";
 import { NotFoundRoute } from "./routes/not-found";
 import { SignInRoute } from "./routes/sign-in";
 import { TeamHomeRoute } from "./routes/teams";
@@ -22,7 +20,6 @@ import { ProjectSettingsRoute } from "./routes/teams/projects/settings";
 
 function AuthenticatedApp(props: RouteSectionProps) {
   const auth = useAuth();
-  const location = useLocation();
   const user = createMemo(() => {
     const status = auth.status();
     return status.state === "connected" ? status : undefined;
@@ -35,11 +32,11 @@ function AuthenticatedApp(props: RouteSectionProps) {
         fallback={
           <Redirect
             href={signInUrl(
-              `${location.pathname}${location.search}${location.hash}`,
-              import.meta.env.BASE_URL,
+              `${window.location.pathname}${window.location.search}${window.location.hash}`,
             )}
             replace
             resolve={false}
+            document
           />
         }
       >
@@ -53,16 +50,20 @@ const queryClient = new QueryClient({
   defaultOptions: { mutations: { networkMode: "always" } },
 });
 const Router = createRouter({
-  base: import.meta.env.BASE_URL,
+  // The router joins its own leading-slash paths onto the base, so drop Vite's trailing slash.
+  base: import.meta.env.BASE_URL.replace(/\/+$/, ""),
   routes: [
     { path: "/sign-in", component: SignInRoute },
-    { path: "/credential-oauth/callback", component: CredentialOAuthCallbackRoute },
+    // Credentials are managed on the website.
+    {
+      path: "/credentials",
+      component: () => <Redirect href="/account/credentials" replace resolve={false} document />,
+    },
     {
       path: "/",
       component: AuthenticatedApp,
       children: [
         { path: "/", component: WorkspaceHomeRoute },
-        { path: "/credentials", component: CredentialsRoute },
         {
           path: "/teams/:teamId",
           children: [

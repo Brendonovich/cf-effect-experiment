@@ -89,7 +89,7 @@ export const layer = (
       const found = key === undefined ? undefined : yield* options.apiKeys.authenticate(key);
       if (found === undefined) return yield* new HttpApiError.Unauthorized();
       return {
-        user: { id: found.userId, sessionId: undefined },
+        user: { id: found.userId },
         caller: ApiCaller.forApiKey({ id: found.id, name: found.name }, found.email),
       } satisfies ProjectMcp.Principal;
     });

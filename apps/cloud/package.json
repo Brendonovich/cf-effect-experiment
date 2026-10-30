@@ -22,7 +22,6 @@
     "@effect/sql-pg": "4.0.6",
     "@effect/sql-sqlite-do": "4.0.6",
     "@macrograph/cloud-api": "workspace:*",
-    "@macrograph/cloud-credentials": "workspace:*",
     "@macrograph/core": "workspace:*",
     "@macrograph/editor": "workspace:*",
     "@macrograph/execution": "workspace:*",

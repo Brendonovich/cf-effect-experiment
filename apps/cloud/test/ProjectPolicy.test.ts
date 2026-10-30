@@ -84,7 +84,7 @@ describe("ProjectPolicy.layer", () => {
             assert.strictEqual(yield* Ref.get(executed), allowed);
           }
         }).pipe(
-          Effect.provideService(CurrentUser, { id: role, sessionId: undefined }),
+          Effect.provideService(CurrentUser, { id: role }),
           Effect.provide(
             ProjectPolicy.layer.pipe(
               Layer.provide(
@@ -125,7 +125,7 @@ describe("ProjectPolicy.layer", () => {
         assert.strictEqual(error._tag, "ProjectNotFound");
       }
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "outsider", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "outsider" }),
       Effect.provide(
         ProjectPolicy.layer.pipe(
           Layer.provide(databaseLayer([], ["outsider", "outsider", "project", 1])),
@@ -150,7 +150,7 @@ describe("TeamPolicy.layer canEdit", () => {
         }
         assert.strictEqual(yield* Ref.get(executed), role !== "viewer");
       }).pipe(
-        Effect.provideService(CurrentUser, { id: role, sessionId: undefined }),
+        Effect.provideService(CurrentUser, { id: role }),
         Effect.provide(
           TeamPolicy.layer.pipe(
             Layer.provide(
@@ -168,7 +168,7 @@ describe("TeamPolicy.layer canEdit", () => {
       const error = yield* Effect.flip(policy.canEdit("team"));
       assert.strictEqual(error._tag, "TeamNotFound");
     }).pipe(
-      Effect.provideService(CurrentUser, { id: "outsider", sessionId: undefined }),
+      Effect.provideService(CurrentUser, { id: "outsider" }),
       Effect.provide(
         TeamPolicy.layer.pipe(Layer.provide(databaseLayer([], ["team", "outsider", 1]))),
       ),

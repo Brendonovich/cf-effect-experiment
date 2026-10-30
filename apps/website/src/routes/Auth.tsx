@@ -1,12 +1,12 @@
 import { Button, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
-import { useLocation, useNavigate } from "@solidjs/router";
+import { useLocation } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
 import { useMutation, useQueryClient } from "@tanstack/solid-query";
 import { Show } from "solid-js";
 
 import { safeNextPath, sessionKey, submitCredentials } from "../api";
-import { Redirect, useSession } from "../session";
+import { Redirect, useGoTo, useSession } from "../session";
 import { showToast } from "../Toasts";
 
 const copy = {
@@ -33,7 +33,7 @@ const copy = {
 export function AuthRoute(props: { readonly mode: "login" | "signup" }) {
   const session = useSession();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const goTo = useGoTo();
   const location = useLocation();
   const next = () => safeNextPath(new URLSearchParams(location.search).get("next"));
   const text = () => copy[props.mode];
@@ -55,13 +55,17 @@ export function AuthRoute(props: { readonly mode: "login" | "signup" }) {
         tone: "success",
         content: props.mode === "login" ? "You are now logged in" : "Welcome to MacroGraph",
       });
-      navigate(next(), { replace: true });
+      goTo(next());
     },
   }));
 
   return (
     <main sx={styles.page}>
-      <Show when={!session.data || submit.isPending} fallback={<Redirect href={next()} />}>
+      <Show
+        // A successful submit already navigates; redirecting again would load the page twice.
+        when={!session.data || submit.isPending || submit.isSuccess}
+        fallback={<Redirect href={next()} />}
+      >
         <div sx={styles.card}>
           <a href="/" aria-label="MacroGraph home" sx={styles.logoLink}>
             <img src={macrographLogo} alt="" sx={styles.logo} />

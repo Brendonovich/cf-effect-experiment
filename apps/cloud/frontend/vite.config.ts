@@ -21,11 +21,15 @@ const workerUrl =
 const publicIngressOrigin = new URL(
   process.env.VITE_PUBLIC_INGRESS_ORIGIN ?? process.env.VITE_PUBLIC_WORKER_ORIGIN ?? workerUrl,
 ).origin;
+// Cloud is mounted at `/cloud` on the main site. The worker strips the mount itself, as it does
+// for requests its Worker Routes receive in production.
+const basePath = process.env.MACROGRAPH_BASE_PATH ?? "/cloud/";
+const mount = basePath.replace(/\/+$/, "");
 const proxyHeaders = { "x-macrograph-public-origin": publicIngressOrigin };
 
 export default defineConfig({
   appType: "spa",
-  base: process.env.MACROGRAPH_BASE_PATH ?? "/",
+  base: basePath,
   build: { sourcemap: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
@@ -48,8 +52,19 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: true,
     proxy: {
-      "/api": { target: workerUrl, changeOrigin: true, headers: proxyHeaders, xfwd: true },
-      "/rpc": {
+      [`${mount}/api`]: {
+        target: workerUrl,
+        changeOrigin: true,
+        headers: proxyHeaders,
+        xfwd: true,
+      },
+      [`${mount}/oauth`]: {
+        target: workerUrl,
+        changeOrigin: true,
+        headers: proxyHeaders,
+        xfwd: true,
+      },
+      [`${mount}/rpc`]: {
         target: workerUrl,
         changeOrigin: true,
         headers: proxyHeaders,

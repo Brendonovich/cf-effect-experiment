@@ -203,9 +203,6 @@ importers:
       '@macrograph/cloud-api':
         specifier: workspace:*
         version: link:../../packages/cloud-api
-      '@macrograph/cloud-credentials':
-        specifier: workspace:*
-        version: link:../../packages/cloud-credentials
       '@macrograph/core':
         specifier: workspace:*
         version: link:../../packages/core
