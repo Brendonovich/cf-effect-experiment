@@ -1,8 +1,8 @@
-import { CredentialTable, LoadingState } from "@macrograph/editor-ui";
+import { CredentialIntegrations, LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
-import { For, Show } from "solid-js";
+import { Show } from "solid-js";
 
 import { runApi, runApiResult } from "../api";
 import { useWorkspace } from "../App";
@@ -83,47 +83,24 @@ export const CredentialsRoute = () => {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: credentialsKey }),
   }));
 
+  const errors = () => (
+    <>
+      <Show when={connectCredential.isError}>
+        <p role="alert" sx={styles.error}>
+          {connectCredential.error?.message ?? "Could not connect credential."}
+        </p>
+      </Show>
+      <Show when={removeCredential.isError}>
+        <p role="alert" sx={styles.error}>
+          Could not remove credential. Please try again.
+        </p>
+      </Show>
+    </>
+  );
+
   return (
     <div sx={styles.root}>
       <div sx={styles.container}>
-        <header sx={styles.header}>
-          <div>
-            <h1 sx={styles.title}>Credentials</h1>
-            <p sx={styles.subtitle}>
-              Connect external accounts to use them anywhere you're logged in to MacroGraph
-            </p>
-          </div>
-          <select
-            aria-label="Add credential"
-            sx={styles.providerSelect}
-            disabled={connectCredential.isPending || providersQuery.isPending}
-            value=""
-            onChange={(event) => {
-              const provider = event.currentTarget.value;
-              event.currentTarget.value = "";
-              if (provider !== "") connectCredential.mutate(provider);
-            }}
-          >
-            <option value="">
-              {connectCredential.isPending ? "Connecting..." : "Add credential..."}
-            </option>
-            <For each={providersQuery.data ?? []}>
-              {(provider) => <option value={provider.id}>{provider.displayName}</option>}
-            </For>
-          </select>
-        </header>
-
-        <Show when={connectCredential.isError}>
-          <p role="alert" sx={styles.error}>
-            {connectCredential.error?.message ?? "Could not connect credential."}
-          </p>
-        </Show>
-        <Show when={removeCredential.isError}>
-          <p role="alert" sx={styles.error}>
-            Could not remove credential. Please try again.
-          </p>
-        </Show>
-
         <Show
           when={!credentialsQuery.isPending}
           fallback={<LoadingState label="Loading credentials" style={styles.loading} />}
@@ -139,8 +116,15 @@ export const CredentialsRoute = () => {
               </div>
             }
           >
-            <CredentialTable
+            <CredentialIntegrations
+              description="Connect external accounts to use them anywhere you're logged in to MacroGraph."
+              providers={providersQuery.data ?? []}
               credentials={credentials()}
+              notice={errors()}
+              onConnect={(provider) => connectCredential.mutate(provider)}
+              connecting={(provider) =>
+                connectCredential.isPending && connectCredential.variables === provider
+              }
               onRemove={(credential) => removeCredential.mutate(credential)}
               removing={(credential) =>
                 removeCredential.isPending &&
@@ -165,30 +149,7 @@ const styles = stylex.create({
     paddingInline: { default: 20, [sm]: 32 },
     paddingBlock: { default: 40, [sm]: 56 },
   },
-  header: {
-    display: "flex",
-    flexDirection: { default: "column", [sm]: "row" },
-    alignItems: { default: "stretch", [sm]: "flex-end" },
-    justifyContent: "space-between",
-    gap: 24,
-    marginBottom: 28,
-  },
-  title: { fontSize: 28, lineHeight: "34px", fontWeight: 600, color: colors.gray12 },
-  subtitle: { marginTop: 8, maxWidth: 520, fontSize: 14, lineHeight: "22px", color: colors.gray10 },
-  providerSelect: {
-    height: 36,
-    flexShrink: 0,
-    borderRadius: 6,
-    border: `1px solid ${colors.gray6}`,
-    backgroundColor: colors.gray12,
-    paddingInline: 12,
-    fontSize: 12,
-    fontWeight: 600,
-    color: colors.gray1,
-    ":disabled": { opacity: 0.6 },
-  },
   error: {
-    marginBottom: 12,
     borderRadius: 6,
     border: `1px solid ${colors.red6}`,
     backgroundColor: colors.red3,

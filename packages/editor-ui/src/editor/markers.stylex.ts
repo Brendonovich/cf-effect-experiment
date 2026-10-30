@@ -5,3 +5,4 @@ export const functionFieldMarker = stylex.defineMarker();
 export const searchMarker = stylex.defineMarker();
 export const splitMarker = stylex.defineMarker();
 export const tabMarker = stylex.defineMarker();
+export const credentialRowMarker = stylex.defineMarker();
