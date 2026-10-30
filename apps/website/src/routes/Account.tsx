@@ -38,6 +38,8 @@ export function AccountLayout(props: { readonly children?: JSX.Element }) {
   );
 }
 
+// Below this width pages drop the side gutter so tabs and lists run to the screen edge.
+const narrow = "@media (max-width: 639px)";
 const styles = stylex.create({
   page: { minHeight: "100dvh", backgroundColor: colors.gray1, color: colors.gray12 },
   container: {
@@ -45,14 +47,15 @@ const styles = stylex.create({
     maxWidth: 800,
     boxSizing: "border-box",
     marginInline: "auto",
-    paddingInline: 24,
-    paddingTop: 24,
+    paddingInline: { default: 24, [narrow]: 0 },
+    paddingTop: { default: 24, [narrow]: 8 },
     paddingBottom: 64,
   },
   tabs: {
     display: "flex",
     gap: 4,
-    marginBottom: 32,
+    marginBottom: { default: 32, [narrow]: 24 },
+    paddingInline: { default: 0, [narrow]: 4 },
     borderBottomColor: colors.gray4,
     borderBottomStyle: "solid",
     borderBottomWidth: 1,

@@ -69,6 +69,7 @@ export function CredentialsRoute() {
         }
       >
         <CredentialIntegrations
+          edgeToEdge
           description="Add credentials to your account to use them within MacroGraph."
           providers={providers}
           credentials={(credentials.data ?? []).map(toCredentialSummary)}
@@ -89,7 +90,12 @@ export function CredentialsRoute() {
 
 const styles = stylex.create({
   loading: { height: 160 },
-  loadError: { paddingBlock: 24, fontSize: 14, color: colors.gray10 },
+  loadError: {
+    paddingBlock: 24,
+    paddingInline: { default: 0, "@media (max-width: 639px)": 16 },
+    fontSize: 14,
+    color: colors.gray10,
+  },
   retry: {
     marginTop: 12,
     paddingBlock: 7,

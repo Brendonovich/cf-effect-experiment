@@ -11,7 +11,7 @@ export function ServersRoute() {
 
   return (
     <div sx={styles.root}>
-      <header>
+      <header sx={styles.header}>
         <h1 sx={styles.title}>Servers</h1>
         <p sx={styles.subtitle}>
           MacroGraph servers registered to your account. Run a server and approve its registration
@@ -57,8 +57,10 @@ export function ServersRoute() {
   );
 }
 
+const narrow = "@media (max-width: 639px)";
 const styles = stylex.create({
-  root: { display: "flex", flexDirection: "column", gap: 32 },
+  root: { display: "flex", flexDirection: "column", gap: { default: 32, [narrow]: 24 } },
+  header: { paddingInline: { default: 0, [narrow]: 16 } },
   title: { margin: 0, fontSize: 20, lineHeight: "28px", fontWeight: 500 },
   subtitle: { margin: 0, marginTop: 4, fontSize: 14, lineHeight: "20px", color: colors.gray11 },
   loading: { height: 120 },
@@ -67,7 +69,8 @@ const styles = stylex.create({
     borderColor: colors.gray5,
     borderStyle: "solid",
     borderWidth: 1,
-    borderRadius: 8,
+    borderInlineWidth: { default: 1, [narrow]: 0 },
+    borderRadius: { default: 8, [narrow]: 0 },
     backgroundColor: colors.gray2,
   },
   row: {

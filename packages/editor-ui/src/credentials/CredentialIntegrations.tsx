@@ -28,13 +28,22 @@ export interface CredentialIntegrationsProps {
   readonly defaultExpanded?: ReadonlyArray<string>;
   /** Show the status column. Hide it when the source does not report credential status. */
   readonly showStatus?: boolean;
+  /**
+   * On narrow viewports, run lists to the container's edges and give the text its own gutter.
+   * Use when the container has no side padding on mobile.
+   */
+  readonly edgeToEdge?: boolean;
 }
 
 const amber = "#ffc53d";
 const green = "#3dd68c";
 
+const narrow = "@media (max-width: 639px)";
+
 const styles = stylex.create({
   root: { display: "flex", flexDirection: "column", gap: 32, color: colors.gray12 },
+  rootEdgeToEdge: { gap: { default: 32, [narrow]: 24 } },
+  gutter: { paddingInline: { default: 0, [narrow]: 16 } },
   header: {
     display: "flex",
     flexWrap: "wrap",
@@ -50,7 +59,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
-    width: 240,
+    width: { default: 240, [narrow]: "100%" },
     height: 36,
     boxSizing: "border-box",
     paddingInline: 12,
@@ -83,6 +92,10 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderWidth: 1,
     backgroundColor: colors.gray2,
+  },
+  listEdgeToEdge: {
+    borderInlineWidth: { default: 1, [narrow]: 0 },
+    borderRadius: { default: 8, [narrow]: 0 },
   },
   group: {
     borderTopColor: colors.gray4,
@@ -172,6 +185,7 @@ const styles = stylex.create({
     fontSize: 13,
   },
   panelRowWithoutStatus: { gridTemplateColumns: "minmax(0, 1fr) minmax(0, 160px) 28px" },
+  panelRowEdgeToEdge: { paddingLeft: { default: 62, [narrow]: 16 } },
   panelHead: {
     minHeight: 28,
     fontSize: 11,
@@ -248,6 +262,9 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
   const [expanded, setExpanded] = createSignal<ReadonlyArray<string>>(props.defaultExpanded ?? []);
   const query = () => search().trim().toLowerCase();
   const showStatus = () => props.showStatus ?? true;
+  const gutter = () => (props.edgeToEdge ? styles.gutter : null);
+  const list = () => (props.edgeToEdge ? styles.listEdgeToEdge : null);
+  const panelRow = () => (props.edgeToEdge ? styles.panelRowEdgeToEdge : null);
   const isExpanded = (provider: string) => query() !== "" || expanded().includes(provider);
   const toggle = (provider: string) =>
     setExpanded((ids) =>
@@ -288,8 +305,8 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
     );
 
   return (
-    <div sx={styles.root}>
-      <header sx={styles.header}>
+    <div sx={[styles.root, props.edgeToEdge ? styles.rootEdgeToEdge : null]}>
+      <header sx={[styles.header, gutter()]}>
         <div sx={styles.heading}>
           <h1 sx={styles.title}>{props.title ?? "Credentials"}</h1>
           <p sx={styles.subtitle}>
@@ -312,8 +329,8 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
       {props.notice}
 
       <section sx={styles.section}>
-        <h2 sx={styles.sectionHeading}>Connected</h2>
-        <div sx={styles.list}>
+        <h2 sx={[styles.sectionHeading, gutter()]}>Connected</h2>
+        <div sx={[styles.list, list()]}>
           <For
             each={groups()}
             fallback={
@@ -378,6 +395,7 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
                         sx={[
                           styles.panelRow,
                           showStatus() ? null : styles.panelRowWithoutStatus,
+                          panelRow(),
                           styles.panelHead,
                         ]}
                         aria-hidden="true"
@@ -396,6 +414,7 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
                               credentialRowMarker,
                               styles.panelRow,
                               showStatus() ? null : styles.panelRowWithoutStatus,
+                              panelRow(),
                             ]}
                           >
                             <span sx={styles.cell}>{accountName(credential)}</span>
@@ -427,7 +446,7 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
                         {(onConnect) => (
                           <button
                             type="button"
-                            sx={styles.add}
+                            sx={[styles.add, panelRow()]}
                             disabled={props.connecting?.(group.provider) ?? false}
                             onClick={() => onConnect()(group.provider)}
                           >
@@ -448,8 +467,8 @@ export function CredentialIntegrations(props: CredentialIntegrationsProps) {
       </section>
 
       <section sx={styles.section}>
-        <h2 sx={styles.sectionHeading}>Available</h2>
-        <div sx={styles.list}>
+        <h2 sx={[styles.sectionHeading, gutter()]}>Available</h2>
+        <div sx={[styles.list, list()]}>
           <For
             each={available()}
             fallback={
