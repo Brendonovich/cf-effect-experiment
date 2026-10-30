@@ -230,6 +230,20 @@ export const layer = (options: Options) =>
                   : { source: "userAccessToken", userId: row.userId };
               }
               const jwt = yield* verifyServerJwt(token);
+              // Server tokens never expire, so deleting the registration is what revokes one.
+              const registrations = yield* database
+                .select({ id: oauthApps.id })
+                .from(oauthApps)
+                .where(
+                  and(
+                    eq(oauthApps.id, jwt.oauthAppId),
+                    eq(oauthApps.type, "server"),
+                    eq(oauthApps.ownerId, jwt.ownerId),
+                  ),
+                )
+                .limit(1)
+                .pipe(Effect.orDie);
+              if (registrations.length === 0) return yield* reject(401);
               return { source: "serverJwt", userId: jwt.ownerId, oauthAppId: jwt.oauthAppId };
             }
             // The desktop app sends its website session ID as a bearer token.
