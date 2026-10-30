@@ -40,6 +40,13 @@ export const resolve = (pathname: string, search: string): Resolved => {
   return { _tag: application ? "Application" : "Assets", path, mounted };
 };
 
+/** Whether CloudWorker's routes claim a path, for stages that forward instead of routing. */
+export const claims = (pathname: string) =>
+  pathname === cloudPathPrefix ||
+  pathname.startsWith(`${cloudPathPrefix}/`) ||
+  pathname === `/.well-known/oauth-authorization-server${cloudPathPrefix}` ||
+  pathname.startsWith(`/.well-known/oauth-protected-resource${cloudPathPrefix}/`);
+
 /** The Worker Route patterns CloudWorker claims on a public hostname. */
 export const routePatterns = (hostname: string) => [
   `${hostname}${cloudPathPrefix}`,

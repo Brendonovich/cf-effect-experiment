@@ -4,6 +4,7 @@ import * as Output from "alchemy/Output";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
+import * as CloudMount from "../api/CloudMount.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import { ObservabilityLayer } from "../Observability.ts";
@@ -12,6 +13,7 @@ import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
+import { CloudWorker } from "./CloudWorker.ts";
 
 /** The built `apps/website` app served at macrograph.app. Omitted while developing. */
 export class WebsiteAssetsDirectory extends Context.Service<
@@ -103,6 +105,10 @@ export default Layer.unwrap(
       Effect.gen(function* () {
         const runtimeContext = yield* Alchemy.RuntimeContext;
         if (stateSecret !== undefined) yield* runtimeContext.set(stateSecretKey, stateSecret);
+        // Without a dedicated hostname there are no Worker Routes (they only run on zones we own),
+        // so this Worker forwards Cloud's paths and its workers.dev URL serves both apps.
+        const cloud =
+          publicHost === undefined ? yield* Cloudflare.Workers.bindWorker(CloudWorker) : undefined;
 
         const stateKey = yield* Effect.cached(
           Effect.gen(function* () {
@@ -148,6 +154,17 @@ export default Layer.unwrap(
             const source = request.source;
             if (!(source instanceof Request)) return yield* app;
             const url = new URL(source.url);
+            if (cloud !== undefined && CloudMount.claims(url.pathname)) {
+              const environment = yield* Cloudflare.WorkerEnvironment;
+              // `bindWorker` names the service binding after the Worker's logical ID.
+              const binding: { fetch: (request: Request) => Promise<Response> } | undefined =
+                environment.CloudWorker;
+              if (binding === undefined) return HttpServerResponse.empty({ status: 503 });
+              // The full path and host go through unchanged; CloudWorker strips the mount itself.
+              const response = yield* Effect.promise(() => binding.fetch(source));
+              // A raw body passes the native response through untouched, including WebSockets.
+              return HttpServerResponse.raw(response, { status: response.status });
+            }
             const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/");
             if (isApi) return yield* app;
             if (

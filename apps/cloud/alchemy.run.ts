@@ -15,17 +15,16 @@ import * as Effect from "effect/Effect";
 import * as Dns from "./src/Dns.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
-import * as PublicHost from "./src/PublicHost.ts";
 import {
   DatabaseHyperdrive,
   DeploymentObjectsBucket,
   LegacyLogicalDatabase,
 } from "./src/Storage.ts";
+import { CloudWorker } from "./src/worker/CloudWorker.ts";
 import CloudWorkerLayer, {
-  CloudWorker,
   IngressPublicOrigin,
   WebAssetsDirectory,
-} from "./src/worker/CloudWorker.ts";
+} from "./src/worker/CloudWorkerLayer.ts";
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 import WebsiteWorkerLayer, {
@@ -107,8 +106,7 @@ export default Alchemy.Stack(
     );
 
     const github = yield* GitHub.GitHubEnv;
-    const previewHost = PublicHost.forStage(yield* Alchemy.Stage);
-    if (github?.pr !== undefined && previewHost !== undefined) {
+    if (github?.pr !== undefined) {
       yield* GitHub.Comment("CloudPreviewComment", {
         owner: github.owner,
         repository: github.repository,
@@ -116,8 +114,8 @@ export default Alchemy.Stack(
         body: Output.interpolate`
 					## MacroGraph preview
 
-					**Website:** https://${previewHost}/
-					**Cloud:** https://${previewHost}/cloud/
+					**Website:** ${websiteWorker.url}
+					**Cloud:** ${websiteWorker.url}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.

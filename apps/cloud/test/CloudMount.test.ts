@@ -57,6 +57,24 @@ describe("CloudMount", () => {
     });
   });
 
+  it("forwards exactly the paths its routes claim", () => {
+    for (const path of [
+      "/cloud",
+      "/cloud/",
+      "/cloud/api/projects",
+      "/.well-known/oauth-authorization-server/cloud",
+      "/.well-known/oauth-protected-resource/cloud/api/mcp",
+    ])
+      assert.isTrue(CloudMount.claims(path), path);
+    for (const path of [
+      "/",
+      "/cloudy",
+      "/api/website/session",
+      "/.well-known/oauth-authorization-server",
+    ])
+      assert.isFalse(CloudMount.claims(path), path);
+  });
+
   it("claims only Cloud's paths on the shared hostname", () => {
     assert.deepStrictEqual(CloudMount.routePatterns("macrograph.app"), [
       "macrograph.app/cloud",
@@ -68,10 +86,9 @@ describe("CloudMount", () => {
 });
 
 describe("PublicHost", () => {
-  it("gives production and previews a shared hostname, and local stages none", () => {
+  it("gives only production a dedicated hostname", () => {
     assert.strictEqual(PublicHost.forStage("production"), "macrograph.app");
-    assert.strictEqual(PublicHost.forStage("pr123"), "pr123.dev.macrograph.app");
+    assert.isUndefined(PublicHost.forStage("pr123"));
     assert.isUndefined(PublicHost.forStage("brendan"));
-    assert.isUndefined(PublicHost.forStage("pr-123"));
   });
 });

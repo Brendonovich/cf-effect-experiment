@@ -73,7 +73,9 @@ Cloud moved from `cloud.macrograph.app` to `macrograph.app/cloud`, in the same l
 opencode.ai: `WebsiteWorker` owns the stage's hostname (`src/PublicHost.ts`) as a Custom Domain
 and serves anything no route claims, while `CloudWorker` claims `/cloud`, `/cloud/*` and the
 `/.well-known/oauth-*/cloud` documents with Worker Routes (`src/api/CloudMount.ts`). Cloudflare runs
-routes before the hostname's own Worker. Previews get `pr<N>.dev.macrograph.app` the same way.
+routes before the hostname's own Worker. Previews have no domain: Worker Routes only run on zones
+we own, so `WebsiteWorker` forwards the same paths to `CloudWorker` over a service binding and its
+workers.dev URL serves both apps.
 `macrograph.app` is canonical; `www.macrograph.app` stays an alias so desktop and server API calls
 keep working, and the Worker 301s browsers to the bare domain.
 
