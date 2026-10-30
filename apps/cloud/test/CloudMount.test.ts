@@ -70,7 +70,7 @@ describe("CloudMount", () => {
 describe("PublicHost", () => {
   it("gives production and previews a shared hostname, and local stages none", () => {
     assert.strictEqual(PublicHost.forStage("production"), "macrograph.app");
-    assert.strictEqual(PublicHost.forStage("pr123"), "pr123.macrograph.app");
+    assert.strictEqual(PublicHost.forStage("pr123"), "pr123.dev.macrograph.app");
     assert.isUndefined(PublicHost.forStage("brendan"));
     assert.isUndefined(PublicHost.forStage("pr-123"));
   });

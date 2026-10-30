@@ -114,9 +114,10 @@ export default Alchemy.Stack(
         repository: github.repository,
         issueNumber: github.pr,
         body: Output.interpolate`
-					## MacroGraph Cloud preview
+					## MacroGraph preview
 
-					**App:** https://${previewHost}/cloud/
+					**Website:** https://${previewHost}/
+					**Cloud:** https://${previewHost}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.
