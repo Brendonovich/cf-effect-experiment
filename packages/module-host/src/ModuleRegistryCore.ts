@@ -105,6 +105,11 @@ export interface Platform {
     readonly changes: (state: ModuleState.Model) => Stream.Stream<ReadonlySet<string>>;
     /** Modules tied to a changed folder that are flagged stale without hashing. */
     readonly staleWithoutHash: (changed: ReadonlySet<string>) => ReadonlyArray<ModuleId.Id>;
+    /**
+     * Reload local and linked modules as soon as their content changes, instead of flagging them
+     * stale for an admin to reload. Meant for development.
+     */
+    readonly autoReload?: boolean;
   };
 }
 
@@ -479,11 +484,19 @@ export const make = (options: Options, platform: Platform) =>
         yield* setEntry({ ...entry, flags: { ...entry.flags, stale: true } });
       });
 
-    /** Rehashes loaded and failed folders under the given roots (all if omitted). */
-    const checkStaleUnder = (changed: Option.Option<ReadonlySet<string>>) =>
+    /**
+     * Rehashes loaded and failed folders under the given roots (all if omitted), flags changed
+     * ones stale and returns them. `includeStale` rehashes already-stale folders too.
+     */
+    const checkStaleUnder = (changed: Option.Option<ReadonlySet<string>>, includeStale = false) =>
       Effect.gen(function* () {
+        const changedIds: Array<{ readonly id: ModuleId.Id; readonly root: string }> = [];
         for (const entry of sortedEntries(yield* current)) {
-          if (entry.flags.stale || Option.isNone(entry.root) || Option.isNone(entry.contentHash))
+          if (
+            (entry.flags.stale && !includeStale) ||
+            Option.isNone(entry.root) ||
+            Option.isNone(entry.contentHash)
+          )
             continue;
           if (entry.status !== "loaded" && entry.status !== "failed") continue;
           // Shipped and installed folders never change in place; only local and linked do.
@@ -498,16 +511,36 @@ export const make = (options: Options, platform: Platform) =>
           )
             continue;
           const hash = yield* platform.hashFolder(root);
-          if (Option.isSome(hash) && hash.value !== entry.contentHash.value)
+          if (Option.isNone(hash)) continue;
+          if (hash.value !== entry.contentHash.value) {
             yield* markStale(entry.id);
+            changedIds.push({ id: entry.id, root });
+          } else if (includeStale && entry.flags.stale)
+            // Back to the loaded content, e.g. a rebuild that produced the same files.
+            yield* setEntry({ ...entry, flags: { ...entry.flags, stale: false } });
         }
+        return changedIds;
       });
 
     const handleChanges = (changed: ReadonlySet<string>) =>
       locked(
         Effect.gen(function* () {
           for (const id of platform.watch?.staleWithoutHash(changed) ?? []) yield* markStale(id);
-          yield* checkStaleUnder(Option.some(changed));
+          const autoReload = platform.watch?.autoReload === true;
+          const changedIds = yield* checkStaleUnder(Option.some(changed), autoReload);
+          if (!autoReload || changedIds.length === 0) return;
+          // A rebuild empties the folder and writes the manifest last. Reload only once the
+          // folder reads as a valid copy again, keeping the loaded version until then; the write
+          // that completes it triggers another check.
+          const groups = yield* scan;
+          for (const { id, root } of changedIds)
+            if (
+              groups
+                .get(id)
+                ?.copies.some((copy) => Option.exists(copy.root, (value) => value === root)) ===
+              true
+            )
+              yield* refresh(id);
         }),
       );
 
@@ -656,7 +689,7 @@ export const make = (options: Options, platform: Platform) =>
             return yield* refresh(id);
           }),
         ),
-      checkStale: locked(checkStaleUnder(Option.none())),
+      checkStale: locked(Effect.asVoid(checkStaleUnder(Option.none()))),
       refreshTrust: locked(
         Effect.gen(function* () {
           for (const entry of sortedEntries(yield* current)) {

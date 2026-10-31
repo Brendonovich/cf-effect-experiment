@@ -319,15 +319,23 @@ export function createModuleData(
         source = {
           open() {
             target.holds++;
-            if (target.holds === 1) void connectRecord(target);
+            // `open` runs inside a settings view effect. Refreshing the settings memo synchronously
+            // there can leave Solid re-running that effect forever while switching module tabs.
+            if (target.holds === 1)
+              queueMicrotask(() => {
+                if (target.holds > 0) void connectRecord(target);
+              });
             let closed = false;
             return () => {
               if (closed) return;
               closed = true;
               target.holds--;
               if (target.holds > 0) return;
-              releaseRecord(target);
-              target.settings.clear(false);
+              queueMicrotask(() => {
+                if (target.holds > 0) return;
+                releaseRecord(target);
+                target.settings.clear(false);
+              });
             };
           },
           settings: target.settings.state,

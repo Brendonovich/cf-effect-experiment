@@ -36,6 +36,8 @@ export interface WatchOptions {
    * marks that module stale without hashing.
    */
   readonly extraDirs?: ReadonlyArray<{ readonly dir: string; readonly id: ModuleId.Id }>;
+  /** Reload changed local and linked modules instead of only marking them stale. */
+  readonly autoReload?: boolean;
 }
 
 export interface Options extends ModuleRegistryCore.Options {
@@ -97,6 +99,7 @@ export const platform = (options: Options) =>
                 ),
               staleWithoutHash: (changed) =>
                 extraDirs.filter((extra) => changed.has(extra.dir)).map((extra) => extra.id),
+              ...(watchOptions.autoReload === true ? { autoReload: true } : {}),
             },
           }),
     } satisfies ModuleRegistryCore.Platform;

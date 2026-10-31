@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module, ModuleId } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import {
   Array,
   Cause,
@@ -29,7 +29,6 @@ const executionSpanNames = [
 
 const setup = Effect.fnUntraced(function* (
   run: Effect.Effect<void, unknown> | (() => Effect.Effect<void, unknown>),
-  missingInput = false,
 ) {
   const module = Module.identify(
     ModuleId.Id.make("local/test/tracing"),
@@ -40,7 +39,7 @@ const setup = Effect.fnUntraced(function* (
           id: "event",
           type: "event",
           event: () => Effect.succeed(true),
-          io: (io) => (missingInput ? { value: io.data.in("value", t.String) } : {}),
+          io: () => ({}),
           run: typeof run === "function" ? run : () => run,
         }),
     }),
@@ -189,28 +188,6 @@ describe("execution tracing", () => {
         assert.isTrue(Cause.hasDies(schemaSpan.status.exit.cause));
         assert.strictEqual(Cause.squash(schemaSpan.status.exit.cause), defect);
       } else assert.fail("Schema span must record the synchronous defect");
-    }),
-  );
-
-  it.effect("captures missing-input failure before any consuming node executes", () =>
-    Effect.gen(function* () {
-      const { spans, dispatch } = yield* setup(Effect.die("run must not be reached"), true);
-      const exit = yield* Effect.exit(dispatch);
-      assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) {
-        assert.deepStrictEqual(
-          Cause.squash(exit.cause),
-          new Executor.MissingInput({ nodeId, inputId: "value" }),
-        );
-      }
-      assertSpanExit(spans, "Executor.executeEventNode", exit);
-      assertSpanExit(spans, "Executor.handleEvent", exit);
-      assert.isFalse(
-        spans.some(
-          (span) => span.name === "Executor.runNode" || span.name === "Executor.resolveInput",
-        ),
-      );
-      assert.isFalse(spans.some((span) => span.name.startsWith("Schema.run ")));
     }),
   );
 

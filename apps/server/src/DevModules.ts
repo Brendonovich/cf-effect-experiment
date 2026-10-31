@@ -77,6 +77,8 @@ export const options = (input: {
     return {
       shippedDirs: [directory],
       evaluator,
+      // Rebuilding a local module (`macrograph-module dev --watch`) takes effect without a reload.
+      autoReloadLocalModules: true,
       extraWatchDirs: [...byId].map(([id, source]) => ({
         dir: join(source.packageDirectory, "src"),
         id,
