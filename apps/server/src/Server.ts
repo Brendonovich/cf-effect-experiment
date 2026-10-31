@@ -407,6 +407,7 @@ nodeServer.on("connection", (socket) => {
   socket.once("close", () => sockets.delete(socket));
 });
 nodeServer.on("listening", () => {
+  if (config.behindDevProxy) return;
   const address = nodeServer.address();
   if (typeof address === "object" && address !== null)
     console.log(`MACROGRAPH_LISTENING ${address.port}`);
@@ -439,7 +440,11 @@ const pathGuard = HttpMiddleware.make((httpEffect) =>
   }),
 );
 
-const Served = HttpRouter.serve(AppLayer, { disableLogger: true, middleware: pathGuard }).pipe(
+const Served = HttpRouter.serve(AppLayer, {
+  disableLogger: true,
+  disableListenLog: config.behindDevProxy,
+  middleware: pathGuard,
+}).pipe(
   Layer.provide(
     NodeHttpServer.layer(() => nodeServer, {
       port: config.port,

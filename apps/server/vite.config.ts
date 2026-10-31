@@ -1,5 +1,6 @@
 import { moduleDeployments } from "@macrograph/module/vite";
 import clientConfig, { serverModules } from "@macrograph/server-client/vite-config";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import {
   defineConfig,
@@ -11,15 +12,36 @@ import {
 
 import { ServerConfig } from "./src/ServerConfig.ts";
 
-export default defineConfig((env) => {
+/** Asks the OS for a free loopback port. */
+const freePort = () =>
+  new Promise<number>((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      probe.close(() =>
+        typeof address === "object" && address !== null
+          ? resolve(address.port)
+          : reject(new Error("Could not find a free port")),
+      );
+    });
+  });
+
+export default defineConfig(async (env) => {
   for (const [key, value] of Object.entries(loadEnv(env.mode, import.meta.dirname, ""))) {
     process.env[key] ??= value;
   }
   process.env.MACROGRAPH_MIGRATIONS_DIR ??= fileURLToPath(
     new URL("../../packages/persistence-sqlite/drizzle", import.meta.url),
   );
-  const config = ServerConfig.makeServerConfig(process.env);
   const client = clientConfig(env);
+  // Vite's port is the only public one: the backend listens on a private loopback port that
+  // Vite proxies to, and links it prints point at Vite.
+  process.env.PORT = String(await freePort());
+  process.env.HOST = "127.0.0.1";
+  process.env.MACROGRAPH_BEHIND_DEV_PROXY = "1";
+  process.env.MACROGRAPH_PUBLIC_ORIGIN ??= `http://localhost:${client.server?.port}`;
+  const config = ServerConfig.makeServerConfig(process.env);
   let stop: (() => Promise<void> | undefined) | undefined;
 
   return mergeConfig(client, {
@@ -33,7 +55,7 @@ export default defineConfig((env) => {
       proxy: Object.fromEntries(
         Object.keys(client.server?.proxy ?? {}).map((path) => [
           path,
-          { target: `http://localhost:${config.port}`, changeOrigin: true, ws: true },
+          { target: `http://${config.host}:${config.port}`, changeOrigin: true, ws: true },
         ]),
       ),
     },
