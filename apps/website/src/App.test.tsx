@@ -57,6 +57,46 @@ it("renders the landing page with a login link for signed-out visitors", async (
   expect(container.querySelector('a[href="/playground"]')?.textContent).toBe("Playground");
 });
 
+it("links landing page integrations to their package reference", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/");
+  await vi.waitFor(() => expect(container.textContent).toContain("Integrations"));
+  expect(container.querySelector('a[href="/docs/macrograph/twitch"]')?.textContent).toBe("Twitch");
+  expect(container.querySelector('a[href="/docs"]')?.textContent).toContain("Browse all packages");
+});
+
+it("lists a package's nodes and shows one at a time", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/macrograph/string/StringIncludes");
+  await vi.waitFor(() =>
+    expect(container.querySelector("[data-graph-node-id]")?.textContent).toContain(
+      "String Includes",
+    ),
+  );
+  expect(container.querySelectorAll("[data-graph-node-id]")).toHaveLength(1);
+  expect(container.textContent).toContain("Performs a case-sensitive literal string comparison.");
+  const link = container.querySelector('a[href="/docs/macrograph/string/StringLength"]');
+  expect(link?.textContent).toBe("String Length");
+  expect(container.querySelector('a[aria-current="page"]')?.textContent).toBe("String Includes");
+});
+
+it("shows node properties with their controls", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/macrograph/obs/GetSceneItemTransform");
+  await vi.waitFor(() => expect(container.textContent).toContain("Properties"));
+  expect(container.textContent).toContain("OBS Socket");
+});
+
+it("shows a not-found message for unknown packages and nodes", async () => {
+  mockApi({ "/api/website/session": null });
+  const unknownPackage = renderApp("/docs/macrograph/nope");
+  await vi.waitFor(() =>
+    expect(unknownPackage.container.textContent).toContain("Package not found"),
+  );
+  const unknownNode = renderApp("/docs/macrograph/string/Nope");
+  await vi.waitFor(() => expect(unknownNode.container.textContent).toContain("Node not found"));
+});
+
 it("sends signed-out visitors from account pages to login and back", async () => {
   mockApi({ "/api/website/session": null });
   const { history } = renderApp("/account/apps");

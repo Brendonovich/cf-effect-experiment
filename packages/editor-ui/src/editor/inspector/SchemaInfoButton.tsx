@@ -98,6 +98,17 @@ const styles = stylex.create({
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
   leftAction: { borderBottomLeftRadius: 4 },
+  link: {
+    alignItems: "center",
+    display: "flex",
+    justifyContent: "center",
+    textDecoration: "none",
+    backgroundColor: {
+      default: "transparent",
+      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+    },
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+  },
   rightAction: {
     borderBottomRightRadius: 4,
     borderLeftColor: colors.gray5,
@@ -111,7 +122,12 @@ const styles = stylex.create({
   },
 });
 
-export function SchemaInfoButton(props: { schema: Package.SchemaModel; packageName: string }) {
+export function SchemaInfoButton(props: {
+  schema: Package.SchemaModel;
+  packageName: string;
+  /** The schema's page in the website's package reference, opened in a new tab. */
+  referenceUrl?: string | undefined;
+}) {
   let root: HTMLDivElement | undefined;
   let trigger: HTMLButtonElement | undefined;
   const [dialogState, setDialogState] = createSignal<"present" | "hiding" | "hidden">("hidden");
@@ -198,9 +214,25 @@ export function SchemaInfoButton(props: { schema: Package.SchemaModel; packageNa
             </div>
           </div>
           <div sx={styles.actions}>
-            <button type="button" disabled sx={[styles.action, styles.leftAction]}>
-              More Info
-            </button>
+            <Show
+              when={props.referenceUrl}
+              fallback={
+                <button type="button" disabled sx={[styles.action, styles.leftAction]}>
+                  Reference
+                </button>
+              }
+            >
+              {(href) => (
+                <a
+                  href={href()}
+                  target="_blank"
+                  rel="noreferrer"
+                  sx={[styles.action, styles.leftAction, styles.link]}
+                >
+                  Reference
+                </a>
+              )}
+            </Show>
             <button
               type="button"
               sx={[styles.action, styles.rightAction]}

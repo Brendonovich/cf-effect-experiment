@@ -22,6 +22,7 @@ declare global {
   const IconSimpleIconsStreamlabs: typeof import('~icons/simple-icons/streamlabs.jsx').default
   const IconSimpleIconsTwitch: typeof import('~icons/simple-icons/twitch.jsx').default
   const IconTablerAppWindow: typeof import('~icons/tabler/app-window.jsx').default
+  const IconTablerArrowRight: typeof import('~icons/tabler/arrow-right.jsx').default
   const IconTablerArrowsDiagonal: typeof import('~icons/tabler/arrows-diagonal.jsx').default
   const IconTablerArrowsDiagonalMinimize2: typeof import('~icons/tabler/arrows-diagonal-minimize2.jsx').default
   const IconTablerBrowser: typeof import('~icons/tabler/browser.jsx').default

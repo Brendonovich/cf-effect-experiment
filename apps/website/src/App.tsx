@@ -10,8 +10,10 @@ import { AppsRoute } from "./routes/Apps";
 import { AuthRoute } from "./routes/Auth";
 import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
+import { DocsIndexRoute, DocsLayout } from "./routes/Docs";
 import { LandingRoute } from "./routes/Landing";
 import { NotFoundRoute } from "./routes/NotFound";
+import { NodeReferenceRoute, PackageLayout, PackageOverviewRoute } from "./routes/PackageReference";
 import { PlaygroundRoute } from "./routes/Playground";
 import { SignInMethodsRoute } from "./routes/SignInMethods";
 import { Redirect, useSession } from "./session";
@@ -44,6 +46,21 @@ export const routes = [
   { path: "/signup", component: SignupRedirect },
   { path: "/device", component: DeviceAuthorizationRoute },
   { path: "/playground", component: PlaygroundRoute },
+  {
+    path: "/docs",
+    component: DocsLayout,
+    children: [
+      { path: "/", component: DocsIndexRoute },
+      {
+        path: "/:publisher/:name",
+        component: PackageLayout,
+        children: [
+          { path: "/", component: PackageOverviewRoute },
+          { path: "/:node", component: NodeReferenceRoute },
+        ],
+      },
+    ],
+  },
   {
     path: "/account",
     component: AccountLayout,

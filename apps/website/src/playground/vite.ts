@@ -10,7 +10,10 @@ const browserImportAudit: Plugin = {
       "/apps/server/",
       "/packages/cloud-api/",
       "/packages/persistence-sqlite/",
-      "/packages/modules/kofi/",
+      // Module definitions are browser-safe; the docs load them to generate node IO.
+      "/packages/modules/kofi/src/Engine",
+      "/packages/modules/kofi/src/Webhook",
+      "/packages/modules/kofi/src/Deployment",
       "/packages/module-host/src/ModuleRegistry.ts",
       "/packages/module-host/src/ModuleSources.ts",
       "/packages/module-host/src/VmLoader.ts",
@@ -19,7 +22,9 @@ const browserImportAudit: Plugin = {
       "/packages/module/src/HttpIngress",
       "/packages/modules/twitch/src/Deployment/Webhook",
       "/packages/modules/twitch/src/WebhookEventSub",
-      "/packages/modules/websocket-server/",
+      "/packages/modules/websocket-server/src/Engine",
+      "/packages/modules/websocket-server/src/Deployment",
+      "/packages/modules/websocket-server/src/Listener",
       "/@effect/platform-node/",
     ];
     const polyfills = ["node-stdlib-browser", "node-polyfill", "rollup-plugin-polyfill-node"];

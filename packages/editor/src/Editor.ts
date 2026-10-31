@@ -23,7 +23,6 @@ import {
   Queue,
   RenderedProject,
   ResourceConstant,
-  SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
 import { Conversion, t } from "@macrograph/module";
@@ -2410,81 +2409,7 @@ export const layer = Layer.effect(Service)(
           )),
           ...collected.types,
         };
-        const encodeValue = (
-          type: t.Type,
-          value: unknown,
-          definitions: t.Definitions,
-        ): Schema.Json =>
-          Schema.decodeUnknownSync(Schema.Json)(
-            Schema.encodeUnknownSync(t.JsonDefaultSchema(type, definitions))(value),
-          );
-        const pkg: Package.Model = {
-          id: PackageId.make(definition.id),
-          name: definition.name ?? definition.id,
-          types: collected.types,
-          ...(pairs.length === 0 ? {} : { conversions: pairs }),
-          ...(definition.description === undefined ? {} : { description: definition.description }),
-          resources: resources.map((resource) => ({
-            id: resource.key,
-            name: resource.definition.name,
-            ...(resource.definition.description === undefined
-              ? {}
-              : { description: resource.definition.description }),
-          })),
-          schemas: schemas.map((schema) => ({
-            id: SchemaId.make(schema.id),
-            internal: schema.internal ?? false,
-            name: schema.name,
-            ...(schema.description === undefined ? {} : { description: schema.description }),
-            type: schema.type,
-            properties: schema.properties.map((property) =>
-              "resource" in property
-                ? {
-                    id: property.id,
-                    name: property.name,
-                    ...(property.description === undefined
-                      ? {}
-                      : { description: property.description }),
-                    resource: property.resource,
-                    optional: false,
-                  }
-                : {
-                    id: property.id,
-                    name: property.name,
-                    ...(property.description === undefined
-                      ? {}
-                      : { description: property.description }),
-                    type: property.type,
-                    optional: property.optional,
-                    ...(property.defaultValue === undefined
-                      ? {}
-                      : {
-                          defaultValue: encodeValue(
-                            property.type,
-                            property.defaultValue,
-                            definitions,
-                          ),
-                        }),
-                  },
-            ),
-            dataInputs: schema.dataInputs.map((input) => ({
-              id: IoId.make(input.id),
-              type: input.type,
-              ...(input.name === undefined ? {} : { name: input.name }),
-              ...(input.defaultValue === undefined
-                ? {}
-                : { defaultValue: encodeValue(input.type, input.defaultValue, definitions) }),
-              ...(input.suggestions === undefined ? {} : { suggestions: true }),
-            })),
-            dataOutputs: schema.dataOutputs.map((output) => ({
-              id: IoId.make(output.id),
-              type: output.type,
-              ...(output.name === undefined ? {} : { name: output.name }),
-            })),
-            executionInputs: schema.executionInputs.map(Scopes.executionPort),
-            executionOutputs: schema.executionOutputs.map(Scopes.executionPort),
-          })),
-        };
+        const pkg = Package.fromModule(definition, resources, collected, definitions);
         // Added first so it runs after the package and engine registrations are removed.
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
@@ -2511,36 +2436,7 @@ export const layer = Layer.effect(Service)(
                     resolve: resolve ?? ((type) => type),
                     definitions,
                   });
-                  return {
-                    dataInputs: io.dataInputs.map((input) => {
-                      // Invalid schema fallback defaults must not prevent rendering repairable nodes.
-                      // Persisted user defaults are separate and are never changed here.
-                      const encoded =
-                        input.defaultValue === undefined
-                          ? undefined
-                          : Schema.encodeUnknownResult(
-                              t.JsonDefaultSchema(input.type, definitions),
-                            )(input.defaultValue);
-                      return {
-                        id: IoId.make(input.id),
-                        type: input.type,
-                        ...(input.name === undefined ? {} : { name: input.name }),
-                        ...(encoded === undefined || encoded._tag === "Failure"
-                          ? {}
-                          : {
-                              defaultValue: encoded.success,
-                            }),
-                        ...(input.suggestions === undefined ? {} : { suggestions: true }),
-                      };
-                    }),
-                    dataOutputs: io.dataOutputs.map((output) => ({
-                      id: IoId.make(output.id),
-                      type: output.type,
-                      ...(output.name === undefined ? {} : { name: output.name }),
-                    })),
-                    executionInputs: io.executionInputs.map(Scopes.executionPort),
-                    executionOutputs: io.executionOutputs.map(Scopes.executionPort),
-                  };
+                  return Package.nodeIO(io, definitions);
                 },
                 getSuggestions: (properties, inputDefaults, input) =>
                   Effect.gen(function* () {

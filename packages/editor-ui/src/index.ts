@@ -10,6 +10,7 @@ export { PresenceList, type PresenceListProps } from "./presence/PresenceList.ts
 export { Button, type ButtonProps, ButtonLink, type ButtonLinkProps } from "./ui/Button.tsx";
 export { LoadingState } from "./ui/LoadingState.tsx";
 export { DataTypePicker } from "./ui/DataTypePicker.tsx";
+export { plainDescription } from "./ui/Description.tsx";
 export { createStateMachine } from "./ui/createStateMachine.ts";
 export {
   initializeBrowserTracing,
@@ -49,6 +50,7 @@ export {
 } from "./apiKeys/ApiKeySettings.tsx";
 export { CredentialTable, type CredentialTableProps } from "./credentials/CredentialTable.tsx";
 export { SnapshotGraphCanvas } from "./editor/graph/SnapshotGraphCanvas.tsx";
+export { SchemaReference, type SchemaReferenceIOInput } from "./editor/modules/SchemaReference.tsx";
 export { RealtimeWorkspace } from "./editor/RealtimeWorkspace.tsx";
 export { LiveEvents, type LiveEventsProps } from "./events/LiveEvents.tsx";
 export {

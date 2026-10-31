@@ -1,17 +1,13 @@
 import type { ClientSettings } from "@macrograph/module";
+import type { t } from "@macrograph/module";
 import type { JSX } from "@solidjs/web";
 
 import {
   BuiltinAuthoring,
-  Clipboard,
-  Function as GraphFunction,
-  Node,
-  NodeId,
-  type NodeIO,
+  type Function as GraphFunction,
   type Package,
   type SchemaAuthoring,
 } from "@macrograph/core";
-import { t } from "@macrograph/module";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Result } from "effect";
@@ -21,12 +17,10 @@ import type { PackageViewState } from "../workspace/workspace";
 import type { ModuleSettingsSource } from "./createModuleData";
 
 import { colors } from "../../tokens.stylex.ts";
-import { DataTypePicker } from "../../ui/DataTypePicker";
-import { Description, plainDescription } from "../../ui/Description";
+import { plainDescription } from "../../ui/Description";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
-import { GraphNode } from "../graph/GraphNode";
-import { PropertyControl } from "../inspector/PropertyControl";
+import { SchemaReference } from "./SchemaReference";
 
 const styles = stylex.create({
   root: {
@@ -183,23 +177,8 @@ const styles = stylex.create({
   },
   detailDescription: { color: colors.gray10, fontSize: 12, lineHeight: 1.5 },
   missingDescription: { fontStyle: "italic" },
-  nodeConfiguration: {
-    alignItems: "start",
-    display: "grid",
-    gap: 24,
-    gridTemplateColumns: "max-content minmax(190px, 240px)",
-  },
   detailSection: { display: "flex", flexDirection: "column", gap: 9, minWidth: 0 },
   detailSectionTitle: { color: colors.gray12, fontSize: 12, fontWeight: 600 },
-  configuration: { display: "flex", flexDirection: "column", gap: 16, minWidth: 0 },
-  preview: {
-    position: "relative",
-  },
-  properties: {
-    display: "grid",
-    gap: 12,
-    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  },
   propertyNote: { color: colors.gray10, fontSize: 11, lineHeight: 1.4 },
   emptyDetail: {
     alignItems: "center",
@@ -211,17 +190,10 @@ const styles = stylex.create({
   },
   message: { color: colors.gray11, fontSize: 12, marginTop: 4 },
   warning: { color: "var(--amber-10)" },
-  nodeName: { color: colors.gray12, fontSize: 13, fontWeight: 500 },
-  nodeDescription: { color: colors.gray10, fontSize: 12, lineHeight: 1.4 },
   eventColor: { color: colors.event },
   execColor: { color: colors.execution },
   pureColor: { color: colors.pure },
   baseColor: { color: colors.base },
-  eventBackground: { backgroundColor: colors.event },
-  execBackground: { backgroundColor: colors.execution },
-  pureBackground: { backgroundColor: colors.pure },
-  baseBackground: { backgroundColor: colors.base },
-  nodeTypeBadge: { color: "white" },
   variantLabelSwatch: {
     backgroundColor: "currentColor",
     borderRadius: 2,
@@ -232,7 +204,6 @@ const styles = stylex.create({
 
 type SchemaModel = Package.SchemaModel;
 type SchemaType = SchemaModel["type"];
-type PreviewValue = string | number | boolean | null;
 
 const schemaVariants: ReadonlyArray<{ type: SchemaType; label: string }> = [
   { type: "event", label: "Event Nodes" },
@@ -250,41 +221,6 @@ const schemaColor = (type: SchemaType) =>
         ? styles.pureColor
         : styles.baseColor;
 
-const schemaBackground = (type: SchemaType) =>
-  type === "event"
-    ? styles.eventBackground
-    : type === "exec"
-      ? styles.execBackground
-      : type === "pure"
-        ? styles.pureBackground
-        : styles.baseBackground;
-
-const propertyDefault = (property: Package.PropertyDefinition): PreviewValue => {
-  if (!("type" in property)) return null;
-  if (
-    typeof property.defaultValue === "string" ||
-    typeof property.defaultValue === "number" ||
-    typeof property.defaultValue === "boolean"
-  )
-    return property.defaultValue;
-  if (property.type._tag === "String") return "";
-  if (property.type._tag === "Bool") return false;
-  return 0;
-};
-
-const collectWildcardIds = (type: t.Type, ids: Set<string>) => {
-  if (type._tag === "Wildcard") ids.add(type.id);
-  if (type._tag === "List") collectWildcardIds(type.item, ids);
-  if (type._tag === "Option") collectWildcardIds(type.inner, ids);
-};
-
-const resolveWildcards = (type: t.Type, values: Readonly<Record<string, t.Type>>): t.Type => {
-  if (type._tag === "Wildcard") return values[type.id] ?? t.String;
-  if (type._tag === "List") return t.List(resolveWildcards(type.item, values));
-  if (type._tag === "Option") return t.Option(resolveWildcards(type.inner, values));
-  return type;
-};
-
 function ReferenceView(props: {
   package: Package.Model;
   schemas: ReadonlyArray<SchemaModel>;
@@ -295,15 +231,6 @@ function ReferenceView(props: {
   onSelectionChange: (selection: string) => void;
 }) {
   const [search, setSearch] = createSignal("");
-  const [propertyValues, setPropertyValues] = createSignal<
-    Readonly<Record<string, Readonly<Record<string, PreviewValue>>>>
-  >({});
-  const [wildcardValues, setWildcardValues] = createSignal<
-    Readonly<Record<string, Readonly<Record<string, t.Type>>>>
-  >({});
-  const [previewSelected, setPreviewSelected] = createSignal(false);
-  const [previewSize, setPreviewSize] = createSignal({ width: 0, height: 0 });
-  let previewElement: HTMLDivElement | undefined;
   const normalizedSearch = createMemo(() => search().trim().toLocaleLowerCase());
   const matchesSearch = (name: string, description?: string) => {
     const query = normalizedSearch();
@@ -361,118 +288,6 @@ function ReferenceView(props: {
       ? props.package.resources.find((resource) => resource.id === key.slice(9))
       : undefined;
   });
-  const values = createMemo(() => {
-    const schema = selectedSchema();
-    if (schema === undefined) return {};
-    return Object.fromEntries(
-      schema.properties.map((property) => [
-        property.id,
-        propertyValues()[schema.id]?.[property.id] ?? propertyDefault(property),
-      ]),
-    );
-  });
-  const wildcardIds = createMemo(() => {
-    const schema = selectedSchema();
-    if (schema === undefined) return [];
-    const ids = new Set<string>();
-    for (const port of [...schema.dataInputs, ...schema.dataOutputs])
-      collectWildcardIds(port.type, ids);
-    for (const port of [...schema.executionInputs, ...schema.executionOutputs])
-      for (const field of port.scope ?? []) collectWildcardIds(field.type, ids);
-    return [...ids];
-  });
-  const previewIO = createMemo<NodeIO | undefined>(() => {
-    const schema = selectedSchema();
-    if (schema === undefined) return undefined;
-    const functionProperty = schema.properties.find((property) => "function" in property);
-    const functionId = functionProperty === undefined ? undefined : values()[functionProperty.id];
-    const functionIO =
-      typeof functionId === "string"
-        ? GraphFunction.callIO(
-            props.functions.find((candidate) => candidate.canvas.id === functionId),
-          )
-        : undefined;
-    const declared = functionIO === undefined ? schema : { ...schema, ...functionIO };
-    const selectedValues = wildcardValues()[schema.id] ?? {};
-    const generated = props.authoring
-      .get({ package: props.package.id, schema: schema.id })
-      ?.generateIO?.({
-        declared,
-        properties: values(),
-        definitions: props.definitions,
-        resolve: (type) => resolveWildcards(type, selectedValues),
-        inputScope: () => undefined,
-      });
-    const preview =
-      generated !== undefined && Result.isSuccess(generated) ? generated.success : declared;
-    const resolveDataPort = (port: SchemaModel["dataInputs"][number]) => ({
-      ...port,
-      type: resolveWildcards(port.type, selectedValues),
-    });
-    const resolveExecutionPort = (port: SchemaModel["executionInputs"][number]) => ({
-      ...port,
-      scope:
-        port.scope?.map((field) => ({
-          ...field,
-          type: resolveWildcards(field.type, selectedValues),
-        })) ?? port.scope,
-    });
-    return {
-      dataInputs: preview.dataInputs.map(resolveDataPort),
-      dataOutputs: preview.dataOutputs.map(resolveDataPort),
-      executionInputs: preview.executionInputs.map(resolveExecutionPort),
-      executionOutputs: preview.executionOutputs.map(resolveExecutionPort),
-    };
-  });
-  const previewNode = createMemo<Node.Model | undefined>(() => {
-    const schema = selectedSchema();
-    if (schema === undefined) return undefined;
-    return {
-      id: NodeId.make("module-reference-preview"),
-      name: schema.name,
-      properties: values(),
-      inputDefaults: {},
-      foldPins: false,
-      schema: { package: props.package.id, schema: schema.id },
-      position: { x: 0, y: 0 },
-    };
-  });
-  const copyPreview = (event: ClipboardEvent) => {
-    const node = previewNode();
-    const schema = selectedSchema();
-    if (!previewSelected() || node === undefined || schema === undefined) return;
-    const io = previewIO();
-    const text = JSON.stringify({
-      format: "macrograph/nodes",
-      version: 1,
-      nodes: [node],
-      connections: [],
-      externalConnections: [],
-      nodeIO: io === undefined ? {} : { [node.id]: io },
-      nodeSchemas: {
-        [node.id]: { moduleName: props.package.name, schemaName: schema.name },
-      },
-    } satisfies Clipboard.Fragment);
-    if (event.clipboardData === null) return;
-    event.preventDefault();
-    event.clipboardData.setData("text/plain", text);
-  };
-  const setProperty = (schemaId: string, propertyId: string, value: PreviewValue) =>
-    setPropertyValues((current) => ({
-      ...current,
-      [schemaId]: { ...current[schemaId], [propertyId]: value },
-    }));
-  const clearProperty = (schemaId: string, propertyId: string) =>
-    setPropertyValues((current) => {
-      const nextSchema = { ...current[schemaId] };
-      delete nextSchema[propertyId];
-      return { ...current, [schemaId]: nextSchema };
-    });
-  const setWildcard = (schemaId: string, wildcardId: string, value: t.Type) =>
-    setWildcardValues((current) => ({
-      ...current,
-      [schemaId]: { ...current[schemaId], [wildcardId]: value },
-    }));
 
   return (
     <div sx={styles.referenceLayout}>
@@ -544,130 +359,24 @@ function ReferenceView(props: {
       <main sx={styles.referenceDetail}>
         <Show when={selectedSchema()}>
           {(schema) => (
-            <div sx={styles.detailContent}>
-              <header sx={styles.detailHeader}>
-                <div sx={styles.detailTitleRow}>
-                  <h2 sx={styles.detailTitle}>{schema().name}</h2>
-                  <span
-                    sx={[styles.typeBadge, styles.nodeTypeBadge, schemaBackground(schema().type)]}
-                  >
-                    {schema().type}
-                  </span>
-                </div>
-                <p
-                  sx={[
-                    styles.detailDescription,
-                    schema().description === undefined ? styles.missingDescription : null,
-                  ]}
-                >
-                  <Show when={schema().description} fallback="No description provided.">
-                    {(description) => <Description text={description()} />}
-                  </Show>
-                </p>
-              </header>
-              <div sx={styles.nodeConfiguration}>
-                <div
-                  ref={previewElement}
-                  sx={styles.preview}
-                  style={{ height: `${previewSize().height}px`, width: `${previewSize().width}px` }}
-                  tabindex={-1}
-                  onCopy={copyPreview}
-                >
-                  <Show when={previewNode()}>
-                    {(node) => (
-                      <GraphNode
-                        node={node()}
-                        schema={schema()}
-                        io={previewIO()}
-                        definitions={props.definitions}
-                        allowInputDefaults={false}
-                        onSizeChange={(_nodeId, size) => setPreviewSize(size)}
-                        connectedInputIds={new Set()}
-                        connectedOutputIds={new Set()}
-                        selected={previewSelected()}
-                        onSelect={() => {
-                          setPreviewSelected(true);
-                          previewElement?.focus();
-                        }}
-                        onDragStart={() => undefined}
-                        onPortPointerDown={() => undefined}
-                        onDisconnect={() => undefined}
-                        onContextMenu={() => undefined}
-                        onExpand={() => undefined}
-                        onSetInputDefault={() => undefined}
-                        onClearInputDefault={() => undefined}
-                        onGetSuggestions={async () => []}
-                      />
-                    )}
-                  </Show>
-                </div>
-                <div sx={styles.configuration}>
-                  <Show when={wildcardIds().length > 0}>
-                    <section sx={styles.detailSection}>
-                      <h3 sx={styles.detailSectionTitle}>Wildcards</h3>
-                      <div sx={styles.properties}>
-                        <For each={wildcardIds()}>
-                          {(wildcardId) => (
-                            <label sx={styles.detailSection}>
-                              <span sx={styles.propertyNote}>{wildcardId}</span>
-                              <DataTypePicker
-                                label={`${wildcardId} wildcard type`}
-                                value={wildcardValues()[schema().id]?.[wildcardId] ?? t.String}
-                                definitions={props.definitions}
-                                onChange={(value) => setWildcard(schema().id, wildcardId, value)}
-                              />
-                            </label>
-                          )}
-                        </For>
-                      </div>
-                    </section>
-                  </Show>
-                  <Show when={schema().properties.length > 0}>
-                    <section sx={styles.detailSection}>
-                      <h3 sx={styles.detailSectionTitle}>Properties</h3>
-                      <div sx={styles.properties}>
-                        <For each={schema().properties}>
-                          {(property) => (
-                            <Show
-                              when={"resource" in property ? undefined : property}
-                              fallback={
-                                <div>
-                                  <div sx={styles.nodeName}>{property.name}</div>
-                                  <p sx={styles.propertyNote}>
-                                    {property.description ??
-                                      ("resource" in property
-                                        ? `Select a ${property.resource} resource when adding this node.`
-                                        : undefined)}
-                                  </p>
-                                </div>
-                              }
-                            >
-                              {(valueProperty) => (
-                                <PropertyControl
-                                  property={valueProperty()}
-                                  functions={props.functions}
-                                  value={values()[property.id]}
-                                  onSet={(value) => {
-                                    if (
-                                      value === null ||
-                                      typeof value === "string" ||
-                                      typeof value === "number" ||
-                                      typeof value === "boolean"
-                                    )
-                                      setProperty(schema().id, property.id, value);
-                                  }}
-                                  onClear={() => clearProperty(schema().id, property.id)}
-                                />
-                              )}
-                            </Show>
-                          )}
-                        </For>
-                      </div>
-                    </section>
-                  </Show>
-                </div>
-              </div>
-            </div>
+            <SchemaReference
+              package={props.package}
+              schema={schema()}
+              definitions={props.definitions}
+              functions={props.functions}
+              generateIO={({ schema: target, ...input }) => {
+                const generated = props.authoring
+                  .get({ package: props.package.id, schema: target.id })
+                  ?.generateIO?.({
+                    ...input,
+                    definitions: props.definitions,
+                    inputScope: () => undefined,
+                  });
+                return generated !== undefined && Result.isSuccess(generated)
+                  ? generated.success
+                  : undefined;
+              }}
+            />
           )}
         </Show>
         <Show when={selectedResource()}>
