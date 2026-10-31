@@ -136,8 +136,6 @@ export default Alchemy.Stack(
 					## MacroGraph preview
 
 					**Website:** ${website.url}
-					**Cloud:** ${website.url}/cloud/
-					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.
 				`,
