@@ -51,7 +51,8 @@
         "Select an exposed node",
         "Reload and observe the same module view and reference selection",
         "Observe its preview and configurable wildcard types and value properties",
-        "Copy the preview, paste into a new graph, and export the pasted node"
+        "Copy the preview, paste into a new graph, and export the pasted node",
+        "Open a Twitch node reference and observe its external documentation link"
       ],
       "evidence": ["screenshot", "server-log", "reference-paste-project.json"]
     },

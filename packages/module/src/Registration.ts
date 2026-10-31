@@ -234,6 +234,8 @@ type CommonSchema<IO, Definition extends Engine.AnyDef, Properties extends Prope
   readonly internal?: boolean;
   readonly name?: string;
   readonly description?: string;
+  /** Link to external documentation for what this schema does, such as an upstream API reference. */
+  readonly docsUrl?: string;
   /**
    * Whether an unfinished invocation may be repeated when its outcome is unknown,
    * such as after a worker crash. Defaults to "unsafe", independently of node type.
@@ -305,6 +307,7 @@ export interface RegisteredSchema {
   readonly internal?: boolean;
   readonly name: string;
   readonly description?: string;
+  readonly docsUrl?: string;
   readonly type: "base" | "event" | "exec" | "pure";
   readonly replay: Replay;
   readonly properties: ReadonlyArray<RegisteredProperty>;
@@ -459,6 +462,7 @@ const makeRegistered = <
     internal: schema.internal ?? false,
     name: schema.name ?? schema.id,
     ...(schema.description === undefined ? {} : { description: schema.description }),
+    ...(schema.docsUrl === undefined ? {} : { docsUrl: schema.docsUrl }),
     type,
     replay: schema.replay ?? "unsafe",
     properties: Object.entries(schema.properties ?? {}).map(([id, property]) =>

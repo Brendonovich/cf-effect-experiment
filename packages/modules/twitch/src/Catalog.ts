@@ -4,7 +4,7 @@ import { t } from "@macrograph/module";
 import { Retry } from "@macrograph/module/Retry";
 import { Effect, Option, Schema } from "effect";
 
-import { actions } from "./Actions.ts";
+import { actions, apiReference } from "./Actions.ts";
 import { TwitchAccount, TwitchEngine, TwitchEventSub } from "./Definition.ts";
 import { HelixError } from "./Helix.ts";
 
@@ -29,6 +29,7 @@ type Event = {
   readonly name: string;
   readonly tag: string;
   readonly description: string;
+  readonly docsUrl: string;
   readonly outputs: ReadonlyArray<Field>;
 };
 
@@ -110,12 +111,22 @@ const eventDescriptions: Readonly<Record<string, string>> = {
   ChannelSharedChatSessionEnd: "Fires when a shared chat session ends.",
   ChannelAdBreakBegin: "Fires when an ad break begins.",
 };
+// Twitch anchors drop the dots from a subscription type; these are the ones that don't follow suit.
+const eventDocsAnchors: Readonly<Record<string, string>> = {
+  "channel.moderate": "channelmoderate-v2",
+  "channel.channel_points_automatic_reward_redemption.add":
+    "channelchannel_points_automatic_reward_redemptionadd-v2",
+  "channel.shared_chat.session.begin": "channelshared_chatbegin",
+  "channel.shared_chat.session.update": "channelshared_chatupdate",
+  "channel.shared_chat.session.end": "channelshared_chatend",
+};
 const event = (id: string, name: string, tag: string, outputs: ReadonlyArray<Field>): Event => ({
   id,
   name,
   tag,
   outputs,
   description: eventDescriptions[id] ?? name,
+  docsUrl: `https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#${eventDocsAnchors[tag] ?? tag.replaceAll(".", "")}`,
 });
 
 export const events: ReadonlyArray<Event> = [
@@ -487,6 +498,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       id: definition.id,
       name: definition.name,
       description: definition.description,
+      docsUrl: definition.docsUrl,
       type: "event",
       properties: eventSubProperty,
       event: (value, { properties }) =>
@@ -510,6 +522,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "SendChatMessage",
     name: "Send Chat Message",
     description: "Sends a message to a Twitch channel's chat.",
+    docsUrl: apiReference("send-chat-message"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -540,6 +553,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     replay: "safe",
     name: "Get Chat Settings",
     description: "Gets chat settings for a broadcaster's channel.",
+    docsUrl: apiReference("get-chat-settings"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -566,6 +580,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "UpdateChatSettings",
     name: "Update Chat Settings",
     description: "Updates chat settings for a broadcaster's channel.",
+    docsUrl: apiReference("update-chat-settings"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -639,6 +654,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     replay: "safe",
     name: "Get Channel Information",
     description: "Gets information about a Twitch channel.",
+    docsUrl: apiReference("get-channel-information"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -673,6 +689,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "ModifyChannelInformation",
     name: "Modify Channel Information",
     description: "Modifies channel information for a broadcaster.",
+    docsUrl: apiReference("modify-channel-information"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -703,6 +720,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     replay: "safe",
     name: "Get Streams",
     description: "Looks up a user's active Twitch stream.",
+    docsUrl: apiReference("get-streams"),
     properties: accountProperty,
     io: (io) => ({
       userId: io.data.in("userId", t.String, { name: "User ID" }),
@@ -727,6 +745,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "CreateClip",
     name: "Create Clip",
     description: "Creates a clip from the broadcaster's stream.",
+    docsUrl: apiReference("create-clip"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -749,6 +768,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "CreatePoll",
     name: "Create Poll",
     description: "Creates a poll with two choices for a broadcaster's channel.",
+    docsUrl: apiReference("create-poll"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -775,6 +795,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "EndPoll",
     name: "End Poll",
     description: "Ends a poll that is currently active.",
+    docsUrl: apiReference("end-poll"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -801,6 +822,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "CreatePrediction",
     name: "Create Prediction",
     description: "Creates a prediction with two outcomes for a broadcaster's channel.",
+    docsUrl: apiReference("create-prediction"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -830,6 +852,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "EndPrediction",
     name: "End Prediction",
     description: "Ends a prediction that is currently active.",
+    docsUrl: apiReference("end-prediction"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -866,6 +889,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     replay: "safe",
     name: "Get Users",
     description: "Gets a Twitch user by ID or login.",
+    docsUrl: apiReference("get-users"),
     properties: accountProperty,
     io: (io) => ({
       userId: io.data.in("userId", t.Option(t.String), { name: "User ID" }),
@@ -897,6 +921,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     replay: "safe",
     name: "Get Followers",
     description: "Gets the total followers for a broadcaster.",
+    docsUrl: apiReference("get-channel-followers"),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -917,6 +942,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       id: action.id,
       replay: action.method === "GET" ? "safe" : "unsafe",
       name: action.name,
+      docsUrl: action.docsUrl,
       description: `${action.name} using authenticated Twitch ${action.id === "ValidateToken" ? "OAuth validation" : "Helix"}.${action.scopes.length ? ` Requires ${action.scopes.join(" or ")}.` : ""}`,
       properties: accountProperty,
       io: (io) => ({

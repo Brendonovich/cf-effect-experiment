@@ -97,6 +97,17 @@ const styles = stylex.create({
     boxShadow: { default: null, ":focus-visible": `inset 0 0 0 1px ${colors.focus}` },
   },
   leftAction: { borderBottomLeftRadius: 4 },
+  link: {
+    alignItems: "center",
+    display: "flex",
+    justifyContent: "center",
+    textDecoration: "none",
+    backgroundColor: {
+      default: "transparent",
+      ":hover": "color-mix(in srgb, var(--gray-12) 5%, transparent)",
+    },
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+  },
   rightAction: {
     borderBottomRightRadius: 4,
     borderLeftColor: colors.gray5,
@@ -195,9 +206,25 @@ export function SchemaInfoButton(props: { schema: Package.SchemaModel; packageNa
             </div>
           </div>
           <div sx={styles.actions}>
-            <button type="button" disabled sx={[styles.action, styles.leftAction]}>
-              More Info
-            </button>
+            <Show
+              when={props.schema.docsUrl}
+              fallback={
+                <button type="button" disabled sx={[styles.action, styles.leftAction]}>
+                  More Info
+                </button>
+              }
+            >
+              {(href) => (
+                <a
+                  href={href()}
+                  target="_blank"
+                  rel="noreferrer"
+                  sx={[styles.action, styles.leftAction, styles.link]}
+                >
+                  More Info
+                </a>
+              )}
+            </Show>
             <button
               type="button"
               sx={[styles.action, styles.rightAction]}

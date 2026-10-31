@@ -181,6 +181,15 @@ const styles = stylex.create({
   },
   detailDescription: { color: colors.gray10, fontSize: 12, lineHeight: 1.5 },
   missingDescription: { fontStyle: "italic" },
+  docsLink: {
+    alignSelf: "flex-start",
+    borderRadius: 2,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+    fontSize: 12,
+    outline: "none",
+    textDecoration: { default: "none", ":hover": "underline" },
+    boxShadow: { default: null, ":focus-visible": `0 0 0 1px ${colors.focus}` },
+  },
   nodeConfiguration: {
     alignItems: "start",
     display: "grid",
@@ -556,6 +565,13 @@ function ReferenceView(props: {
                 >
                   {schema().description ?? "No description provided."}
                 </p>
+                <Show when={schema().docsUrl}>
+                  {(href) => (
+                    <a sx={styles.docsLink} href={href()} target="_blank" rel="noreferrer">
+                      View documentation ↗
+                    </a>
+                  )}
+                </Show>
               </header>
               <div sx={styles.nodeConfiguration}>
                 <div

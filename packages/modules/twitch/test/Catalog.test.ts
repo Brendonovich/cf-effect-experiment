@@ -196,6 +196,8 @@ describe("Twitch catalog", () => {
         ],
       );
       assert.isTrue(schemas.every(({ description }) => description !== undefined));
+      for (const { id, docsUrl } of schemas)
+        assert.match(docsUrl ?? "", /^https:\/\/dev\.twitch\.tv\/docs\//, id);
       assert.isTrue(
         schemas.slice(0, 49).every(({ description }) => !description?.includes("Twitch emits")),
       );
