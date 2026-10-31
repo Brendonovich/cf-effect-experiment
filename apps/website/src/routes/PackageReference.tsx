@@ -323,7 +323,11 @@ const variantColor = (type: SchemaType) =>
 
 const md = "@media (min-width: 768px)";
 const styles = stylex.create({
+  // Fills the page below the site header, so the node list can reach the bottom of the window.
   shell: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
     width: "100%",
     maxWidth: 1280,
     boxSizing: "border-box",
@@ -367,8 +371,10 @@ const styles = stylex.create({
   },
   layout: {
     display: "grid",
+    flex: 1,
     gridTemplateColumns: { default: "minmax(0, 1fr)", [md]: "240px minmax(0, 1fr)" },
-    alignItems: "start",
+    gridTemplateRows: { default: "auto 1fr", [md]: "1fr" },
+    alignItems: { default: "start", [md]: "stretch" },
   },
   sidebar: {
     position: "sticky",
