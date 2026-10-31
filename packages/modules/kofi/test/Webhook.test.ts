@@ -1,11 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HttpEndpoint } from "@macrograph/module";
+import { HttpEndpoint, Module } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect } from "effect";
 
 import { WebhookId } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
 import { handler as webhookHandler } from "../src/Webhook.ts";
+
+const moduleId = Module.builtinId("kofi");
 
 const delivery = {
   verification_token: "secret-token",
@@ -46,10 +48,10 @@ describe("Ko-fi webhook", () => {
       const requirements = yield* deployment.httpIngress.requirements({
         webhooks: { [WebhookId.make("primary")]: { verificationToken: "secret-token" } },
       });
-      assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
+      assert.deepStrictEqual(yield* HttpIngress.manifest(moduleId, requirements), [
         {
           handlerId: HttpEndpoint.HandlerId.make("kofi:payment"),
-          moduleId: "kofi",
+          moduleId,
           instanceKey: HttpEndpoint.InstanceKey.make("primary"),
           displayName: "Webhook",
           metadata: { webhookId: "primary" },
@@ -69,7 +71,7 @@ describe("Ko-fi webhook", () => {
           },
         },
       });
-      const manifest = yield* HttpIngress.manifest(requirements);
+      const manifest = yield* HttpIngress.manifest(moduleId, requirements);
       assert.strictEqual(manifest[0]?.displayName, "Supporter Donations");
     }),
   );

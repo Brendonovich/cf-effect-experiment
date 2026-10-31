@@ -1,0 +1,10 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "node-builtin",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Node built-in",
+  "server": "server.cjs",
+  "node": ["path"]
+}

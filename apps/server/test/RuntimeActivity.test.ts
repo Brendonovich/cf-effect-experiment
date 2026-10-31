@@ -9,7 +9,7 @@ import {
   Presence,
 } from "@macrograph/editor";
 import { Executor, RuntimeActivity } from "@macrograph/execution";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Array, Cause, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
@@ -42,11 +42,13 @@ describe("workspace runtime activity access", () => {
           const activity = yield* RuntimeActivity.Service;
           class Secret extends Schema.TaggedClass<Secret>()("Secret", { token: Schema.String }) {}
           class TestEngine extends Engine.make({ events: Array.empty<Secret>() }) {}
-          const module = Module.make({
-            id: "private",
-            engine: TestEngine,
-            effect: () => Effect.void,
-          });
+          const module = Module.identify(
+            ModuleId.Id.make("local/test/private"),
+            Module.make({
+              engine: TestEngine,
+              effect: () => Effect.void,
+            }),
+          );
           let calls = 0;
           const event = new Secret({ token: "secret-payload" });
           const executor = activity.wrap({

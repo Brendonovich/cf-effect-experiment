@@ -1,15 +1,15 @@
 import { t } from "@macrograph/module";
 
-const User = t.defineStruct("github/User", "GitHub User", {
+const User = t.defineStruct("User", "GitHub User", {
   login: t.String,
   id: t.Int,
   type: t.String,
   html_url: t.String,
 });
 
-const Installation = t.defineStruct("github/Installation", "GitHub Installation", { id: t.Int });
+const Installation = t.defineStruct("Installation", "GitHub Installation", { id: t.Int });
 
-const Repository = t.defineStruct("github/Repository", "GitHub Repository", {
+const Repository = t.defineStruct("Repository", "GitHub Repository", {
   id: t.Int,
   name: t.String,
   full_name: t.String,
@@ -18,13 +18,13 @@ const Repository = t.defineStruct("github/Repository", "GitHub Repository", {
   default_branch: t.String,
 });
 
-const CommitAuthor = t.defineStruct("github/CommitAuthor", "GitHub CommitAuthor", {
+const CommitAuthor = t.defineStruct("CommitAuthor", "GitHub CommitAuthor", {
   name: t.String,
   email: t.String,
   username: t.Option(t.String),
 });
 
-const PushCommit = t.defineStruct("github/PushCommit", "GitHub PushCommit", {
+const PushCommit = t.defineStruct("PushCommit", "GitHub PushCommit", {
   id: t.String,
   message: t.String,
   timestamp: t.DateTime,
@@ -36,12 +36,12 @@ const PushCommit = t.defineStruct("github/PushCommit", "GitHub PushCommit", {
   modified: t.List(t.String),
 });
 
-const Pusher = t.defineStruct("github/Pusher", "GitHub Pusher", {
+const Pusher = t.defineStruct("Pusher", "GitHub Pusher", {
   name: t.String,
   email: t.Option(t.String),
 });
 
-const BranchReference = t.defineStruct("github/BranchReference", "GitHub BranchReference", {
+const BranchReference = t.defineStruct("BranchReference", "GitHub BranchReference", {
   label: t.String,
   ref: t.String,
   sha: t.String,
@@ -49,7 +49,7 @@ const BranchReference = t.defineStruct("github/BranchReference", "GitHub BranchR
   repo: t.Option(t.Struct(Repository)),
 });
 
-const PullRequest = t.defineStruct("github/PullRequest", "GitHub PullRequest", {
+const PullRequest = t.defineStruct("PullRequest", "GitHub PullRequest", {
   id: t.Int,
   number: t.Int,
   state: t.String,
@@ -65,7 +65,7 @@ const PullRequest = t.defineStruct("github/PullRequest", "GitHub PullRequest", {
   base: t.Struct(BranchReference),
 });
 
-const Issue = t.defineStruct("github/Issue", "GitHub Issue", {
+const Issue = t.defineStruct("Issue", "GitHub Issue", {
   id: t.Int,
   number: t.Int,
   state: t.String,
@@ -76,7 +76,7 @@ const Issue = t.defineStruct("github/Issue", "GitHub Issue", {
   user: t.Struct(User),
 });
 
-const IssueComment = t.defineStruct("github/IssueComment", "GitHub IssueComment", {
+const IssueComment = t.defineStruct("IssueComment", "GitHub IssueComment", {
   id: t.Int,
   body: t.String,
   html_url: t.String,
@@ -85,7 +85,7 @@ const IssueComment = t.defineStruct("github/IssueComment", "GitHub IssueComment"
   updated_at: t.DateTime,
 });
 
-const Workflow = t.defineStruct("github/Workflow", "GitHub Workflow", {
+const Workflow = t.defineStruct("Workflow", "GitHub Workflow", {
   id: t.Int,
   name: t.String,
   path: t.String,
@@ -93,7 +93,7 @@ const Workflow = t.defineStruct("github/Workflow", "GitHub Workflow", {
   html_url: t.String,
 });
 
-const WorkflowRun = t.defineStruct("github/WorkflowRun", "GitHub WorkflowRun", {
+const WorkflowRun = t.defineStruct("WorkflowRun", "GitHub WorkflowRun", {
   id: t.Int,
   name: t.Option(t.String),
   event: t.String,
@@ -104,7 +104,7 @@ const WorkflowRun = t.defineStruct("github/WorkflowRun", "GitHub WorkflowRun", {
   html_url: t.String,
 });
 
-const Release = t.defineStruct("github/Release", "GitHub Release", {
+const Release = t.defineStruct("Release", "GitHub Release", {
   id: t.Int,
   tag_name: t.String,
   target_commitish: t.String,
@@ -116,7 +116,7 @@ const Release = t.defineStruct("github/Release", "GitHub Release", {
   author: t.Struct(User),
 });
 
-const PullRequestAction = t.defineEnum("github/PullRequestAction", "GitHub PullRequestAction", [
+const PullRequestAction = t.defineEnum("PullRequestAction", "GitHub PullRequestAction", [
   "assigned",
   "auto_merge_disabled",
   "auto_merge_enabled",
@@ -140,7 +140,7 @@ const PullRequestAction = t.defineEnum("github/PullRequestAction", "GitHub PullR
   "unlocked",
 ]);
 
-const IssueAction = t.defineEnum("github/IssueAction", "GitHub IssueAction", [
+const IssueAction = t.defineEnum("IssueAction", "GitHub IssueAction", [
   "assigned",
   "closed",
   "deleted",
@@ -161,19 +161,19 @@ const IssueAction = t.defineEnum("github/IssueAction", "GitHub IssueAction", [
   "untyped",
 ]);
 
-const IssueCommentAction = t.defineEnum("github/IssueCommentAction", "GitHub IssueCommentAction", [
+const IssueCommentAction = t.defineEnum("IssueCommentAction", "GitHub IssueCommentAction", [
   "created",
   "deleted",
   "edited",
 ]);
 
-const WorkflowRunAction = t.defineEnum("github/WorkflowRunAction", "GitHub WorkflowRunAction", [
+const WorkflowRunAction = t.defineEnum("WorkflowRunAction", "GitHub WorkflowRunAction", [
   "completed",
   "in_progress",
   "requested",
 ]);
 
-const ReleaseAction = t.defineEnum("github/ReleaseAction", "GitHub ReleaseAction", [
+const ReleaseAction = t.defineEnum("ReleaseAction", "GitHub ReleaseAction", [
   "created",
   "deleted",
   "edited",
@@ -183,7 +183,7 @@ const ReleaseAction = t.defineEnum("github/ReleaseAction", "GitHub ReleaseAction
   "unpublished",
 ]);
 
-const PushPayload = t.defineStruct("github/PushPayload", "GitHub PushPayload", {
+const PushPayload = t.defineStruct("PushPayload", "GitHub PushPayload", {
   ref: t.String,
   before: t.String,
   after: t.String,
@@ -199,20 +199,16 @@ const PushPayload = t.defineStruct("github/PushPayload", "GitHub PushPayload", {
   installation: t.Struct(Installation),
 });
 
-const PullRequestPayload = t.defineStruct(
-  "github/PullRequestPayload",
-  "GitHub PullRequestPayload",
-  {
-    action: t.Enum(PullRequestAction),
-    number: t.Int,
-    pull_request: t.Struct(PullRequest),
-    repository: t.Struct(Repository),
-    sender: t.Struct(User),
-    installation: t.Struct(Installation),
-  },
-);
+const PullRequestPayload = t.defineStruct("PullRequestPayload", "GitHub PullRequestPayload", {
+  action: t.Enum(PullRequestAction),
+  number: t.Int,
+  pull_request: t.Struct(PullRequest),
+  repository: t.Struct(Repository),
+  sender: t.Struct(User),
+  installation: t.Struct(Installation),
+});
 
-const IssuesPayload = t.defineStruct("github/IssuesPayload", "GitHub IssuesPayload", {
+const IssuesPayload = t.defineStruct("IssuesPayload", "GitHub IssuesPayload", {
   action: t.Enum(IssueAction),
   issue: t.Struct(Issue),
   repository: t.Struct(Repository),
@@ -220,33 +216,25 @@ const IssuesPayload = t.defineStruct("github/IssuesPayload", "GitHub IssuesPaylo
   installation: t.Struct(Installation),
 });
 
-const IssueCommentPayload = t.defineStruct(
-  "github/IssueCommentPayload",
-  "GitHub IssueCommentPayload",
-  {
-    action: t.Enum(IssueCommentAction),
-    issue: t.Struct(Issue),
-    comment: t.Struct(IssueComment),
-    repository: t.Struct(Repository),
-    sender: t.Struct(User),
-    installation: t.Struct(Installation),
-  },
-);
+const IssueCommentPayload = t.defineStruct("IssueCommentPayload", "GitHub IssueCommentPayload", {
+  action: t.Enum(IssueCommentAction),
+  issue: t.Struct(Issue),
+  comment: t.Struct(IssueComment),
+  repository: t.Struct(Repository),
+  sender: t.Struct(User),
+  installation: t.Struct(Installation),
+});
 
-const WorkflowRunPayload = t.defineStruct(
-  "github/WorkflowRunPayload",
-  "GitHub WorkflowRunPayload",
-  {
-    action: t.Enum(WorkflowRunAction),
-    workflow: t.Struct(Workflow),
-    workflow_run: t.Struct(WorkflowRun),
-    repository: t.Struct(Repository),
-    sender: t.Struct(User),
-    installation: t.Struct(Installation),
-  },
-);
+const WorkflowRunPayload = t.defineStruct("WorkflowRunPayload", "GitHub WorkflowRunPayload", {
+  action: t.Enum(WorkflowRunAction),
+  workflow: t.Struct(Workflow),
+  workflow_run: t.Struct(WorkflowRun),
+  repository: t.Struct(Repository),
+  sender: t.Struct(User),
+  installation: t.Struct(Installation),
+});
 
-const ReleasePayload = t.defineStruct("github/ReleasePayload", "GitHub ReleasePayload", {
+const ReleasePayload = t.defineStruct("ReleasePayload", "GitHub ReleasePayload", {
   action: t.Enum(ReleaseAction),
   release: t.Struct(Release),
   repository: t.Struct(Repository),

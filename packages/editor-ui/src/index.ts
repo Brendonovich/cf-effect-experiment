@@ -33,6 +33,7 @@ export {
   type EditorController,
   type EditorControllerOptions,
 } from "./editor/createEditorController.ts";
+export * from "./editor/modules/index.ts";
 export { macrographLogo };
 export {
   CredentialIntegrations,
@@ -63,3 +64,10 @@ export {
   EventExecutionRow,
   type EventSource,
 } from "./events/Events.tsx";
+export {
+  ModulesAdminView,
+  type ModulesAdminTab,
+  type ModulesAdminViewProps,
+  type ModuleAdminClient,
+  type SubscribeModulesChanged,
+} from "./modules-admin/index.ts";

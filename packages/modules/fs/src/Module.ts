@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { FilesystemEngine } from "./Definition.ts";
 
 const FilesystemModule = Module.make({
-  id: "fs",
   name: "Filesystem",
   engine: FilesystemEngine,
   effect: Effect.fnUntraced(function* (context) {

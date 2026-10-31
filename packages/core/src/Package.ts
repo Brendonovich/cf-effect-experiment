@@ -83,7 +83,6 @@ export interface ModuleInfo {
   readonly id: string;
   readonly name?: string;
   readonly description?: string;
-  readonly types?: t.Definitions;
 }
 
 export interface ResourceInfo {
@@ -124,7 +123,8 @@ export const nodeIO = (io: Registration.RegisteredNodeIO, definitions: t.Definit
 
 /**
  * Describes a module's registered schemas and engine resources as a package. Default values are
- * encoded against `definitions`, which must include any custom types they reference.
+ * encoded against `definitions`, which must include the module's own types and any project types
+ * they reference.
  */
 export const fromModule = (
   module: ModuleInfo,
@@ -140,7 +140,7 @@ export const fromModule = (
   return {
     id: PackageId.make(module.id),
     name: module.name ?? module.id,
-    types: module.types ?? {},
+    types: collected.types,
     ...(conversions.length === 0 ? {} : { conversions }),
     ...(module.description === undefined ? {} : { description: module.description }),
     resources: resources.map((resource) => ({

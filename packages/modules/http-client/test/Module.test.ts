@@ -9,44 +9,58 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { t, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration, ModuleId } from "@macrograph/module";
 import { Array, Cause, Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
-import HttpClientDeployment from "../src/Deployment.ts";
+import HttpClientDeploymentDefinition from "../src/Deployment.ts";
 import { makeRuntimeClient } from "../src/Engine.ts";
-import HttpClientModule from "../src/Module.ts";
+import HttpClientModuleDefinition from "../src/Module.ts";
 import { localLayer } from "../src/UrlPolicy.ts";
+
+const HttpClientDeployment = Engine.identify(
+  Module.builtinId("http-client"),
+  HttpClientDeploymentDefinition,
+);
+const HttpClientModule = Module.identify(
+  Module.builtinId("http-client"),
+  HttpClientModuleDefinition,
+);
 
 class Start extends Schema.TaggedClass<Start>()("Start", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Start>() }) {}
 
-const TestModule = Module.make({
-  id: "http-client-test",
-  engine: TestEngine,
-  effect: Effect.fnUntraced(function* (context) {
-    yield* context.schema.register({
-      id: "Start",
-      type: "event",
-      event: (event) => Effect.succeed(event._tag === "Start"),
-      io: () => ({}),
-      run: () => Effect.void,
-    });
-    yield* context.schema.register({
-      id: "Record",
-      io: (io) => ({ status: io.data.in("status", t.Int) }),
-      run: ({ io }) =>
-        Effect.sync(() => {
-          statuses.push(io.status);
-        }),
-    });
+const TestModule = Module.identify(
+  ModuleId.Id.make("local/test/http-client-test"),
+  Module.make({
+    engine: TestEngine,
+    effect: Effect.fnUntraced(function* (context) {
+      yield* context.schema.register({
+        id: "Start",
+        type: "event",
+        event: (event) => Effect.succeed(event._tag === "Start"),
+        io: () => ({}),
+        run: () => Effect.void,
+      });
+      yield* context.schema.register({
+        id: "Record",
+        io: (io) => ({ status: io.data.in("status", t.Int) }),
+        run: ({ io }) =>
+          Effect.sync(() => {
+            statuses.push(io.status);
+          }),
+      });
+    }),
   }),
-});
+);
 
 const statuses: Array<number> = [];
-const TestDeployment = Engine.deployment(
-  TestModule,
-  TestEngine.toLayer(() => Effect.die("test engine is not hosted")),
+const TestDeployment = Engine.identify(
+  TestModule.id,
+  Engine.deployment(
+    TestModule,
+    TestEngine.toLayer(() => Effect.die("test engine is not hosted")),
+  ),
 );
 
 const run = (

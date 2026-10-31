@@ -316,6 +316,8 @@ export const apply = (
 
     case "ResourceValuesUpdated":
     case "ModuleClientStateDirty":
+    case "PackagesChanged":
+    case "ModulesChanged":
       return Effect.void;
   }
 };

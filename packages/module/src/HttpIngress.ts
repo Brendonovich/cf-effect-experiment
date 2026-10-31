@@ -1,6 +1,7 @@
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect";
 
 import * as HttpEndpoint from "./HttpEndpoint.ts";
+import * as ModuleId from "./ModuleId.ts";
 
 export interface HttpRequest<Metadata, Configuration = unknown> {
   readonly endpoint: HttpEndpoint.Resolved<Metadata>;
@@ -22,17 +23,25 @@ export interface HttpResponse<Event> {
   readonly events?: ReadonlyArray<HttpEvent<Event>>;
 }
 
-export interface DeliveredEvent {
-  readonly moduleId: string;
+/** An encoded event produced by a handler; the registry adds the id of the module it belongs to. */
+export interface EncodedEvent {
   readonly eventType: string;
   readonly eventId?: string;
   readonly payload: unknown;
 }
 
-export interface Response {
+export interface DeliveredEvent extends EncodedEvent {
+  readonly moduleId: ModuleId.Id;
+}
+
+export interface HandlerResponse {
   readonly status: number;
   readonly body?: string;
   readonly contentType?: string;
+  readonly events: ReadonlyArray<EncodedEvent>;
+}
+
+export interface Response extends HandlerResponse {
   readonly events: ReadonlyArray<DeliveredEvent>;
 }
 
@@ -84,7 +93,7 @@ interface Handler {
   readonly method: string;
   readonly handle: (
     request: HttpRequest<unknown>,
-  ) => Effect.Effect<Response, InvalidMetadata | InvalidConfiguration | EventEncodingError>;
+  ) => Effect.Effect<HandlerResponse, InvalidMetadata | InvalidConfiguration | EventEncodingError>;
   readonly mount: (
     entry: ManifestEntry,
     endpoints: HttpEndpoint.Service,
@@ -98,7 +107,7 @@ interface Handler {
   ) => Effect.Effect<ManifestEntry, ReconciliationError>;
   readonly allows: (
     entry: ManifestEntry,
-    event: DeliveredEvent,
+    event: EncodedEvent,
   ) => Effect.Effect<boolean, InvalidConfiguration>;
 }
 
@@ -124,7 +133,7 @@ export interface Requirement {
 
 export const ManifestEntry = Schema.Struct({
   handlerId: HttpEndpoint.HandlerId,
-  moduleId: Schema.String,
+  moduleId: ModuleId.Id,
   instanceKey: HttpEndpoint.InstanceKey,
   displayName: Schema.String,
   metadata: Schema.Unknown,
@@ -146,7 +155,6 @@ export interface HttpDefinition<
   Event extends { readonly _tag: string },
   Configuration,
 > extends HttpEndpoint.Handler<Metadata> {
-  readonly moduleId: string;
   readonly displayName: string;
   readonly method: string;
   readonly event: Schema.Codec<Event, unknown, never, never>;
@@ -183,7 +191,6 @@ export interface HttpDefinition<
 }
 
 export interface AnyHttpDefinition extends HttpEndpoint.Handler<unknown> {
-  readonly moduleId: string;
   readonly displayName: string;
   readonly method: string;
   readonly configuration: Schema.Codec<unknown, unknown, never, never>;
@@ -191,7 +198,6 @@ export interface AnyHttpDefinition extends HttpEndpoint.Handler<unknown> {
 
 export const make = <Metadata, Event extends { readonly _tag: string }, Configuration>(options: {
   readonly id: string;
-  readonly moduleId: string;
   readonly displayName: string;
   readonly method: string;
   readonly metadata: Schema.Codec<Metadata, unknown, never, never>;
@@ -203,7 +209,6 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
   const handlerId = HttpEndpoint.HandlerId.make(options.id);
   const definition: HttpDefinition<Metadata, Event, Configuration> = {
     id: handlerId,
-    moduleId: options.moduleId,
     displayName: options.displayName,
     method: options.method,
     metadata: options.metadata,
@@ -244,19 +249,10 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
                     ({ event, eventId }) =>
                       Schema.encodeUnknownEffect(options.event)(event).pipe(
                         Effect.map(
-                          (payload): DeliveredEvent =>
+                          (payload): EncodedEvent =>
                             eventId === undefined
-                              ? {
-                                  moduleId: options.moduleId,
-                                  eventType: event._tag,
-                                  payload,
-                                }
-                              : {
-                                  moduleId: options.moduleId,
-                                  eventType: event._tag,
-                                  eventId,
-                                  payload,
-                                },
+                              ? { eventType: event._tag, payload }
+                              : { eventType: event._tag, eventId, payload },
                         ),
                         Effect.mapError((cause) => new EventEncodingError({ handlerId, cause })),
                       ),
@@ -377,7 +373,10 @@ export const make = <Metadata, Event extends { readonly _tag: string }, Configur
   return definition;
 };
 
-export const manifest = (requirements: ReadonlyArray<Requirement>): Effect.Effect<Manifest> =>
+export const manifest = (
+  moduleId: ModuleId.Id,
+  requirements: ReadonlyArray<Requirement>,
+): Effect.Effect<Manifest> =>
   Effect.forEach(requirements, (requirement) =>
     Effect.all({
       metadata: Schema.encodeUnknownEffect(requirement.definition.metadata)(requirement.metadata),
@@ -388,7 +387,7 @@ export const manifest = (requirements: ReadonlyArray<Requirement>): Effect.Effec
       Effect.map(
         ({ metadata, configuration }): ManifestEntry => ({
           handlerId: requirement.definition.id,
-          moduleId: requirement.definition.moduleId,
+          moduleId,
           instanceKey: requirement.instanceKey,
           displayName: requirement.displayName,
           metadata,
@@ -399,8 +398,13 @@ export const manifest = (requirements: ReadonlyArray<Requirement>): Effect.Effec
     ),
   );
 
+/** A handler definition together with the module it was registered for. */
+export interface RegisteredDefinition extends AnyHttpDefinition {
+  readonly moduleId: ModuleId.Id;
+}
+
 export interface RegistryService {
-  readonly definitions: ReadonlyArray<AnyHttpDefinition>;
+  readonly definitions: ReadonlyArray<RegisteredDefinition>;
   readonly handle: (
     request: HttpRequest<unknown>,
   ) => Effect.Effect<Response, InvalidMetadata | InvalidConfiguration | EventEncodingError>;
@@ -426,68 +430,73 @@ export class Registry extends Context.Service<Registry, RegistryService>()(
   "macrograph/Module/HttpIngress/Registry",
 ) {}
 
-export function makeRegistry<RO1, RI1, RO2, RI2, RO3, RI3, RO4, RI4>(
-  lives: readonly [Live<RO1, RI1>, Live<RO2, RI2>, Live<RO3, RI3>, Live<RO4, RI4>],
-): Effect.Effect<
-  RegistryService,
-  InitializationError,
-  RO1 | RI1 | RO2 | RI2 | RO3 | RI3 | RO4 | RI4
->;
-export function makeRegistry<RO1, RI1, RO2, RI2, RO3, RI3>(
-  lives: readonly [Live<RO1, RI1>, Live<RO2, RI2>, Live<RO3, RI3>],
-): Effect.Effect<RegistryService, InitializationError, RO1 | RI1 | RO2 | RI2 | RO3 | RI3>;
-export function makeRegistry<RO, RI>(
-  lives: ReadonlyArray<Live<RO, RI>>,
-): Effect.Effect<RegistryService, InitializationError, RO | RI>;
-export function makeRegistry<RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) {
-  return Effect.gen(function* () {
-    const handlers = yield* Effect.forEach(lives, (live) => live.build);
-    const byId = new Map(handlers.map((handler) => [handler.id, handler]));
+/** The handlers of one module, registered under the id its host mounted it with. */
+export interface ModuleHandlers<Lives extends ReadonlyArray<Live<any, any>>> {
+  readonly moduleId: ModuleId.Id;
+  readonly handlers: Lives;
+}
+
+export type HandlerServices<Modules extends ReadonlyArray<ModuleHandlers<ReadonlyArray<AnyLive>>>> =
+  Modules[number]["handlers"][number] extends infer L
+    ? L extends Live<infer RO, infer RI>
+      ? RO | RI
+      : never
+    : never;
+
+export const makeRegistry = <
+  const Modules extends ReadonlyArray<ModuleHandlers<ReadonlyArray<Live<any, any>>>>,
+>(
+  modules: Modules,
+): Effect.Effect<RegistryService, InitializationError, HandlerServices<Modules>> =>
+  Effect.gen(function* () {
+    const registered = modules.flatMap((module) =>
+      module.handlers.map((live) => ({ moduleId: module.moduleId, live })),
+    );
+    const handlers = yield* Effect.forEach(registered, ({ moduleId, live }) =>
+      Effect.map(live.build, (handler) => ({ moduleId, handler })),
+    );
+    const byId = new Map(handlers.map((entry) => [entry.handler.id, entry]));
     if (byId.size !== handlers.length) {
       const duplicate = handlers.find(
-        (handler, index) =>
-          handlers.findIndex((candidate) => candidate.id === handler.id) !== index,
+        (entry, index) =>
+          handlers.findIndex((candidate) => candidate.handler.id === entry.handler.id) !== index,
       );
       return yield* new InitializationError({
-        handlerId: duplicate?.id ?? HttpEndpoint.HandlerId.make("unknown"),
+        handlerId: duplicate?.handler.id ?? HttpEndpoint.HandlerId.make("unknown"),
         cause: "Duplicate HTTP ingress handler id",
       });
     }
+    const forEntry = (entry: ManifestEntry) => {
+      const registered = byId.get(entry.handlerId);
+      return registered === undefined || registered.moduleId !== entry.moduleId
+        ? Effect.fail(
+            new ReconciliationError({
+              handlerId: entry.handlerId,
+              instanceKey: entry.instanceKey,
+              cause: "HTTP ingress handler is not registered",
+            }),
+          )
+        : Effect.succeed(registered.handler);
+    };
 
     return Registry.of({
-      definitions: lives.map((live) => live.definition),
+      definitions: registered.map(({ moduleId, live }) => ({ ...live.definition, moduleId })),
       handle: (request) => {
-        const handler = byId.get(request.endpoint.schema.id);
-        if (handler === undefined) return Effect.succeed({ status: 404, events: [] });
-        if (request.method !== handler.method) return Effect.succeed({ status: 405, events: [] });
-        return handler.handle(request);
+        const registered = byId.get(request.endpoint.schema.id);
+        if (registered === undefined) return Effect.succeed({ status: 404, events: [] });
+        if (request.method !== registered.handler.method)
+          return Effect.succeed({ status: 405, events: [] });
+        return registered.handler.handle(request).pipe(
+          Effect.map((response) => ({
+            ...response,
+            events: response.events.map((event) => ({ ...event, moduleId: registered.moduleId })),
+          })),
+        );
       },
-      mount: (entry, endpoints) => {
-        const handler = byId.get(entry.handlerId);
-        const definition = lives.find((live) => live.definition.id === entry.handlerId)?.definition;
-        if (handler === undefined || definition?.moduleId !== entry.moduleId)
-          return Effect.fail(
-            new ReconciliationError({
-              handlerId: entry.handlerId,
-              instanceKey: entry.instanceKey,
-              cause: "HTTP ingress handler is not registered",
-            }),
-          );
-        return handler.mount(entry, endpoints);
-      },
-      unmount: (entry, endpoints) => {
-        const handler = byId.get(entry.handlerId);
-        const definition = lives.find((live) => live.definition.id === entry.handlerId)?.definition;
-        if (handler === undefined || definition?.moduleId !== entry.moduleId)
-          return Effect.fail(
-            new ReconciliationError({
-              handlerId: entry.handlerId,
-              instanceKey: entry.instanceKey,
-              cause: "HTTP ingress handler is not registered",
-            }),
-          );
-        return handler.unmount(entry, endpoints);
-      },
+      mount: (entry, endpoints) =>
+        Effect.flatMap(forEntry(entry), (handler) => handler.mount(entry, endpoints)),
+      unmount: (entry, endpoints) =>
+        Effect.flatMap(forEntry(entry), (handler) => handler.unmount(entry, endpoints)),
       mergeManifests: (manifests) => {
         const grouped = new Map<ManifestEntryKey, Array<ManifestEntry>>();
         for (const entry of manifests.flat()) {
@@ -497,7 +506,9 @@ export function makeRegistry<RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) {
           else entries.push(entry);
         }
         return Effect.forEach(grouped.values(), (entries) => {
-          const handler = byId.get(entries[0]?.handlerId ?? HttpEndpoint.HandlerId.make("unknown"));
+          const handler = byId.get(
+            entries[0]?.handlerId ?? HttpEndpoint.HandlerId.make("unknown"),
+          )?.handler;
           if (handler === undefined)
             return Effect.fail(
               new ReconciliationError({
@@ -510,14 +521,18 @@ export function makeRegistry<RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) {
         });
       },
       allows: (entry, event) => {
-        const handler = byId.get(entry.handlerId);
-        return handler === undefined ? Effect.succeed(false) : handler.allows(entry, event);
+        const registered = byId.get(entry.handlerId);
+        return registered === undefined || registered.moduleId !== event.moduleId
+          ? Effect.succeed(false)
+          : registered.handler.allows(entry, event);
       },
     });
   });
-}
 
-export const layer = <RO, RI>(lives: ReadonlyArray<Live<RO, RI>>) =>
-  Layer.effect(Registry)(makeRegistry(lives));
+export const layer = <
+  const Modules extends ReadonlyArray<ModuleHandlers<ReadonlyArray<Live<any, any>>>>,
+>(
+  modules: Modules,
+) => Layer.effect(Registry)(makeRegistry(modules));
 
 export * as HttpIngress from "./HttpIngress.ts";

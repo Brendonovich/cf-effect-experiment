@@ -16,8 +16,8 @@ import {
   projectIngressEvents,
   projects,
 } from "../database/DatabaseSchema.ts";
+import { executorRegistry as executorModules } from "../modules/CloudModules.ts";
 import * as EventPolicy from "./EventPolicy.ts";
-import { registry as executorModules } from "./ExecutorModules.ts";
 
 export const make = (workerOperations: Pick<WorkerOperations, "replayEvent">) =>
   Effect.gen(function* () {

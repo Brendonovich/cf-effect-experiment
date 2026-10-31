@@ -9,7 +9,6 @@ const checked = Effect.fnUntraced(function* (value: number, type: t.Int | t.Floa
   return value;
 });
 const MathModule = Module.make({
-  id: "math",
   name: "Math",
   description: "Perform arithmetic, comparisons, rounding, and other numeric operations.",
   effect: Effect.fnUntraced(function* (context) {

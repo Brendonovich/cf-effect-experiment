@@ -5,6 +5,7 @@
       "packages/*",
       "packages/workflow-runtime*/test-app",
       "packages/modules/*",
+      "local-modules/*",
       "apps/*",
       "apps/cloud/frontend",
       "apps/server/client"

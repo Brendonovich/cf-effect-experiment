@@ -10,7 +10,6 @@ const validEntries = (number: number) =>
   Number.isSafeInteger(number) && number >= 0 && number <= 1024;
 const decimal = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
 const StringModule = Module.make({
-  id: "string",
   name: "String",
   description: "Create, compare, format, and transform text.",
   effect: Effect.fnUntraced(function* (context) {

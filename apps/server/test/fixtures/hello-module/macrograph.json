@@ -1,0 +1,11 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "hello",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Hello fixture",
+  "description": "A third-party module without an engine.",
+  "server": "server.cjs",
+  "icon": "assets/icon.svg"
+}

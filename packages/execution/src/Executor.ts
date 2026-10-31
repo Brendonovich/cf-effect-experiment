@@ -5,6 +5,7 @@ import {
   Node,
   type NodeIO,
   OutputRef,
+  PackageId,
   Project,
   Queue,
   ResourceConstant,
@@ -15,17 +16,23 @@ import {
 import { Conversion, t } from "@macrograph/module";
 import * as Engine from "@macrograph/module/Engine";
 import * as Module from "@macrograph/module/Module";
+import * as ModuleId from "@macrograph/module/ModuleId";
 import * as Registration from "@macrograph/module/Registration";
 import { Retry } from "@macrograph/module/Retry";
-import { Cause, Effect, Logger, Ref, Result, Schema } from "effect";
+import { Cause, Effect, Logger, Ref, Result, Schema, type Scope } from "effect";
 
 const NodeOutputKey = Schema.String.pipe(Schema.brand("NodeOutputKey"));
 type NodeOutputKey = typeof NodeOutputKey.Type;
 
-export class ModuleNotRegistered extends Schema.TaggedError<ModuleNotRegistered>()(
-  "ModuleNotRegistered",
+/** A node uses a module that is not loaded; the node is kept as a missing-module placeholder. */
+export class ModuleUnavailable extends Schema.TaggedError<ModuleUnavailable>()(
+  "ModuleUnavailable",
   { moduleId: Schema.String },
-) {}
+) {
+  override get message() {
+    return `Module ${this.moduleId} is not loaded`;
+  }
+}
 
 export class SchemaNotRegistered extends Schema.TaggedError<SchemaNotRegistered>()(
   "SchemaNotRegistered",
@@ -145,7 +152,7 @@ const handleRunCause =
 export type ExecutorError =
   | Retry
   | GraphFunction.InvocationError
-  | ModuleNotRegistered
+  | ModuleUnavailable
   | SchemaNotRegistered
   | InvalidConnection
   | MissingInput
@@ -179,11 +186,12 @@ interface ExecutionState {
 export interface Service {
   readonly project: Effect.Effect<Project.Model>;
   readonly loadProject: (project: Project.Model) => Effect.Effect<void>;
+  /** Registers a module until the current scope closes; closing it removes exactly this module. */
   readonly module: <Definition extends Engine.AnyDef = never>(
     ...args: Module.RegisterArgs<Definition>
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, never, Scope.Scope>;
   readonly handleEvent: <Definition extends Engine.AnyDef>(
-    module: Module.Module<Definition>,
+    module: Module.Identified<Definition>,
     event: Engine.EventOf<Definition>,
   ) => Effect.Effect<void, ExecutorError>;
   readonly invokeFunction: (
@@ -213,7 +221,7 @@ export interface QueueInvocation {
 type ExecutionRequest =
   | {
       readonly _tag: "Event";
-      readonly definition: { readonly id: string };
+      readonly definition: { readonly id: ModuleId.Id };
       readonly event: { readonly _tag: string };
     }
   | {
@@ -336,6 +344,8 @@ export interface MakeOptions {
   ) => Effect.Effect<ReadonlyArray<ResourceConstant.LiveValue>>;
 }
 
+const listPackageId = PackageId.make(Module.builtinId("list"));
+
 const outputKey = (nodeId: string, outputId: string) =>
   NodeOutputKey.make(`${nodeId}\0${outputId}`);
 
@@ -344,10 +354,8 @@ export const make = Effect.fnUntraced(function* (
   options?: MakeOptions,
 ): Effect.fn.Return<Service> {
   const project = yield* Ref.make(initialProject);
-  const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(new Map());
   const customTypeSchemas = yield* Registration.collect(CustomTypes.module.effect);
-  yield* Ref.set(
-    modules,
+  const modules = yield* Ref.make<ReadonlyMap<string, RegisteredModule>>(
     new Map([
       [
         CustomTypes.module.id,
@@ -392,10 +400,16 @@ export const make = Effect.fnUntraced(function* (
         deployment.definition !== definition.engine)
     )
       return yield* Effect.die(`Deployment does not match module ${definition.id}`);
-    const { schemas: registered, conversions } = yield* Registration.collectModule(
-      definition.effect,
-    );
-    const types = definition.types ?? {};
+    if ((yield* Ref.get(modules)).has(definition.id))
+      return yield* Effect.die(`Module ${definition.id} is already registered`);
+    const {
+      schemas: registered,
+      conversions,
+      types,
+    } = yield* Registration.collectModule(definition.effect, {
+      moduleId: definition.id,
+      ...(definition.types === undefined ? {} : { types: definition.types }),
+    });
     const invalid =
       Conversion.validateModule(definition.id, types, conversions) ??
       Conversion.duplicate([
@@ -418,16 +432,22 @@ export const make = Effect.fnUntraced(function* (
               },
             )
           : yield* options.engineClient(definition.id);
-    yield* Ref.update(modules, (current) => {
-      const next = new Map(current);
-      next.set(definition.id, {
-        schemas: new Map(registered.map((schema) => [schema.id, schema])),
-        engineClient,
-        types,
-        conversions,
-      });
-      return next;
-    });
+    const module: RegisteredModule = {
+      schemas: new Map(registered.map((schema) => [schema.id, schema])),
+      engineClient,
+      types,
+      conversions,
+    };
+    yield* Effect.acquireRelease(
+      Ref.update(modules, (current) => new Map(current).set(definition.id, module)),
+      () =>
+        Ref.update(modules, (current) => {
+          if (current.get(definition.id) !== module) return current;
+          const next = new Map(current);
+          next.delete(definition.id);
+          return next;
+        }),
+    );
   });
 
   const executeSerializedNode: SerializedNodeExecutor["executeNode"] = Effect.fnUntraced(
@@ -442,7 +462,7 @@ export const make = Effect.fnUntraced(function* (
       };
       const registeredModule = registeredModules.get(request.moduleId);
       if (registeredModule === undefined)
-        return yield* new ModuleNotRegistered({ moduleId: request.moduleId });
+        return yield* new ModuleUnavailable({ moduleId: request.moduleId });
       const schema = registeredModule.schemas.get(request.schemaId);
       if (schema === undefined)
         return yield* new SchemaNotRegistered({
@@ -593,9 +613,7 @@ export const make = Effect.fnUntraced(function* (
           : Object.fromEntries(
               yield* Effect.forEach(fields, (field) =>
                 Schema.encodeUnknownEffect(t.JsonValueSchema(resolveType(field.type), definitions))(
-                  selected instanceof Registration.ScopeExecution
-                    ? selected.payload[field.id]
-                    : undefined,
+                  Registration.isScopeExecution(selected) ? selected.payload[field.id] : undefined,
                 ).pipe(
                   Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
                   Effect.map((value) => [field.id, value] as const),
@@ -665,7 +683,7 @@ export const make = Effect.fnUntraced(function* (
       ),
     };
     if (definition !== undefined && !registeredModules.has(definition.id))
-      return yield* new ModuleNotRegistered({ moduleId: definition.id });
+      return yield* new ModuleUnavailable({ moduleId: definition.id });
 
     const registeredIO = (io: NodeIO): Registration.RegisteredNodeIO => ({
       dataInputs: io.dataInputs.map(
@@ -735,7 +753,7 @@ export const make = Effect.fnUntraced(function* (
       }
       const registeredModule = registeredModules.get(node.schema.package);
       if (registeredModule === undefined)
-        return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
+        return yield* new ModuleUnavailable({ moduleId: node.schema.package });
       const schema = registeredModule.schemas.get(node.schema.schema);
       if (schema === undefined)
         return yield* new SchemaNotRegistered({
@@ -1025,7 +1043,7 @@ export const make = Effect.fnUntraced(function* (
           [...io.executionInputs, ...io.executionOutputs].some((port) => port.scope !== undefined)
         )
           reasons.push("Pure nodes cannot consume or emit scopes");
-        if (node.schema.package === "list" && node.schema.schema === "ListCreate") {
+        if (node.schema.package === listPackageId && node.schema.schema === "ListCreate") {
           const count = node.properties.number ?? 1;
           if (
             typeof count !== "number" ||
@@ -1246,7 +1264,7 @@ export const make = Effect.fnUntraced(function* (
           GraphFunction.isBoundaryNodeId(node.id) ||
           Queue.isEnqueue(node);
         if (registeredModule === undefined && !synthetic)
-          return yield* new ModuleNotRegistered({ moduleId: node.schema.package });
+          return yield* new ModuleUnavailable({ moduleId: node.schema.package });
         if (
           schema.properties.some((property) => "resource" in property) &&
           registeredModule?.engineClient === undefined
@@ -1382,9 +1400,7 @@ export const make = Effect.fnUntraced(function* (
           return {
             outputs,
             executionOutputId: selected?.id ?? null,
-            ...(selected instanceof Registration.ScopeExecution
-              ? { scopePayload: selected.payload }
-              : {}),
+            ...(Registration.isScopeExecution(selected) ? { scopePayload: selected.payload } : {}),
           } satisfies NodeExecutionResult;
         });
 
@@ -1992,7 +2008,9 @@ export const make = Effect.fnUntraced(function* (
       ([, graph]) => {
         const canvas = Scopes.lowerProjections(graph.canvas);
         return Effect.forEach(
-          Object.values(canvas.nodes).filter((node) => node.schema.package === definition.id),
+          Object.values(canvas.nodes).filter(
+            (node) => node.schema.package === PackageId.make(definition.id),
+          ),
           (node) =>
             Effect.gen(function* () {
               const schema = registeredModules

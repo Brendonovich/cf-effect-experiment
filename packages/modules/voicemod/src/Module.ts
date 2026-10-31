@@ -6,7 +6,6 @@ import { VoicemodEngine } from "./Definition.ts";
 
 export const ids = ["SetVoice", "SetVoiceChangerState", "SetHearSelfState"] as const;
 export default Module.make({
-  id: "voicemod",
   name: "Voicemod",
   engine: VoicemodEngine,
   effect: Effect.fnUntraced(function* (context) {

@@ -94,10 +94,14 @@ const loadSchemas = (id: ModuleId.Id) => {
     module === null
       ? new Map<string, Registration.RegisteredSchema>()
       : new Map(
-          (await Effect.runPromise(Registration.collect(module.effect))).map((schema) => [
-            schema.id,
-            schema,
-          ]),
+          (
+            await Effect.runPromise(
+              Registration.collectModule(module.effect, {
+                moduleId: id,
+                ...(module.types === undefined ? {} : { types: module.types }),
+              }),
+            )
+          ).schemas.map((schema) => [schema.id, schema]),
         ),
   );
   schemaCache.set(id, schemas);

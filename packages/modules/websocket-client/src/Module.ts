@@ -13,7 +13,6 @@ const connectionProperty = {
 } as const;
 
 const WebSocketClientModule = Module.make({
-  id: "websocket-client",
   name: "WebSocket Client",
   engine: WebSocketClientEngine,
   effect: Effect.fnUntraced(function* (context) {

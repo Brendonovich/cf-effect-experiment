@@ -1,15 +1,5 @@
 import type { Plugin } from "vite";
 
-import { moduleSettings } from "@macrograph/module/vite";
-
-/** Modules whose settings the playground offers. */
-const browserSettings = new Set([
-  "@macrograph/module-obs",
-  "@macrograph/module-twitch",
-  "@macrograph/module-utilities",
-  "@macrograph/module-websocket-client",
-]);
-
 const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
   // The server bundle runs in a Worker; only what ships to browsers is audited.
@@ -24,6 +14,11 @@ const browserImportAudit: Plugin = {
       "/packages/modules/kofi/src/Engine",
       "/packages/modules/kofi/src/Webhook",
       "/packages/modules/kofi/src/Deployment",
+      "/packages/module-host/src/ModuleRegistry.ts",
+      "/packages/module-host/src/ModuleSources.ts",
+      "/packages/module-host/src/VmLoader.ts",
+      "/packages/module-host/src/NativeAddons.ts",
+      "/packages/module-host/src/ModuleWatcher.ts",
       "/packages/module/src/HttpIngress",
       "/packages/modules/twitch/src/Deployment/Webhook",
       "/packages/modules/twitch/src/WebhookEventSub",
@@ -70,6 +65,8 @@ const browserImportAudit: Plugin = {
       "/packages/modules/twitch/src/WebSocketEventSub.ts",
       "/packages/modules/websocket-client/src/Engine.ts",
       "/apps/website/src/playground/local/BrowserServices.ts",
+      "/packages/module-host/src/StaticRegistry.ts",
+      "/packages/module-host/src/ModuleRegistryCore.ts",
     ];
     for (const expected of required) {
       if (!modules.some((id) => id.includes(expected)))
@@ -79,10 +76,7 @@ const browserImportAudit: Plugin = {
 };
 
 /**
- * The playground's build plugins: `virtual:macrograph-module-settings`, and a check that the
- * browser bundle has the modules it runs and nothing that only works on a server.
+ * The playground's build plugins: a check that the browser bundle has the modules it runs and
+ * nothing that only works on a server.
  */
-export const playground = (): Plugin[] => [
-  moduleSettings(undefined, browserSettings),
-  browserImportAudit,
-];
+export const playground = (): Plugin[] => [browserImportAudit];

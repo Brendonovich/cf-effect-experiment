@@ -76,7 +76,6 @@ describe("Streamlabs module", () => {
       assert.strictEqual(outputs[2]!.amount, "1000000");
       assert.strictEqual(outputs[3]!.membershipGiftId, "gift");
       assert.strictEqual(outputs[4]!.giftMembershipsCount, 5);
-      assert.strictEqual(deployment.moduleId, "streamlabs");
       assert.strictEqual(deployment.definition, module.engine);
     }),
   );

@@ -8,9 +8,10 @@ import { handler, requirements } from "../src/Polling.ts";
 describe("Sendblue polling ingress", () => {
   it.effect("is enabled only when polling mode is selected", () =>
     Effect.gen(function* () {
+      const primary = AccountId.make("primary");
       const storage = {
         accounts: {
-          primary: {
+          [primary]: {
             name: "Primary",
             apiKey: "key-id",
             apiSecret: "secret-key",
@@ -22,7 +23,7 @@ describe("Sendblue polling ingress", () => {
       assert.strictEqual((yield* requirements(storage)).length, 1);
       assert.deepStrictEqual(
         yield* requirements({
-          accounts: { primary: { ...storage.accounts.primary, mode: "webhook" } },
+          accounts: { [primary]: { ...storage.accounts[primary]!, mode: "webhook" } },
         }),
         [],
       );
@@ -76,7 +77,6 @@ describe("Sendblue polling ingress", () => {
       });
       assert.strictEqual(result.events.length, 1);
       assert.deepInclude(result.events[0], {
-        moduleId: "sendblue",
         eventType: "SendblueMessageReceived",
         eventId: "new",
       });

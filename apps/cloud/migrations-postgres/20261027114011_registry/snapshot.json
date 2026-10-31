@@ -1,0 +1,888 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "42ed9154-2139-459c-82c9-d699311e37a7",
+  "prevIds": [
+    "8d14646b-bf70-454b-9d99-78588d476524"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_packages"
+      ],
+      "writes": [
+        "s|tbl|public.registry_packages",
+        "n|tbl|public.registry_packages",
+        "e|tbl|public.registry_packages",
+        "n|rel|public.registry_packages",
+        "n|type|public.registry_packages",
+        "n|rel|public.registry_packages_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_publishers"
+      ],
+      "writes": [
+        "s|tbl|public.registry_publishers",
+        "n|tbl|public.registry_publishers",
+        "e|tbl|public.registry_publishers",
+        "n|rel|public.registry_publishers",
+        "n|type|public.registry_publishers",
+        "n|rel|public.registry_publishers_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_releases"
+      ],
+      "writes": [
+        "s|tbl|public.registry_releases",
+        "n|tbl|public.registry_releases",
+        "e|tbl|public.registry_releases",
+        "n|rel|public.registry_releases",
+        "n|type|public.registry_releases",
+        "n|rel|public.registry_releases_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "registry_packages",
+        "registry_packages_publisher_name_unique"
+      ],
+      "writes": [
+        "s|idx|public.registry_packages_publisher_name_unique",
+        "n|idx|public.registry_packages_publisher_name_unique",
+        "e|idx|public.registry_packages_publisher_name_unique",
+        "n|rel|public.registry_packages_publisher_name_unique"
+      ],
+      "reads": [
+        "n|tbl|public.registry_packages",
+        "n|sch|public",
+        "n|col|public.registry_packages.publisher",
+        "n|col|public.registry_packages.name"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "registry_publishers",
+        "registry_publishers_owner_idx"
+      ],
+      "writes": [
+        "s|idx|public.registry_publishers_owner_idx",
+        "n|idx|public.registry_publishers_owner_idx",
+        "e|idx|public.registry_publishers_owner_idx",
+        "n|rel|public.registry_publishers_owner_idx"
+      ],
+      "reads": [
+        "n|tbl|public.registry_publishers",
+        "n|sch|public",
+        "n|col|public.registry_publishers.owner_user_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "registry_releases",
+        "registry_releases_package_version_unique"
+      ],
+      "writes": [
+        "s|idx|public.registry_releases_package_version_unique",
+        "n|idx|public.registry_releases_package_version_unique",
+        "e|idx|public.registry_releases_package_version_unique",
+        "n|rel|public.registry_releases_package_version_unique"
+      ],
+      "reads": [
+        "n|tbl|public.registry_releases",
+        "n|sch|public",
+        "n|col|public.registry_releases.package_id",
+        "n|col|public.registry_releases.version"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_packages"
+      ],
+      "writes": [
+        "s|fk|public.registry_packages.registry_packages_publisher_registry_publishers_name_fkey",
+        "n|fk|public.registry_packages.registry_packages_publisher_registry_publishers_name_fkey",
+        "e|fk|public.registry_packages.registry_packages_publisher_registry_publishers_name_fkey",
+        "n|con|public.registry_packages.registry_packages_publisher_registry_publishers_name_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.registry_packages",
+        "n|sch|public",
+        "n|tbl|public.registry_publishers",
+        "n|sch|public",
+        "n|col|public.registry_packages.publisher",
+        "n|col|public.registry_publishers.name",
+        "e|uniqueness|public.registry_publishers.name"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_publishers"
+      ],
+      "writes": [
+        "s|fk|public.registry_publishers.registry_publishers_owner_user_id_users_id_fkey",
+        "n|fk|public.registry_publishers.registry_publishers_owner_user_id_users_id_fkey",
+        "e|fk|public.registry_publishers.registry_publishers_owner_user_id_users_id_fkey",
+        "n|con|public.registry_publishers.registry_publishers_owner_user_id_users_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.registry_publishers",
+        "n|sch|public",
+        "n|tbl|public.users",
+        "n|sch|public",
+        "n|col|public.registry_publishers.owner_user_id",
+        "n|col|public.users.id",
+        "e|uniqueness|public.users.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_releases"
+      ],
+      "writes": [
+        "s|fk|public.registry_releases.registry_releases_package_id_registry_packages_id_fkey",
+        "n|fk|public.registry_releases.registry_releases_package_id_registry_packages_id_fkey",
+        "e|fk|public.registry_releases.registry_releases_package_id_registry_packages_id_fkey",
+        "n|con|public.registry_releases.registry_releases_package_id_registry_packages_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.registry_releases",
+        "n|sch|public",
+        "n|tbl|public.registry_packages",
+        "n|sch|public",
+        "n|col|public.registry_releases.package_id",
+        "n|col|public.registry_packages.id",
+        "e|uniqueness|public.registry_packages.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "registry_releases"
+      ],
+      "writes": [
+        "s|fk|public.registry_releases.registry_releases_published_by_users_id_fkey",
+        "n|fk|public.registry_releases.registry_releases_published_by_users_id_fkey",
+        "e|fk|public.registry_releases.registry_releases_published_by_users_id_fkey",
+        "n|con|public.registry_releases.registry_releases_published_by_users_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.registry_releases",
+        "n|sch|public",
+        "n|tbl|public.users",
+        "n|sch|public",
+        "n|col|public.registry_releases.published_by",
+        "n|col|public.users.id",
+        "e|uniqueness|public.users.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "registry_packages",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "registry_publishers",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "registry_releases",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "publisher",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "display_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "description",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "created_at",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "updated_at",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "owner_user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "trusted",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "created_at",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "updated_at",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "package_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "version",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "api",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "manifest",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "integrity",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "tarball_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "trust_override",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "reason",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "signed_record",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "signature",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "published_by",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "published_at",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "registry_packages_publisher_name_unique",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "publisher",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "name",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "registry_publishers_owner_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "owner_user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "registry_releases_package_version_unique",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "package_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "version",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "registry_packages_publisher_registry_publishers_name_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "publisher"
+        ],
+        "schemaTo": "public",
+        "tableTo": "registry_publishers",
+        "columnsTo": [
+          "name"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "registry_publishers_owner_user_id_users_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "owner_user_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "users",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "registry_releases_package_id_registry_packages_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "package_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "registry_packages",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "registry_releases_published_by_users_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "published_by"
+        ],
+        "schemaTo": "public",
+        "tableTo": "users",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_packages",
+        "name": "registry_packages_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_publishers",
+        "name": "registry_publishers_pkey",
+        "columns": [
+          "name"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "registry_releases",
+        "name": "registry_releases_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

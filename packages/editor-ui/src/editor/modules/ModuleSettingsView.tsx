@@ -11,9 +11,10 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Result } from "effect";
-import { For, Loading, Show, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Loading, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
 import type { PackageViewState } from "../workspace/workspace";
+import type { ModuleSettingsSource } from "./createModuleData";
 
 import { colors } from "../../tokens.stylex.ts";
 import { plainDescription } from "../../ui/Description";
@@ -434,14 +435,67 @@ function ConnectedModuleSettings(props: {
   return <>{view()}</>;
 }
 
+function EngineSettings(props: {
+  source: ModuleSettingsSource;
+  endpoints: ReadonlyArray<ClientSettings.Endpoint>;
+  onChanged: () => Promise<void>;
+}) {
+  // Load the module's UI only while its settings are shown; releasing drops its stylesheets.
+  createEffect(
+    () => props.source,
+    (source) => source.open(),
+  );
+  const result = createMemo(() => props.source.settings());
+  const connected = createMemo(() => {
+    const current = result();
+    return current._tag === "Ready" ? current.connected : undefined;
+  });
+  const failure = createMemo(() => {
+    const current = result();
+    return current._tag === "Failed" ? current.message : undefined;
+  });
+  return (
+    <>
+      <Show when={result()._tag === "Idle"}>
+        <LoadingState label="Loading module settings" style={styles.fullHeight} />
+      </Show>
+      <Show when={result()._tag === "None"}>
+        <div>
+          <p sx={styles.message}>This module has no configurable editor settings.</p>
+        </div>
+      </Show>
+      <Show when={failure()}>
+        {(message) => (
+          <div role="alert">
+            <p sx={[styles.message, styles.warning]}>
+              The settings for this module could not be loaded.
+            </p>
+            <p sx={styles.propertyNote}>{message()}</p>
+          </div>
+        )}
+      </Show>
+      <Show when={connected()}>
+        {(settings) => (
+          <ConnectedModuleSettings
+            settings={settings()}
+            state={props.source.state}
+            endpoints={props.endpoints}
+            onChanged={props.onChanged}
+          />
+        )}
+      </Show>
+    </>
+  );
+}
+
 export function ModuleSettingsView(props: {
   package: Package.Model;
   definitions?: t.Definitions;
   functions?: ReadonlyArray<GraphFunction.Model>;
   authoring?: SchemaAuthoring.Registry;
-  settings?: ClientSettings.Connected<JSX.Element> | undefined;
+  /** The module's settings UI; `undefined` when the module catalog has none for it. */
+  settings?: ModuleSettingsSource | undefined;
   data: ModuleSettingsData;
-  state: () => unknown;
   requireCapability?: boolean;
   onChanged: () => Promise<void>;
   view: PackageViewState;
@@ -513,9 +567,8 @@ export function ModuleSettingsView(props: {
                       }
                     >
                       <QueryClientProvider client={queryClient}>
-                        <ConnectedModuleSettings
-                          settings={settings()}
-                          state={props.state}
+                        <EngineSettings
+                          source={settings()}
                           endpoints={props.data.endpoints}
                           onChanged={props.onChanged}
                         />

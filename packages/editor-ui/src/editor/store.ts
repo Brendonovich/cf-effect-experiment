@@ -163,6 +163,19 @@ export function createEditorStore(authoring: SchemaAuthoring.Registry = BuiltinA
       return;
     }
 
+    if (event._tag === "PackagesChanged") {
+      setStore((store) => {
+        store.packages = [...event.packages];
+        for (const [graphId, nodes] of Object.entries(event.nodeIO))
+          for (const [nodeId, io] of Object.entries(nodes))
+            (store.nodeIO[graphId] ??= {})[nodeId] = io;
+        // Nodes of an unloaded module stay in the project as placeholders without IO.
+        for (const [graphId, nodeIds] of Object.entries(event.unavailableNodes))
+          for (const nodeId of nodeIds) delete store.nodeIO[graphId]?.[nodeId];
+      });
+      return;
+    }
+
     if (!store.project) return;
 
     switch (event._tag) {

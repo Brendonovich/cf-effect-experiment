@@ -2,9 +2,10 @@
 
 Send and receive MIDI with hardware connected to the server, such as a Novation Launchpad.
 Uses [`@julusian/midi`](https://github.com/Julusian/node-midi) (RtMidi), which ships prebuilt
-binaries for macOS, Linux (glibc and musl x64) and Windows. The addon is loaded lazily: if it is
-missing or fails to load, the module reports MIDI as unavailable in Settings instead of stopping
-the server.
+binaries for macOS, Linux (glibc and musl x64) and Windows. The packaged module ships them as
+`native/midi/<target>.node` and loads the one for the server's platform through
+`require("macrograph:native/midi")`. The addon is loaded lazily: if it is missing or fails to
+load, the module reports MIDI as unavailable in Settings instead of stopping the server.
 
 ## Devices
 
@@ -18,8 +19,9 @@ working when a device is unplugged and plugged back in.
   reconnect. If an input fails to open, it is not retried until it reconnects, you re-enable it,
   or you press **Rescan**.
 
-MIDI devices must be connected to the machine running the server. The Docker image does not
-include the native addon (and containers normally cannot see USB MIDI devices), so MIDI shows as
+MIDI devices must be connected to the machine running the server. Containers normally cannot
+see USB MIDI devices unless they're passed through (for example `--device /dev/snd`). The
+Docker image includes ALSA on x64; arm64 Alpine has no prebuilt addon, so MIDI shows as
 unavailable there.
 
 On macOS, CoreMIDI may not report devices plugged in after the server started. Restart the
