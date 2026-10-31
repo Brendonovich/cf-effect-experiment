@@ -10,7 +10,21 @@ import type { WorkerBindings } from "./api";
 import { route } from "./routing";
 
 export default {
-  fetch: (request: Request, env: WorkerBindings) =>
-    // Pages read the bindings through `getRequestEvent().nativeEvent` to call the API.
-    route(request, env, (page) => handleRequest(page, { event: { nativeEvent: { env } } })),
+  fetch: async (request: Request, env: WorkerBindings) => {
+    try {
+      // Pages read the bindings through `getRequestEvent().nativeEvent` to call the API.
+      return await route(request, env, (page) =>
+        handleRequest(page, { event: { nativeEvent: { env } } }),
+      );
+    } catch (error) {
+      console.error("Website request failed", error);
+      // TEMP: surface the failure on previews while debugging the deploy.
+      return new Response(
+        env.PREVIEW_GATE === undefined
+          ? "Internal Server Error"
+          : String(error instanceof Error ? error.stack : error),
+        { status: 500 },
+      );
+    }
+  },
 };
