@@ -25,6 +25,19 @@ interface ProviderDefinition {
     readonly id: string;
     readonly displayName: string;
   }>;
+  /** Signing in to MacroGraph asks for only enough to identify the account. */
+  readonly signIn?: {
+    readonly scopes: ReadonlyArray<string>;
+    readonly authorizeParams?: Readonly<Record<string, string>>;
+    readonly identity: (accessToken: string, clientId: string) => Promise<Identity>;
+  };
+}
+
+export interface Identity {
+  readonly id: string;
+  readonly displayName: string;
+  /** Only set when the provider has verified the address. */
+  readonly verifiedEmail: string | undefined;
 }
 
 export interface Provider extends ProviderDefinition {
@@ -110,6 +123,29 @@ const requiredString = (value: unknown, name: string) => {
   return value;
 };
 
+const verifiedEmail = (email: unknown, verified: unknown) =>
+  verified === true && typeof email === "string" && email !== "" ? email : undefined;
+
+/** Standard OIDC userinfo, as Google and Twitch serve it. */
+const oidcIdentity = async (
+  url: string,
+  token: string,
+  displayName: (claims: Record<string, unknown>) => string,
+) => {
+  const claims = object(await json(url, { headers: { Authorization: `Bearer ${token}` } }));
+  return {
+    id: requiredString(claims.sub, "subject"),
+    displayName: displayName(claims),
+    verifiedEmail: verifiedEmail(claims.email, claims.email_verified),
+  };
+};
+
+const githubHeaders = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: "application/vnd.github+json",
+  "User-Agent": "MacroGraph-Cloud",
+});
+
 const definitions: ReadonlyArray<ProviderDefinition> = [
   {
     id: "twitch",
@@ -130,6 +166,18 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
         id: requiredString(user.id, "user id"),
         displayName: requiredString(user.display_name, "display name"),
       };
+    },
+    signIn: {
+      scopes: ["openid", "user:read:email"],
+      authorizeParams: {
+        claims: JSON.stringify({
+          userinfo: { email: null, email_verified: null, preferred_username: null },
+        }),
+      },
+      identity: (token) =>
+        oidcIdentity("https://id.twitch.tv/oauth2/userinfo", token, (claims) =>
+          requiredString(claims.preferred_username, "username"),
+        ),
     },
   },
   {
@@ -153,6 +201,24 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
             : requiredString(user.username, "username"),
       };
     },
+    signIn: {
+      scopes: ["identify", "email"],
+      identity: async (token) => {
+        const user = object(
+          await json("https://discord.com/api/v10/users/@me", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        );
+        return {
+          id: requiredString(user.id, "user id"),
+          displayName:
+            typeof user.global_name === "string"
+              ? user.global_name
+              : requiredString(user.username, "username"),
+          verifiedEmail: verifiedEmail(user.email, user.verified),
+        };
+      },
+    },
   },
   {
     id: "github",
@@ -164,15 +230,27 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
     refresh: true,
     user: async (token) => {
       const user = object(
-        await json("https://api.github.com/user", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github+json",
-            "User-Agent": "MacroGraph-Cloud",
-          },
-        }),
+        await json("https://api.github.com/user", { headers: githubHeaders(token) }),
       );
       return { id: String(user.id), displayName: requiredString(user.login, "login") };
+    },
+    signIn: {
+      // GitHub Apps ignore scopes and need the "Email addresses" account permission instead.
+      scopes: ["read:user", "user:email"],
+      identity: async (token) => {
+        const [user, emails] = await Promise.all([
+          json("https://api.github.com/user", { headers: githubHeaders(token) }).then(object),
+          json("https://api.github.com/user/emails", { headers: githubHeaders(token) }),
+        ]);
+        const primary = (Array.isArray(emails) ? emails : [])
+          .map(object)
+          .find((email) => email.primary === true);
+        return {
+          id: String(user.id),
+          displayName: requiredString(user.login, "login"),
+          verifiedEmail: verifiedEmail(primary?.email, primary?.verified),
+        };
+      },
     },
   },
   {
@@ -218,6 +296,14 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
         displayName:
           typeof user.name === "string" ? user.name : requiredString(user.email, "email"),
       };
+    },
+    signIn: {
+      scopes: ["openid", "email", "profile"],
+      authorizeParams: { prompt: "select_account" },
+      identity: (token) =>
+        oidcIdentity("https://openidconnect.googleapis.com/v1/userinfo", token, (claims) =>
+          typeof claims.name === "string" ? claims.name : requiredString(claims.email, "email"),
+        ),
     },
   },
   {
@@ -314,20 +400,46 @@ const make = Effect.gen(function* () {
   );
   const providers = configured.flatMap(Option.toArray);
   const byId = new Map(providers.map((provider) => [provider.id, provider]));
+  const authorizeUrl = (
+    provider: Provider,
+    redirectUri: string,
+    state: string,
+    request: Pick<ProviderDefinition, "scopes" | "authorizeParams">,
+  ) => {
+    const params = new URLSearchParams({
+      ...request.authorizeParams,
+      client_id: provider.clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: request.scopes.join(" "),
+      state,
+    });
+    return `${provider.authorizeUrl}?${params}`;
+  };
   return {
     list: providers.map(({ id, displayName }) => ({ id, displayName })),
+    signInList: providers.flatMap(({ id, displayName, signIn }) =>
+      signIn === undefined ? [] : [{ id, displayName }],
+    ),
     get: (id: string) => byId.get(id),
-    authorizeUrl: (provider: Provider, redirectUri: string, state: string) => {
-      const params = new URLSearchParams({
-        ...provider.authorizeParams,
-        client_id: provider.clientId,
-        redirect_uri: redirectUri,
-        response_type: "code",
-        scope: provider.scopes.join(" "),
-        state,
-      });
-      return `${provider.authorizeUrl}?${params}`;
-    },
+    authorizeUrl: (provider: Provider, redirectUri: string, state: string) =>
+      authorizeUrl(provider, redirectUri, state, provider),
+    /** Undefined when the provider can't be used to sign in. */
+    signInUrl: (provider: Provider, redirectUri: string, state: string) =>
+      provider.signIn === undefined
+        ? undefined
+        : authorizeUrl(provider, redirectUri, state, provider.signIn),
+    identity: (provider: Provider, accessToken: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (provider.signIn === undefined) throw new Error(`${provider.id} can't sign in`);
+          return await provider.signIn.identity(accessToken, provider.clientId);
+        },
+        catch: (error) =>
+          new ProviderError({
+            message: error instanceof Error ? error.message : "OAuth identity request failed",
+          }),
+      }),
     exchange: (provider: Provider, code: string, redirectUri: string) =>
       requestToken(provider, {
         client_id: provider.clientId,

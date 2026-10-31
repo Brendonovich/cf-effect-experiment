@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Data, Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/http";
 
@@ -10,6 +10,7 @@ import {
   accountUsers,
   oauthCredentials,
   type OAuthToken,
+  userIdentities,
 } from "../database/AccountDatabaseSchema.ts";
 import * as Database from "../database/Database.ts";
 import * as Jwt from "./Jwt.ts";
@@ -27,6 +28,17 @@ export const websiteOrigins = [
 ];
 
 const oauthStateLifetimeSeconds = 60 * 60;
+const signInNonceCookie = "sign_in_nonce";
+
+/** Why signing in with a provider failed, passed to the website as `?error=`. */
+type SignInError =
+  | "cancelled"
+  | "expired"
+  | "failed"
+  | "email_unverified"
+  | "account_exists"
+  | "identity_in_use";
+
 export interface Options {
   /** HMAC key for OAuth `state` values. */
   readonly stateKey: Effect.Effect<Jwt.SigningKey>;
@@ -36,6 +48,10 @@ export interface Options {
   readonly issuer?: string;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
+  /** Providers that registered `/auth/proxy` on another origin, by provider ID. */
+  readonly providerRedirectOrigins?: Readonly<Record<string, string>>;
+  /** Pull request previews serve the website from their own workers.dev origin. */
+  readonly preview?: boolean;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
   /** Overrides the OAuth server's clock, for tests. */
@@ -122,7 +138,16 @@ const isLocalOrigin = (origin: URL) =>
 type OAuthState =
   | { readonly env: "desktop"; readonly port: number }
   | { readonly env: "web"; readonly targetOrigin: string }
-  | { readonly env: "credentials"; readonly targetOrigin: string; readonly userId: string };
+  | { readonly env: "credentials"; readonly targetOrigin: string; readonly userId: string }
+  | {
+      readonly env: "signIn";
+      /** Matches the browser's sign-in cookie, so a callback only completes where it started. */
+      readonly nonce: string;
+      /** The website page to return to, with `error` added when signing in fails. */
+      readonly returnTo: string;
+      /** Set when a signed-in user is connecting another sign-in method. */
+      readonly userId?: string;
+    };
 
 const parseOAuthState = (value: Readonly<Record<string, unknown>>): OAuthState | undefined => {
   if (value.env === "desktop")
@@ -131,6 +156,17 @@ const parseOAuthState = (value: Readonly<Record<string, unknown>>): OAuthState |
       value.port > 0 &&
       value.port < 65_536
       ? { env: "desktop", port: value.port }
+      : undefined;
+  if (value.env === "signIn")
+    return typeof value.nonce === "string" &&
+      typeof value.returnTo === "string" &&
+      (value.userId === undefined || typeof value.userId === "string")
+      ? {
+          env: "signIn",
+          nonce: value.nonce,
+          returnTo: PreviewAuth.safeNext(value.returnTo),
+          ...(value.userId === undefined ? {} : { userId: value.userId }),
+        }
       : undefined;
   if (typeof value.targetOrigin !== "string" || !URL.canParse(value.targetOrigin)) return undefined;
   const targetOrigin = new URL(value.targetOrigin).origin;
@@ -165,7 +201,8 @@ export const layer = (options: Options) =>
       const database = yield* Database.Service;
       const providers = yield* OAuthProviders.Service;
       const sessions = yield* Session.make;
-      const proxyRedirectUri = `${options.authRedirectOrigin}/auth/proxy`;
+      const proxyRedirectUri = (provider: OAuthProviders.Provider) =>
+        `${options.providerRedirectOrigins?.[provider.id] ?? options.authRedirectOrigin}/auth/proxy`;
 
       /**
        * The request's origin when it is a known website origin. OAuth callbacks and verification
@@ -175,9 +212,33 @@ export const layer = (options: Options) =>
         const origin = requestOrigin(request);
         return websiteOrigins.includes(origin) ||
           origin === options.authRedirectOrigin ||
-          isLocalOrigin(new URL(origin))
+          isLocalOrigin(new URL(origin)) ||
+          (options.preview === true && PreviewAuth.isPreviewOrigin(origin))
           ? origin
           : websiteOrigins[0];
+      };
+
+      /**
+       * A preview's callback for state it signed, which this stage can't verify. Previews share the
+       * providers' redirect URI with production, so production forwards their callbacks; only our
+       * own preview Workers can receive them, and each verifies its state itself.
+       */
+      const previewCallback = (state: string | null) => {
+        try {
+          const payload: unknown = JSON.parse(
+            new TextDecoder().decode(Jwt.base64UrlDecode(state?.split(".")[1] ?? "")),
+          );
+          if (!isRecord(payload) || typeof payload.redirect_uri !== "string") return undefined;
+          const url = new URL(payload.redirect_uri);
+          return PreviewAuth.isPreviewOrigin(url.origin) &&
+            /^\/api\/auth\/[a-z]+\/callback$/.test(url.pathname) &&
+            url.search === "" &&
+            url.hash === ""
+            ? url.href
+            : undefined;
+        } catch {
+          return undefined;
+        }
       };
 
       const oauth = OAuthServer.make({
@@ -219,7 +280,7 @@ export const layer = (options: Options) =>
             if (request.method !== "GET" && !sameOrigin(request)) return yield* reject(400);
           }
           const validated = yield* sessions.validate(sessionId);
-          return validated === undefined
+          return validated === undefined || !validated.user.hasSignInMethod
             ? undefined
             : { source: "session", userId: validated.user.id };
         });
@@ -229,14 +290,26 @@ export const layer = (options: Options) =>
           Effect.flatMap((auth) => (auth === undefined ? reject(403) : Effect.succeed(auth))),
         );
 
-      /** Authenticates the website's own cookie session, rejecting cross-origin writes. */
-      const websiteSession = (request: HttpServerRequest.HttpServerRequest) =>
+      const optionalWebsiteSession = (request: HttpServerRequest.HttpServerRequest) =>
+        Effect.gen(function* () {
+          const sessionId = request.cookies[Session.cookieName];
+          return sessionId === undefined ? undefined : yield* sessions.validate(sessionId);
+        });
+
+      /**
+       * Authenticates the website's own cookie session, rejecting cross-origin writes. Accounts
+       * without a sign-in method can only manage their sign-in methods.
+       */
+      const websiteSession = (
+        request: HttpServerRequest.HttpServerRequest,
+        options?: { readonly withoutSignInMethod: true },
+      ) =>
         Effect.gen(function* () {
           if (request.method !== "GET" && !sameOrigin(request)) return yield* reject(403);
-          const sessionId = request.cookies[Session.cookieName];
-          if (sessionId === undefined) return yield* reject(401);
-          const validated = yield* sessions.validate(sessionId);
+          const validated = yield* optionalWebsiteSession(request);
           if (validated === undefined) return yield* reject(401);
+          if (!validated.user.hasSignInMethod && options?.withoutSignInMethod !== true)
+            return yield* reject(403);
           return validated;
         });
 
@@ -283,7 +356,7 @@ export const layer = (options: Options) =>
       const exchangeCode = (provider: OAuthProviders.Provider, code: string | null) =>
         code === null
           ? reject(400)
-          : providers.exchange(provider, code, proxyRedirectUri).pipe(
+          : providers.exchange(provider, code, proxyRedirectUri(provider)).pipe(
               Effect.map(
                 (token): OAuthToken => ({
                   access_token: token.access_token,
@@ -299,7 +372,144 @@ export const layer = (options: Options) =>
             );
 
       const authorizationUrl = (provider: OAuthProviders.Provider, state: string) =>
-        providers.authorizeUrl(provider, proxyRedirectUri, state);
+        providers.authorizeUrl(provider, proxyRedirectUri(provider), state);
+
+      // ---- Signing in with a provider account ----
+
+      const signInRedirect = (returnTo: string, error?: SignInError) => {
+        if (error === undefined) return HttpServerResponse.redirect(returnTo);
+        const url = new URL(returnTo, "https://macrograph.invalid");
+        url.searchParams.set("error", error);
+        return HttpServerResponse.redirect(`${url.pathname}${url.search}`);
+      };
+
+      const identityWhere = (providerId: string, providerUserId: string) =>
+        and(
+          eq(userIdentities.providerId, providerId),
+          eq(userIdentities.providerUserId, providerUserId),
+        );
+
+      /**
+       * Finds the account a provider account signs in to, linking it to `linkUserId` or creating a
+       * new account when it is unknown. Accounts are never linked by email: the original website
+       * did not verify addresses, so a matching email could belong to someone else.
+       */
+      const resolveSignIn = (
+        provider: OAuthProviders.Provider,
+        identity: OAuthProviders.Identity,
+        linkUserId: string | undefined,
+      ) =>
+        Effect.gen(function* (): Effect.fn.Return<
+          | { readonly userId: string; readonly event: Analytics.Event }
+          | { readonly error: SignInError }
+        > {
+          const where = identityWhere(provider.id, identity.id);
+          const details = {
+            email: identity.verifiedEmail ?? null,
+            displayName: identity.displayName,
+          };
+          const existing = yield* database
+            .select({ userId: userIdentities.userId })
+            .from(userIdentities)
+            .where(where)
+            .limit(1)
+            .pipe(Effect.orDie);
+          if (existing[0] !== undefined) {
+            const { userId } = existing[0];
+            if (linkUserId !== undefined && userId !== linkUserId)
+              return { error: "identity_in_use" };
+            yield* database.update(userIdentities).set(details).where(where).pipe(Effect.orDie);
+            return { userId, event: { event: "user logged in" } };
+          }
+          const identityRow = { providerId: provider.id, providerUserId: identity.id, ...details };
+          const connected = {
+            event: "sign-in method connected",
+            providerId: provider.id,
+            providerUserId: identity.id,
+          } as const;
+          if (linkUserId !== undefined) {
+            const inserted = yield* database
+              .insert(userIdentities)
+              .values({ ...identityRow, userId: linkUserId })
+              .onConflictDoNothing()
+              .returning({ userId: userIdentities.userId })
+              .pipe(Effect.orDie);
+            return inserted.length === 0
+              ? { error: "identity_in_use" }
+              : { userId: linkUserId, event: connected };
+          }
+          const email = identity.verifiedEmail?.trim().toLowerCase();
+          if (email === undefined) return { error: "email_unverified" };
+          const taken = yield* database
+            .select({ id: accountUsers.id })
+            .from(accountUsers)
+            .where(sql`lower(${accountUsers.email}) = ${email}`)
+            .limit(1)
+            .pipe(Effect.orDie);
+          if (taken.length > 0) return { error: "account_exists" };
+          const userId = Session.generateId(15);
+          const created = yield* database
+            .transaction((transaction) =>
+              Effect.gen(function* () {
+                const inserted = yield* transaction
+                  .insert(accountUsers)
+                  .values({ id: userId, email })
+                  .onConflictDoNothing({ target: accountUsers.email })
+                  .returning({ id: accountUsers.id });
+                if (inserted.length === 0) return false;
+                yield* transaction.insert(userIdentities).values({ ...identityRow, userId });
+                return true;
+              }),
+            )
+            .pipe(Effect.orDie);
+          return created
+            ? { userId, event: { event: "user signed up", email } }
+            : { error: "account_exists" };
+        });
+
+      const completeSignIn = (
+        request: HttpServerRequest.HttpServerRequest,
+        provider: OAuthProviders.Provider,
+        state: Extract<OAuthState, { env: "signIn" }>,
+        params: URLSearchParams,
+      ) =>
+        Effect.gen(function* () {
+          const failed = (error: SignInError) => signInRedirect(state.returnTo, error);
+          if (request.cookies[signInNonceCookie] !== state.nonce) return failed("expired");
+          const code = params.get("code");
+          if (code === null) return failed("cancelled");
+          if (state.userId !== undefined) {
+            const current = yield* optionalWebsiteSession(request);
+            if (current?.user.id !== state.userId) return failed("expired");
+          }
+          const result = yield* providers.exchange(provider, code, proxyRedirectUri(provider)).pipe(
+            Effect.flatMap((token) => providers.identity(provider, token.access_token)),
+            Effect.flatMap((identity) => resolveSignIn(provider, identity, state.userId)),
+            Effect.catchTag("OAuthProviderError", (error) =>
+              Effect.logWarning("Provider sign-in failed", error).pipe(
+                Effect.as({ error: "failed" as const }),
+              ),
+            ),
+          );
+          if ("error" in result) return failed(result.error);
+          yield* options.capture(result.userId, result.event);
+          const response = signInRedirect(state.returnTo);
+          if (state.userId !== undefined) return response;
+          return Session.setCookies(
+            yield* sessions.create(result.userId),
+            isSecure(request),
+          )(response);
+        }).pipe(
+          Effect.map(
+            HttpServerResponse.setCookieUnsafe(signInNonceCookie, "", {
+              path: "/",
+              sameSite: "lax",
+              secure: isSecure(request),
+              httpOnly: true,
+              maxAge: "0 seconds",
+            }),
+          ),
+        );
 
       // ---- Original public API, used by desktop, servers, and the playground ----
 
@@ -414,7 +624,8 @@ export const layer = (options: Options) =>
                 catch: () => new Reject({ response: HttpServerResponse.empty({ status: 400 }) }),
               });
               const state = isRecord(decoded) ? parseOAuthState(decoded) : undefined;
-              if (state === undefined || state.env === "credentials") return yield* reject(400);
+              if (state === undefined || (state.env !== "desktop" && state.env !== "web"))
+                return yield* reject(400);
               if (state.env === "web") {
                 const origin = new URL(state.targetOrigin);
                 const allowed =
@@ -435,8 +646,10 @@ export const layer = (options: Options) =>
         handle(
           Effect.gen(function* () {
             const url = requestUrl(request);
-            const state = yield* verifyOAuthState(url.searchParams.get("state"));
-            return HttpServerResponse.redirect(`${state.redirectUri}${url.search}`);
+            const forwarded = previewCallback(url.searchParams.get("state"));
+            const redirectUri =
+              forwarded ?? (yield* verifyOAuthState(url.searchParams.get("state"))).redirectUri;
+            return HttpServerResponse.redirect(`${redirectUri}${url.search}`);
           }),
         ),
       );
@@ -449,10 +662,9 @@ export const layer = (options: Options) =>
             const previewOrigin = url.searchParams.get("origin");
             if (previewOrigin === null || !PreviewAuth.isPreviewOrigin(previewOrigin))
               return yield* reject(400);
-            const sessionId = request.cookies[Session.cookieName];
-            const validated =
-              sessionId === undefined ? undefined : yield* sessions.validate(sessionId);
-            if (validated === undefined)
+            const validated = yield* optionalWebsiteSession(request);
+            // The login page also asks accounts without a sign-in method to connect one.
+            if (validated === undefined || !validated.user.hasSignInMethod)
               return HttpServerResponse.redirect(
                 `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`,
               );
@@ -493,6 +705,8 @@ export const layer = (options: Options) =>
                 return responderPage(credentialsResponderScript, {
                   "target-origin": state.targetOrigin,
                 });
+              case "signIn":
+                return yield* completeSignIn(request, provider, state, params);
             }
           }),
         ),
@@ -575,7 +789,7 @@ export const layer = (options: Options) =>
               .limit(1)
               .pipe(Effect.orDie);
             const user = users[0];
-            if (user === undefined) return invalid;
+            if (user === undefined || user.hashedPassword === null) return invalid;
             if (!(yield* Password.verify(user.hashedPassword, credentials.password)))
               return invalid;
             yield* options.capture(user.id, { event: "user logged in" });
@@ -584,34 +798,95 @@ export const layer = (options: Options) =>
         ),
       );
 
-      yield* router.add("POST", "/api/website/signup", (request) =>
+      yield* router.add("GET", "/api/website/sign-in/providers", () =>
+        Effect.succeed(json(providers.signInList)),
+      );
+
+      /**
+       * Starts signing in with a provider. With a session, this connects the provider account to
+       * it instead. Either way the provider returns to `returnTo`.
+       */
+      yield* router.add("GET", "/api/website/sign-in/:provider", (request) =>
         handle(
           Effect.gen(function* () {
-            if (!sameOrigin(request)) return yield* reject(403);
-            const body = yield* readJson(request);
-            const credentials = credentialsFrom(body);
-            if (credentials === undefined)
-              return json({
-                success: false,
-                error:
-                  typeof body.email === "string" && emailPattern.test(body.email)
-                    ? "Password must be at least 8 characters"
-                    : "Invalid email",
-              });
-            const hashedPassword = yield* Password.hash(credentials.password);
-            const userId = Session.generateId(15);
-            const inserted = yield* database
-              .insert(accountUsers)
-              .values({ id: userId, email: credentials.email, hashedPassword })
-              .onConflictDoNothing({ target: accountUsers.email })
-              .returning({ id: accountUsers.id })
-              .pipe(Effect.orDie);
-            if (inserted.length === 0)
-              return json({ success: false, error: "An account with this email already exists" });
-            yield* options.capture(userId, { event: "user signed up", email: credentials.email });
-            return yield* startSession(request, userId);
+            const provider = yield* providerFor((yield* HttpRouter.params).provider);
+            const current = yield* optionalWebsiteSession(request);
+            const nonce = Session.generateId(32);
+            const state = yield* signOAuthState(provider.id, publicOrigin(request), {
+              env: "signIn",
+              nonce,
+              returnTo: PreviewAuth.safeNext(requestUrl(request).searchParams.get("returnTo")),
+              ...(current === undefined ? {} : { userId: current.user.id }),
+            });
+            const url = providers.signInUrl(provider, proxyRedirectUri(provider), state);
+            if (url === undefined) return yield* reject(400);
+            return HttpServerResponse.redirect(url).pipe(
+              HttpServerResponse.setCookieUnsafe(signInNonceCookie, nonce, {
+                path: "/",
+                sameSite: "lax",
+                secure: isSecure(request),
+                httpOnly: true,
+                maxAge: `${oauthStateLifetimeSeconds} seconds`,
+              }),
+            );
           }),
         ),
+      );
+
+      yield* router.add("GET", "/api/website/sign-in-methods", (request) =>
+        handle(
+          Effect.gen(function* () {
+            const { user } = yield* websiteSession(request, { withoutSignInMethod: true });
+            const rows = yield* database
+              .select({
+                providerId: userIdentities.providerId,
+                providerUserId: userIdentities.providerUserId,
+                displayName: userIdentities.displayName,
+                email: userIdentities.email,
+              })
+              .from(userIdentities)
+              .where(eq(userIdentities.userId, user.id))
+              .orderBy(userIdentities.createdAt)
+              .pipe(Effect.orDie);
+            return json(rows);
+          }),
+        ),
+      );
+
+      yield* router.add(
+        "DELETE",
+        "/api/website/sign-in-methods/:provider/:providerUserId",
+        (request) =>
+          handle(
+            Effect.gen(function* () {
+              const { user } = yield* websiteSession(request);
+              const params = yield* HttpRouter.params;
+              const removed = yield* database
+                .transaction((transaction) =>
+                  Effect.gen(function* () {
+                    const rows = yield* transaction
+                      .select({ providerId: userIdentities.providerId })
+                      .from(userIdentities)
+                      .where(eq(userIdentities.userId, user.id))
+                      .for("update");
+                    // Every account keeps at least one way to sign in.
+                    if (rows.length <= 1) return false;
+                    const deleted = yield* transaction
+                      .delete(userIdentities)
+                      .where(
+                        and(
+                          identityWhere(params.provider ?? "", params.providerUserId ?? ""),
+                          eq(userIdentities.userId, user.id),
+                        ),
+                      )
+                      .returning({ providerId: userIdentities.providerId });
+                    return deleted.length > 0;
+                  }),
+                )
+                .pipe(Effect.orDie);
+              return HttpServerResponse.empty({ status: removed ? 204 : 409 });
+            }),
+          ),
       );
 
       yield* router.add("POST", "/api/website/logout", (request) =>

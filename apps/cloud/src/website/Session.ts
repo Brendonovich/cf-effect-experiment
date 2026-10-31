@@ -1,8 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { type Cookies, HttpServerResponse } from "effect/http";
 
-import { accountSessions, accountUsers } from "../database/AccountDatabaseSchema.ts";
+import {
+  accountSessions,
+  accountUsers,
+  userIdentities,
+} from "../database/AccountDatabaseSchema.ts";
 import * as Database from "../database/Database.ts";
 
 // Compatible with the Lucia v3 sessions issued by the original website.
@@ -45,7 +49,15 @@ const generateSessionId = () => {
 
 export interface Validated {
   readonly session: { readonly id: string; readonly expiresAt: Date; readonly fresh: boolean };
-  readonly user: { readonly id: string; readonly email: string };
+  readonly user: {
+    readonly id: string;
+    readonly email: string;
+    /**
+     * Accounts from before sign-in providers only have a password. They may sign in, but must
+     * connect a provider before using anything else.
+     */
+    readonly hasSignInMethod: boolean;
+  };
 }
 
 const cookieOptions = (secure: boolean, httpOnly: boolean, maxAge?: number) =>
@@ -116,6 +128,7 @@ export const make = Effect.gen(function* () {
           expiresAt: accountSessions.expiresAt,
           userId: accountUsers.id,
           email: accountUsers.email,
+          hasSignInMethod: sql<boolean>`exists (select 1 from ${userIdentities} where ${userIdentities.userId} = ${accountUsers.id})`,
         })
         .from(accountSessions)
         .innerJoin(accountUsers, eq(accountUsers.id, accountSessions.userId))
@@ -142,7 +155,7 @@ export const make = Effect.gen(function* () {
       }
       return {
         session: { id: row.id, expiresAt, fresh },
-        user: { id: row.userId, email: row.email },
+        user: { id: row.userId, email: row.email, hasSignInMethod: row.hasSignInMethod },
       };
     });
 

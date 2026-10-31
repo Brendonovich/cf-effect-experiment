@@ -13,6 +13,7 @@ import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { LandingRoute } from "./routes/Landing";
 import { NotFoundRoute } from "./routes/NotFound";
 import { PlaygroundRoute } from "./routes/Playground";
+import { SignInMethodsRoute } from "./routes/SignInMethods";
 import { Redirect, useSession } from "./session";
 import { Toaster } from "./Toasts";
 
@@ -23,7 +24,7 @@ function HomeRoute() {
   const promptLogin = () => new URLSearchParams(location.search).has("promptLogin");
   return (
     <Show
-      when={promptLogin() && !session.isPending && session.data === null}
+      when={promptLogin() && !session.isPending && !session.data?.user.hasSignInMethod}
       fallback={<LandingRoute />}
     >
       <Redirect href={loginPath("/")} />
@@ -31,10 +32,16 @@ function HomeRoute() {
   );
 }
 
+function SignupRedirect() {
+  const location = useLocation();
+  return <Redirect href={`/login${location.search}`} />;
+}
+
 export const routes = [
   { path: "/", component: HomeRoute },
-  { path: "/login", component: () => <AuthRoute mode="login" /> },
-  { path: "/signup", component: () => <AuthRoute mode="signup" /> },
+  { path: "/login", component: AuthRoute },
+  // Signing in with a provider creates accounts now.
+  { path: "/signup", component: SignupRedirect },
   { path: "/device", component: DeviceAuthorizationRoute },
   { path: "/playground", component: PlaygroundRoute },
   {
@@ -43,6 +50,7 @@ export const routes = [
     children: [
       { path: "/", component: () => <Redirect href="/account/credentials" /> },
       { path: "/credentials", component: () => <CredentialsRoute /> },
+      { path: "/sign-in", component: SignInMethodsRoute },
       { path: "/apps", component: AppsRoute },
     ],
   },
