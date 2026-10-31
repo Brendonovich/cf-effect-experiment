@@ -81,3 +81,22 @@ it("shows a not-found page for removed playground routes", async () => {
   const { container } = renderApp("/playground");
   await vi.waitFor(() => expect(container.textContent).toContain("Page not found"));
 });
+
+it("switches account tabs without reloading", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/credentials": [],
+    "/api/website/servers": [{ id: "server-1", type: "server" }],
+  });
+  const { container, history } = renderApp("/account/credentials");
+  const heading = () => container.querySelector("h1")?.textContent;
+  await vi.waitFor(() => expect(heading()).toBe("Credentials"));
+
+  const tab = (href: string) => container.querySelector<HTMLAnchorElement>(`nav a[href="${href}"]`);
+
+  tab("/account/servers")?.click();
+  await vi.waitFor(() => expect(heading()).toBe("Servers"));
+  expect(history.get()).toBe("/account/servers");
+  tab("/account/credentials")?.click();
+  await vi.waitFor(() => expect(heading()).toBe("Credentials"));
+});

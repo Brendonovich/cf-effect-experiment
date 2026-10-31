@@ -56,7 +56,8 @@ export function RequireSession(props: { readonly children: (session: Session) =>
         keyed
         fallback={<Redirect href={loginPath(`${location.pathname}${location.search}`)} />}
       >
-        {(value) => props.children(value)}
+        {/* Called in JSX so what the children read (such as the matched route) stays tracked. */}
+        {(value) => <>{props.children(value)}</>}
       </Show>
     </Show>
   );
