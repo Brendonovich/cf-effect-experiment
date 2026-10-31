@@ -93,8 +93,11 @@ async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
   const cookie = incoming?.headers.get("cookie");
   if (cookie) headers.set("cookie", cookie);
-  // Writes require a same-origin request, which this is on the visitor's behalf.
+  // Writes require a same-origin request, which this is on the visitor's behalf. A request built
+  // here has no Host header, so the API learns the origin it compares against from these.
   headers.set("origin", url.origin);
+  headers.set("x-forwarded-host", url.host);
+  headers.set("x-forwarded-proto", url.protocol.slice(0, -1));
   const native = (event as { readonly nativeEvent?: { readonly env?: WorkerBindings } } | undefined)
     ?.nativeEvent;
   const api = native?.env?.API;
