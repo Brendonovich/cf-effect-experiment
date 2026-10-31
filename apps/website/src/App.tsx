@@ -11,10 +11,13 @@ import { AuthRoute } from "./routes/Auth";
 import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { DocsIndexRoute, DocsLayout } from "./routes/Docs";
+import { DocsShell } from "./routes/DocsShell";
 import { LandingRoute } from "./routes/Landing";
+import { ModulesIndexRoute, ModulesLayout } from "./routes/Modules";
 import { NotFoundRoute } from "./routes/NotFound";
 import { NodeReferenceRoute, PackageLayout, PackageOverviewRoute } from "./routes/PackageReference";
 import { PlaygroundRoute } from "./routes/Playground";
+import { ServerSetupRoute } from "./routes/ServerSetup";
 import { SignInMethodsRoute } from "./routes/SignInMethods";
 import { Redirect, useSession } from "./session";
 import { Toaster } from "./Toasts";
@@ -50,7 +53,21 @@ export const routes = [
     path: "/docs",
     component: DocsLayout,
     children: [
-      { path: "/", component: DocsIndexRoute },
+      {
+        path: "/",
+        component: DocsShell,
+        children: [
+          { path: "/", component: DocsIndexRoute },
+          { path: "/server", component: ServerSetupRoute },
+        ],
+      },
+    ],
+  },
+  {
+    path: "/modules",
+    component: ModulesLayout,
+    children: [
+      { path: "/", component: ModulesIndexRoute },
       {
         path: "/:publisher/:name",
         component: PackageLayout,

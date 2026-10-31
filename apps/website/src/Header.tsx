@@ -4,10 +4,16 @@ import { AccountMenu, ButtonLink, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { Show } from "solid-js";
+import { For, Show } from "solid-js";
 
 import { loginPath } from "./api";
 import { useLogOut, useSession } from "./session";
+
+const siteLinks = [
+  { href: "/playground", label: "Playground" },
+  { href: "/modules", label: "Modules" },
+  { href: "/docs", label: "Docs" },
+] as const;
 
 /** The site header. Pages can add a centered `nav` and `actions` beside the account menu. */
 export function Header(props: { readonly nav?: JSX.Element; readonly actions?: JSX.Element }) {
@@ -18,10 +24,29 @@ export function Header(props: { readonly nav?: JSX.Element; readonly actions?: J
 
   return (
     <header sx={styles.header}>
-      <a href="/" sx={[styles.brand]}>
-        <img src={macrographLogo} alt="" sx={styles.logo} />
-        MacroGraph
-      </a>
+      <div sx={styles.start}>
+        <a href="/" sx={[styles.brand]}>
+          <img src={macrographLogo} alt="" sx={styles.logo} />
+          MacroGraph
+        </a>
+        <nav sx={styles.links} aria-label="Site">
+          <For each={siteLinks}>
+            {(link) => {
+              const current = () => location.pathname === link.href;
+              const active = () => current() || location.pathname.startsWith(`${link.href}/`);
+              return (
+                <a
+                  href={link.href}
+                  sx={[styles.link, active() && styles.linkActive]}
+                  aria-current={current() ? "page" : undefined}
+                >
+                  {link.label}
+                </a>
+              );
+            }}
+          </For>
+        </nav>
+      </div>
       <Show when={props.nav !== undefined}>
         <div sx={styles.nav}>{props.nav}</div>
       </Show>
@@ -73,6 +98,15 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
   },
+  start: { display: "flex", alignItems: "center", gap: 16, minWidth: 0 },
+  links: { display: "flex", alignItems: "center", gap: 12 },
+  link: {
+    fontSize: 13,
+    fontWeight: 500,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+    textDecoration: "none",
+  },
+  linkActive: { color: colors.gray12 },
   brand: {
     display: "flex",
     alignItems: "center",

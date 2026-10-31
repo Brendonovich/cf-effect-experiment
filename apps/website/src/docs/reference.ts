@@ -25,9 +25,11 @@ export type { PackageSummary } from "virtual:macrograph-reference";
 type PackageName = Pick<ModuleId.Parts, "publisher" | "name">;
 
 export const docsPath = "/docs";
-/** Docs cover the official registry, so packages are addressed by publisher and name. */
+export const serverSetupPath = `${docsPath}/server`;
+export const modulesPath = "/modules";
+/** The module reference covers the official registry, so modules are addressed by publisher and name. */
 export const packagePath = (pkg: PackageName) =>
-  `${docsPath}/${encodeURIComponent(pkg.publisher)}/${encodeURIComponent(pkg.name)}`;
+  `${modulesPath}/${encodeURIComponent(pkg.publisher)}/${encodeURIComponent(pkg.name)}`;
 export const nodePath = (pkg: PackageName, schemaId: string) =>
   `${packagePath(pkg)}/${encodeURIComponent(schemaId)}`;
 

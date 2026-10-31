@@ -5,10 +5,10 @@ import { referenceUrl } from "../../src/editor/inspector/referenceUrl";
 
 it("links official registry modules by publisher and name", () => {
   expect(referenceUrl("macrograph.app/macrograph/twitch", { id: "ChatMessage" })).toBe(
-    "https://macrograph.app/docs/macrograph/twitch/ChatMessage",
+    "https://macrograph.app/modules/macrograph/twitch/ChatMessage",
   );
   expect(referenceUrl("macrograph.app/acme/lights", { id: "Toggle" })).toBe(
-    "https://macrograph.app/docs/acme/lights/Toggle",
+    "https://macrograph.app/modules/acme/lights/Toggle",
   );
 });
 

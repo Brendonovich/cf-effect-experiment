@@ -10,7 +10,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import {
   type PackageSummary,
-  docsPath,
+  modulesPath,
   findPackage,
   nodePath,
   packageCounts,
@@ -42,7 +42,7 @@ export function PackageLayout(props: { readonly children?: JSX.Element }) {
   return (
     <Show
       when={summary()}
-      fallback={<NotFound title="Package not found" message="There's no package with this name." />}
+      fallback={<NotFound title="Module not found" message="There's no module with this name." />}
     >
       {(summary) => <PackageShell summary={summary()}>{props.children}</PackageShell>}
     </Show>
@@ -92,8 +92,8 @@ function PackageShell(props: {
     <div sx={styles.shell}>
       <header sx={styles.packageHeader}>
         <nav aria-label="Breadcrumb" sx={styles.breadcrumb}>
-          <a href={docsPath} sx={styles.breadcrumbLink}>
-            Packages
+          <a href={modulesPath} sx={styles.breadcrumbLink}>
+            Modules
           </a>
           <span aria-hidden="true">/</span>
           <span>{props.summary.publisher}</span>
@@ -213,7 +213,7 @@ export function PackageOverviewRoute() {
             {summary().description ?? "No description provided."}
           </p>
           <dl sx={styles.facts}>
-            <dt sx={styles.factLabel}>Package</dt>
+            <dt sx={styles.factLabel}>Module</dt>
             <dd sx={styles.factValue}>
               <code sx={styles.code}>
                 {summary().publisher}/{summary().name}
@@ -230,7 +230,7 @@ export function PackageOverviewRoute() {
             <section sx={styles.section}>
               <h2 sx={styles.sectionTitle}>Resources</h2>
               <p sx={styles.sectionLead}>
-                Connections and accounts that this package's nodes act on. Choose one when adding a
+                Connections and accounts that this module's nodes act on. Choose one when adding a
                 node that needs it.
               </p>
               <ul sx={styles.resources}>
@@ -304,8 +304,8 @@ function NotFound(props: { readonly title: string; readonly message: string }) {
       <h1 sx={styles.title}>{props.title}</h1>
       <p sx={styles.lead}>
         {props.message}{" "}
-        <a href={docsPath} sx={styles.inlineLink}>
-          Browse all packages
+        <a href={modulesPath} sx={styles.inlineLink}>
+          Browse all modules
         </a>
       </p>
     </main>

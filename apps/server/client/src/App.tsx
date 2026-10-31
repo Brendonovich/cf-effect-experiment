@@ -5,18 +5,21 @@ import {
   AccountMenu,
   ApiKeySettings,
   Button,
-  ButtonLink,
   createEditorController,
   CredentialSettings,
   RealtimeWorkspace,
-  macrographLogo,
   ModulesAdminView,
+  ServerHeader,
+  ServerSetupApproval,
+  ServerSetupCard,
+  ServerSetupConnecting,
+  ServerSetupForm,
   PresenceList,
 } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
-import { createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
+import { createMemo, createSignal, onCleanup, onSettled, Show, untrack } from "solid-js";
 
 import { editorConnection, editorModules, type ModuleAdminConnection } from "./editorConnection";
 
@@ -84,104 +87,9 @@ const styles = stylex.create({
     overflow: "hidden",
     width: "100vw",
   },
-  header: {
-    alignItems: "center",
-    borderBottomColor: colors.gray5,
-    borderBottomStyle: "solid",
-    borderBottomWidth: 1,
-    display: "grid",
-    gridTemplateColumns: { default: "1fr auto", "@media (min-width: 600px)": "1fr auto 1fr" },
-    flexShrink: 0,
-    columnGap: 8,
-    minHeight: 44,
-    paddingInline: 12,
-  },
-  brand: { display: "flex", alignItems: "center", gap: 8, minHeight: 44 },
-  logo: { borderRadius: 6, height: 28, width: 28 },
-  title: { fontWeight: 600, letterSpacing: "-0.025em" },
-  nav: {
-    display: "flex",
-    alignSelf: "stretch",
-    justifySelf: "center",
-    gridColumn: { default: "1 / -1", "@media (min-width: 600px)": "2" },
-    gridRowStart: { default: 2, "@media (min-width: 600px)": 1 },
-  },
-  navItem: {
-    borderBottomStyle: "solid",
-    borderBottomWidth: 2,
-    paddingBlock: 8,
-    paddingInline: 16,
-    fontSize: 12,
-    fontWeight: 500,
-    textTransform: "capitalize",
-    backgroundColor: { default: "transparent", ":hover": colors.gray3 },
-    cursor: "pointer",
-  },
-  navActive: { borderBottomColor: colors.focus, color: colors.gray12 },
-  navIdle: {
-    borderBottomColor: "transparent",
-    color: { default: colors.gray10, ":hover": colors.gray12 },
-  },
-  account: {
-    alignItems: "center",
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "flex-end",
-    justifySelf: "end",
-    gridRowStart: 1,
-    gridColumnStart: -2,
-    minWidth: 0,
-  },
   main: { flex: 1, minHeight: 0 },
   setupPage: { display: "flex", flex: 1, minHeight: 0, overflowY: "auto", padding: 24 },
-  setupCard: {
-    backgroundColor: colors.gray2,
-    borderColor: colors.gray5,
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderRadius: 8,
-    display: "flex",
-    flexDirection: "column",
-    gap: 24,
-    margin: "auto",
-    maxWidth: 400,
-    padding: { default: 20, "@media (min-width: 600px)": 32 },
-    width: "100%",
-  },
-  setupHeading: { display: "flex", flexDirection: "column", gap: 6 },
-  setupTitle: { fontSize: 20, fontWeight: 600, letterSpacing: "-0.025em", margin: 0 },
   description: { color: colors.gray11, lineHeight: 1.6, margin: 0, overflowWrap: "anywhere" },
-  hint: { color: colors.gray10, fontSize: 12, margin: 0 },
-  userCode: {
-    backgroundColor: colors.gray1,
-    borderColor: colors.gray5,
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderRadius: 6,
-    color: colors.gray12,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-    fontSize: 28,
-    fontWeight: 600,
-    letterSpacing: "0.15em",
-    paddingBlock: 16,
-    textAlign: "center",
-  },
-  form: { display: "flex", flexDirection: "column", gap: 12 },
-  fullWidth: { width: "100%" },
-  input: {
-    backgroundColor: colors.gray1,
-    borderColor: colors.gray6,
-    borderStyle: "solid",
-    borderWidth: 1,
-    borderRadius: 4,
-    color: colors.gray12,
-    fontSize: 16,
-    minWidth: 0,
-    padding: 10,
-    outline: "none",
-    boxShadow: { default: "none", ":focus-visible": `0 0 0 2px ${colors.focus}` },
-  },
   actions: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 },
   error: { color: colors.red11, lineHeight: 1.5, margin: 0, overflowWrap: "anywhere" },
   link: { color: colors.gray12, textDecoration: "underline", textUnderlineOffset: 3 },
@@ -452,117 +360,36 @@ export function App() {
         when={setupRequired() === false}
         fallback={
           <main sx={styles.setupPage}>
-            <section sx={styles.setupCard} aria-labelledby="setup-title">
-              <div sx={styles.brand}>
-                <img src={macrographLogo} alt="" sx={styles.logo} />
-                <span sx={styles.title}>MacroGraph</span>
-              </div>
+            <ServerSetupCard>
               <Show
                 when={setupRequired() === true}
                 fallback={
-                  <>
-                    <h1 id="setup-title" sx={styles.setupTitle}>
-                      Connecting to your server
-                    </h1>
-                    <Show
-                      when={sessionError()}
-                      fallback={
-                        <p sx={styles.description} role="status">
-                          Checking server status...
-                        </p>
-                      }
-                    >
-                      <p sx={styles.error} role="alert">
-                        {sessionError()}
-                      </p>
-                      <Button type="button" onClick={() => void refreshSession()}>
-                        Retry
-                      </Button>
-                    </Show>
-                  </>
+                  <ServerSetupConnecting
+                    error={sessionError()}
+                    onRetry={() => void refreshSession()}
+                  />
                 }
               >
                 <Show
                   when={signingIn()}
                   fallback={
-                    <>
-                      <div sx={styles.setupHeading}>
-                        <h1 id="setup-title" sx={styles.setupTitle}>
-                          Set up your server
-                        </h1>
-                        <p sx={styles.description}>
-                          The account you approve with becomes this server's administrator.
-                        </p>
-                      </div>
-                      <form
-                        sx={styles.form}
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          if (setupKey().trim()) void signIn(setupKey().trim());
-                        }}
-                      >
-                        <Show when={linkedSetupKey === "" || approvalError()}>
-                          <input
-                            type="password"
-                            aria-label="Setup key"
-                            placeholder="Setup key"
-                            autocomplete="off"
-                            spellcheck={false}
-                            required
-                            value={setupKey()}
-                            aria-describedby="setup-key-help"
-                            sx={styles.input}
-                            onInput={(event) => setSetupKey(event.currentTarget.value)}
-                          />
-                          <p id="setup-key-help" sx={styles.hint}>
-                            Printed in your server logs as <code>MACROGRAPH_SETUP_KEY</code>.
-                          </p>
-                        </Show>
-                        <ApprovalError />
-                        <Button type="submit" disabled={!setupKey().trim()} sx={styles.fullWidth}>
-                          Continue with MacroGraph
-                        </Button>
-                      </form>
-                    </>
+                    <ServerSetupForm
+                      setupKey={setupKey()}
+                      onSetupKeyInput={setSetupKey}
+                      showKeyInput={linkedSetupKey === "" || approvalError() !== null}
+                      error={approvalError()}
+                      onSubmit={(key) => void signIn(key)}
+                    />
                   }
                 >
-                  <div sx={styles.setupHeading}>
-                    <h1 id="setup-title" sx={styles.setupTitle}>
-                      Approve on macrograph.app
-                    </h1>
-                    <p sx={styles.description} role="status">
-                      {userCode() === null
-                        ? "Opening macrograph.app..."
-                        : "Make sure it shows this code."}
-                    </p>
-                  </div>
-                  <Show when={userCode()}>
-                    {(code) => <div sx={styles.userCode}>{code()}</div>}
-                  </Show>
-                  <div sx={styles.form}>
-                    <Show when={verificationUrl()}>
-                      {(url) => (
-                        <ButtonLink
-                          href={url()}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="secondary"
-                          sx={styles.fullWidth}
-                        >
-                          Open macrograph.app
-                        </ButtonLink>
-                      )}
-                    </Show>
-                    <Button type="button" variant="text" onClick={cancelSignIn}>
-                      Cancel
-                    </Button>
-                  </div>
-                  <p sx={styles.hint}>
-                    This server will be able to use your cloud-managed credentials.
-                  </p>
+                  <ServerSetupApproval
+                    userCode={userCode()}
+                    verificationUrl={verificationUrl()}
+                    onCancel={cancelSignIn}
+                  />
                 </Show>
               </Show>
-            </section>
+            </ServerSetupCard>
           </main>
         }
       >
@@ -586,57 +413,37 @@ export function App() {
             });
             return (
               <>
-                <header sx={styles.header}>
-                  <div sx={styles.brand}>
-                    <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
-                    <span sx={styles.title}>MacroGraph</span>
-                  </div>
-                  <nav sx={styles.nav} aria-label="Workspace">
-                    <For each={["editor", "events"] as const}>
-                      {(tab) => (
-                        <button
-                          type="button"
-                          sx={[styles.navItem, view() === tab ? styles.navActive : styles.navIdle]}
-                          aria-current={view() === tab ? "page" : undefined}
-                          onClick={() => setView(tab)}
-                        >
-                          {tab}
-                        </button>
-                      )}
-                    </For>
-                  </nav>
-                  <div sx={styles.account}>
-                    <PresenceList controller={controller} onFollow={() => setView("editor")} />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setView("editor");
-                        controller.openProjectSettings();
-                      }}
-                    >
-                      Settings
-                    </Button>
-                    <Show
-                      when={auth().user}
-                      fallback={
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={signingIn()}
-                          onClick={() => void signIn()}
-                        >
-                          {signingIn() ? "Signing in..." : "Sign in"}
-                        </Button>
-                      }
-                    >
-                      {(activeUser) => (
-                        <AccountMenu email={activeUser().email} onSignOut={() => void signOut()} />
-                      )}
-                    </Show>
-                  </div>
-                </header>
+                <ServerHeader view={view()} onViewChange={setView}>
+                  <PresenceList controller={controller} onFollow={() => setView("editor")} />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setView("editor");
+                      controller.openProjectSettings();
+                    }}
+                  >
+                    Settings
+                  </Button>
+                  <Show
+                    when={auth().user}
+                    fallback={
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={signingIn()}
+                        onClick={() => void signIn()}
+                      >
+                        {signingIn() ? "Signing in..." : "Sign in"}
+                      </Button>
+                    }
+                  >
+                    {(activeUser) => (
+                      <AccountMenu email={activeUser().email} onSignOut={() => void signOut()} />
+                    )}
+                  </Show>
+                </ServerHeader>
                 <Show when={signingIn() || approvalError()}>
                   <div sx={styles.authNotice}>
                     <ApprovalStatus />

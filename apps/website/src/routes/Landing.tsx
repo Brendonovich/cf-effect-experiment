@@ -5,7 +5,7 @@ import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { For } from "solid-js";
 
-import { docsPath, packageLogo, packagePath } from "../docs/reference";
+import { modulesPath, packageLogo, packagePath, serverSetupPath } from "../docs/reference";
 import { Header } from "../Header";
 import { DownloadMenu } from "./DownloadMenu";
 
@@ -29,6 +29,10 @@ export function LandingRoute() {
               Playground
             </ButtonLink>
             <DownloadMenu />
+            <ButtonLink href={serverSetupPath} variant="secondary" sx={styles.action}>
+              <IconTablerServer {...stylex.attrs(styles.actionIcon)} />
+              Setup Server
+            </ButtonLink>
           </div>
           <nav sx={styles.socials} aria-label="MacroGraph on social media">
             <For each={socials}>
@@ -73,8 +77,8 @@ export function LandingRoute() {
               )}
             </For>
           </ul>
-          <a href={docsPath} sx={styles.allPackages}>
-            Browse all packages
+          <a href={modulesPath} sx={styles.allPackages}>
+            Browse all modules
             <IconTablerArrowRight {...stylex.attrs(styles.allPackagesIcon)} />
           </a>
         </section>

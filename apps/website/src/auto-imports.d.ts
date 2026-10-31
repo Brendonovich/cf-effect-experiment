@@ -28,14 +28,19 @@ declare global {
   const IconTablerBrowser: typeof import('~icons/tabler/browser.jsx').default
   const IconTablerCheck: typeof import('~icons/tabler/check.jsx').default
   const IconTablerChevronDown: typeof import('~icons/tabler/chevron-down.jsx').default
+  const IconTablerChevronRight: typeof import('~icons/tabler/chevron-right.jsx').default
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerDeviceDesktopDown: typeof import('~icons/tabler/device-desktop-down.jsx').default
   const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
+  const IconTablerInfoCircle: typeof import('~icons/tabler/info-circle.jsx').default
   const IconTablerKey: typeof import('~icons/tabler/key.jsx').default
+  const IconTablerLock: typeof import('~icons/tabler/lock.jsx').default
   const IconTablerMail: typeof import('~icons/tabler/mail.jsx').default
+  const IconTablerMenu2: typeof import('~icons/tabler/menu2.jsx').default
   const IconTablerPackage: typeof import('~icons/tabler/package.jsx').default
   const IconTablerPlug: typeof import('~icons/tabler/plug.jsx').default
   const IconTablerPlus: typeof import('~icons/tabler/plus.jsx').default
+  const IconTablerPointerFilled: typeof import('~icons/tabler/pointer-filled.jsx').default
   const IconTablerRefresh: typeof import('~icons/tabler/refresh.jsx').default
   const IconTablerRobot: typeof import('~icons/tabler/robot.jsx').default
   const IconTablerSandbox: typeof import('~icons/tabler/sandbox.jsx').default
