@@ -38,9 +38,9 @@ is a compatibility alias for readiness.
 
 ### First-time setup
 
-On an unconfigured server, startup prints `MACROGRAPH_SETUP_KEY <key>`. Open the server in
-your browser, enter that key on the setup page, and approve the code it shows at
-`macrograph.app/device`. For Docker, find the key with `docker logs macrograph`.
+On an unconfigured server, startup prints `MACROGRAPH_SETUP_KEY <key>` and a setup link that
+already includes the key (based on `MACROGRAPH_PUBLIC_ORIGIN`). Open the link, or open the server
+in your browser and enter the key, then approve the code it shows at `macrograph.app/device`. For Docker, find the key with `docker logs macrograph`.
 
 The server registers itself with macrograph.app as an OAuth client the first time it is used, and
 everyone signs in to it with the same device code flow (see `apps/cloud/OAUTH.md`). The client

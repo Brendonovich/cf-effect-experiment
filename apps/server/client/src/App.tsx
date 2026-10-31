@@ -5,6 +5,7 @@ import {
   AccountMenu,
   ApiKeySettings,
   Button,
+  ButtonLink,
   createEditorController,
   CredentialSettings,
   RealtimeWorkspace,
@@ -141,22 +142,32 @@ const styles = stylex.create({
     borderRadius: 8,
     display: "flex",
     flexDirection: "column",
-    gap: 20,
+    gap: 24,
     margin: "auto",
-    maxWidth: 480,
+    maxWidth: 400,
     padding: { default: 20, "@media (min-width: 600px)": 32 },
     width: "100%",
   },
-  setupTitle: { fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", margin: 0 },
+  setupHeading: { display: "flex", flexDirection: "column", gap: 6 },
+  setupTitle: { fontSize: 20, fontWeight: 600, letterSpacing: "-0.025em", margin: 0 },
   description: { color: colors.gray11, lineHeight: 1.6, margin: 0, overflowWrap: "anywhere" },
+  hint: { color: colors.gray10, fontSize: 12, margin: 0 },
   userCode: {
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-    fontWeight: 600,
-    letterSpacing: "0.06em",
+    backgroundColor: colors.gray1,
+    borderColor: colors.gray5,
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderRadius: 6,
     color: colors.gray12,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: 28,
+    fontWeight: 600,
+    letterSpacing: "0.15em",
+    paddingBlock: 16,
+    textAlign: "center",
   },
   form: { display: "flex", flexDirection: "column", gap: 12 },
-  label: { fontWeight: 500 },
+  fullWidth: { width: "100%" },
   input: {
     backgroundColor: colors.gray1,
     borderColor: colors.gray6,
@@ -182,7 +193,10 @@ export function App() {
   const [setupRequired, setSetupRequired] = createSignal<boolean | null>(null);
   const [canEdit, setCanEdit] = createSignal(false);
   const [sessionError, setSessionError] = createSignal<string | null>(null);
-  const [setupKey, setSetupKey] = createSignal("");
+  // Setup links printed in the server logs carry the key in the URL fragment.
+  const linkedSetupKey = new URLSearchParams(location.hash.slice(1)).get("setup-key")?.trim() ?? "";
+  if (linkedSetupKey !== "") history.replaceState(null, "", location.pathname + location.search);
+  const [setupKey, setSetupKey] = createSignal(linkedSetupKey);
   const [signingIn, setSigningIn] = createSignal(false);
   const [verificationUrl, setVerificationUrl] = createSignal<string | null>(null);
   const [userCode, setUserCode] = createSignal<string | null>(null);
@@ -400,42 +414,35 @@ export function App() {
   });
 
   const rootAttrs = stylex.attrs(styles.root);
+  const ApprovalError = () => (
+    <Show when={approvalError()}>
+      <p sx={styles.error} role="alert">
+        {approvalError()}
+      </p>
+    </Show>
+  );
   const ApprovalStatus = () => (
-    <div sx={styles.form}>
-      <Show when={approvalError()}>
-        <p sx={styles.error} role="alert">
-          {approvalError()}
-        </p>
-      </Show>
+    <>
+      <ApprovalError />
       <Show when={signingIn()}>
-        <p sx={styles.description} role="status">
-          {verificationUrl() ? "Waiting for approval on macrograph.app..." : "Starting approval..."}
-        </p>
-        <Show when={userCode()}>
-          {(code) => (
-            <p sx={styles.description}>
-              Check that macrograph.app shows the code{" "}
-              <strong sx={styles.userCode}>{code()}</strong>
-            </p>
-          )}
-        </Show>
         <div sx={styles.actions}>
+          <span sx={styles.description} role="status">
+            Waiting for approval on macrograph.app
+            <Show when={userCode()}>{(code) => <> · {code()}</>}</Show>
+          </span>
           <Show when={verificationUrl()}>
             {(url) => (
               <a href={url()} target="_blank" rel="noopener noreferrer" sx={styles.link}>
-                Open approval page
+                Open
               </a>
             )}
           </Show>
-          <Button type="button" variant="secondary" onClick={cancelSignIn}>
+          <Button type="button" variant="text" onClick={cancelSignIn}>
             Cancel
           </Button>
         </div>
-        <Show when={verificationUrl()}>
-          <p sx={styles.description}>If the popup did not open, use the approval link above.</p>
-        </Show>
       </Show>
-    </div>
+    </>
   );
 
   return (
@@ -474,54 +481,85 @@ export function App() {
                   </>
                 }
               >
-                <h1 id="setup-title" sx={styles.setupTitle}>
-                  Set up your server
-                </h1>
-                <p sx={styles.description}>
-                  The MacroGraph account that approves setup becomes this server's administrator and
-                  can edit its projects.
-                </p>
-                <p sx={styles.description}>
-                  Approval also authorizes this server to use your cloud-managed credentials.
-                  Provider tokens stay on the server, not in project data. Only continue if you
-                  trust this server.
-                </p>
-                <form
-                  sx={styles.form}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    if (!signingIn() && setupKey().trim()) void signIn(setupKey().trim());
-                  }}
+                <Show
+                  when={signingIn()}
+                  fallback={
+                    <>
+                      <div sx={styles.setupHeading}>
+                        <h1 id="setup-title" sx={styles.setupTitle}>
+                          Set up your server
+                        </h1>
+                        <p sx={styles.description}>
+                          The account you approve with becomes this server's administrator.
+                        </p>
+                      </div>
+                      <form
+                        sx={styles.form}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          if (setupKey().trim()) void signIn(setupKey().trim());
+                        }}
+                      >
+                        <Show when={linkedSetupKey === "" || approvalError()}>
+                          <input
+                            type="password"
+                            aria-label="Setup key"
+                            placeholder="Setup key"
+                            autocomplete="off"
+                            spellcheck={false}
+                            required
+                            value={setupKey()}
+                            aria-describedby="setup-key-help"
+                            sx={styles.input}
+                            onInput={(event) => setSetupKey(event.currentTarget.value)}
+                          />
+                          <p id="setup-key-help" sx={styles.hint}>
+                            Printed in your server logs as <code>MACROGRAPH_SETUP_KEY</code>.
+                          </p>
+                        </Show>
+                        <ApprovalError />
+                        <Button type="submit" disabled={!setupKey().trim()} sx={styles.fullWidth}>
+                          Continue with MacroGraph
+                        </Button>
+                      </form>
+                    </>
+                  }
                 >
-                  <label for="setup-key" sx={styles.label}>
-                    Setup key
-                  </label>
-                  <input
-                    id="setup-key"
-                    type="password"
-                    autocomplete="off"
-                    spellcheck={false}
-                    required
-                    value={setupKey()}
-                    disabled={signingIn()}
-                    aria-describedby="setup-key-help"
-                    sx={styles.input}
-                    onInput={(event) => setSetupKey(event.currentTarget.value)}
-                  />
-                  <p id="setup-key-help" sx={styles.description}>
-                    Find <code>MACROGRAPH_SETUP_KEY &lt;key&gt;</code> in your server logs and enter
-                    only the key. It works only until setup completes and is not saved in this
-                    browser.
+                  <div sx={styles.setupHeading}>
+                    <h1 id="setup-title" sx={styles.setupTitle}>
+                      Approve on macrograph.app
+                    </h1>
+                    <p sx={styles.description} role="status">
+                      {userCode() === null
+                        ? "Opening macrograph.app..."
+                        : "Make sure it shows this code."}
+                    </p>
+                  </div>
+                  <Show when={userCode()}>
+                    {(code) => <div sx={styles.userCode}>{code()}</div>}
+                  </Show>
+                  <div sx={styles.form}>
+                    <Show when={verificationUrl()}>
+                      {(url) => (
+                        <ButtonLink
+                          href={url()}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          variant="secondary"
+                          sx={styles.fullWidth}
+                        >
+                          Open macrograph.app
+                        </ButtonLink>
+                      )}
+                    </Show>
+                    <Button type="button" variant="text" onClick={cancelSignIn}>
+                      Cancel
+                    </Button>
+                  </div>
+                  <p sx={styles.hint}>
+                    This server will be able to use your cloud-managed credentials.
                   </p>
-                  <Button type="submit" disabled={signingIn() || !setupKey().trim()}>
-                    {signingIn()
-                      ? "Waiting for approval..."
-                      : approvalError()
-                        ? "Retry setup"
-                        : "Approve on macrograph.app"}
-                  </Button>
-                </form>
-                <ApprovalStatus />
+                </Show>
               </Show>
             </section>
           </main>
