@@ -48,6 +48,7 @@ export {
 } from "./apiKeys/ApiKeySettings.tsx";
 export { CredentialTable, type CredentialTableProps } from "./credentials/CredentialTable.tsx";
 export { SnapshotGraphCanvas } from "./editor/graph/SnapshotGraphCanvas.tsx";
+export { SchemaReference, type SchemaReferenceIOInput } from "./editor/modules/SchemaReference.tsx";
 export { RealtimeWorkspace } from "./editor/RealtimeWorkspace.tsx";
 export { LiveEvents, type LiveEventsProps } from "./events/LiveEvents.tsx";
 export {

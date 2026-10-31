@@ -5,7 +5,7 @@ import MagicString from "magic-string";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-interface ModulePackage {
+export interface ModulePackage {
   readonly name?: string;
   readonly exports?: Readonly<Record<string, unknown>>;
   readonly macrograph?: Readonly<Record<string, unknown>>;
@@ -36,31 +36,48 @@ const manifestPath = (manifest: ModulePackage, name: string) => {
   return typeof value === "string" ? value : undefined;
 };
 
+/** Lists workspace modules whose manifest resolves `modulePath`, sorted by package name. */
+export const discoverWorkspaceModules = (options: {
+  readonly workspaceRoot?: string;
+  readonly modulePath: (manifest: ModulePackage) => string | undefined;
+  readonly include?: ReadonlySet<string>;
+}) => {
+  const modulesDirectory = resolve(
+    options.workspaceRoot ?? resolve(import.meta.dirname, "../../.."),
+    "packages/modules",
+  );
+  return readdirSync(modulesDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => {
+      const packageJson = resolve(modulesDirectory, entry.name, "package.json");
+      if (!existsSync(packageJson)) return [];
+      const manifest = JSON.parse(readFileSync(packageJson, "utf8")) as ModulePackage;
+      if (options.include !== undefined && !options.include.has(manifest.name ?? entry.name))
+        return [];
+      const modulePath = options.modulePath(manifest);
+      return modulePath === undefined
+        ? []
+        : [
+            {
+              packageJson,
+              source: manifest.name ?? entry.name,
+              modulePath: resolve(modulesDirectory, entry.name, modulePath),
+            },
+          ];
+    })
+    .sort((left, right) => left.source.localeCompare(right.source));
+};
+
 const workspaceModules = (options: DiscoveryOptions) => {
   const workspaceRoot = options.workspaceRoot ?? resolve(import.meta.dirname, "../../..");
   const modulesDirectory = resolve(workspaceRoot, "packages/modules");
   const resolvedVirtualId = `\0${options.virtualId}`;
   const discover = () =>
-    readdirSync(modulesDirectory, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .flatMap((entry) => {
-        const packageJson = resolve(modulesDirectory, entry.name, "package.json");
-        if (!existsSync(packageJson)) return [];
-        const manifest = JSON.parse(readFileSync(packageJson, "utf8")) as ModulePackage;
-        if (options.include !== undefined && !options.include.has(manifest.name ?? entry.name))
-          return [];
-        const modulePath = options.modulePath(manifest);
-        return modulePath === undefined
-          ? []
-          : [
-              {
-                packageJson,
-                source: manifest.name ?? entry.name,
-                modulePath: resolve(modulesDirectory, entry.name, modulePath),
-              },
-            ];
-      })
-      .sort((left, right) => left.source.localeCompare(right.source));
+    discoverWorkspaceModules({
+      workspaceRoot,
+      modulePath: options.modulePath,
+      ...(options.include === undefined ? {} : { include: options.include }),
+    });
   const invalidate = <Module>(moduleGraph: ModuleGraph<Module>) => {
     const module = moduleGraph.getModuleById(resolvedVirtualId);
     if (module !== undefined) moduleGraph.invalidateModule(module);

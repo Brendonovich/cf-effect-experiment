@@ -5,17 +5,7 @@ import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { For } from "solid-js";
 
-import discordLogo from "../assets/integrations/discord.png";
-import goxlrLogo from "../assets/integrations/goxlr.png";
-import midiLogo from "../assets/integrations/midi.svg";
-import obsLogo from "../assets/integrations/obs.png";
-import openaiLogo from "../assets/integrations/openai.png";
-import speakerBotLogo from "../assets/integrations/speaker-bot.svg";
-import streamDeckLogo from "../assets/integrations/stream-deck.jpg";
-import streamlabsLogo from "../assets/integrations/streamlabs.png";
-import twitchLogo from "../assets/integrations/twitch.png";
-import vtubeStudioLogo from "../assets/integrations/vtube-studio.png";
-import websocketsLogo from "../assets/integrations/websockets.webp";
+import { docsPath, packageLogo, packagePath } from "../docs/reference";
 import { Header } from "../Header";
 import { DownloadMenu } from "./DownloadMenu";
 
@@ -70,15 +60,23 @@ export function LandingRoute() {
             <For each={integrations}>
               {(item) => (
                 <li sx={styles.card}>
-                  <img src={item.logo} alt="" sx={styles.cardLogo} />
+                  <img src={packageLogo(item.package)} alt="" sx={styles.cardLogo} />
                   <div sx={styles.cardBody}>
-                    <h3 sx={styles.cardTitle}>{item.name}</h3>
+                    <h3 sx={styles.cardTitle}>
+                      <a href={packagePath(item.package)} sx={styles.cardLink}>
+                        {item.name}
+                      </a>
+                    </h3>
                     <p sx={styles.cardDescription}>{item.description}</p>
                   </div>
                 </li>
               )}
             </For>
           </ul>
+          <a href={docsPath} sx={styles.allPackages}>
+            Browse all packages
+            <IconTablerArrowRight {...stylex.attrs(styles.allPackagesIcon)} />
+          </a>
         </section>
       </main>
     </div>
@@ -170,6 +168,7 @@ const styles = stylex.create({
     listStyle: "none",
   },
   card: {
+    position: "relative",
     display: "flex",
     alignItems: "center",
     gap: 16,
@@ -191,6 +190,12 @@ const styles = stylex.create({
   },
   cardBody: { minWidth: 0 },
   cardTitle: { margin: 0, fontSize: 15, fontWeight: 600 },
+  // The title's link covers the whole card; links in the description sit above it.
+  cardLink: {
+    color: "inherit",
+    textDecoration: "none",
+    "::after": { content: '""', position: "absolute", inset: 0, borderRadius: 10 },
+  },
   cardDescription: {
     margin: 0,
     marginTop: 2,
@@ -198,41 +203,73 @@ const styles = stylex.create({
     lineHeight: "20px",
     color: colors.gray11,
   },
-  inlineLink: { color: colors.gray12, textDecoration: "underline" },
+  inlineLink: {
+    position: "relative",
+    zIndex: 1,
+    color: colors.gray12,
+    textDecoration: "underline",
+  },
+  allPackages: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    width: "fit-content",
+    marginTop: 24,
+    marginInline: "auto",
+    fontSize: 14,
+    fontWeight: 500,
+    color: { default: colors.gray11, ":hover": colors.gray12 },
+    textDecoration: "none",
+  },
+  allPackagesIcon: { width: 16, height: 16 },
 });
 
+/** Each links to its package's reference. */
 const integrations: ReadonlyArray<{
   readonly name: string;
   readonly description: JSX.Element;
-  readonly logo: string;
+  readonly package: { readonly publisher: string; readonly name: string };
 }> = [
-  { name: "OBS", description: "Modify and listen to changes in all aspects of OBS", logo: obsLogo },
-  { name: "Twitch", description: "Interact with Chat, EventSub, and Helix", logo: twitchLogo },
+  {
+    name: "OBS",
+    description: "Modify and listen to changes in all aspects of OBS",
+    package: { publisher: "macrograph", name: "obs" },
+  },
+  {
+    name: "Twitch",
+    description: "Interact with Chat, EventSub, and Helix",
+    package: { publisher: "macrograph", name: "twitch" },
+  },
   {
     name: "VTube Studio",
     description: "Execute hotkeys and control models",
-    logo: vtubeStudioLogo,
+    package: { publisher: "macrograph", name: "vtube-studio" },
   },
   {
     name: "Streamlabs",
     description: "Listen for donations and YouTube events",
-    logo: streamlabsLogo,
+    package: { publisher: "macrograph", name: "streamlabs" },
   },
   {
     name: "Discord",
     description: "Send and receive messages, and interact with the Discord API",
-    logo: discordLogo,
+    package: { publisher: "macrograph", name: "discord" },
   },
-  { name: "Speaker.bot", description: "Trigger and stop text-to-speech", logo: speakerBotLogo },
+  {
+    name: "Speaker.bot",
+    description: "Trigger and stop text-to-speech",
+    package: { publisher: "macrograph", name: "speakerbot" },
+  },
   {
     name: "WebSockets",
     description: "Connect to WebSocket servers and host your own",
-    logo: websocketsLogo,
+    package: { publisher: "macrograph", name: "websocket-client" },
   },
   {
     name: "GoXLR",
     description: "Control and listen to buttons, dials, faders, and channels",
-    logo: goxlrLogo,
+    package: { publisher: "macrograph", name: "goxlr" },
   },
   {
     name: "Elgato Stream Deck",
@@ -249,17 +286,17 @@ const integrations: ReadonlyArray<{
         </a>
       </>
     ),
-    logo: streamDeckLogo,
+    package: { publisher: "macrograph", name: "streamdeck" },
   },
   {
     name: "MIDI",
     description: "Send and receive MIDI messages to and from MIDI devices",
-    logo: midiLogo,
+    package: { publisher: "macrograph", name: "midi" },
   },
   {
     name: "OpenAI",
     description: "Generate text with ChatGPT and images with Dall-E",
-    logo: openaiLogo,
+    package: { publisher: "macrograph", name: "openai" },
   },
 ];
 

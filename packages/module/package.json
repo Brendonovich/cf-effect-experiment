@@ -16,6 +16,7 @@
     "./HttpIngress": "./src/HttpIngress.ts",
     "./PollingIngress": "./src/PollingIngress.ts",
     "./Module": "./src/Module.ts",
+    "./ModuleId": "./src/ModuleId.ts",
     "./Registration": "./src/Registration.ts",
     "./Resource": "./src/Resource.ts",
     "./Retry": "./src/Retry.ts",
