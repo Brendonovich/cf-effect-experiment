@@ -148,9 +148,6 @@
       "path": "apps/website"
     },
     {
-      "path": "apps/playground"
-    },
-    {
       "path": "apps/storybook"
     }
   ]

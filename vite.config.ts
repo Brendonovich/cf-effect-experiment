@@ -50,13 +50,13 @@ export default defineConfig({
       ],
       "macrograph/no-node-imports-in-browser": [
         "error",
-        ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
+        ["apps/cloud/frontend", "apps/website", "apps/server/client", "packages/editor-ui"],
       ],
       "macrograph/no-crypto-random-uuid-in-browser": [
         "error",
         [
           "apps/cloud/frontend",
-          "apps/playground",
+          "apps/website",
           "apps/server/client",
           "packages/editor",
           "packages/editor-ui",
@@ -64,7 +64,7 @@ export default defineConfig({
       ],
       "macrograph/no-unhandled-run-fork": [
         "error",
-        ["apps/cloud/frontend", "apps/playground", "apps/server/client", "packages/editor-ui"],
+        ["apps/cloud/frontend", "apps/website", "apps/server/client", "packages/editor-ui"],
       ],
     },
   },

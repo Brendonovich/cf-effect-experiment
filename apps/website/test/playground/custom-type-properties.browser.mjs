@@ -97,7 +97,7 @@ async function open(context, fixture) {
     logs.push(message.text());
     if (message.text().includes("STRICT_READ_UNTRACKED")) errors.push(message.text());
   });
-  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315");
+  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315/playground");
   await button(page, "Demo").first().click();
   await page.locator("[data-active-graph-canvas]").waitFor();
   return { page, errors, logs };

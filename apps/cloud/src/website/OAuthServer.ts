@@ -24,11 +24,6 @@ export const deviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code
 export const scopes = ["openid", "email", "offline_access", "credentials"] as const;
 export type Scope = (typeof scopes)[number];
 
-/** Built-in public clients. They cannot keep a secret, so they authenticate with `client_id` only. */
-export const publicClients: Readonly<Record<string, { readonly name: string }>> = {
-  "macrograph-playground": { name: "MacroGraph Playground" },
-};
-
 const deviceCodeLifetimeSeconds = 10 * 60;
 const pollIntervalSeconds = 5;
 const accessTokenLifetimeSeconds = 60 * 60;
@@ -237,7 +232,7 @@ const formDecode = (value: string) => {
 export interface Client {
   readonly id: string;
   readonly name: string;
-  /** Built-in clients are ours; registered clients name themselves. */
+  /** Whether MacroGraph vouches for the client's name; registered clients name themselves. */
   readonly verified: boolean;
   readonly scope: ReadonlyArray<Scope>;
 }
@@ -452,11 +447,6 @@ export const make = (options: Options) => {
       }
       if (clientId === undefined) return yield* invalidRequest("client_id is required");
 
-      const builtIn = Object.hasOwn(publicClients, clientId) ? publicClients[clientId] : undefined;
-      if (builtIn !== undefined) {
-        if (method !== "none") return yield* failed("Public clients do not use a client secret");
-        return { id: clientId, name: builtIn.name, verified: true, scope: scopes };
-      }
       if (method === "none" || secret === undefined)
         return yield* failed("Client authentication is required");
 
@@ -633,15 +623,10 @@ export const make = (options: Options) => {
             scopes_supported: scopes,
             response_types_supported: [],
             grant_types_supported: [deviceCodeGrantType, "refresh_token"],
-            token_endpoint_auth_methods_supported: [
-              "client_secret_basic",
-              "client_secret_post",
-              "none",
-            ],
+            token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
             revocation_endpoint_auth_methods_supported: [
               "client_secret_basic",
               "client_secret_post",
-              "none",
             ],
             subject_types_supported: ["public"],
             id_token_signing_alg_values_supported: ["RS256"],
@@ -1105,8 +1090,6 @@ export const make = (options: Options) => {
 
   const describeClient = (clientId: string) =>
     Effect.gen(function* () {
-      const builtIn = Object.hasOwn(publicClients, clientId) ? publicClients[clientId] : undefined;
-      if (builtIn !== undefined) return { id: clientId, name: builtIn.name, verified: true };
       const rows = yield* database
         .select({ name: authClients.name })
         .from(authClients)

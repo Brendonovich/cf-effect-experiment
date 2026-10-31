@@ -22,25 +22,25 @@ For an existing installation without Chromium, run its adjacent `cli.js` with `i
 Start an isolated playground server in one terminal:
 
 ```sh
-pnpm --filter @macrograph/playground dev --host 127.0.0.1 --port 4315 --strictPort
+pnpm --filter @macrograph/website dev --host 127.0.0.1 --port 4315 --strictPort
 ```
 
 In another terminal, with `PLAYWRIGHT_MODULE` exported if necessary:
 
 ```sh
-node apps/playground/test/custom-types.browser.mjs
+node apps/website/test/playground/custom-types.browser.mjs
 ```
 
 For the focused property-driven node regression (with deterministic project fixtures):
 
 ```sh
-node apps/playground/test/custom-type-properties.browser.mjs
+node apps/website/test/playground/custom-type-properties.browser.mjs
 ```
 
 To check live Break Struct output generation specifically:
 
 ```sh
-BROWSER_SCENARIO=breakStructOutputs node apps/playground/test/custom-type-properties.browser.mjs
+BROWSER_SCENARIO=breakStructOutputs node apps/website/test/playground/custom-type-properties.browser.mjs
 ```
 
 This drags a Make Struct output onto Break Struct, checks that field pins appear
@@ -52,10 +52,10 @@ pins, nested optional update pins, persistence across reload, and live updates t
 Make Some node. Runtime Print assertions verify that unmodified fields are preserved and
 disconnecting the update input restores the original value. Recording is not enabled by this test.
 
-The default URL is `http://127.0.0.1:4315`. Override it with `PLAYGROUND_URL`; set `HEADED=1` to watch Chromium:
+The default URL is `http://127.0.0.1:4315/playground`. Override it with `PLAYGROUND_URL`; set `HEADED=1` to watch Chromium:
 
 ```sh
-PLAYGROUND_URL=http://127.0.0.1:4315 HEADED=1 node apps/playground/test/custom-types.browser.mjs
+PLAYGROUND_URL=http://127.0.0.1:4315/playground HEADED=1 node apps/website/test/playground/custom-types.browser.mjs
 ```
 
 The script uses a fresh browser context, so it does not replace your normal browser's project. Avoid concurrent source edits, formatting, or tests that write source files while it runs: Vite hot reload can reset the editor mid-scenario. Success prints `PASS`; failed assertions exit nonzero with diagnostic output.

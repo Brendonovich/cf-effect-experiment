@@ -16,4 +16,4 @@
 
 ## Evidence
 
-The run records `created-project.json`, `persisted-project.json`, `persistence-export.png`, `playground.log`, and content hashes in `manifest.json`. Success requires every manifest check to pass, with no uncaught page errors, unexpected console/HTTP errors, or failed browser requests.
+The run records `created-project.json`, `persisted-project.json`, `persistence-export.png`, `website.log`, and content hashes in `manifest.json`. Success requires every manifest check to pass, with no uncaught page errors, unexpected console/HTTP errors, or failed browser requests.

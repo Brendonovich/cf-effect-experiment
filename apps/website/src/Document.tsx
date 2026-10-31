@@ -18,6 +18,9 @@ export default function Document(props: { readonly children?: JSX.Element }) {
         <link rel="icon" href="/favicon.png" />
         <title>MacroGraph</title>
         <HydrationScript />
+        {/* StyleX adds this to `index.html` in dev; start mode has none. It keeps the dev stylesheet
+        current, including for code loaded after the first render, such as the playground. */}
+        {import.meta.env.DEV ? <script type="module" src="/@id/virtual:stylex:runtime" /> : null}
       </head>
       <body>{props.children}</body>
     </html>

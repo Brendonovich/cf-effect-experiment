@@ -46,7 +46,7 @@ export class CloudCredentialError extends Schema.TaggedError<CloudCredentialErro
 
 /** How this client identifies itself to the authorization server. */
 export type ClientConfig =
-  /** A built-in public client, such as the browser playground. */
+  /** A public client, which has no secret. */
   | { readonly type: "public"; readonly clientId: string }
   /** A confidential client that registers itself on first use, such as a server. */
   | {
@@ -1027,6 +1027,115 @@ export const make = Effect.fnUntraced(function* (
     pollOwner: (ownerId) => pollOwner(ownerId),
     signIn,
     credentials: { get, refresh, subscribe, catalog, refetch, auth },
+  };
+});
+
+// ---- Website session ----
+
+export interface SessionOptions {
+  /** The macrograph.app origin; defaults to the page's own. */
+  readonly origin?: string;
+}
+
+/**
+ * Credentials of the user signed in to the macrograph.app website, read with the session cookie.
+ * For pages served from macrograph.app itself, such as the playground, which need no OAuth client.
+ */
+export const makeSession = Effect.fnUntraced(function* (
+  options: SessionOptions = {},
+): Effect.fn.Return<Engine.CredentialService, never, HttpClient.HttpClient> {
+  const origin = (options.origin ?? "").replace(/\/$/, "");
+  const http = HttpClient.withScope(yield* HttpClient.HttpClient);
+  const lock = Semaphore.makeUnsafe(1);
+  const subscribers = new Set<() => Effect.Effect<void>>();
+  let cached: ReadonlyArray<typeof CloudCredential.Type> | undefined;
+
+  const notify = Effect.suspend(() =>
+    Effect.forEach(Array.from(subscribers), (subscriber) => subscriber(), { discard: true }),
+  );
+  const request = <A, I>(method: "GET" | "POST", path: string, schema: Schema.Codec<A, I>) =>
+    Effect.gen(function* () {
+      const response = yield* http
+        .execute(HttpClientRequest.make(method)(`${origin}/api${path}`))
+        .pipe(Effect.mapError(requestFailed));
+      // The API answers 403 without a session.
+      if (response.status === 401 || response.status === 403)
+        return yield* failure("not-connected", "Log in to macrograph.app to use your credentials.");
+      if (response.status < 200 || response.status >= 300) return yield* requestFailed();
+      const body = yield* response.json.pipe(Effect.mapError(invalidResponse));
+      return yield* Schema.decodeUnknownEffect(schema)(body).pipe(Effect.mapError(invalidResponse));
+    }).pipe(Effect.scoped);
+
+  const fetchCredentials = request("GET", "/credentials", CloudCredentialList).pipe(
+    Effect.tap((credentials) =>
+      Effect.sync(() => {
+        cached = credentials;
+      }),
+    ),
+    Effect.tapError((error) =>
+      Effect.sync(() => {
+        // Signed out: nothing is available until the user logs in again.
+        if (error.code === "not-connected") cached = [];
+      }),
+    ),
+  );
+  const load = Effect.suspend(() =>
+    cached === undefined ? fetchCredentials : Effect.succeed(cached),
+  );
+  const toCatalog = (
+    result: Effect.Effect<ReadonlyArray<typeof CloudCredential.Type>, CloudCredentialError>,
+  ) =>
+    result.pipe(
+      Effect.map(
+        (credentials): Credential.Catalog => ({
+          _tag: "CredentialCatalogAvailable",
+          credentials: credentials.map(toSummary),
+        }),
+      ),
+      Effect.catch((error) =>
+        Effect.succeed(
+          Credential.unavailable(
+            error.code === "not-connected" ? "not-connected" : "request-failed",
+            error.reason,
+          ),
+        ),
+      ),
+    );
+
+  return {
+    get: lock.withPermit(load).pipe(
+      Effect.map((credentials) => credentials.map(toEngineCredential)),
+      Effect.catch(() => Effect.succeed<Array<Engine.Credential>>([])),
+    ),
+    refresh: (provider, id) =>
+      lock
+        .withPermit(
+          request(
+            "POST",
+            `/credentials/${encodeURIComponent(provider)}/${encodeURIComponent(id)}/refresh`,
+            CloudCredential,
+          ).pipe(
+            Effect.tap((credential) =>
+              Effect.sync(() => {
+                cached = (cached ?? []).map((candidate) =>
+                  candidate.provider === provider && candidate.id === id ? credential : candidate,
+                );
+              }),
+            ),
+          ),
+        )
+        .pipe(
+          Effect.map(toEngineCredential),
+          Effect.tap(() => notify),
+          Effect.orDie,
+        ),
+    subscribe: (callback) =>
+      Effect.acquireRelease(
+        Effect.sync(() => subscribers.add(callback)),
+        () => Effect.sync(() => subscribers.delete(callback)),
+      ).pipe(Effect.asVoid),
+    catalog: lock.withPermit(toCatalog(load)),
+    refetch: lock.withPermit(toCatalog(fetchCredentials)).pipe(Effect.tap(() => notify)),
   };
 });
 

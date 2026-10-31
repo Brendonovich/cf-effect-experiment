@@ -99,7 +99,7 @@ export async function inlineScopes(context) {
     if (message.text().includes("STRICT_READ_UNTRACKED")) errors.push(message.text());
   });
   try {
-    await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315");
+    await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315/playground");
     await page.getByRole("button", { name: "Demo", exact: true }).first().click();
     const bundled = () => pin(page, "match", "output", JSON.stringify(["Port", scope]));
     const exec = () => pin(page, "match", "output", JSON.stringify(["ScopeExec", scope]));
@@ -294,7 +294,7 @@ export async function singleSchemaDrop(context) {
   page.on("console", (message) => {
     if (message.text().includes("STRICT_READ_UNTRACKED")) errors.push(message.text());
   });
-  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315");
+  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315/playground");
   await page.getByRole("button", { name: "Demo", exact: true }).first().click();
   const source = pin(page, "match", "output", JSON.stringify(["Port", scope]));
   await source.waitFor();

@@ -361,13 +361,6 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         );
         assert.strictEqual((yield* body(wrongMethod)).error, "invalid_client");
 
-        const publicWithSecret = yield* send(
-          app,
-          "/api/oauth/device_authorization",
-          form({ scope: "openid" }, basic("macrograph-playground", "secret")),
-        );
-        assert.strictEqual((yield* body(publicWithSecret)).error, "invalid_client");
-
         const error = (path: string, init: RequestInit) =>
           send(app, path, init).pipe(
             Effect.flatMap(body),
@@ -567,42 +560,6 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
           ),
         );
         assert.strictEqual((yield* body(refreshed)).error, "invalid_grant");
-      }),
-    ),
-  );
-
-  it.effect("lets built-in public clients authenticate with client_id alone", () =>
-    scoped(({ app, pg }) =>
-      Effect.gen(function* () {
-        const session = yield* signIn(pg, "user");
-        const auth = {};
-        const extra = { client_id: "macrograph-playground" };
-        const started = yield* body(
-          yield* send(
-            app,
-            "/api/oauth/device_authorization",
-            form({ scope: "openid", ...extra }, auth),
-          ),
-        );
-        const lookup = yield* body(
-          yield* website(app, session, "device/lookup", { userCode: started.user_code }),
-        );
-        assert.deepStrictEqual(lookup.client, {
-          id: "macrograph-playground",
-          name: "MacroGraph Playground",
-          verified: true,
-        });
-        const tokens = yield* authorize(
-          app,
-          auth,
-          session,
-          "openid email offline_access credentials",
-          extra,
-        );
-        assert.strictEqual(
-          (yield* verifyJwt(app, string(tokens.id_token))).aud,
-          "macrograph-playground",
-        );
       }),
     ),
   );

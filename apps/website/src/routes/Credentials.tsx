@@ -20,7 +20,8 @@ const providers = connectableProviders.map((id) => ({ id, displayName: providerD
 const providerName = (id: string) =>
   id in providerDisplayNames ? providerDisplayNames[id as keyof typeof providerDisplayNames] : id;
 
-export function CredentialsRoute() {
+/** The account's credentials. `onChanged` runs after one is connected or removed. */
+export function CredentialsRoute(props: { readonly onChanged?: () => void | Promise<void> }) {
   const queryClient = useQueryClient();
   const credentials = createQuery(() => ({ queryKey: credentialsKey, queryFn: getCredentials }));
 
@@ -29,6 +30,7 @@ export function CredentialsRoute() {
     mutationFn: connectCredential,
     onSuccess: (result, provider) => {
       void queryClient.invalidateQueries({ queryKey: credentialsKey });
+      void props.onChanged?.();
       showToast({
         tone: "success",
         content: (
@@ -47,7 +49,10 @@ export function CredentialsRoute() {
   const remove = useMutation(() => ({
     networkMode: "always" as const,
     mutationFn: removeCredential,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: credentialsKey }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: credentialsKey });
+      void props.onChanged?.();
+    },
     onError: () =>
       showToast({ tone: "error", content: "Could not remove the credential. Please try again." }),
   }));

@@ -253,7 +253,7 @@ const importProject = async (project) => {
 };
 
 try {
-  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315");
+  await page.goto(process.env.PLAYGROUND_URL ?? "http://127.0.0.1:4315/playground");
   await button("Types").click();
   await button("New struct").click();
   await page.getByLabel("Type name", { exact: true }).fill("Person");
