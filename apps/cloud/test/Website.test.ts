@@ -83,7 +83,7 @@ const providersLayer = OAuthProviders.layer.pipe(
 
 const makeApp = makeAppWith();
 
-function makeAppWith(options: { readonly rows?: Rows } = {}) {
+function makeAppWith(options: { readonly rows?: Rows; readonly preview?: boolean } = {}) {
   return Effect.gen(function* () {
     const stateKey = yield* Jwt.hmacKey("state-secret");
     const signingKey = yield* Jwt.rsaKey(yield* generateRsaPem);
@@ -91,6 +91,7 @@ function makeAppWith(options: { readonly rows?: Rows } = {}) {
       stateKey: Effect.succeed(stateKey),
       signingKey: Effect.succeed(signingKey),
       authRedirectOrigin: origin,
+      ...(options.preview === undefined ? {} : { preview: options.preview }),
       capture: Analytics.disabled,
       fetch: async (url) =>
         String(url).endsWith("/darwin-aarch64/latest")
@@ -239,6 +240,54 @@ describe("website routes", () => {
       const web = btoa(JSON.stringify({ env: "web", targetOrigin: "https://example.com" }));
       const foreign = yield* send(app, `/auth/twitch/login?state=${web}`);
       assert.strictEqual(foreign.status, 400);
+    }),
+  );
+
+  it.effect("routes preview OAuth through production's proxy", () =>
+    Effect.gen(function* () {
+      const previewOrigin = "https://macrograph-website-pr151-abc123.brendonovich.workers.dev";
+      const preview = yield* makeAppWith({ preview: true });
+      const start = yield* send(preview, "/api/website/sign-in/twitch?returnTo=%2Flogin", {
+        headers: { "x-forwarded-host": new URL(previewOrigin).host },
+      });
+      const state = new URL(start.headers.get("location") ?? "").searchParams.get("state") ?? "";
+      const claims = JSON.parse(
+        new TextDecoder().decode(Jwt.base64UrlDecode(state.split(".")[1] ?? "")),
+      );
+      assert.strictEqual(claims.redirect_uri, `${previewOrigin}/api/auth/twitch/callback`);
+
+      // Production can't verify the preview's state, but forwards it to the preview, which can.
+      const production = yield* makeApp;
+      const proxy = yield* send(production, `/auth/proxy?code=code&state=${state}`);
+      assert.strictEqual(proxy.status, 302);
+      assert.strictEqual(
+        proxy.headers.get("location"),
+        `${previewOrigin}/api/auth/twitch/callback?code=code&state=${state}`,
+      );
+
+      // Unverified state never sends codes anywhere else.
+      const forge = (redirectUri: string) =>
+        `${state.split(".")[0]}.${Jwt.base64UrlEncode(new TextEncoder().encode(JSON.stringify({ ...claims, redirect_uri: redirectUri })))}.${state.split(".")[2]}`;
+      for (const redirectUri of [
+        "https://attacker.example/api/auth/twitch/callback",
+        `${previewOrigin}/somewhere-else`,
+        `${previewOrigin}/api/auth/twitch/callback?next=https://attacker.example`,
+      ]) {
+        const forged = yield* send(production, `/auth/proxy?code=code&state=${forge(redirectUri)}`);
+        assert.strictEqual(forged.status, 400);
+      }
+
+      // Only previews treat their workers.dev origin as their own.
+      const spoofed = yield* send(production, "/api/website/sign-in/twitch?returnTo=%2Flogin", {
+        headers: { "x-forwarded-host": new URL(previewOrigin).host },
+      });
+      const spoofedState =
+        new URL(spoofed.headers.get("location") ?? "").searchParams.get("state") ?? "";
+      assert.strictEqual(
+        JSON.parse(new TextDecoder().decode(Jwt.base64UrlDecode(spoofedState.split(".")[1] ?? "")))
+          .redirect_uri,
+        `${origin}/api/auth/twitch/callback`,
+      );
     }),
   );
 

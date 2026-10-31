@@ -48,6 +48,8 @@ export interface Options {
   readonly issuer?: string;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
+  /** Pull request previews serve the website from their own workers.dev origin. */
+  readonly preview?: boolean;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
   /** Overrides the OAuth server's clock, for tests. */
@@ -207,9 +209,33 @@ export const layer = (options: Options) =>
         const origin = requestOrigin(request);
         return websiteOrigins.includes(origin) ||
           origin === options.authRedirectOrigin ||
-          isLocalOrigin(new URL(origin))
+          isLocalOrigin(new URL(origin)) ||
+          (options.preview === true && PreviewAuth.isPreviewOrigin(origin))
           ? origin
           : websiteOrigins[0];
+      };
+
+      /**
+       * A preview's callback for state it signed, which this stage can't verify. Previews share the
+       * providers' redirect URI with production, so production forwards their callbacks; only our
+       * own preview Workers can receive them, and each verifies its state itself.
+       */
+      const previewCallback = (state: string | null) => {
+        try {
+          const payload: unknown = JSON.parse(
+            new TextDecoder().decode(Jwt.base64UrlDecode(state?.split(".")[1] ?? "")),
+          );
+          if (!isRecord(payload) || typeof payload.redirect_uri !== "string") return undefined;
+          const url = new URL(payload.redirect_uri);
+          return PreviewAuth.isPreviewOrigin(url.origin) &&
+            /^\/api\/auth\/[a-z]+\/callback$/.test(url.pathname) &&
+            url.search === "" &&
+            url.hash === ""
+            ? url.href
+            : undefined;
+        } catch {
+          return undefined;
+        }
       };
 
       const oauth = OAuthServer.make({
@@ -617,8 +643,10 @@ export const layer = (options: Options) =>
         handle(
           Effect.gen(function* () {
             const url = requestUrl(request);
-            const state = yield* verifyOAuthState(url.searchParams.get("state"));
-            return HttpServerResponse.redirect(`${state.redirectUri}${url.search}`);
+            const forwarded = previewCallback(url.searchParams.get("state"));
+            const redirectUri =
+              forwarded ?? (yield* verifyOAuthState(url.searchParams.get("state"))).redirectUri;
+            return HttpServerResponse.redirect(`${redirectUri}${url.search}`);
           }),
         ),
       );

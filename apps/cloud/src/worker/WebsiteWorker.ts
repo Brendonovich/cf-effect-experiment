@@ -137,6 +137,7 @@ export default Layer.unwrap(
           signingKey,
           ...(publicHost === undefined ? {} : { issuer: `https://${publicHost}` }),
           authRedirectOrigin,
+          preview: PublicHost.isPreviewStage(stage),
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
         }).pipe(
           Layer.provide(OAuthProviders.layer),
