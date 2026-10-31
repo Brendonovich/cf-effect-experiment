@@ -190,6 +190,25 @@ describe("OAuth authorization server", () => {
     ),
   );
 
+  it.effect("deletes clients that never got a grant after 30 days", () =>
+    scoped(({ app, pg, advance }) =>
+      Effect.gen(function* () {
+        const session = yield* signIn(pg, "owner");
+        const unused = yield* registerServer(app);
+        const used = yield* registerServer(app);
+        yield* authorize(app, used.auth, session, "openid offline_access credentials");
+        advance(31 * 24 * 60 * 60 * 1000);
+        yield* registerServer(app);
+        const ids = yield* Effect.promise(() =>
+          pg.query<{ id: string }>(`select id from auth_clients`),
+        );
+        const remaining = ids.rows.map((row) => row.id);
+        assert.notInclude(remaining, unused.id);
+        assert.include(remaining, used.id);
+      }),
+    ),
+  );
+
   it.effect("runs the device flow (RFC 8628) and issues OpenID ID tokens", () =>
     scoped(({ app, pg, advance }) =>
       Effect.gen(function* () {

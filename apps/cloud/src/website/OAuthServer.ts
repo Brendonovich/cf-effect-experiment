@@ -2,7 +2,7 @@
  * MacroGraph's OAuth 2.0 authorization server. Clients sign in with the device authorization grant
  * (RFC 8628) only; servers register themselves (RFC 7591/7592). See `OAUTH.md`.
  */
-import { and, eq, gt, isNull, lt, notExists, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { type Context, Data, Effect } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/http";
 
@@ -381,19 +381,13 @@ export const make = (options: Options) => {
     yield* database.delete(authGrants).where(lt(authGrants.expiresAt, current));
     yield* database.delete(authRefreshTokens).where(lt(authRefreshTokens.expiresAt, current));
     yield* database.delete(authAccessTokens).where(lt(authAccessTokens.expiresAt, current));
-    yield* database
-      .delete(authClients)
-      .where(
-        and(
-          lt(authClients.lastUsedAt, new Date(current.getTime() - unusedClientLifetimeMs)),
-          notExists(
-            database
-              .select({ id: authGrants.id })
-              .from(authGrants)
-              .where(eq(authGrants.clientId, authClients.id)),
-          ),
-        ),
-      );
+    yield* database.delete(authClients).where(
+      and(
+        lt(authClients.lastUsedAt, new Date(current.getTime() - unusedClientLifetimeMs)),
+        // A nested query builder renders as an empty `not exists ()` in the bundled Worker.
+        sql`not exists (select 1 from ${authGrants} where ${authGrants.clientId} = ${authClients.id})`,
+      ),
+    );
   }).pipe(Effect.orDie);
 
   const deleteClient = (clientId: string) =>
