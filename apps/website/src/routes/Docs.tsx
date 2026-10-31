@@ -60,7 +60,13 @@ export function DocsIndexRoute() {
 
 const md = "@media (min-width: 768px)";
 const styles = stylex.create({
-  page: { minHeight: "100dvh", backgroundColor: colors.gray1, color: colors.gray12 },
+  page: {
+    display: "flex",
+    flexDirection: "column",
+    minHeight: "100dvh",
+    backgroundColor: colors.gray1,
+    color: colors.gray12,
+  },
   main: {
     width: "100%",
     maxWidth: 1080,

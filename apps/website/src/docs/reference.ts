@@ -3,9 +3,8 @@ import type { SchemaReferenceIOInput } from "@macrograph/editor-ui";
 import { type NodeIO, Package } from "@macrograph/core";
 import { type ModuleId, type t } from "@macrograph/module";
 import * as Registration from "@macrograph/module/Registration";
-import { createQuery } from "@tanstack/solid-query";
 import { Effect, Schema } from "effect";
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import { loadModule, loadPackage, packages } from "virtual:macrograph-reference";
 
 import discordLogo from "../assets/integrations/discord.png";
@@ -64,23 +63,24 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 
 const decode = Schema.decodeUnknownSync(Package.Model);
 
-/**
- * Loads one package's reference. The query holds JSON, so the server render's cache hydrates the
- * page without loading the package again.
- */
-export const usePackageReference = (id: () => ModuleId.Id) => {
-  const query = createQuery(() => ({
-    queryKey: ["reference", id()],
-    queryFn: () => loadPackage(id()),
-    staleTime: Infinity,
-  }));
-  // Query data is a deep store; decoding reads every field, which should not each be tracked.
-  const data = createMemo((): Package.Model | undefined => {
-    const encoded = query.data;
-    return encoded === undefined || encoded === null ? undefined : untrack(() => decode(encoded));
+const packageCache = new Map<ModuleId.Id, Promise<Package.Model>>();
+
+const loadReference = (id: ModuleId.Id) => {
+  const cached = packageCache.get(id);
+  if (cached !== undefined) return cached;
+  const reference = loadPackage(id).then((encoded) => {
+    if (encoded === null) throw new Error(`No reference for ${id}`);
+    return decode(encoded);
   });
-  return { query, data };
+  packageCache.set(id, reference);
+  return reference;
 };
+
+/**
+ * One package's reference. Reading it suspends until the package's JSON has loaded, so pages
+ * render complete and navigation waits instead of showing a loading state.
+ */
+export const usePackageReference = (id: () => ModuleId.Id) => createMemo(() => loadReference(id()));
 
 const schemaCache = new Map<
   ModuleId.Id,

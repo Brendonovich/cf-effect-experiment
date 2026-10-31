@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 
 import { type Package } from "@macrograph/core";
-import { LoadingState, SchemaReference, plainDescription } from "@macrograph/editor-ui";
+import { SchemaReference, plainDescription } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useParams } from "@solidjs/router";
 import { httpStatus, isServer } from "@solidjs/web";
@@ -66,8 +66,8 @@ function PackageShell(props: {
     return schemaVariants
       .map((variant) => ({
         ...variant,
-        schemas: (reference.data()?.schemas ?? [])
-          .filter((schema) => schema.type === variant.type && matches(schema))
+        schemas: reference()
+          .schemas.filter((schema) => schema.type === variant.type && matches(schema))
           .toSorted((left, right) => left.name.localeCompare(right.name)),
       }))
       .filter((group) => group.schemas.length > 0);
@@ -76,8 +76,8 @@ function PackageShell(props: {
     decodeURIComponent(location.pathname) === decodeURIComponent(href);
   const currentLabel = createMemo(
     () =>
-      reference.data()?.schemas.find((schema) => current(nodePath(props.summary, schema.id)))
-        ?.name ?? "Overview",
+      reference().schemas.find((schema) => current(nodePath(props.summary, schema.id)))?.name ??
+      "Overview",
   );
   // On narrow screens the node list is a menu, which closes once a page is chosen.
   const [menuOpen, setMenuOpen] = createSignal(false);
@@ -172,7 +172,7 @@ function PackageShell(props: {
                   </section>
                 )}
               </For>
-              <Show when={reference.data() !== undefined && groups().length === 0}>
+              <Show when={groups().length === 0}>
                 <p sx={styles.empty}>No matching nodes.</p>
               </Show>
             </nav>
@@ -201,21 +201,7 @@ function PackageData(props: {
   readonly children: (pkg: () => Package.Model, summary: () => PackageSummary) => JSX.Element;
 }) {
   const reference = usePackageReference(() => props.summary.id);
-  return (
-    <Show
-      when={reference.data()}
-      fallback={
-        <Show
-          when={reference.query.isError}
-          fallback={<LoadingState label="Loading reference" style={styles.loading} />}
-        >
-          <p sx={styles.lead}>The reference could not be loaded.</p>
-        </Show>
-      }
-    >
-      {(pkg) => props.children(pkg, () => props.summary)}
-    </Show>
-  );
+  return <>{props.children(reference, () => props.summary)}</>;
 }
 
 export function PackageOverviewRoute() {
@@ -337,7 +323,11 @@ const variantColor = (type: SchemaType) =>
 
 const md = "@media (min-width: 768px)";
 const styles = stylex.create({
+  // Fills the page below the site header, so the node list can reach the bottom of the window.
   shell: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
     width: "100%",
     maxWidth: 1280,
     boxSizing: "border-box",
@@ -381,8 +371,10 @@ const styles = stylex.create({
   },
   layout: {
     display: "grid",
+    flex: 1,
     gridTemplateColumns: { default: "minmax(0, 1fr)", [md]: "240px minmax(0, 1fr)" },
-    alignItems: "start",
+    gridTemplateRows: { default: "auto 1fr", [md]: "1fr" },
+    alignItems: { default: "start", [md]: "stretch" },
   },
   sidebar: {
     position: "sticky",
@@ -509,7 +501,6 @@ const styles = stylex.create({
     paddingInlineStart: { default: 0, [md]: 32 },
     paddingBottom: { default: 48, [md]: 96 },
   },
-  loading: { marginTop: 48 },
   overview: { maxWidth: 720 },
   lead: {
     margin: 0,
