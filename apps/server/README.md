@@ -29,8 +29,9 @@ pnpm --filter @macrograph/server build
 PORT=3001 MACROGRAPH_DATA_DIR=./data pnpm --filter @macrograph/server start
 ```
 
-Open `http://localhost:5174` for the Vite development client. The backend remains at
-`http://localhost:3001`. `GET /health/live` reports process liveness and
+In development, open `http://localhost:5174`; that is the only port. The backend listens on a
+private loopback port that Vite proxies to, so `PORT` and `HOST` apply to production only. In
+production, the server and client share `PORT`. `GET /health/live` reports process liveness and
 `GET /health/ready` reports readiness after persistence and module initialization. `GET /health`
 is a compatibility alias for readiness.
 
@@ -74,7 +75,7 @@ with the same file protections as the authorization files.
 
 ### Environment
 
-- `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.
+- `PORT` and `HOST`: production listener, default `3001` and `0.0.0.0`.
 - `MACROGRAPH_DATA_DIR`: persistent SQLite directory, default current directory; mount `/data` in the image.
 - `MACROGRAPH_ISSUER`: the MacroGraph OAuth issuer, default `https://macrograph.app`.
 - `MACROGRAPH_SERVER_NAME`: the name users see when approving this server, default

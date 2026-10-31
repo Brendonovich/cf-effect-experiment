@@ -143,6 +143,8 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     basePath,
     port,
     host: env.HOST ?? "0.0.0.0",
+    /** Set by the Vite dev server, which owns the public port and proxies to this listener. */
+    behindDevProxy: env.MACROGRAPH_BEHIND_DEV_PROXY === "1",
     dataDirectory,
     databasePath: resolve(dataDirectory, "project.db"),
     cloudAuthPath: resolve(dataDirectory, "macrograph-auth.json"),
