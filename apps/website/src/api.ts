@@ -1,5 +1,7 @@
 import type { Credential } from "@macrograph/module";
 
+import { getRequestEvent, isServer } from "@solidjs/web";
+
 export type AuthProvider = "twitch" | "discord" | "spotify" | "patreon" | "github";
 
 export const providerDisplayNames: Record<AuthProvider, string> = {
@@ -63,13 +65,54 @@ export class ApiError extends Error {
   }
 }
 
+/** The website's Worker bindings, which the server render receives (see `worker.ts`). */
+export interface WorkerBindings {
+  /** WebsiteWorker: the account API. */
+  readonly API?: { readonly fetch: (request: Request) => Promise<Response> };
+  /** CloudWorker, for stages without Worker Routes. */
+  readonly CLOUD?: { readonly fetch: (request: Request) => Promise<Response> };
+  /** Set on pull request previews, which only let allowed accounts in. */
+  readonly PREVIEW_GATE?: string;
+}
+
+/** Where the server render reaches the API when it runs outside the Worker (`vite` dev). */
+const devApiOrigin = () =>
+  (typeof process === "undefined" ? undefined : process.env.VITE_WEBSITE_WORKER_URL) ??
+  "http://localhost:1339";
+
+/**
+ * Calls the website API. In the browser it's a same-origin fetch; during the server render it goes
+ * to WebsiteWorker over its service binding, as the visitor, and passes any refreshed session
+ * cookie on to the page response.
+ */
+async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+  if (!isServer) return fetch(path, { ...init, credentials: "same-origin" });
+  const event = getRequestEvent();
+  const incoming = event?.request;
+  const url = new URL(path, incoming?.url ?? "http://localhost");
+  const headers = new Headers(init.headers);
+  const cookie = incoming?.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
+  // Writes require a same-origin request, which this is on the visitor's behalf.
+  headers.set("origin", url.origin);
+  const native = (event as { readonly nativeEvent?: { readonly env?: WorkerBindings } } | undefined)
+    ?.nativeEvent;
+  const api = native?.env?.API;
+  const response = api
+    ? await api.fetch(new Request(url, { ...init, headers }))
+    : await fetch(new URL(`${url.pathname}${url.search}`, devApiOrigin()), { ...init, headers });
+  const head = (event as { readonly response?: { readonly headers?: Headers } } | undefined)
+    ?.response?.headers;
+  for (const value of response.headers.getSetCookie()) head?.append("set-cookie", value);
+  return response;
+}
+
 export async function websiteRequest<T>(
   path: string,
   init?: { readonly method?: string; readonly body?: unknown },
 ): Promise<T> {
-  const response = await fetch(`/api/website${path}`, {
+  const response = await apiFetch(`/api/website${path}`, {
     method: init?.method ?? "GET",
-    credentials: "same-origin",
     ...(init?.body === undefined
       ? {}
       : { headers: { "content-type": "application/json" }, body: JSON.stringify(init.body) }),

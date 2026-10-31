@@ -11,8 +11,9 @@ const workerUrl = process.env.VITE_WEBSITE_WORKER_URL ?? "http://localhost:1339"
 const cloudUrl = process.env.VITE_CLOUD_DEV_URL ?? "http://localhost:5175";
 
 export default defineConfig({
-  appType: "spa",
   build: { sourcemap: true },
+  // Workspace packages ship TypeScript source, which the server render must compile, not import.
+  ssr: { noExternal: [/^@macrograph\//] },
   plugins: [
     opencode({ skills: ["solidjs"] }),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
@@ -26,7 +27,14 @@ export default defineConfig({
         rootDir: new URL("../..", import.meta.url).pathname,
       },
     }),
-    solid(),
+    // Start mode server-renders every page (`src/Document.tsx` + `src/App.tsx`) and, deployed,
+    // runs `src/worker.ts`. `async` sends each page complete instead of streaming fallbacks.
+    // Tests render components directly, so they keep the plain client transform.
+    solid(
+      process.env.VITEST
+        ? {}
+        : { start: { renderMode: "async", middleware: "./src/middleware.ts" }, ssr: true },
+    ),
   ],
   server: {
     port: 5176,

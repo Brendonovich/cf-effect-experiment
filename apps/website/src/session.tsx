@@ -3,6 +3,7 @@ import type { JSX } from "@solidjs/web";
 import { LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useNavigate } from "@solidjs/router";
+import { httpHeader, httpStatus, isServer } from "@solidjs/web";
 import * as stylex from "@stylexjs/stylex";
 import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { Show, untrack } from "solid-js";
@@ -37,8 +38,14 @@ export function useGoTo() {
 }
 
 export function Redirect(props: { readonly href: string }) {
-  const goTo = useGoTo();
-  goTo(untrack(() => props.href));
+  const href = untrack(() => props.href);
+  // Rendered on the server, this becomes the response's redirect.
+  if (isServer) {
+    httpStatus(302);
+    httpHeader("location", href);
+    return null;
+  }
+  useGoTo()(href);
   return null;
 }
 

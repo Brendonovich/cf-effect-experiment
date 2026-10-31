@@ -1,4 +1,6 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, untrack } from "solid-js";
+
+import type { Session } from "./api";
 
 import { useSession } from "./session";
 import { showToast } from "./Toasts";
@@ -20,11 +22,11 @@ const desktopRunning = async () => {
  * running on this machine. Asks at most once per page load.
  */
 export function DesktopListener() {
+  // Built identically on the server, where effects never run, so hydration keys line up.
   const session = useSession();
   let prompted = false;
 
-  const check = async () => {
-    const current = session.data;
+  const check = async (current: Session | null | undefined) => {
     if (prompted || current === null || current === undefined) return;
     if (!(await desktopRunning()) || prompted) return;
     prompted = true;
@@ -64,11 +66,16 @@ export function DesktopListener() {
 
   createEffect(
     () => session.data,
-    () => void check(),
+    (current) => void check(current),
   );
-  const onFocus = () => void check();
-  window.addEventListener("focus", onFocus);
-  onCleanup(() => window.removeEventListener("focus", onFocus));
+  createEffect(
+    () => undefined,
+    () => {
+      const onFocus = () => void check(untrack(() => session.data));
+      window.addEventListener("focus", onFocus);
+      return () => window.removeEventListener("focus", onFocus);
+    },
+  );
 
   return null;
 }

@@ -4,6 +4,7 @@ import { Loading, Show, untrack } from "solid-js";
 
 import { loginPath } from "./api";
 import { DesktopListener } from "./DesktopListener";
+import { registerQueryClient } from "./queryState";
 import { AccountLayout } from "./routes/Account";
 import { AppsRoute } from "./routes/Apps";
 import { AuthRoute } from "./routes/Auth";
@@ -47,6 +48,7 @@ export const routes = [
   { path: "*404", component: NotFoundRoute },
 ];
 
+/** The whole site; start mode renders it inside `Document` on the server and hydrates it. */
 export function App(props: {
   readonly queryClient?: QueryClient;
   /** Overrides browser history, for tests. */
@@ -57,6 +59,7 @@ export function App(props: {
   const queryClient =
     untrack(() => props.queryClient) ??
     new QueryClient({ defaultOptions: { mutations: { networkMode: "always" } } });
+  registerQueryClient(queryClient);
   return (
     <Loading fallback={null}>
       <QueryClientProvider client={queryClient}>
@@ -73,3 +76,5 @@ export function App(props: {
     </Loading>
   );
 }
+
+export default App;

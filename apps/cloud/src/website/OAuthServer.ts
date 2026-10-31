@@ -248,7 +248,7 @@ const clientMetadata = (row: ClientRow, issuer: string) => ({
   client_id: row.id,
   client_id_issued_at: Math.floor(row.createdAt.getTime() / 1000),
   client_secret_expires_at: 0,
-  registration_client_uri: `${issuer}/oauth/register/${row.id}`,
+  registration_client_uri: `${issuer}/api/oauth/register/${row.id}`,
   client_name: row.name,
   grant_types: [deviceCodeGrantType, "refresh_token"],
   response_types: [],
@@ -624,12 +624,12 @@ export const make = (options: Options) => {
         return HttpServerResponse.jsonUnsafe(
           {
             issuer,
-            device_authorization_endpoint: `${issuer}/oauth/device_authorization`,
-            token_endpoint: `${issuer}/oauth/token`,
-            revocation_endpoint: `${issuer}/oauth/revoke`,
-            registration_endpoint: `${issuer}/oauth/register`,
-            userinfo_endpoint: `${issuer}/oauth/userinfo`,
-            jwks_uri: `${issuer}/oauth/jwks`,
+            device_authorization_endpoint: `${issuer}/api/oauth/device_authorization`,
+            token_endpoint: `${issuer}/api/oauth/token`,
+            revocation_endpoint: `${issuer}/api/oauth/revoke`,
+            registration_endpoint: `${issuer}/api/oauth/register`,
+            userinfo_endpoint: `${issuer}/api/oauth/userinfo`,
+            jwks_uri: `${issuer}/api/oauth/jwks`,
             scopes_supported: scopes,
             response_types_supported: [],
             grant_types_supported: [deviceCodeGrantType, "refresh_token"],
@@ -652,8 +652,8 @@ export const make = (options: Options) => {
       }),
     );
 
-    yield* preflight("/oauth/jwks");
-    yield* route("GET", "/oauth/jwks", () =>
+    yield* preflight("/api/oauth/jwks");
+    yield* route("GET", "/api/oauth/jwks", () =>
       Effect.gen(function* () {
         const key = yield* options.signingKey;
         return HttpServerResponse.jsonUnsafe(
@@ -665,8 +665,8 @@ export const make = (options: Options) => {
 
     // ---- Dynamic client registration (RFC 7591, RFC 7592) ----
 
-    yield* preflight("/oauth/register");
-    yield* route("POST", "/oauth/register", (request) =>
+    yield* preflight("/api/oauth/register");
+    yield* route("POST", "/api/oauth/register", (request) =>
       Effect.gen(function* () {
         const ip = requestIp(request);
         if (ip !== null && (yield* rateLimited(`register:${ip}`, 20, 60 * 60)))
@@ -728,13 +728,13 @@ export const make = (options: Options) => {
         return row;
       });
 
-    yield* preflight("/oauth/register/:client_id");
-    yield* route("GET", "/oauth/register/:client_id", (request) =>
+    yield* preflight("/api/oauth/register/:client_id");
+    yield* route("GET", "/api/oauth/register/:client_id", (request) =>
       registeredClient(request).pipe(
         Effect.map((row) => json(clientMetadata(row, options.issuer(request)))),
       ),
     );
-    yield* route("PUT", "/oauth/register/:client_id", (request) =>
+    yield* route("PUT", "/api/oauth/register/:client_id", (request) =>
       Effect.gen(function* () {
         const row = yield* registeredClient(request);
         const body = yield* readJsonObject(request);
@@ -771,7 +771,7 @@ export const make = (options: Options) => {
         return json(clientMetadata(updated[0]!, options.issuer(request)));
       }),
     );
-    yield* route("DELETE", "/oauth/register/:client_id", (request) =>
+    yield* route("DELETE", "/api/oauth/register/:client_id", (request) =>
       Effect.gen(function* () {
         const row = yield* registeredClient(request);
         yield* deleteClient(row.id);
@@ -781,8 +781,8 @@ export const make = (options: Options) => {
 
     // ---- Device authorization (RFC 8628 §3.1) ----
 
-    yield* preflight("/oauth/device_authorization");
-    yield* route("POST", "/oauth/device_authorization", (request) =>
+    yield* preflight("/api/oauth/device_authorization");
+    yield* route("POST", "/api/oauth/device_authorization", (request) =>
       Effect.gen(function* () {
         const form = yield* readForm(request);
         const client = yield* authenticateClient(request, form);
@@ -992,8 +992,8 @@ export const make = (options: Options) => {
         return json(response);
       });
 
-    yield* preflight("/oauth/token");
-    yield* route("POST", "/oauth/token", (request) =>
+    yield* preflight("/api/oauth/token");
+    yield* route("POST", "/api/oauth/token", (request) =>
       Effect.gen(function* () {
         const form = yield* readForm(request);
         const grantType = form.get("grant_type");
@@ -1010,8 +1010,8 @@ export const make = (options: Options) => {
 
     // ---- Revocation (RFC 7009) ----
 
-    yield* preflight("/oauth/revoke");
-    yield* route("POST", "/oauth/revoke", (request) =>
+    yield* preflight("/api/oauth/revoke");
+    yield* route("POST", "/api/oauth/revoke", (request) =>
       Effect.gen(function* () {
         const form = yield* readForm(request);
         const client = yield* authenticateClient(request, form);
@@ -1078,9 +1078,9 @@ export const make = (options: Options) => {
             : {}),
         });
       });
-    yield* preflight("/oauth/userinfo");
-    yield* route("GET", "/oauth/userinfo", userInfo);
-    yield* route("POST", "/oauth/userinfo", userInfo);
+    yield* preflight("/api/oauth/userinfo");
+    yield* route("GET", "/api/oauth/userinfo", userInfo);
+    yield* route("POST", "/api/oauth/userinfo", userInfo);
   });
 
   // ---- The website's own endpoints for the verification and account pages ----
