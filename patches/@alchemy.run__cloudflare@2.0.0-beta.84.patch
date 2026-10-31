@@ -1,0 +1,53 @@
+diff --git a/lib/Workers/Sources/Vite.js b/lib/Workers/Sources/Vite.js
+index b744e891933db49f4d50b1b78bd4f395b278332e..2078492d6b3426780e2ad152b8f70c9c8abe02b5 100644
+--- a/lib/Workers/Sources/Vite.js
++++ b/lib/Workers/Sources/Vite.js
+@@ -6,6 +6,7 @@ var __rewriteRelativeImportExtension = (this && this.__rewriteRelativeImportExte
+     }
+     return path;
+ };
++import { existsSync } from "node:fs";
+ import { createRequire } from "node:module";
+ import nodePath from "node:path";
+ import { pathToFileURL } from "node:url";
+@@ -300,11 +301,13 @@ export const hashViteInput = Effect.fn(function* (rootDir = initialCwd, options,
+     const [root, workspaces] = yield* Effect.all([hashRoot, additionalWorkspaces], {
+         concurrency: "unbounded",
+     });
+-    const workspaceHashes = yield* Effect.forEach(workspaces, (cwd) => hashWorkspaceDirectory(cwd), {
++    // A workspace recorded by an earlier build may since have been deleted; it no longer affects the build.
++    const existing = Array.from(workspaces).filter((cwd) => existsSync(path.resolve(resolvedRoot, cwd)));
++    const workspaceHashes = yield* Effect.forEach(existing, (cwd) => hashWorkspaceDirectory(cwd), {
+         concurrency: "unbounded",
+     });
+     const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
+-    return { hash, workspaces: Array.from(workspaces).map(relativeToRoot) };
++    return { hash, workspaces: existing.map(relativeToRoot) };
+ });
+ /**
+  * Source provider for vite-based workers (`props.vite`, set by
+diff --git a/src/Workers/Sources/Vite.ts b/src/Workers/Sources/Vite.ts
+index fb6b5c8c61e227bede07f6d32d02ab9dcef4c6ef..f89c5e2b2cc716d48db6dd5fd8474b09e50f656d 100644
+--- a/src/Workers/Sources/Vite.ts
++++ b/src/Workers/Sources/Vite.ts
+@@ -1,3 +1,4 @@
++import { existsSync } from "node:fs";
+ import { createRequire } from "node:module";
+ import nodePath from "node:path";
+ import { pathToFileURL } from "node:url";
+@@ -369,11 +370,13 @@ export const hashViteInput = Effect.fn(function* <E, R>(
+   const [root, workspaces] = yield* Effect.all([hashRoot, additionalWorkspaces], {
+     concurrency: "unbounded",
+   });
+-  const workspaceHashes = yield* Effect.forEach(workspaces, (cwd) => hashWorkspaceDirectory(cwd), {
++  // A workspace recorded by an earlier build may since have been deleted; it no longer affects the build.
++  const existing = Array.from(workspaces).filter((cwd) => existsSync(path.resolve(resolvedRoot, cwd)));
++  const workspaceHashes = yield* Effect.forEach(existing, (cwd) => hashWorkspaceDirectory(cwd), {
+     concurrency: "unbounded",
+   });
+   const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
+-  return { hash, workspaces: Array.from(workspaces).map(relativeToRoot) };
++  return { hash, workspaces: existing.map(relativeToRoot) };
+ });
+ 
+ /**

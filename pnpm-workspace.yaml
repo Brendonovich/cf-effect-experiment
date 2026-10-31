@@ -19,6 +19,7 @@ allowBuilds:
 patchedDependencies:
   "@solidjs/router@2.0.0-next.17": patches/@solidjs__router@2.0.0-next.17.patch
   "@opencode/core@2.0.27": patches/@opencode__core@2.0.27.patch
+  "@alchemy.run/cloudflare@2.0.0-beta.84": patches/@alchemy.run__cloudflare@2.0.0-beta.84.patch
 
 catalog:
   "@stylexjs/stylex": 0.19.0
