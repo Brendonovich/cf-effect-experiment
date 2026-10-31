@@ -34,19 +34,14 @@ export function Header() {
             }
           >
             {(current) => (
-              <>
-                <a href="/cloud/" sx={[styles.link]}>
-                  Cloud
-                </a>
-                <a href="/account/credentials" sx={[styles.link]}>
-                  Account
-                </a>
-                <AccountMenu
-                  email={current().user.email}
-                  onCredentials={() => navigate("/account/credentials")}
-                  onSignOut={() => logOut.mutate()}
-                />
-              </>
+              <AccountMenu
+                email={current().user.email}
+                items={[
+                  { label: "Credentials", onSelect: () => navigate("/account/credentials") },
+                  { label: "Apps", onSelect: () => navigate("/account/apps") },
+                ]}
+                onSignOut={() => logOut.mutate()}
+              />
             )}
           </Show>
         </Show>
@@ -79,11 +74,6 @@ const styles = stylex.create({
   },
   logo: { width: 28, height: 28, borderRadius: 6 },
   end: { display: "flex", alignItems: "center", gap: 16 },
-  link: {
-    fontSize: 13,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
-    textDecoration: "none",
-  },
   login: { borderRadius: 6 },
   placeholder: {
     width: 28,

@@ -1,6 +1,10 @@
 import macrographLogo from "./macrograph-logo.png";
 
-export { AccountMenu, type AccountMenuProps } from "./account/AccountMenu.tsx";
+export {
+  AccountMenu,
+  type AccountMenuItem,
+  type AccountMenuProps,
+} from "./account/AccountMenu.tsx";
 export { Avatar, type AvatarProps } from "./account/Avatar.tsx";
 export { PresenceList, type PresenceListProps } from "./presence/PresenceList.tsx";
 export { Button, type ButtonProps, ButtonLink, type ButtonLinkProps } from "./ui/Button.tsx";

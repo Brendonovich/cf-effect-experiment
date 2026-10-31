@@ -473,7 +473,13 @@ export function App(
             <Loading fallback={null}>
               <AccountMenu
                 email={props.user.email}
-                onCredentials={() => window.location.assign("/account/credentials")}
+                items={[
+                  {
+                    label: "Credentials",
+                    onSelect: () => window.location.assign("/account/credentials"),
+                  },
+                  { label: "Apps", onSelect: () => window.location.assign("/account/apps") },
+                ]}
                 onSignOut={() => void auth.signOut()}
               />
             </Loading>
