@@ -69,9 +69,9 @@ const setup = ServerSetup.make({
   onKeyIssued: (key) =>
     Effect.gen(function* () {
       yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
-      yield* Effect.logInfo(
-        "Open the server in your browser and enter the setup key to configure its administrator.",
-      );
+      // The key goes in the fragment so it is never sent to the server or stored in access logs.
+      const setupUrl = `${config.publicOrigin}${config.basePath}/#setup-key=${encodeURIComponent(key)}`;
+      yield* Effect.logInfo(`Open ${setupUrl} to set up this server.`);
     }),
 });
 const serverOwnerId = setup.ownerId;
