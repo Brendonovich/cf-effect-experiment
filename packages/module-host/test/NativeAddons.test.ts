@@ -18,6 +18,7 @@ const midiPackage = dirname(
 );
 const target = NativeAddons.currentTarget();
 const prebuild = join(midiPackage, "prebuilds", `midi-${target}`, "node-napi-v7.node");
+const hasMidiSequencer = process.platform !== "linux" || existsSync("/dev/snd/seq");
 
 const manifest = (native: ReadonlyArray<string> = ["midi"]): Manifest.Model => ({
   manifest: 1,
@@ -56,14 +57,17 @@ describe.runIf(existsSync(prebuild))("NativeAddons", () => {
 
   it("loads a declared addon and calls into it", () => {
     const root = packageWithAddon();
-    const value = evaluate(
-      root,
-      `const midi = require("macrograph:native/midi");
+    const code = `const midi = require("macrograph:native/midi");
       const input = new midi.Input(() => {});
       const count = input.getPortCount();
       input.destroy();
-      exports.default = { midi, count, names: midi.getInputPortNames() };`,
-    );
+      exports.default = { midi, count, names: midi.getInputPortNames() };`;
+    // Without an ALSA sequencer RtMidi can't start, but reaching that error still means the addon ran.
+    if (!hasMidiSequencer) {
+      assert.throws(() => evaluate(root, code), /Failed to initialise RtMidi/);
+      return;
+    }
+    const value = evaluate(root, code);
     assert.isTrue(typeof field(value, "count") === "number");
     assert.isTrue(Array.isArray(field(value, "names")));
   });
