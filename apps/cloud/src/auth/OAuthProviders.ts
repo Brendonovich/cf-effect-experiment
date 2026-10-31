@@ -235,12 +235,14 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
       return { id: String(user.id), displayName: requiredString(user.login, "login") };
     },
     signIn: {
-      // GitHub Apps ignore scopes and need the "Email addresses" account permission instead.
+      // GitHub Apps ignore scopes: listing emails needs the "Email addresses" account permission.
       scopes: ["read:user", "user:email"],
       identity: async (token) => {
         const [user, emails] = await Promise.all([
           json("https://api.github.com/user", { headers: githubHeaders(token) }).then(object),
-          json("https://api.github.com/user/emails", { headers: githubHeaders(token) }),
+          json("https://api.github.com/user/emails", { headers: githubHeaders(token) }).catch(
+            () => [],
+          ),
         ]);
         const primary = (Array.isArray(emails) ? emails : [])
           .map(object)
@@ -248,7 +250,11 @@ const definitions: ReadonlyArray<ProviderDefinition> = [
         return {
           id: String(user.id),
           displayName: requiredString(user.login, "login"),
-          verifiedEmail: verifiedEmail(primary?.email, primary?.verified),
+          // Without that permission, fall back to the profile's public email, which GitHub only
+          // allows to be a verified address.
+          verifiedEmail:
+            verifiedEmail(primary?.email, primary?.verified) ??
+            verifiedEmail(user.email, typeof user.email === "string"),
         };
       },
     },

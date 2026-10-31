@@ -31,7 +31,12 @@ const generateRsaPem = Effect.promise(async () => {
 const providersLayer = OAuthProviders.layer.pipe(
   Layer.provide(
     ConfigProvider.layer(
-      ConfigProvider.fromUnknown({ TWITCH_CLIENT_ID: "client", TWITCH_CLIENT_SECRET: "secret" }),
+      ConfigProvider.fromUnknown({
+        TWITCH_CLIENT_ID: "client",
+        TWITCH_CLIENT_SECRET: "secret",
+        GITHUB_CLIENT_ID: "client",
+        GITHUB_CLIENT_SECRET: "secret",
+      }),
     ),
   ),
 );
