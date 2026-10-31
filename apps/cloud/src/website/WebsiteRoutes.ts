@@ -15,6 +15,7 @@ import * as Database from "../database/Database.ts";
 import * as Jwt from "./Jwt.ts";
 import * as OAuthServer from "./OAuthServer.ts";
 import * as Password from "./Password.ts";
+import * as PreviewAuth from "./PreviewAuth.ts";
 import * as Releases from "./Releases.ts";
 import * as Session from "./Session.ts";
 
@@ -434,6 +435,33 @@ export const layer = (options: Options) =>
             const url = requestUrl(request);
             const state = yield* verifyOAuthState(url.searchParams.get("state"));
             return HttpServerResponse.redirect(`${state.redirectUri}${url.search}`);
+          }),
+        ),
+      );
+
+      // Signs the visitor into a preview deployment, which checks their account against its allowlist.
+      yield* router.add("GET", PreviewAuth.startPath, (request) =>
+        handle(
+          Effect.gen(function* () {
+            const url = requestUrl(request);
+            const previewOrigin = url.searchParams.get("origin");
+            if (previewOrigin === null || !PreviewAuth.isPreviewOrigin(previewOrigin))
+              return yield* reject(400);
+            const sessionId = request.cookies[Session.cookieName];
+            const validated =
+              sessionId === undefined ? undefined : yield* sessions.validate(sessionId);
+            if (validated === undefined)
+              return HttpServerResponse.redirect(
+                `/login?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`,
+              );
+            const callback = yield* PreviewAuth.grant({
+              signingKey: yield* options.signingKey,
+              issuer: options.issuer ?? requestOrigin(request),
+              previewOrigin,
+              userId: validated.user.id,
+              next: PreviewAuth.safeNext(url.searchParams.get("next")),
+            });
+            return HttpServerResponse.redirect(callback);
           }),
         ),
       );

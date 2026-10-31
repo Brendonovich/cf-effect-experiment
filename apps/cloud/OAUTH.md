@@ -181,3 +181,19 @@ All in the account schema (`src/database/AccountDatabaseSchema.ts`):
 
 Grants cascade to their tokens. Deleting a client deletes its grants and device flows in the same
 transaction (no foreign key, since built-in public clients have no row).
+
+## Preview deployments
+
+Pull request previews (`pr<number>` stages) only let in the account IDs listed in the
+`PREVIEW_ALLOWED_USERS` GitHub Actions variable (comma-separated); an empty list lets nobody in.
+Cloud has no workers.dev URL on previews, so it is reached only through the gated WebsiteWorker.
+Ingress stays public so provider webhooks still arrive.
+
+1. A visitor without a valid `macrograph_preview` cookie is redirected to
+   `https://macrograph.app/auth/preview?origin=<preview origin>&next=<path>`. Other methods get 401.
+2. Production signs them in if needed, then redirects to `<preview origin>/auth/preview/callback`
+   with a grant: an RS256 JWT (`typ: preview-grant+jwt`) signed with `WebsiteSigningKey`, with
+   `iss` `https://macrograph.app`, `aud` the preview origin, `sub` the account ID, and a 60 second
+   lifetime. It only redirects to `https://macrograph-websiteworker-pr<n>-*.brendonovich.workers.dev`.
+3. The preview verifies the grant against `https://macrograph.app/oauth/jwks`, checks `sub` against
+   its allowlist, and sets its own HMAC-signed cookie for 7 days.

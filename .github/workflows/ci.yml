@@ -205,6 +205,7 @@ jobs:
       PATREON_CLIENT_SECRET: ${{ secrets.PATREON_CLIENT_SECRET }}
       STREAMLABS_CLIENT_ID: ${{ secrets.STREAMLABS_CLIENT_ID }}
       STREAMLABS_CLIENT_SECRET: ${{ secrets.STREAMLABS_CLIENT_SECRET }}
+      PREVIEW_ALLOWED_USERS: ${{ vars.PREVIEW_ALLOWED_USERS }}
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
       PULL_REQUEST: ${{ github.event.pull_request.number }}

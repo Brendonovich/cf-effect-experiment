@@ -36,6 +36,8 @@ export interface SigningKey {
   readonly publicJwk?: PublicJwk;
 }
 
+export type VerifyKey = Pick<SigningKey, "algorithm" | "verify">;
+
 /** RFC 7638 JWK thumbprint of an RSA public key, used as its `kid`. */
 export const rsaThumbprint = async (jwk: { readonly n: string; readonly e: string }) => {
   // Required members only, in lexicographic order, with no whitespace.
@@ -87,6 +89,21 @@ export const rsaKey = (pem: string) =>
     };
   });
 
+/** A verify-only key from a published JWK, such as another stage's `/oauth/jwks`. */
+export const rsaPublicKey = (jwk: { readonly n: string; readonly e: string }) =>
+  Effect.tryPromise(
+    async (): Promise<VerifyKey> => ({
+      algorithm: "RS256",
+      verify: await crypto.subtle.importKey(
+        "jwk",
+        { kty: "RSA", n: jwk.n, e: jwk.e },
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"],
+      ),
+    }),
+  );
+
 export const sign = (
   key: SigningKey,
   payload: Readonly<Record<string, unknown>>,
@@ -107,7 +124,7 @@ export const sign = (
   });
 
 /** Verifies a compact JWS and returns its payload, or `undefined` when it is invalid or expired. */
-export const verify = (key: SigningKey, token: string) =>
+export const verify = (key: VerifyKey, token: string) =>
   Effect.promise(async (): Promise<Readonly<Record<string, unknown>> | undefined> => {
     try {
       const [header, payload, signature] = token.split(".");

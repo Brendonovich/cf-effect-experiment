@@ -12,3 +12,6 @@ export const forStage = (stage: string): string | undefined =>
 
 /** Hosts that browsers are redirected from to the canonical host. API clients keep using them. */
 export const legacyBrowserHosts: ReadonlySet<string> = new Set([`www.${zoneName}`]);
+
+/** Pull request stages, deployed by CI as `pr<number>`. */
+export const isPreviewStage = (stage: string) => /^pr\d+$/.test(stage);
