@@ -1,7 +1,8 @@
 /**
- * The website's Worker: server-renders every page. In production WebsiteWorker (the API) and
- * CloudWorker claim their paths with Worker Routes before requests get here; stages without a
- * public host have no routes, so `routing.ts` forwards those paths over service bindings instead.
+ * The website's Worker: server-renders every page. In production WebsiteWorker (the API),
+ * CloudWorker, and the playground claim their paths with Worker Routes before requests get here;
+ * stages without a public host have no routes, so `routing.ts` forwards those paths over service
+ * bindings instead.
  */
 import { handleRequest } from "virtual:solid-ssr-handler";
 

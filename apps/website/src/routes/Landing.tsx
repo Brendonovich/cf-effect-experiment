@@ -1,6 +1,6 @@
 import type { JSX } from "@solidjs/web";
 
-import { macrographLogo } from "@macrograph/editor-ui";
+import { ButtonLink, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { For } from "solid-js";
@@ -34,6 +34,11 @@ export function LandingRoute() {
             care of connecting to them so you can focus on creating.
           </p>
           <div sx={styles.actions}>
+            {/* The playground is a separate app under `/playground/`, so this is a page load. */}
+            <ButtonLink href="/playground/" rel="external" sx={styles.action}>
+              <IconTablerSandbox {...stylex.attrs(styles.actionIcon)} />
+              Playground
+            </ButtonLink>
             <DownloadMenu />
           </div>
           <nav sx={styles.socials} aria-label="MacroGraph on social media">
@@ -129,6 +134,8 @@ const styles = stylex.create({
     color: colors.gray11,
   },
   actions: { display: "flex", gap: 12, marginTop: 32 },
+  action: { gap: 8, height: 44, paddingInline: 20, borderRadius: 8, fontSize: 15 },
+  actionIcon: { width: 18, height: 18 },
   socials: { display: "flex", gap: 4, marginTop: 20 },
   social: {
     display: "grid",

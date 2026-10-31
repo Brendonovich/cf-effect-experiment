@@ -17,6 +17,10 @@ export const isCloudPath = (pathname: string) =>
   pathname === "/.well-known/oauth-authorization-server/cloud" ||
   pathname.startsWith("/.well-known/oauth-protected-resource/cloud/");
 
+/** Paths the playground serves; kept in step with `apps/cloud/src/PublicHost.ts`. */
+export const isPlaygroundPath = (pathname: string) =>
+  pathname === "/playground" || pathname.startsWith("/playground/");
+
 /** Kept in step with `apps/cloud/src/website/PreviewAuth.ts`. */
 const gateCheckHeader = "x-macrograph-preview-gate";
 
@@ -36,7 +40,7 @@ const previewDenial = async (request: Request, env: WorkerBindings) => {
   return answer.status === 204 ? undefined : answer;
 };
 
-/** Sends a request to the API, Cloud, the canonical host, or the page renderer. */
+/** Sends a request to the API, Cloud, the playground, the canonical host, or the page renderer. */
 export const route = async (
   request: Request,
   env: WorkerBindings,
@@ -50,6 +54,8 @@ export const route = async (
   if (denied !== undefined) return denied;
   if (isCloudPath(url.pathname))
     return env.CLOUD?.fetch(request) ?? new Response(null, { status: 503 });
+  if (isPlaygroundPath(url.pathname))
+    return env.PLAYGROUND?.fetch(request) ?? new Response(null, { status: 503 });
   if (
     legacyBrowserHosts.has(url.hostname) &&
     (request.method === "GET" || request.method === "HEAD")
