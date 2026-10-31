@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 
+import * as InitialData from "../src/website/InitialData.ts";
 import * as Jwt from "../src/website/Jwt.ts";
 import {
   type App,
@@ -603,6 +604,40 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
       }),
     ),
   );
+
+  it.effect("provides the device page's first-render data", () =>
+    scoped(({ app, pg }) =>
+      Effect.gen(function* () {
+        const client = yield* registerServer(app);
+        const session = yield* signIn(pg, "owner");
+        const started = yield* body(
+          yield* send(app, "/oauth/device_authorization", form({ scope: "openid" }, client.auth)),
+        );
+        const page = (query: string, headers: Record<string, string> = {}) =>
+          send(app, `/api/website/device${query}`, { headers }).pipe(Effect.flatMap(body));
+
+        assert.deepStrictEqual(yield* page(`?user_code=${started.user_code}`), { session: null });
+        const data = yield* page(`?user_code=${started.user_code}`, { cookie: session.cookie });
+        assert.strictEqual((data.session as { user: { id: string } }).user.id, "owner");
+        const device = data.device as { userCode: string; request: { client: { name: string } } };
+        assert.strictEqual(device.userCode, started.user_code);
+        assert.strictEqual(device.request.client.name, "Brendan's server");
+        const unknown = yield* page("?user_code=BBBB-BBBB", { cookie: session.cookie });
+        assert.deepStrictEqual(unknown.device, { userCode: "BBBB-BBBB", request: null });
+      }),
+    ),
+  );
+
+  it("embeds first-render data without letting it close the script element", () => {
+    const html = InitialData.inject("<html><head><title>x</title></head><body></body></html>", {
+      name: "</script><script>alert(1)</script>",
+    });
+    assert.include(html, '<script id="macrograph-initial-data" type="application/json">');
+    assert.notInclude(html, "</script><script>alert(1)");
+    assert.isTrue(html.indexOf("macrograph-initial-data") < html.indexOf("</head>"));
+    const json = html.slice(html.indexOf('json">') + 6, html.indexOf("</script></head>"));
+    assert.deepStrictEqual(JSON.parse(json), { name: "</script><script>alert(1)</script>" });
+  });
 
   it.effect("requires a same-origin website session to approve codes", () =>
     scoped(({ app, pg }) =>

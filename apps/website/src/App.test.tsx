@@ -140,3 +140,40 @@ it("approves a device sign-in after showing who is asking and for what", async (
   approve?.click();
   await vi.waitFor(() => expect(container.textContent).toContain("Access granted"));
 });
+
+it("opens straight on the request the Worker embedded, without fetching", async () => {
+  const requested: Array<string> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      requested.push(new URL(String(input), "http://localhost").pathname);
+      return new Response(null, { status: 404 });
+    }),
+  );
+  const embedded = document.createElement("script");
+  embedded.id = "macrograph-initial-data";
+  embedded.type = "application/json";
+  embedded.textContent = JSON.stringify({
+    session,
+    device: {
+      userCode: "BCDF-GHJK",
+      request: {
+        userCode: "BCDF-GHJK",
+        client: { id: "mgc_1", name: "Ada's server", verified: false },
+        scope: ["openid", "credentials"],
+        requestedAt: 0,
+        expiresAt: 0,
+        requestIp: null,
+        requestCountry: null,
+      },
+    },
+  });
+  document.head.append(embedded);
+  cleanups.push(() => embedded.remove());
+  const { container } = renderApp("/device?user_code=BCDF-GHJK");
+  // Rendered on the first pass: no session check or lookup in between.
+  expect(container.textContent).toContain("Approve sign-in?");
+  expect(container.textContent).toContain("Ada's server");
+  await Promise.resolve();
+  expect(requested.filter((path) => path.startsWith("/api/website/"))).toEqual([]);
+});

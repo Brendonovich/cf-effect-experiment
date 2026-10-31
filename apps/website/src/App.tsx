@@ -2,8 +2,9 @@ import { createRouter, useLocation, type RouterHistory } from "@solidjs/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { Loading, Show, untrack } from "solid-js";
 
-import { loginPath } from "./api";
+import { loginPath, sessionKey } from "./api";
 import { DesktopListener } from "./DesktopListener";
+import { initialData } from "./initialData";
 import { AccountLayout } from "./routes/Account";
 import { AppsRoute } from "./routes/Apps";
 import { AuthRoute } from "./routes/Auth";
@@ -57,6 +58,9 @@ export function App(props: {
   const queryClient =
     untrack(() => props.queryClient) ??
     new QueryClient({ defaultOptions: { mutations: { networkMode: "always" } } });
+  // A session embedded by the Worker means the page needn't wait to check it.
+  const embedded = initialData();
+  if (embedded.session !== undefined) queryClient.setQueryData(sessionKey, embedded.session);
   return (
     <Loading fallback={null}>
       <QueryClientProvider client={queryClient}>
