@@ -119,7 +119,7 @@ const eventDocsAnchors: Readonly<Record<string, string>> = {
   "channel.shared_chat.session.update": "channelshared_chatupdate",
   "channel.shared_chat.session.end": "channelshared_chatend",
 };
-const withDocs = (description: string, url: string) => `${description} [Twitch docs](${url})`;
+const withDocs = (description: string, url: string) => `${description}\n[Twitch docs](${url})`;
 const event = (id: string, name: string, tag: string, outputs: ReadonlyArray<Field>): Event => ({
   id,
   name,

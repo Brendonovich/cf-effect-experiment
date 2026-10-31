@@ -199,7 +199,7 @@ describe("Twitch catalog", () => {
       for (const { id, description } of schemas)
         assert.match(
           description ?? "",
-          / \[Twitch docs\]\(https:\/\/dev\.twitch\.tv\/docs\/[^)]+\)$/,
+          /\n\[Twitch docs\]\(https:\/\/dev\.twitch\.tv\/docs\/[^)]+\)$/,
           id,
         );
       assert.isTrue(

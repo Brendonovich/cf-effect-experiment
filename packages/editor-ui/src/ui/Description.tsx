@@ -27,6 +27,7 @@ export const plainDescription = (description: string) =>
   description.replace(linkPattern, (_match, text: string) => text);
 
 const styles = stylex.create({
+  root: { whiteSpace: "pre-line" },
   link: {
     borderRadius: 2,
     color: { default: colors.gray11, ":hover": colors.gray12 },
@@ -39,16 +40,18 @@ const styles = stylex.create({
 /** Renders a description, opening its markdown links in a new tab. */
 export function Description(props: { readonly text: string }) {
   return (
-    <For each={descriptionSegments(props.text)}>
-      {(segment) => (
-        <Show when={"href" in segment ? segment.href : undefined} fallback={segment.text}>
-          {(href) => (
-            <a sx={styles.link} href={href()} target="_blank" rel="noreferrer">
-              {segment.text}
-            </a>
-          )}
-        </Show>
-      )}
-    </For>
+    <span sx={styles.root}>
+      <For each={descriptionSegments(props.text)}>
+        {(segment) => (
+          <Show when={"href" in segment ? segment.href : undefined} fallback={segment.text}>
+            {(href) => (
+              <a sx={styles.link} href={href()} target="_blank" rel="noreferrer">
+                {segment.text}
+              </a>
+            )}
+          </Show>
+        )}
+      </For>
+    </span>
   );
 }
