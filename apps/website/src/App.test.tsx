@@ -54,20 +54,94 @@ it("renders the landing page with a login link for signed-out visitors", async (
   await vi.waitFor(() => expect(container.textContent).toContain("Log in"));
   expect(container.querySelector("h1")?.textContent).toBe("MacroGraph");
   expect(container.textContent).toContain("Visual programming for streamers");
-  expect(container.querySelector('a[href="/playground"]')?.textContent).toBe("Playground");
+  expect(container.querySelector('main a[href="/playground"]')?.textContent).toBe("Playground");
 });
 
 it("links landing page integrations to their package reference", async () => {
   mockApi({ "/api/website/session": null });
   const { container } = renderApp("/");
   await vi.waitFor(() => expect(container.textContent).toContain("Integrations"));
-  expect(container.querySelector('a[href="/docs/macrograph/twitch"]')?.textContent).toBe("Twitch");
-  expect(container.querySelector('a[href="/docs"]')?.textContent).toContain("Browse all packages");
+  expect(container.querySelector('a[href="/modules/macrograph/twitch"]')?.textContent).toBe(
+    "Twitch",
+  );
+  expect(container.querySelector('main a[href="/modules"]')?.textContent).toContain(
+    "Browse all modules",
+  );
+});
+
+it("links the landing page to the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/");
+  await vi.waitFor(() => expect(container.textContent).toContain("Download Desktop"));
+  expect(container.querySelector('main a[href="/docs/server"]')?.textContent).toBe("Setup Server");
+});
+
+it("renders the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Set up a server"),
+  );
+  expect(container.textContent).toContain("ghcr.io/brendonovich/macrograph-server:beta");
+});
+
+it("steps through the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Set up a server"),
+  );
+  const expanded = () =>
+    container.querySelector('button[aria-expanded="true"]')?.textContent?.replace(/^\d/, "");
+  expect(expanded()).toBe("Start the container");
+  const next = [...container.querySelectorAll("button")].find((b) => b.textContent === "Next");
+  next?.click();
+  await vi.waitFor(() => expect(expanded()).toBe("Open your setup link"));
+  expect(container.textContent).toContain("docker logs macrograph");
+  const claim = [...container.querySelectorAll("button")].find(
+    (b) => b.getAttribute("aria-expanded") !== null && b.textContent?.includes("Claim your server"),
+  );
+  claim?.click();
+  await vi.waitFor(() => expect(container.textContent).toContain("Step 3 of 4"));
+  const currentPart = () =>
+    container.querySelector('button[aria-current="step"]')?.textContent ?? "";
+  expect(currentPart()).toContain("Continue with MacroGraph");
+  const approvePart = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("choose Approve"),
+  );
+  approvePart?.click();
+  await vi.waitFor(() => expect(currentPart()).toContain("choose Approve"));
+});
+
+it("links guides from the docs sidebar", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() => expect(container.querySelector('nav[aria-label="Docs"]')).not.toBeNull());
+  const sidebar = container.querySelector('nav[aria-label="Docs"]');
+  expect(sidebar?.textContent).toContain("Guides");
+  expect(sidebar?.textContent).not.toContain("Modules");
+  // Narrower screens open the same links in a drawer, from a bar that shows where you are.
+  const menu = container.querySelector('button[aria-controls="docs-drawer"]');
+  expect(menu?.getAttribute("aria-label")).toBe("Open navigation");
+  expect(menu?.parentElement?.textContent).toBe("GuidesSet up a server");
+  expect(sidebar?.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe(
+    "/docs/server",
+  );
+});
+
+it("gives modules their own section, outside the docs", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/modules/macrograph/string");
+  await vi.waitFor(() => expect(container.textContent).toContain("Overview"));
+  expect(container.querySelector('nav[aria-label="Docs"]')).toBeNull();
+  expect(
+    container.querySelector('header a[href="/modules"]')?.getAttribute("aria-current"),
+  ).toBeNull();
 });
 
 it("lists a package's nodes and shows one at a time", async () => {
   mockApi({ "/api/website/session": null });
-  const { container } = renderApp("/docs/macrograph/string/StringIncludes");
+  const { container } = renderApp("/modules/macrograph/string/StringIncludes");
   await vi.waitFor(() =>
     expect(container.querySelector("[data-graph-node-id]")?.textContent).toContain(
       "String Includes",
@@ -75,25 +149,25 @@ it("lists a package's nodes and shows one at a time", async () => {
   );
   expect(container.querySelectorAll("[data-graph-node-id]")).toHaveLength(1);
   expect(container.textContent).toContain("Performs a case-sensitive literal string comparison.");
-  const link = container.querySelector('a[href="/docs/macrograph/string/StringLength"]');
+  const link = container.querySelector('a[href="/modules/macrograph/string/StringLength"]');
   expect(link?.textContent).toBe("String Length");
   expect(container.querySelector('a[aria-current="page"]')?.textContent).toBe("String Includes");
 });
 
 it("shows node properties with their controls", async () => {
   mockApi({ "/api/website/session": null });
-  const { container } = renderApp("/docs/macrograph/obs/GetSceneItemTransform");
+  const { container } = renderApp("/modules/macrograph/obs/GetSceneItemTransform");
   await vi.waitFor(() => expect(container.textContent).toContain("Properties"));
   expect(container.textContent).toContain("OBS Socket");
 });
 
 it("shows a not-found message for unknown packages and nodes", async () => {
   mockApi({ "/api/website/session": null });
-  const unknownPackage = renderApp("/docs/macrograph/nope");
+  const unknownPackage = renderApp("/modules/macrograph/nope");
   await vi.waitFor(() =>
-    expect(unknownPackage.container.textContent).toContain("Package not found"),
+    expect(unknownPackage.container.textContent).toContain("Module not found"),
   );
-  const unknownNode = renderApp("/docs/macrograph/string/Nope");
+  const unknownNode = renderApp("/modules/macrograph/string/Nope");
   await vi.waitFor(() => expect(unknownNode.container.textContent).toContain("Node not found"));
 });
 

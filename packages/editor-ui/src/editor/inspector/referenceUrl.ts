@@ -10,7 +10,7 @@ const corePackages = new Set<string>([
   Queue.packageId,
 ]);
 
-/** A schema's page in the website's package reference, which covers the official registry. */
+/** A schema's page in the website's module reference, which covers the official registry. */
 export const referenceUrl = (
   packageId: string | undefined,
   schema: { readonly id: string; readonly internal?: boolean | undefined },
@@ -18,5 +18,5 @@ export const referenceUrl = (
   if (packageId === undefined || schema.internal === true || corePackages.has(packageId))
     return undefined;
   if (!ModuleId.is(packageId) || !ModuleId.isOfficial(packageId)) return undefined;
-  return `${referenceOrigin}/docs/${ModuleId.toDisplay(packageId)}/${encodeURIComponent(schema.id)}`;
+  return `${referenceOrigin}/modules/${ModuleId.toDisplay(packageId)}/${encodeURIComponent(schema.id)}`;
 };

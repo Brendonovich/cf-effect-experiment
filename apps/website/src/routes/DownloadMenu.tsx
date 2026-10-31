@@ -7,7 +7,7 @@ export function DownloadMenu() {
     <div sx={styles.root}>
       <Button type="button" disabled aria-describedby="download-soon" sx={styles.trigger}>
         <IconTablerDeviceDesktopDown {...stylex.attrs(styles.icon)} />
-        Download
+        Download Desktop
       </Button>
       <span id="download-soon" sx={styles.sticker}>
         Soon
