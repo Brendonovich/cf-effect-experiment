@@ -234,11 +234,7 @@ export function Playground() {
         </div>
       </Show>
       <main sx={styles.main}>
-        <RealtimeWorkspace
-          controller={editor}
-          runtimeLabel="Browser"
-          view={view()}
-        />
+        <RealtimeWorkspace controller={editor} runtimeLabel="Browser" view={view()} />
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createSign, generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { createSign, generateKeyPairSync } from "node:crypto";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -327,7 +327,10 @@ describe("built self-hosted server", () => {
     const signIn = await fetch(`${origin}${basePath}/auth/start`, { method: "POST" });
     expect(signIn.status).toBe(200);
     expect(signIn.headers.get("cache-control")).toBe("no-store");
-    expect(await signIn.json()).toMatchObject({ deviceCode: "reader-device", userCode: "LMNP-QRST" });
+    expect(await signIn.json()).toMatchObject({
+      deviceCode: "reader-device",
+      userCode: "LMNP-QRST",
+    });
     expect(
       JSON.parse(await readFile(join(dataDirectory, "macrograph-auth.json"), "utf8")),
     ).toMatchObject({ version: 2, client: { clientId: "server-client" } });
