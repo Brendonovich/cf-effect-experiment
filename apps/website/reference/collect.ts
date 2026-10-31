@@ -31,7 +31,6 @@ const isModule = (value: unknown): value is ModuleDefinition =>
   typeof value.effect === "function";
 
 const Manifest = Schema.Struct({
-  name: Schema.String,
   macrograph: Schema.optional(
     Schema.Struct({
       publisher: Schema.optional(ModuleId.Publisher),
@@ -42,17 +41,17 @@ const Manifest = Schema.Struct({
 
 /**
  * Modules are published to the official registry under their manifest's publisher and name.
- * Built-ins without one are `@macrograph/module-<name>`, published by `macrograph`.
+ * Built-ins without one are published by `macrograph` under their module id, matching the links
+ * the editor builds from loaded packages.
  */
-const moduleId = (packageJson: string) => {
+const moduleId = (packageJson: string, module: ModuleDefinition) => {
   const manifest = Schema.decodeUnknownSync(Manifest)(
     JSON.parse(readFileSync(packageJson, "utf8")),
   );
   return ModuleId.make({
     namespace: ModuleId.OfficialNamespace,
     publisher: manifest.macrograph?.publisher ?? "macrograph",
-    name:
-      manifest.macrograph?.name ?? manifest.name.replace(/^@[^/]+\//, "").replace(/^module-/, ""),
+    name: manifest.macrograph?.name ?? module.id,
   });
 };
 
@@ -84,7 +83,7 @@ export const modules: ReadonlyArray<CollectedModule> = await Promise.all(
       module.types ?? {},
     );
     return {
-      id: moduleId(packageJson),
+      id: moduleId(packageJson, module),
       source,
       modulePath,
       package: encode({ ...pkg, schemas: pkg.schemas.filter((schema) => !schema.internal) }),

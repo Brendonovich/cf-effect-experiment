@@ -20,6 +20,7 @@ import { Select } from "../../ui/Select";
 import { FunctionInfo } from "./FunctionInfo";
 import { ModuleInfo } from "./ModuleInfo";
 import { PropertyControl } from "./PropertyControl";
+import { referenceUrl } from "./referenceUrl";
 import { SchemaInfoButton } from "./SchemaInfoButton";
 import { SourceProperty } from "./SourceProperty";
 
@@ -282,6 +283,7 @@ export function Inspector(props: {
                   <SchemaInfoButton
                     schema={schema()}
                     packageName={pkg()?.name ?? "Unknown Module"}
+                    referenceUrl={referenceUrl(pkg()?.id, schema())}
                   />
                   <Show when={schema().properties.length > 0}>
                     <div sx={styles.properties}>
