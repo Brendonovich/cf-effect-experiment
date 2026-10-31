@@ -1,12 +1,17 @@
 import * as stylex from "@stylexjs/stylex";
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 
 import { colors } from "../tokens.stylex.ts";
 import { Avatar } from "./Avatar.tsx";
 
+export interface AccountMenuItem {
+  readonly label: string;
+  readonly onSelect: () => void;
+}
+
 export interface AccountMenuProps {
   readonly email: string;
-  readonly onCredentials?: () => void;
+  readonly items?: readonly AccountMenuItem[];
   readonly onSignOut: () => void;
 }
 
@@ -15,11 +20,11 @@ export function AccountMenu(props: AccountMenuProps) {
   const [open, setOpen] = createSignal(false);
   let root: HTMLDivElement | undefined;
   let trigger: HTMLButtonElement | undefined;
-  let firstAction: HTMLButtonElement | undefined;
+  let popover: HTMLDivElement | undefined;
 
   createEffect(open, (isOpen) => {
     if (!isOpen) return;
-    firstAction?.focus();
+    popover?.querySelector("button")?.focus();
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (event.target instanceof globalThis.Node && !root?.contains(event.target)) {
         setOpen(false);
@@ -64,26 +69,34 @@ export function AccountMenu(props: AccountMenuProps) {
         <Avatar email={props.email} />
       </button>
       <Show when={open()}>
-        <div id="account-popover" role="region" aria-label="Account actions" sx={styles.popover}>
-          <Show when={props.onCredentials !== undefined}>
-            <button
-              ref={firstAction}
-              type="button"
-              sx={[styles.button, styles.action]}
-              onClick={() => {
-                setOpen(false);
-                props.onCredentials?.();
-              }}
-            >
-              Credentials
-            </button>
-          </Show>
+        <div
+          ref={popover}
+          id="account-popover"
+          role="region"
+          aria-label="Account actions"
+          sx={styles.popover}
+        >
+          <div sx={styles.email} title={props.email}>
+            {props.email}
+          </div>
+          <For each={props.items ?? []}>
+            {(item) => (
+              <button
+                type="button"
+                sx={[styles.button, styles.action]}
+                onClick={() => {
+                  setOpen(false);
+                  item.onSelect();
+                }}
+              >
+                {item.label}
+              </button>
+            )}
+          </For>
+          <div sx={styles.separator} />
           <button
-            ref={(element) => {
-              if (props.onCredentials === undefined) firstAction = element;
-            }}
             type="button"
-            sx={[styles.button, styles.logout]}
+            sx={[styles.button, styles.action]}
             onClick={() => {
               setOpen(false);
               props.onSignOut();
@@ -126,15 +139,23 @@ const styles = stylex.create({
     zIndex: 50,
     top: "calc(100% + 6px)",
     right: 0,
-    width: 160,
+    width: 200,
     padding: 4,
     borderRadius: 8,
     border: `1px solid ${colors.gray6}`,
     backgroundColor: colors.gray2,
     boxShadow: "0 12px 24px rgb(0 0 0 / .25)",
   },
-  logout: { width: "100%", textAlign: "left" },
-  action: { width: "100%", textAlign: "left" },
+  email: {
+    padding: "6px 8px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    fontSize: 12,
+    color: colors.gray10,
+  },
+  separator: { height: 1, marginBlock: 4, backgroundColor: colors.gray5 },
+  action: { display: "block", width: "100%", textAlign: "left" },
   button: {
     flexShrink: 0,
     borderRadius: 6,
