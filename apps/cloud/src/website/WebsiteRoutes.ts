@@ -260,7 +260,7 @@ export const layer = (options: Options) =>
           return yield* Jwt.sign(key, {
             ...state,
             provider,
-            redirect_uri: `${callbackOrigin}/auth/${provider}/callback`,
+            redirect_uri: `${callbackOrigin}/api/auth/${provider}/callback`,
             exp: Math.floor(Date.now() / 1000) + oauthStateLifetimeSeconds,
           });
         });
@@ -401,32 +401,34 @@ export const layer = (options: Options) =>
 
       // ---- OAuth flows for desktop, web clients, and account credentials ----
 
-      yield* router.add("GET", "/auth/:provider/login", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const provider = yield* providerFor((yield* HttpRouter.params).provider);
-            const encoded = requestUrl(request).searchParams.get("state");
-            if (encoded === null) return yield* reject(400);
-            const decoded = yield* Effect.try({
-              try: (): unknown => JSON.parse(atob(encoded)),
-              catch: () => new Reject({ response: HttpServerResponse.empty({ status: 400 }) }),
-            });
-            const state = isRecord(decoded) ? parseOAuthState(decoded) : undefined;
-            if (state === undefined || state.env === "credentials") return yield* reject(400);
-            if (state.env === "web") {
-              const origin = new URL(state.targetOrigin);
-              const allowed =
-                state.targetOrigin === publicOrigin(request) ||
-                websiteOrigins.includes(state.targetOrigin) ||
-                isLocalOrigin(origin);
-              // Tokens are posted to the opener, so only MacroGraph origins may receive them.
-              if (!allowed) return yield* reject(400);
-            }
-            const signed = yield* signOAuthState(provider.id, publicOrigin(request), state);
-            return HttpServerResponse.redirect(authorizationUrl(provider, signed));
-          }),
-        ),
-      );
+      // `/auth/*` is kept for shipped desktop apps; new clients use the `/api/auth/*` aliases.
+      for (const prefix of ["/auth", "/api/auth"] as const)
+        yield* router.add("GET", `${prefix}/:provider/login`, (request) =>
+          handle(
+            Effect.gen(function* () {
+              const provider = yield* providerFor((yield* HttpRouter.params).provider);
+              const encoded = requestUrl(request).searchParams.get("state");
+              if (encoded === null) return yield* reject(400);
+              const decoded = yield* Effect.try({
+                try: (): unknown => JSON.parse(atob(encoded)),
+                catch: () => new Reject({ response: HttpServerResponse.empty({ status: 400 }) }),
+              });
+              const state = isRecord(decoded) ? parseOAuthState(decoded) : undefined;
+              if (state === undefined || state.env === "credentials") return yield* reject(400);
+              if (state.env === "web") {
+                const origin = new URL(state.targetOrigin);
+                const allowed =
+                  state.targetOrigin === publicOrigin(request) ||
+                  websiteOrigins.includes(state.targetOrigin) ||
+                  isLocalOrigin(origin);
+                // Tokens are posted to the opener, so only MacroGraph origins may receive them.
+                if (!allowed) return yield* reject(400);
+              }
+              const signed = yield* signOAuthState(provider.id, publicOrigin(request), state);
+              return HttpServerResponse.redirect(authorizationUrl(provider, signed));
+            }),
+          ),
+        );
 
       // The single redirect URI registered with providers; routes back to the originating callback.
       yield* router.add("GET", "/auth/proxy", (request) =>
@@ -466,7 +468,7 @@ export const layer = (options: Options) =>
         ),
       );
 
-      yield* router.add("GET", "/auth/:provider/callback", (request) =>
+      yield* router.add("GET", "/api/auth/:provider/callback", (request) =>
         handle(
           Effect.gen(function* () {
             const provider = yield* providerFor((yield* HttpRouter.params).provider);
@@ -502,25 +504,27 @@ export const layer = (options: Options) =>
         "access-control-allow-headers": "Content-Type, Authorization",
       };
 
-      yield* router.add("OPTIONS", "/auth/:provider/refresh", () =>
-        Effect.succeed(HttpServerResponse.empty({ status: 204, headers: refreshCors })),
-      );
+      for (const prefix of ["/auth", "/api/auth"] as const) {
+        yield* router.add("OPTIONS", `${prefix}/:provider/refresh`, () =>
+          Effect.succeed(HttpServerResponse.empty({ status: 204, headers: refreshCors })),
+        );
 
-      yield* router.add("POST", "/auth/:provider/refresh", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const provider = yield* providerFor((yield* HttpRouter.params).provider);
-            const body = yield* readJson(request);
-            if (typeof body.refreshToken !== "string") return yield* reject(400);
-            const refresh: Effect.Effect<OAuthToken | undefined, OAuthProviders.ProviderError> =
-              providers.refresh(provider, body.refreshToken);
-            const token = yield* refresh.pipe(Effect.catch(() => reject(400)));
-            return json(token ?? null);
-          }),
-        ).pipe(Effect.map((response) => HttpServerResponse.setHeaders(response, refreshCors))),
-      );
+        yield* router.add("POST", `${prefix}/:provider/refresh`, (request) =>
+          handle(
+            Effect.gen(function* () {
+              const provider = yield* providerFor((yield* HttpRouter.params).provider);
+              const body = yield* readJson(request);
+              if (typeof body.refreshToken !== "string") return yield* reject(400);
+              const refresh: Effect.Effect<OAuthToken | undefined, OAuthProviders.ProviderError> =
+                providers.refresh(provider, body.refreshToken);
+              const token = yield* refresh.pipe(Effect.catch(() => reject(400)));
+              return json(token ?? null);
+            }),
+          ).pipe(Effect.map((response) => HttpServerResponse.setHeaders(response, refreshCors))),
+        );
+      }
 
-      // ---- JSON endpoints backing the static website ----
+      // ---- JSON endpoints backing the website ----
 
       yield* router.add("GET", "/api/website/session", (request) =>
         handle(

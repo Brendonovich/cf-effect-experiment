@@ -2,8 +2,8 @@ import { Button, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useNavigate } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { useMutation } from "@tanstack/solid-query";
-import { For, Match, Show, Switch, createSignal, onSettled, untrack } from "solid-js";
+import { createQuery, useMutation } from "@tanstack/solid-query";
+import { For, Match, Show, Switch, createMemo, createSignal, onSettled, untrack } from "solid-js";
 
 import {
   ApiError,
@@ -42,6 +42,20 @@ type Step =
   | { readonly state: "confirm"; readonly request: DeviceRequest }
   | { readonly state: "done"; readonly approved: boolean };
 
+const notFoundMessage = "That code wasn't recognised or has expired. Check it and try again.";
+const rateLimitedMessage = "Too many attempts. Wait a few minutes and try again.";
+
+/** Looks up the code a device linked to, reporting failures as data so the page still renders. */
+const lookupLinkedRequest = async (userCode: string) => {
+  try {
+    const request = await lookupDeviceRequest(userCode);
+    return request === null ? { error: notFoundMessage } : { request };
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 429) return { error: rateLimitedMessage };
+    throw error;
+  }
+};
+
 const countryName = (code: string) => {
   try {
     return new Intl.DisplayNames(undefined, { type: "region" }).of(code) ?? code;
@@ -60,24 +74,40 @@ function DeviceAuthorization(props: { readonly session: Session }) {
   const navigate = useNavigate();
   const initialCode = untrack(() => new URLSearchParams(location.search).get("user_code") ?? "");
   const [code, setCode] = createSignal(initialCode);
-  const [step, setStep] = createSignal<Step>({ state: "enter-code" });
+  // The code from the link is looked up while rendering, so the server sends the request with it.
+  const linked = createQuery(() => ({
+    queryKey: ["device-request", initialCode],
+    queryFn: () => lookupLinkedRequest(initialCode),
+    enabled: initialCode !== "",
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  }));
+  const [chosen, setStep] = createSignal<Step | undefined>(undefined);
+  const step = createMemo((): Step => {
+    const current = chosen();
+    if (current !== undefined) return current;
+    const request = linked.data?.request;
+    return request ? { state: "confirm", request } : { state: "enter-code" };
+  });
 
   const lookup = useMutation(() => ({
     networkMode: "always" as const,
     mutationFn: async (userCode: string) => {
       try {
         const request = await lookupDeviceRequest(userCode);
-        if (request === null)
-          throw new Error("That code wasn't recognised or has expired. Check it and try again.");
+        if (request === null) throw new Error(notFoundMessage);
         return request;
       } catch (error) {
-        if (error instanceof ApiError && error.status === 429)
-          throw new Error("Too many attempts. Wait a few minutes and try again.");
+        if (error instanceof ApiError && error.status === 429) throw new Error(rateLimitedMessage);
         throw error;
       }
     },
     onSuccess: (request) => setStep({ state: "confirm", request }),
   }));
+
+  const linkedError = createMemo(() =>
+    chosen() !== undefined || lookup.isPending ? undefined : linked.data?.error,
+  );
 
   const decide = useMutation(() => ({
     networkMode: "always" as const,
@@ -91,12 +121,9 @@ function DeviceAuthorization(props: { readonly session: Session }) {
 
   onSettled(() => {
     if (initialCode === "") return;
-    // Navigating flushes, which `onSettled` must not do synchronously.
-    queueMicrotask(() => {
-      // Codes grant access once approved; keep them out of history once read.
-      navigate(location.pathname, { replace: true });
-      lookup.mutate(initialCode);
-    });
+    // Codes grant access once approved; keep them out of history once read. Navigating flushes,
+    // which `onSettled` must not do synchronously.
+    queueMicrotask(() => navigate(location.pathname, { replace: true }));
   });
 
   const signedInAs = () => (
@@ -225,13 +252,13 @@ function DeviceAuthorization(props: { readonly session: Session }) {
               autocomplete="off"
               spellcheck={false}
               placeholder="XXXX-XXXX"
-              aria-invalid={lookup.isError ? "true" : "false"}
+              aria-invalid={lookup.isError || linkedError() !== undefined ? "true" : "false"}
               sx={styles.codeInput}
             />
-            <Show when={lookup.error}>
-              {(error) => (
+            <Show when={lookup.error?.message ?? linkedError()}>
+              {(message) => (
                 <p role="alert" sx={styles.error}>
-                  {error().message}
+                  {message()}
                 </p>
               )}
             </Show>

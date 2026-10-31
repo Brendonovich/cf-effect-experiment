@@ -6,7 +6,7 @@ import * as Jwt from "../src/website/Jwt.ts";
 import * as PreviewAuth from "../src/website/PreviewAuth.ts";
 import { type App, harness, send, signIn } from "./OAuthHarness.ts";
 
-const preview = "https://macrograph-websiteworker-pr42-abc123.brendonovich.workers.dev";
+const preview = "https://macrograph-website-pr42-abc123.brendonovich.workers.dev";
 
 const start = (previewOrigin: string) =>
   `${PreviewAuth.startPath}?${new URLSearchParams({ origin: previewOrigin, next: "/account/apps?x=1" })}`;
@@ -45,8 +45,10 @@ describe("preview auth", () => {
       const session = yield* signIn(pg, "owner");
       for (const origin of [
         "https://attacker.example",
-        "http://macrograph-websiteworker-pr42-abc123.brendonovich.workers.dev",
-        "https://macrograph-websiteworker-pr42-abc123.brendonovich.workers.dev.attacker.example",
+        "http://macrograph-website-pr42-abc123.brendonovich.workers.dev",
+        // The API Worker has no public URL on previews, so its host never receives grants.
+        "https://macrograph-websiteworker-pr42-abc123.brendonovich.workers.dev",
+        "https://macrograph-website-pr42-abc123.brendonovich.workers.dev.attacker.example",
         "https://macrograph-cloudworker-pr42-abc123.brendonovich.workers.dev",
         `${preview}/path`,
       ]) {
@@ -119,7 +121,7 @@ describe("preview auth", () => {
 
   it.effect("rejects grants for another preview or tampered with", () =>
     Effect.gen(function* () {
-      const other = "https://macrograph-websiteworker-pr7-def456.brendonovich.workers.dev";
+      const other = "https://macrograph-website-pr7-def456.brendonovich.workers.dev";
       const { app, callback } = yield* grantFor("owner", other);
       const gate = yield* makeGate(app, ["owner"]);
       const token = callback.searchParams.get("token") ?? "";

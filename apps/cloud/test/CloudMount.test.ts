@@ -86,6 +86,19 @@ describe("CloudMount", () => {
 });
 
 describe("PublicHost", () => {
+  it("routes only API paths to WebsiteWorker, leaving Cloud's discovery document alone", () => {
+    assert.deepStrictEqual(PublicHost.apiRoutePatterns("macrograph.app"), [
+      "macrograph.app/api/*",
+      "macrograph.app/auth/*",
+      "macrograph.app/.well-known/oauth-authorization-server",
+    ]);
+    // Cloud's metadata lives at a longer path, so the exact API pattern never claims it.
+    assert.notInclude(
+      PublicHost.apiRoutePatterns("macrograph.app"),
+      "macrograph.app/.well-known/oauth-authorization-server/*",
+    );
+  });
+
   it("gives only production a dedicated hostname", () => {
     assert.strictEqual(PublicHost.forStage("production"), "macrograph.app");
     assert.isUndefined(PublicHost.forStage("pr123"));

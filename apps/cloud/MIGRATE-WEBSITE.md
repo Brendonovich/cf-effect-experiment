@@ -68,14 +68,24 @@ registrations created on either side remain valid.
 ## Single Origin
 
 Cloud moved from `cloud.macrograph.app` to `macrograph.app/cloud`, in the same layout as
-opencode.ai: `WebsiteWorker` owns the stage's hostname (`src/PublicHost.ts`) as a Custom Domain
-and serves anything no route claims, while `CloudWorker` claims `/cloud`, `/cloud/*` and the
-`/.well-known/oauth-*/cloud` documents with Worker Routes (`src/api/CloudMount.ts`). Cloudflare runs
-routes before the hostname's own Worker. Previews have no domain: Worker Routes only run on zones
-we own, so `WebsiteWorker` forwards the same paths to `CloudWorker` over a service binding and its
-workers.dev URL serves both apps.
+opencode.ai. The website's own Worker (`apps/website`, Solid start mode with server rendering,
+deployed with `Cloudflare.Website.Vite`) owns the stage's hostname (`src/PublicHost.ts`) as a Custom
+Domain and serves every page. Worker Routes, which Cloudflare runs before the hostname's own
+Worker, send the rest elsewhere:
+
+- `WebsiteWorker` (the API) claims `/api/*`, `/auth/*` (kept for shipped desktop apps) and
+  `/.well-known/oauth-authorization-server`, on `macrograph.app` and `www`. It also owns all of
+  `macrograph.brendonovich.dev`, where every OAuth provider has `/auth/proxy` registered.
+- `CloudWorker` claims `/cloud`, `/cloud/*` and the `/.well-known/oauth-*/cloud` documents
+  (`src/api/CloudMount.ts`).
+
+Previews have no domain: Worker Routes only run on zones we own, so the website's Worker forwards
+the same paths over service bindings and its workers.dev URL serves everything
+(`apps/website/src/routing.ts`). Pages fetch their data during the server render through the same
+API binding, as the visitor.
+
 `macrograph.app` is canonical; `www.macrograph.app` stays an alias so desktop and server API calls
-keep working, and the Worker 301s browsers to the bare domain.
+keep working, and the website's Worker 301s browsers to the bare domain.
 
 Cloud signs in with the website's `auth_session` cookie, so the two share one login. Cloud's
 `users` rows already use website account IDs. `CloudAuthDO` and its per-session credential cache

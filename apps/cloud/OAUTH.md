@@ -10,17 +10,17 @@ This replaces server registration codes, server JWTs, the old device-code endpoi
 
 ## Standards
 
-| Spec | Used for |
-| --- | --- |
-| RFC 6749 (OAuth 2.0) | Token endpoint, client authentication, error responses, refresh grant |
-| RFC 8628 (Device Authorization Grant) | The only user-facing flow |
-| RFC 7591 / RFC 7592 (Dynamic Client Registration and Management) | Servers register themselves |
-| RFC 7009 (Token Revocation) | Sign out, disconnect |
-| RFC 6750 (Bearer Token Usage) | Calling `/api/credentials` and UserInfo |
-| RFC 8414 (Authorization Server Metadata) | Discovery |
-| RFC 7517 / RFC 7638 (JWK, JWK Thumbprint) | Signing keys and `kid` |
-| RFC 9700 (OAuth 2.0 Security BCP) | Refresh token rotation and reuse detection |
-| OpenID Connect Core 1.0 | ID token format and validation, UserInfo, `openid`/`email`/`offline_access` scopes |
+| Spec                                                             | Used for                                                                           |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| RFC 6749 (OAuth 2.0)                                             | Token endpoint, client authentication, error responses, refresh grant              |
+| RFC 8628 (Device Authorization Grant)                            | The only user-facing flow                                                          |
+| RFC 7591 / RFC 7592 (Dynamic Client Registration and Management) | Servers register themselves                                                        |
+| RFC 7009 (Token Revocation)                                      | Sign out, disconnect                                                               |
+| RFC 6750 (Bearer Token Usage)                                    | Calling `/api/credentials` and UserInfo                                            |
+| RFC 8414 (Authorization Server Metadata)                         | Discovery                                                                          |
+| RFC 7517 / RFC 7638 (JWK, JWK Thumbprint)                        | Signing keys and `kid`                                                             |
+| RFC 9700 (OAuth 2.0 Security BCP)                                | Refresh token rotation and reuse detection                                         |
+| OpenID Connect Core 1.0                                          | ID token format and validation, UserInfo, `openid`/`email`/`offline_access` scopes |
 
 We are **not** an OpenID Provider: OpenID Connect requires the authorization endpoint, which we do
 not have. ID tokens, UserInfo and claims follow OpenID Connect exactly, but we publish only RFC
@@ -30,28 +30,30 @@ not have. ID tokens, UserInfo and claims follow OpenID Connect exactly, but we p
 
 The issuer is `https://macrograph.app` in production. Other stages use the request origin (the
 preview's workers.dev URL, or localhost). Metadata is served without a path suffix, so it does not
-collide with Cloud's `/.well-known/oauth-authorization-server/cloud`.
+collide with Cloud's `/.well-known/oauth-authorization-server/cloud`. Every endpoint lives under
+`/api/`, which WebsiteWorker claims with a Worker Route; only the metadata document sits at the root,
+where RFC 8414 requires it. `/device` is a page, served by the website's own Worker.
 
-| Endpoint | Path |
-| --- | --- |
-| Metadata | `GET /.well-known/oauth-authorization-server` |
-| JWKS | `GET /oauth/jwks` |
-| Registration | `POST /oauth/register` |
-| Client configuration | `GET`, `PUT`, `DELETE /oauth/register/:client_id` |
-| Device authorization | `POST /oauth/device_authorization` |
-| Token | `POST /oauth/token` |
-| Revocation | `POST /oauth/revoke` |
-| UserInfo | `GET`, `POST /oauth/userinfo` |
-| Verification page | `/device` (`?user_code=` pre-fills it) |
+| Endpoint             | Path                                                  |
+| -------------------- | ----------------------------------------------------- |
+| Metadata             | `GET /.well-known/oauth-authorization-server`         |
+| JWKS                 | `GET /api/oauth/jwks`                                 |
+| Registration         | `POST /api/oauth/register`                            |
+| Client configuration | `GET`, `PUT`, `DELETE /api/oauth/register/:client_id` |
+| Device authorization | `POST /api/oauth/device_authorization`                |
+| Token                | `POST /api/oauth/token`                               |
+| Revocation           | `POST /api/oauth/revoke`                              |
+| UserInfo             | `GET`, `POST /api/oauth/userinfo`                     |
+| Verification page    | `/device` (`?user_code=` pre-fills it)                |
 
-Everything under `/oauth/` and the metadata allow any origin (CORS `*`, no cookies), because the
+Everything under `/api/oauth/` and the metadata allow any origin (CORS `*`, no cookies), because the
 playground calls them from the browser. Requests are `application/x-www-form-urlencoded` except
 registration, which is JSON as RFC 7591 requires. Token, device and registration responses carry
 `Cache-Control: no-store` and `Pragma: no-cache`.
 
 ## Clients
 
-**Registered clients (servers).** On first start a server calls `POST /oauth/register`:
+**Registered clients (servers).** On first start a server calls `POST /api/oauth/register`:
 
 ```json
 {
@@ -73,25 +75,25 @@ after 30 days. A server that gets `invalid_client` registers again.
 
 **Public clients.** Built in, no secret, `token_endpoint_auth_method: none`:
 
-| `client_id` | Name |
-| --- | --- |
+| `client_id`             | Name                  |
+| ----------------------- | --------------------- |
 | `macrograph-playground` | MacroGraph Playground |
 
 ## Scopes
 
-| Scope | Grants |
-| --- | --- |
-| `openid` | An ID token (`sub`) and UserInfo |
-| `email` | `email` and `email_verified` claims |
-| `offline_access` | A refresh token, so the grant outlives the access token |
-| `credentials` | Read and refresh the user's connected credentials (`/api/credentials`) |
+| Scope            | Grants                                                                 |
+| ---------------- | ---------------------------------------------------------------------- |
+| `openid`         | An ID token (`sub`) and UserInfo                                       |
+| `email`          | `email` and `email_verified` claims                                    |
+| `offline_access` | A refresh token, so the grant outlives the access token                |
+| `credentials`    | Read and refresh the user's connected credentials (`/api/credentials`) |
 
 Signing in to a server asks for `openid email`. Connecting a server's owner, or the playground,
 asks for `openid email offline_access credentials`.
 
 ## Device flow
 
-1. The client calls `POST /oauth/device_authorization` with `scope` (and its client
+1. The client calls `POST /api/oauth/device_authorization` with `scope` (and its client
    authentication). The response has `device_code`, `user_code`, `verification_uri`
    (`https://macrograph.app/device`), `verification_uri_complete`, `expires_in` (600) and
    `interval` (5).
@@ -99,7 +101,7 @@ asks for `openid email offline_access credentials`.
 3. On `/device` the user signs in if needed, enters or confirms the code, and sees the client's
    name (marked unverified for registered clients), the requested scopes in plain language, and
    where the request came from (IP and country). They approve or deny.
-4. The client polls `POST /oauth/token` with
+4. The client polls `POST /api/oauth/token` with
    `grant_type=urn:ietf:params:oauth:grant-type:device_code` and gets `authorization_pending`,
    `slow_down` (polling faster than `interval`; the interval grows by 5 seconds), `access_denied`,
    `expired_token`, or tokens. A device code works once.
@@ -113,13 +115,13 @@ The token response is the RFC 6749 shape plus `id_token` when `openid` was grant
 `access_token`, `token_type: "Bearer"`, `expires_in`, `scope`, `refresh_token` (only with
 `offline_access`), `id_token`.
 
-| Token | Format | Lifetime | Stored |
-| --- | --- | --- | --- |
-| Access token | opaque `mgat_…` | 1 hour | SHA-256 hash |
-| Refresh token | opaque `mgrt_…` | 90 days, renewed on each use | SHA-256 hash |
-| ID token | RS256 JWT | 5 minutes | not stored |
-| Device code | opaque | 10 minutes | SHA-256 hash |
-| Client secret, registration token | opaque | until rotated or deleted | SHA-256 hash |
+| Token                             | Format          | Lifetime                     | Stored       |
+| --------------------------------- | --------------- | ---------------------------- | ------------ |
+| Access token                      | opaque `mgat_…` | 1 hour                       | SHA-256 hash |
+| Refresh token                     | opaque `mgrt_…` | 90 days, renewed on each use | SHA-256 hash |
+| ID token                          | RS256 JWT       | 5 minutes                    | not stored   |
+| Device code                       | opaque          | 10 minutes                   | SHA-256 hash |
+| Client secret, registration token | opaque          | until rotated or deleted     | SHA-256 hash |
 
 Access tokens are opaque so revocation takes effect immediately.
 
@@ -131,7 +133,7 @@ may narrow the scope but never widen it.
 **ID token claims:** `iss`, `sub` (the account ID), `aud` (the `client_id`), `exp`, `iat`, and with
 `email` scope `email` and `email_verified` (always `false`: addresses are not verified yet).
 Signed with a 2048-bit RSA key that each stage generates once and keeps in its alchemy state
-(`WebsiteSigningKey`); `kid` is its RFC 7638 thumbprint, published at `/oauth/jwks`.
+(`WebsiteSigningKey`); `kid` is its RFC 7638 thumbprint, published at `/api/oauth/jwks`.
 Clients validate them per OpenID Connect Core §3.1.3.7: signature, `iss`, `aud` contains their
 `client_id`, `azp` when there are several audiences, `exp`, and `iat`.
 
@@ -142,7 +144,7 @@ as its refresh token chain; one without ends when its access token expires.
 
 **Account → Servers** lists the user's grants that hold `credentials`, grouped by client, with the
 client's name, when it was approved, and when it was last used. Removing one revokes the grant and
-every token issued from it. Revoking a refresh token through `/oauth/revoke` does the same; revoking
+every token issued from it. Revoking a refresh token through `/api/oauth/revoke` does the same; revoking
 an access token revokes only that token.
 
 ## Resource access
@@ -170,14 +172,14 @@ The desktop app still sends its website session ID as a bearer token until it mo
 
 All in the account schema (`src/database/AccountDatabaseSchema.ts`):
 
-| Table | Holds |
-| --- | --- |
-| `auth_clients` | Registered clients: hashed secret and registration token, metadata, created IP |
+| Table                        | Holds                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth_clients`               | Registered clients: hashed secret and registration token, metadata, created IP                                                        |
 | `auth_device_authorizations` | Pending device flows: hashed device code, user code, client, scope, status, user, interval, last poll, expiry, request IP and country |
-| `auth_grants` | Client, user, scope, created, last used, expiry |
-| `auth_refresh_tokens` | Hashed token, grant, expiry, when it was retired |
-| `auth_access_tokens` | Hashed token, grant, scope, expiry |
-| `auth_rate_limits` | Fixed-window counters for registration and code lookups |
+| `auth_grants`                | Client, user, scope, created, last used, expiry                                                                                       |
+| `auth_refresh_tokens`        | Hashed token, grant, expiry, when it was retired                                                                                      |
+| `auth_access_tokens`         | Hashed token, grant, scope, expiry                                                                                                    |
+| `auth_rate_limits`           | Fixed-window counters for registration and code lookups                                                                               |
 
 Grants cascade to their tokens. Deleting a client deletes its grants and device flows in the same
 transaction (no foreign key, since built-in public clients have no row).
@@ -186,7 +188,10 @@ transaction (no foreign key, since built-in public clients have no row).
 
 Pull request previews (`pr<number>` stages) only let in the account IDs listed in the
 `PREVIEW_ALLOWED_USERS` GitHub Actions variable (comma-separated); an empty list lets nobody in.
-Cloud has no workers.dev URL on previews, so it is reached only through the gated WebsiteWorker.
+WebsiteWorker and Cloud have no workers.dev URLs on previews; the website's own Worker is the only
+public entry. It forwards API paths to WebsiteWorker, which gates them, and asks WebsiteWorker for a
+gate decision (`x-macrograph-preview-gate`, answered 204 when allowed) before rendering a page or
+forwarding to Cloud.
 Ingress stays public so provider webhooks still arrive.
 
 1. A visitor without a valid `macrograph_preview` cookie is redirected to
@@ -194,6 +199,6 @@ Ingress stays public so provider webhooks still arrive.
 2. Production signs them in if needed, then redirects to `<preview origin>/auth/preview/callback`
    with a grant: an RS256 JWT (`typ: preview-grant+jwt`) signed with `WebsiteSigningKey`, with
    `iss` `https://macrograph.app`, `aud` the preview origin, `sub` the account ID, and a 60 second
-   lifetime. It only redirects to `https://macrograph-websiteworker-pr<n>-*.brendonovich.workers.dev`.
-3. The preview verifies the grant against `https://macrograph.app/oauth/jwks`, checks `sub` against
+   lifetime. It only redirects to `https://macrograph-website-pr<n>-*.brendonovich.workers.dev`.
+3. The preview verifies the grant against `https://macrograph.app/api/oauth/jwks`, checks `sub` against
    its allowlist, and sets its own HMAC-signed cookie for 7 days.

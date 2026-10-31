@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Dns from "./src/Dns.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
+import * as PublicHost from "./src/PublicHost.ts";
 import {
   DatabaseHyperdrive,
   DeploymentObjectsBucket,
@@ -28,7 +29,6 @@ import CloudWorkerLayer, {
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 import WebsiteWorkerLayer, {
-  WebsiteAssetsDirectory,
   WebsiteOAuthStateSecret,
   WebsiteSigningKey,
   WebsiteWorker,
@@ -80,15 +80,6 @@ export default Alchemy.Stack(
         })
       : undefined;
 
-    const websiteBuild = !ctx.dev
-      ? yield* Command.Build("WebsiteBuild", {
-          command: "pnpm run build",
-          cwd: "../website",
-          outdir: "dist",
-          memo: false,
-        })
-      : undefined;
-
     const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
       const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
       const cloudWorker = yield* CloudWorker.pipe(Alchemy.remote()).pipe(
@@ -108,8 +99,32 @@ export default Alchemy.Stack(
       Effect.provide(WebsiteWorkerLayer),
       Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
       Effect.provideService(WebsiteSigningKey, websiteSigningKey.privateKey),
-      Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
     );
+
+    // The server-rendered website (`apps/website`, Solid start mode). It owns the stage's hostname;
+    // the API and Cloud claim their paths with Worker Routes there, and elsewhere it forwards them
+    // over these bindings (see `apps/website/src/worker.ts`).
+    const stage = yield* Alchemy.Stage;
+    const publicHost = PublicHost.forStage(stage);
+    const website = yield* Cloudflare.Website.Vite("Website", {
+      rootDir: "../website",
+      main: "src/worker.ts",
+      env: {
+        API: websiteWorker,
+        CLOUD: cloudWorker,
+        // Previews let only allowed accounts in; WebsiteWorker makes the decision.
+        ...(PublicHost.isPreviewStage(stage) ? { PREVIEW_GATE: "1" } : {}),
+      },
+      // The app compiles workspace packages from source, so their changes must rebuild it too.
+      memo: {
+        include: ["**/*", "../../packages/*/src/**", "../../packages/*/package.json"],
+        lockfile: true,
+      },
+      ...(publicHost === undefined
+        ? // Explicitly detach: omitting `domain` would leave a previously attached one in place.
+          { domain: null }
+        : { domain: { name: publicHost, aliases: [...PublicHost.legacyBrowserHosts] } }),
+    });
 
     const github = yield* GitHub.GitHubEnv;
     if (github?.pr !== undefined) {
@@ -120,8 +135,8 @@ export default Alchemy.Stack(
         body: Output.interpolate`
 					## MacroGraph preview
 
-					**Website:** ${websiteWorker.url}
-					**Cloud:** ${websiteWorker.url}/cloud/
+					**Website:** ${website.url}
+					**Cloud:** ${website.url}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
 					Built from commit ${github.sha.slice(0, 7)}.
@@ -132,6 +147,7 @@ export default Alchemy.Stack(
     return {
       publicWorkerUrl: cloudWorker.url,
       publicIngressUrl: ingressWorker.url,
+      websiteUrl: website.url,
       websiteWorkerUrl: websiteWorker.url,
     };
   }),

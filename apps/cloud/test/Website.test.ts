@@ -212,7 +212,7 @@ describe("website routes", () => {
       );
       assert.strictEqual(proxy.status, 302);
       assert.isTrue(
-        proxy.headers.get("location")?.startsWith(`${origin}/auth/twitch/callback?code=code`),
+        proxy.headers.get("location")?.startsWith(`${origin}/api/auth/twitch/callback?code=code`),
       );
 
       const spoofed = yield* send(app, `/auth/twitch/login?state=${state}`, {
@@ -221,7 +221,15 @@ describe("website routes", () => {
       const spoofedState = new URL(spoofed.headers.get("location") ?? "").searchParams.get("state");
       const spoofedProxy = yield* send(app, `/auth/proxy?code=code&state=${spoofedState}`);
       assert.isTrue(
-        spoofedProxy.headers.get("location")?.startsWith(`${origin}/auth/twitch/callback`),
+        spoofedProxy.headers.get("location")?.startsWith(`${origin}/api/auth/twitch/callback`),
+      );
+
+      // New clients use the same flow under `/api/auth`.
+      const aliased = yield* send(app, `/api/auth/twitch/login?state=${state}`);
+      assert.strictEqual(aliased.status, 302);
+      assert.strictEqual(
+        new URL(aliased.headers.get("location") ?? "").origin,
+        "https://id.twitch.tv",
       );
 
       const forged = yield* send(app, "/auth/proxy?code=code&state=forged");

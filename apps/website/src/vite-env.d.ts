@@ -1,3 +1,4 @@
+/// <reference types="@solidjs/vite-plugin/virtual-solid-manifest" />
 declare module "*.css" {}
 
 declare module "*.png" {

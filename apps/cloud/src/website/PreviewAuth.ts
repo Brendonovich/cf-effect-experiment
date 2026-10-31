@@ -3,6 +3,9 @@
  * production's `/auth/preview`, which signs a short-lived grant for the signed-in account with the
  * production OAuth signing key and redirects back. The preview verifies it against production's
  * JWKS and keeps its own cookie.
+ *
+ * The gate runs in WebsiteWorker. The website's Worker, the only public entry to a preview, sends
+ * page and Cloud requests here with {@link gateCheckHeader} first and serves them only on a 204.
  */
 import { Effect } from "effect";
 import { type HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -16,18 +19,21 @@ export const startPath = "/auth/preview";
 export const callbackPath = "/auth/preview/callback";
 export const cookieName = "macrograph_preview";
 
+/** Asks WebsiteWorker for the gate's decision alone: 204 if allowed, otherwise its response. */
+export const gateCheckHeader = "x-macrograph-preview-gate";
+
 const grantType = "preview-grant+jwt";
 const grantLifetimeSeconds = 60;
 const cookieLifetimeSeconds = 7 * 24 * 60 * 60;
 
-/** Origins grants may be sent to: preview WebsiteWorkers on their workers.dev URLs. */
+/** Origins grants may be sent to: preview website Workers on their workers.dev URLs. */
 export const isPreviewOrigin = (origin: string) => {
   if (!URL.canParse(origin)) return false;
   const url = new URL(origin);
   return (
     url.origin === origin &&
     url.protocol === "https:" &&
-    /^macrograph-websiteworker-pr\d+-[a-z0-9]+\.brendonovich\.workers\.dev$/.test(url.hostname)
+    /^macrograph-website-pr\d+-[a-z0-9]+\.brendonovich\.workers\.dev$/.test(url.hostname)
   );
 };
 
@@ -93,7 +99,7 @@ export interface GateOptions {
  */
 export const makeGate = (options: GateOptions) => {
   const fetchJwks = Effect.tryPromise(async () => {
-    const response = await (options.fetch ?? fetch)(`${authOrigin}/oauth/jwks`);
+    const response = await (options.fetch ?? fetch)(`${authOrigin}/api/oauth/jwks`);
     if (!response.ok) throw new Error(`JWKS request failed with ${response.status}`);
     const body: unknown = await response.json();
     if (!isRecord(body) || !Array.isArray(body.keys)) throw new Error("Malformed JWKS");

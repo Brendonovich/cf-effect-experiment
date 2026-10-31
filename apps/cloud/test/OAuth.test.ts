@@ -19,7 +19,7 @@ import {
 
 const registerServer = (app: App, metadata: Record<string, unknown> = {}) =>
   Effect.gen(function* () {
-    const response = yield* send(app, "/oauth/register", {
+    const response = yield* send(app, "/api/oauth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -48,13 +48,13 @@ const authorize = (
 ) =>
   Effect.gen(function* () {
     const started = yield* body(
-      yield* send(app, "/oauth/device_authorization", form({ scope, ...extra }, auth)),
+      yield* send(app, "/api/oauth/device_authorization", form({ scope, ...extra }, auth)),
     );
     const userCode = string(started.user_code);
     assert.isTrue((yield* website(app, session, "device/approve", { userCode })).ok);
     const token = yield* send(
       app,
-      "/oauth/token",
+      "/api/oauth/token",
       form({ grant_type: deviceGrant, device_code: string(started.device_code), ...extra }, auth),
     );
     assert.strictEqual(token.status, 200);
@@ -63,7 +63,7 @@ const authorize = (
 
 const verifyJwt = (app: App, token: string) =>
   Effect.gen(function* () {
-    const jwks = yield* body(yield* send(app, "/oauth/jwks"));
+    const jwks = yield* body(yield* send(app, "/api/oauth/jwks"));
     const [key] = jwks.keys as ReadonlyArray<JsonWebKey & { kid: string }>;
     const [header, payload, signature] = token.split(".");
     const decode = (part: string) =>
@@ -108,16 +108,16 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         assert.strictEqual(response.headers.get("access-control-allow-origin"), "*");
         const metadata = yield* body(response);
         assert.strictEqual(metadata.issuer, origin);
-        assert.strictEqual(metadata.token_endpoint, `${origin}/oauth/token`);
+        assert.strictEqual(metadata.token_endpoint, `${origin}/api/oauth/token`);
         assert.strictEqual(
           metadata.device_authorization_endpoint,
-          `${origin}/oauth/device_authorization`,
+          `${origin}/api/oauth/device_authorization`,
         );
         assert.deepStrictEqual(metadata.response_types_supported, []);
         assert.notProperty(metadata, "authorization_endpoint");
         assert.deepStrictEqual(metadata.grant_types_supported, [deviceGrant, "refresh_token"]);
 
-        const jwks = yield* body(yield* send(app, "/oauth/jwks"));
+        const jwks = yield* body(yield* send(app, "/api/oauth/jwks"));
         const [key] = jwks.keys as ReadonlyArray<Record<string, unknown>>;
         assert.strictEqual(key?.kty, "RSA");
         assert.strictEqual(key?.alg, "RS256");
@@ -138,7 +138,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
 
         const rejected = (metadata: Record<string, unknown>) =>
           Effect.gen(function* () {
-            const response = yield* send(app, "/oauth/register", {
+            const response = yield* send(app, "/api/oauth/register", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify(metadata),
@@ -182,7 +182,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         );
         const gone = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ scope: "openid" }, client.auth),
         );
         assert.strictEqual(gone.status, 401);
@@ -218,7 +218,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
 
         const response = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ scope: "openid email offline_access credentials" }, client.auth),
         );
         assert.strictEqual(response.headers.get("cache-control"), "no-store");
@@ -238,7 +238,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const poll = () =>
           send(
             app,
-            "/oauth/token",
+            "/api/oauth/token",
             form(
               { grant_type: deviceGrant, device_code: string(started.device_code) },
               client.auth,
@@ -285,7 +285,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         assert.strictEqual((yield* poll()).error, "invalid_grant");
 
         const userInfo = yield* body(
-          yield* send(app, "/oauth/userinfo", {
+          yield* send(app, "/api/oauth/userinfo", {
             headers: { authorization: `Bearer ${string(tokens.access_token)}` },
           }),
         );
@@ -305,13 +305,13 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const session = yield* signIn(pg, "user");
         const start = send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ scope: "openid" }, client.auth),
         ).pipe(Effect.flatMap(body));
         const poll = (deviceCode: unknown) =>
           send(
             app,
-            "/oauth/token",
+            "/api/oauth/token",
             form({ grant_type: deviceGrant, device_code: string(deviceCode) }, client.auth),
           ).pipe(Effect.flatMap(body));
 
@@ -336,7 +336,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const client = yield* registerServer(app);
         const wrong = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ scope: "openid" }, basic(client.id, "wrong")),
         );
         assert.strictEqual(wrong.status, 401);
@@ -345,14 +345,14 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
 
         const missingSecret = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ client_id: client.id, scope: "openid" }),
         );
         assert.strictEqual((yield* body(missingSecret)).error, "invalid_client");
 
         const wrongMethod = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({
             client_id: client.id,
             client_secret: string(client.client_secret),
@@ -363,7 +363,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
 
         const publicWithSecret = yield* send(
           app,
-          "/oauth/device_authorization",
+          "/api/oauth/device_authorization",
           form({ scope: "openid" }, basic("macrograph-playground", "secret")),
         );
         assert.strictEqual((yield* body(publicWithSecret)).error, "invalid_client");
@@ -374,15 +374,18 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
             Effect.map((value) => value.error),
           );
         assert.strictEqual(
-          yield* error("/oauth/device_authorization", form({ scope: "everything" }, client.auth)),
+          yield* error(
+            "/api/oauth/device_authorization",
+            form({ scope: "everything" }, client.auth),
+          ),
           "invalid_scope",
         );
         assert.strictEqual(
-          yield* error("/oauth/token", form({ grant_type: "password" }, client.auth)),
+          yield* error("/api/oauth/token", form({ grant_type: "password" }, client.auth)),
           "unsupported_grant_type",
         );
         assert.strictEqual(
-          yield* error("/oauth/token", {
+          yield* error("/api/oauth/token", {
             method: "POST",
             headers: { "content-type": "application/json", ...client.auth },
             body: JSON.stringify({ grant_type: deviceGrant }),
@@ -390,7 +393,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
           "invalid_request",
         );
         assert.strictEqual(
-          yield* error("/oauth/token", {
+          yield* error("/api/oauth/token", {
             ...form({}, client.auth),
             body: `grant_type=${encodeURIComponent(deviceGrant)}&device_code=a&device_code=b`,
           }),
@@ -414,7 +417,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const refresh = (refreshToken: unknown, scope?: string) =>
           send(
             app,
-            "/oauth/token",
+            "/api/oauth/token",
             form(
               {
                 grant_type: "refresh_token",
@@ -500,7 +503,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         assert.strictEqual(credential?.token.access_token, "twitch-access");
         assert.notProperty(credential?.token, "refresh_token");
 
-        const missing = yield* send(app, "/oauth/userinfo");
+        const missing = yield* send(app, "/api/oauth/userinfo");
         assert.strictEqual(missing.status, 401);
         assert.strictEqual(missing.headers.get("www-authenticate"), 'Bearer realm="macrograph"');
       }),
@@ -520,12 +523,12 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
           "openid offline_access credentials",
         );
         const revoke = (token: unknown, auth: Record<string, string>) =>
-          send(app, "/oauth/revoke", form({ token: string(token) }, auth));
+          send(app, "/api/oauth/revoke", form({ token: string(token) }, auth));
 
         assert.strictEqual((yield* revoke("unknown", client.auth)).status, 200);
         assert.strictEqual((yield* revoke(tokens.access_token, other.auth)).status, 400);
         assert.strictEqual((yield* revoke(tokens.access_token, client.auth)).status, 200);
-        const userInfo = yield* send(app, "/oauth/userinfo", {
+        const userInfo = yield* send(app, "/api/oauth/userinfo", {
           headers: { authorization: `Bearer ${string(tokens.access_token)}` },
         });
         assert.strictEqual(userInfo.status, 401);
@@ -557,7 +560,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         assert.strictEqual(removed.status, 204);
         const refreshed = yield* send(
           app,
-          "/oauth/token",
+          "/api/oauth/token",
           form(
             { grant_type: "refresh_token", refresh_token: string(again.refresh_token) },
             client.auth,
@@ -577,7 +580,7 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const started = yield* body(
           yield* send(
             app,
-            "/oauth/device_authorization",
+            "/api/oauth/device_authorization",
             form({ scope: "openid", ...extra }, auth),
           ),
         );
@@ -610,7 +613,11 @@ describe("OAuth authorization server", { timeout: 30_000 }, () => {
         const client = yield* registerServer(app);
         const session = yield* signIn(pg, "user");
         const started = yield* body(
-          yield* send(app, "/oauth/device_authorization", form({ scope: "openid" }, client.auth)),
+          yield* send(
+            app,
+            "/api/oauth/device_authorization",
+            form({ scope: "openid" }, client.auth),
+          ),
         );
         const crossSite = yield* website(
           app,
