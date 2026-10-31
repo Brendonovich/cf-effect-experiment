@@ -5,12 +5,12 @@ import { Loading, Show, untrack } from "solid-js";
 import { loginPath } from "./api";
 import { DesktopListener } from "./DesktopListener";
 import { AccountLayout } from "./routes/Account";
+import { AppsRoute } from "./routes/Apps";
 import { AuthRoute } from "./routes/Auth";
 import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { LandingRoute } from "./routes/Landing";
 import { NotFoundRoute } from "./routes/NotFound";
-import { ServersRoute } from "./routes/Servers";
 import { Redirect, useSession } from "./session";
 import { Toaster } from "./Toasts";
 
@@ -33,18 +33,14 @@ export const routes = [
   { path: "/", component: HomeRoute },
   { path: "/login", component: () => <AuthRoute mode="login" /> },
   { path: "/signup", component: () => <AuthRoute mode="signup" /> },
-  { path: "/login/device", component: () => <DeviceAuthorizationRoute flow="device" /> },
-  {
-    path: "/server-registration",
-    component: () => <DeviceAuthorizationRoute flow="server-registration" />,
-  },
+  { path: "/device", component: DeviceAuthorizationRoute },
   {
     path: "/account",
     component: AccountLayout,
     children: [
       { path: "/", component: () => <Redirect href="/account/credentials" /> },
       { path: "/credentials", component: CredentialsRoute },
-      { path: "/servers", component: ServersRoute },
+      { path: "/apps", component: AppsRoute },
     ],
   },
   { path: "/credentials", component: () => <Redirect href="/account/credentials" /> },

@@ -4,73 +4,92 @@ import * as stylex from "@stylexjs/stylex";
 import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { For, Show } from "solid-js";
 
-import { getServers, removeServer, serversKey } from "../api";
+import { authorizationsKey, getAuthorizations, revokeAuthorization } from "../api";
 import { showToast } from "../Toasts";
 
-export function ServersRoute() {
+const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
+export function AppsRoute() {
   const queryClient = useQueryClient();
-  const servers = createQuery(() => ({ queryKey: serversKey, queryFn: getServers }));
-  const remove = useMutation(() => ({
+  const authorizations = createQuery(() => ({
+    queryKey: authorizationsKey,
+    queryFn: getAuthorizations,
+  }));
+  const revoke = useMutation(() => ({
     networkMode: "always" as const,
-    mutationFn: removeServer,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: serversKey }),
+    mutationFn: revokeAuthorization,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: authorizationsKey }),
     onError: () =>
-      showToast({ tone: "error", content: "Could not remove the server. Please try again." }),
+      showToast({ tone: "error", content: "Could not remove the app. Please try again." }),
   }));
 
   return (
     <div sx={styles.root}>
       <header sx={styles.header}>
-        <h1 sx={styles.title}>Servers</h1>
+        <h1 sx={styles.title}>Apps</h1>
         <p sx={styles.subtitle}>
-          MacroGraph servers registered to your account. Run a server and approve its registration
-          code to add one.
+          Servers and apps that can use your credentials. Start a MacroGraph server and approve its
+          sign-in code to add one.
         </p>
       </header>
       <Show
-        when={!servers.isPending}
-        fallback={<LoadingState label="Loading servers" style={styles.loading} />}
+        when={!authorizations.isPending}
+        fallback={<LoadingState label="Loading apps" style={styles.loading} />}
       >
         <div sx={styles.list}>
           <Show
-            when={!servers.isError}
+            when={!authorizations.isError}
             fallback={
               <p sx={styles.empty}>
-                Servers could not be loaded.{" "}
-                <button type="button" sx={styles.retry} onClick={() => void servers.refetch()}>
+                Apps could not be loaded.{" "}
+                <button
+                  type="button"
+                  sx={styles.retry}
+                  onClick={() => void authorizations.refetch()}
+                >
                   Try again
                 </button>
               </p>
             }
           >
             <For
-              each={servers.data ?? []}
-              fallback={<p sx={styles.empty}>No servers are registered to your account yet.</p>}
+              each={authorizations.data ?? []}
+              fallback={<p sx={styles.empty}>No apps can use your credentials yet.</p>}
             >
-              {(server) => (
+              {(authorization) => (
                 <div sx={styles.row}>
                   <span sx={styles.icon} aria-hidden="true">
-                    <IconTablerServer {...stylex.attrs(styles.iconSvg)} />
+                    <Show
+                      when={authorization.client.verified}
+                      fallback={<IconTablerServer {...stylex.attrs(styles.iconSvg)} />}
+                    >
+                      <IconTablerAppWindow {...stylex.attrs(styles.iconSvg)} />
+                    </Show>
                   </span>
                   <div sx={styles.body}>
-                    <p sx={styles.name}>MacroGraph server</p>
-                    <p sx={styles.id}>{server.id}</p>
+                    <p sx={styles.name}>{authorization.client.name}</p>
+                    <p sx={styles.detail}>
+                      Approved {date.format(authorization.createdAt)} · Last used{" "}
+                      {date.format(authorization.lastUsedAt)}
+                    </p>
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
                     sx={styles.remove}
-                    disabled={remove.isPending && remove.variables === server.id}
+                    disabled={revoke.isPending && revoke.variables === authorization.id}
                     onClick={() => {
                       if (
                         window.confirm(
-                          "Remove this server? It loses access to your credentials and must be set up again to reconnect.",
+                          `Remove ${authorization.client.name}? It loses access to your credentials and has to be approved again.`,
                         )
                       )
-                        remove.mutate(server.id);
+                        revoke.mutate(authorization.id);
                     }}
                   >
-                    {remove.isPending && remove.variables === server.id ? "Removing..." : "Remove"}
+                    {revoke.isPending && revoke.variables === authorization.id
+                      ? "Removing..."
+                      : "Remove"}
                   </Button>
                 </div>
               )}
@@ -125,11 +144,10 @@ const styles = stylex.create({
   body: { flex: 1, minWidth: 0 },
   remove: { flexShrink: 0, borderRadius: 6 },
   name: { margin: 0, fontSize: 15, lineHeight: "20px", fontWeight: 500 },
-  id: {
+  detail: {
     margin: 0,
     marginTop: 2,
     overflow: "hidden",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     fontSize: 13,
     color: colors.gray10,
     textOverflow: "ellipsis",

@@ -24,9 +24,33 @@ export interface WebsiteCredential {
   readonly displayName: string | null;
 }
 
-export interface Server {
+export type OAuthScope = "openid" | "email" | "offline_access" | "credentials";
+
+export interface OAuthClient {
   readonly id: string;
-  readonly type: "server" | null;
+  readonly name: string;
+  /** Built-in MacroGraph apps; other names are chosen by whoever runs the server. */
+  readonly verified: boolean;
+}
+
+/** A device sign-in waiting for approval on `/device`. */
+export interface DeviceRequest {
+  readonly userCode: string;
+  readonly client: OAuthClient;
+  readonly scope: ReadonlyArray<OAuthScope>;
+  readonly requestedAt: number;
+  readonly expiresAt: number;
+  readonly requestIp: string | null;
+  readonly requestCountry: string | null;
+}
+
+/** An app the user allowed to use their credentials. */
+export interface Authorization {
+  readonly id: string;
+  readonly client: OAuthClient;
+  readonly scope: ReadonlyArray<OAuthScope>;
+  readonly createdAt: number;
+  readonly lastUsedAt: number;
 }
 
 export type AuthResult =
@@ -57,12 +81,13 @@ export async function websiteRequest<T>(
 
 export const sessionKey = ["session"] as const;
 export const credentialsKey = ["credentials"] as const;
-export const serversKey = ["servers"] as const;
+export const authorizationsKey = ["authorizations"] as const;
 
 export const getSession = () => websiteRequest<Session | null>("/session");
 export const getCredentials = () =>
   websiteRequest<ReadonlyArray<WebsiteCredential>>("/credentials");
-export const getServers = () => websiteRequest<ReadonlyArray<Server>>("/servers");
+export const getAuthorizations = () =>
+  websiteRequest<ReadonlyArray<Authorization>>("/authorizations");
 
 export const submitCredentials = (mode: "login" | "signup", email: string, password: string) =>
   websiteRequest<AuthResult>(`/${mode}`, { method: "POST", body: { email, password } });
@@ -75,8 +100,24 @@ export const removeCredential = (credential: { readonly provider: string; readon
     { method: "DELETE" },
   );
 
-export const removeServer = (id: string) =>
-  websiteRequest<void>(`/servers/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const revokeAuthorization = (id: string) =>
+  websiteRequest<void>(`/authorizations/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+/** Resolves to `null` when the code is unknown, used, or expired. */
+export const lookupDeviceRequest = async (userCode: string) => {
+  try {
+    return await websiteRequest<DeviceRequest>("/device/lookup", {
+      method: "POST",
+      body: { userCode },
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+};
+
+export const decideDeviceRequest = (userCode: string, decision: "approve" | "deny") =>
+  websiteRequest<boolean>(`/device/${decision}`, { method: "POST", body: { userCode } });
 
 export class PopupBlockedError extends Error {
   constructor() {
