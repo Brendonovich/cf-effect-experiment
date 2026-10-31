@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { isApiPath, isCloudPath, isPlaygroundPath, route } from "./routing";
+import { isApiPath, isCloudPath, route } from "./routing";
 
 const worker = {
   fetch: (request: Request, env: Parameters<typeof route>[1]) =>
@@ -14,7 +14,7 @@ const binding = (name: string) => ({
 });
 
 describe("website Worker", () => {
-  it("matches the paths the API, Cloud, and the playground claim with Worker Routes", () => {
+  it("matches the paths the API and Cloud claim with Worker Routes", () => {
     for (const path of [
       "/api/website/session",
       "/api/oauth/token",
@@ -40,13 +40,10 @@ describe("website Worker", () => {
     ])
       expect(isCloudPath(path), path).toBe(true);
     expect(isCloudPath("/cloudy")).toBe(false);
-    for (const path of ["/playground", "/playground/", "/playground/assets/index.js"])
-      expect(isPlaygroundPath(path), path).toBe(true);
-    expect(isPlaygroundPath("/playgrounds")).toBe(false);
   });
 
-  it("forwards API, Cloud, and playground paths over their bindings and renders everything else", async () => {
-    const env = { API: binding("api"), CLOUD: binding("cloud"), PLAYGROUND: binding("playground") };
+  it("forwards API and Cloud paths over their bindings and renders everything else", async () => {
+    const env = { API: binding("api"), CLOUD: binding("cloud") };
     const text = async (url: string, init?: RequestInit) =>
       (await worker.fetch(new Request(url, init), env)).text();
     expect(await text("https://preview.example/api/website/session")).toBe(
@@ -56,10 +53,6 @@ describe("website Worker", () => {
       "cloud /.well-known/oauth-authorization-server/cloud",
     );
     expect(await text("https://preview.example/cloud/projects")).toBe("cloud /cloud/projects");
-    expect(await text("https://preview.example/playground")).toBe("playground /playground");
-    expect(await text("https://preview.example/playground/assets/index.js")).toBe(
-      "playground /playground/assets/index.js",
-    );
     expect(await text("https://preview.example/device?user_code=X")).toBe("page");
   });
 
@@ -75,7 +68,7 @@ describe("website Worker", () => {
     expect(await api.text()).toBe("api /api/credentials");
   });
 
-  it("lets only visitors the API's preview gate allows reach pages, Cloud, and the playground", async () => {
+  it("lets only visitors the API's preview gate allows reach pages and Cloud", async () => {
     const api = {
       fetch: vi.fn(async (request: Request) => {
         if (request.headers.get("x-macrograph-preview-gate") === null)
@@ -87,12 +80,7 @@ describe("website Worker", () => {
           : Response.redirect("https://macrograph.app/auth/preview?origin=x", 302);
       }),
     };
-    const env = {
-      API: api,
-      CLOUD: binding("cloud"),
-      PLAYGROUND: binding("playground"),
-      PREVIEW_GATE: "1",
-    };
+    const env = { API: api, CLOUD: binding("cloud"), PREVIEW_GATE: "1" };
     const visit = (path: string, cookie = "") =>
       worker.fetch(new Request(`https://preview.example${path}`, { headers: { cookie } }), env);
 
@@ -100,7 +88,6 @@ describe("website Worker", () => {
     expect(outsider.status).toBe(302);
     expect(outsider.headers.get("location")).toContain("/auth/preview");
     expect((await visit("/cloud/")).status).toBe(302);
-    expect((await visit("/playground/")).status).toBe(302);
     // API paths are gated by the API itself, so they're forwarded untouched.
     expect(await (await visit("/auth/preview/callback?token=t")).text()).toBe(
       "api /auth/preview/callback",
@@ -108,8 +95,5 @@ describe("website Worker", () => {
 
     expect(await (await visit("/account", "macrograph_preview=ok")).text()).toBe("page");
     expect(await (await visit("/cloud/", "macrograph_preview=ok")).text()).toBe("cloud /cloud/");
-    expect(await (await visit("/playground/", "macrograph_preview=ok")).text()).toBe(
-      "playground /playground/",
-    );
   });
 });

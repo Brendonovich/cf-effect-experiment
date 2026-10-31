@@ -945,6 +945,9 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@macrograph/playground':
+        specifier: workspace:*
+        version: link:../playground
       '@solidjs/router':
         specifier: 2.0.0-next.17
         version: 2.0.0-next.17(patch_hash=8a1941fd60846fa8b50d100d77cb36ef71e7c729be9b1b1b6948753b10a58101)(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(solid-js@2.0.0-rc.9)

@@ -1,16 +1,12 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
-import { moduleSettings, stylexProps } from "@macrograph/module/vite";
+import { stylexProps } from "@macrograph/module/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig, type Plugin } from "vite";
 
-const browserSettings = new Set([
-  "@macrograph/module-obs",
-  "@macrograph/module-twitch",
-  "@macrograph/module-utilities",
-  "@macrograph/module-websocket-client",
-]);
+import { playgroundModuleSettings } from "./src/vite";
+
 const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
   generateBundle(_options, bundle) {
@@ -83,7 +79,7 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true },
   plugins: [
     opencode({ skills: ["solidjs"] }),
-    moduleSettings(undefined, browserSettings),
+    playgroundModuleSettings(),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
     stylexProps(),
     stylex.vite({

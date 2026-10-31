@@ -34,8 +34,7 @@ export function LandingRoute() {
             care of connecting to them so you can focus on creating.
           </p>
           <div sx={styles.actions}>
-            {/* The playground is a separate app under `/playground/`, so this is a page load. */}
-            <ButtonLink href="/playground/" rel="external" sx={styles.action}>
+            <ButtonLink href="/playground" sx={styles.action}>
               <IconTablerSandbox {...stylex.attrs(styles.actionIcon)} />
               Playground
             </ButtonLink>

@@ -1,3 +1,5 @@
+import type { JSX } from "@solidjs/web";
+
 import { AccountMenu, ButtonLink, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useNavigate } from "@solidjs/router";
@@ -7,7 +9,8 @@ import { Show } from "solid-js";
 import { loginPath } from "./api";
 import { useLogOut, useSession } from "./session";
 
-export function Header() {
+/** The site header. Pages can add a centered `nav` and `actions` beside the account menu. */
+export function Header(props: { readonly nav?: JSX.Element; readonly actions?: JSX.Element }) {
   const session = useSession();
   const logOut = useLogOut();
   const navigate = useNavigate();
@@ -19,7 +22,11 @@ export function Header() {
         <img src={macrographLogo} alt="" sx={styles.logo} />
         MacroGraph
       </a>
+      <Show when={props.nav !== undefined}>
+        <div sx={styles.nav}>{props.nav}</div>
+      </Show>
       <div sx={styles.end}>
+        {props.actions}
         <Show when={!session.isPending} fallback={<span sx={styles.placeholder} />}>
           <Show
             when={session.data}
@@ -50,13 +57,15 @@ export function Header() {
   );
 }
 
+const md = "@media (min-width: 768px)";
 const styles = stylex.create({
   header: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: { default: "auto minmax(0, 1fr)", [md]: "1fr auto 1fr" },
+    // Every page's header row is the same height; `nav` wraps onto its own row on narrow screens.
+    gridTemplateRows: "minmax(56px, auto)",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
-    height: 56,
+    columnGap: 16,
     paddingInline: 20,
     borderBottomColor: colors.gray4,
     borderBottomStyle: "solid",
@@ -73,7 +82,22 @@ const styles = stylex.create({
     textDecoration: "none",
   },
   logo: { width: 28, height: 28, borderRadius: 6 },
-  end: { display: "flex", alignItems: "center", gap: 16 },
+  nav: {
+    display: "flex",
+    alignSelf: "stretch",
+    justifySelf: "center",
+    gridColumn: { default: "1 / -1", [md]: "2" },
+    gridRow: { default: "2", [md]: "1" },
+  },
+  end: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 16,
+    gridColumn: "-2",
+    gridRow: "1",
+    minWidth: 0,
+  },
   login: { borderRadius: 6 },
   placeholder: {
     width: 28,

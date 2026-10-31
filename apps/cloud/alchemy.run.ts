@@ -101,37 +101,17 @@ export default Alchemy.Stack(
       Effect.provideService(WebsiteSigningKey, websiteSigningKey.privateKey),
     );
 
+    // The server-rendered website (`apps/website`, Solid start mode). It owns the stage's hostname;
+    // the API and Cloud claim their paths with Worker Routes there, and elsewhere it forwards them
+    // over these bindings (see `apps/website/src/worker.ts`).
     const stage = yield* Alchemy.Stage;
     const publicHost = PublicHost.forStage(stage);
-
-    // The browser playground (`apps/playground`), mounted at `/playground/` on the website. Its Vite
-    // config reads the base from MACROGRAPH_BASE_PATH, and the build inherits this process's env.
-    process.env.MACROGRAPH_BASE_PATH = `${PublicHost.playgroundPathPrefix}/`;
-    const playground = yield* Cloudflare.Website.Vite("Playground", {
-      rootDir: "../playground",
-      memo: {
-        include: ["**/*", "../../packages/*/src/**", "../../packages/*/package.json"],
-        lockfile: true,
-      },
-      ...(publicHost === undefined
-        ? {}
-        : {
-            routes: PublicHost.playgroundRoutePatterns(publicHost).map((pattern) => ({ pattern })),
-          }),
-      // Previews reach the playground only through the website's Worker and its gate.
-      ...(PublicHost.isPreviewStage(stage) ? { workersDev: false } : {}),
-    });
-
-    // The server-rendered website (`apps/website`, Solid start mode). It owns the stage's hostname;
-    // the API, Cloud, and the playground claim their paths with Worker Routes there, and elsewhere it
-    // forwards them over these bindings (see `apps/website/src/worker.ts`).
     const website = yield* Cloudflare.Website.Vite("Website", {
       rootDir: "../website",
       main: "src/worker.ts",
       env: {
         API: websiteWorker,
         CLOUD: cloudWorker,
-        PLAYGROUND: playground,
         // Previews let only allowed accounts in; WebsiteWorker makes the decision.
         ...(PublicHost.isPreviewStage(stage) ? { PREVIEW_GATE: "1" } : {}),
       },
@@ -156,7 +136,6 @@ export default Alchemy.Stack(
 					## MacroGraph preview
 
 					**Website:** ${website.url}
-					**Playground:** ${website.url}/playground/
 					**Cloud:** ${website.url}/cloud/
 					**Ingress:** ${ingressWorker.url}
 
