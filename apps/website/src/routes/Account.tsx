@@ -10,7 +10,7 @@ import { RequireSession } from "../session";
 
 const tabs = [
   { href: "/account/credentials", label: "Credentials" },
-  { href: "/account/servers", label: "Servers" },
+  { href: "/account/apps", label: "Apps" },
 ];
 
 export function AccountLayout(props: { readonly children?: JSX.Element }) {

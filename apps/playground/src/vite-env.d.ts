@@ -15,7 +15,8 @@ declare module "virtual:macrograph-module-settings" {
 interface ImportMetaEnv {
   readonly BASE_URL: string;
   readonly DEV: boolean;
-  readonly VITE_MACROGRAPH_CREDENTIALS_BASE_URL?: string;
+  /** The macrograph.app OAuth issuer to sign in with, for testing against other stages. */
+  readonly VITE_MACROGRAPH_ISSUER?: string;
 }
 
 interface ImportMeta {

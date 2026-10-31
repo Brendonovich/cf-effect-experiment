@@ -83,17 +83,13 @@ const providersLayer = OAuthProviders.layer.pipe(
 
 const makeApp = makeAppWith();
 
-function makeAppWith(
-  options: {
-    readonly serverKey?: CryptoKey;
-    readonly rows?: Rows;
-  } = {},
-) {
+function makeAppWith(options: { readonly rows?: Rows } = {}) {
   return Effect.gen(function* () {
     const stateKey = yield* Jwt.hmacKey("state-secret");
+    const signingKey = yield* Jwt.rsaKey(yield* generateRsaPem);
     return yield* WebsiteRoutes.layer({
       stateKey: Effect.succeed(stateKey),
-      serverKey: Effect.succeed(options.serverKey),
+      signingKey: Effect.succeed(signingKey),
       authRedirectOrigin: origin,
       capture: Analytics.disabled,
       fetch: async (url) =>
@@ -190,81 +186,13 @@ describe("website JWTs", () => {
 });
 
 describe("website routes", () => {
-  it.effect("keeps the original device and registration error shapes", () =>
+  it.effect("requires authentication for the account API", () =>
     Effect.gen(function* () {
       const app = yield* makeApp;
-      const grant = yield* send(
-        app,
-        "/api/login/oauth/access_token?device_code=missing&grant_type=urn:ietf:params:oauth:grant-type:device_code",
-        { method: "POST" },
-      );
-      assert.strictEqual(grant.status, 400);
-      assert.deepStrictEqual(yield* Effect.promise(() => grant.json()), {
-        code: "incorrect_device_code",
-        _tag: "DeviceFlowError",
-      });
-
-      const registration = yield* send(app, "/api/server/registration", json({ id: "missing" }));
-      assert.strictEqual(registration.status, 400);
-      assert.deepStrictEqual(yield* Effect.promise(() => registration.json()), {
-        code: "incorrect_id",
-        _tag: "ServerRegistrationError",
-      });
-
       const anonymous = yield* send(app, "/api/credentials");
       assert.strictEqual(anonymous.status, 403);
       const user = yield* send(app, "/api/user");
       assert.isNull(yield* Effect.promise(() => user.json()));
-    }),
-  );
-
-  it.effect("rejects server tokens whose registration was deleted", () =>
-    Effect.gen(function* () {
-      const serverKey = yield* Jwt.rsaKey(yield* generateRsaPem);
-      const token = yield* Jwt.sign(serverKey, { oauthAppId: "app", ownerId: "user", iat: 1 });
-      const asServer = { headers: { authorization: `Bearer ${token}`, "client-id": "server" } };
-      const registered = (sql: string) => (sql.includes(`from "oauth_apps"`) ? [["app"]] : []);
-
-      const live = yield* makeAppWith({ serverKey, rows: registered });
-      assert.strictEqual((yield* send(live, "/api/credentials", asServer)).status, 200);
-
-      const revoked = yield* makeAppWith({ serverKey });
-      for (const path of ["/api/credentials", "/api/user", "/api/server/registration"])
-        assert.strictEqual((yield* send(revoked, path, asServer)).status, 401, path);
-      const refresh = yield* send(revoked, "/api/credentials/twitch/1/refresh", {
-        ...asServer,
-        method: "POST",
-      });
-      assert.strictEqual(refresh.status, 401);
-    }),
-  );
-
-  it.effect("removes only the signed-in owner's server and its pending sign-ins", () =>
-    Effect.gen(function* () {
-      const statements: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
-      const app = yield* makeAppWith({
-        rows: (sql, params) => {
-          statements.push({ sql, params });
-          if (sql.includes(`from "session"`))
-            return [["session", new Date(Date.now() + 86_400_000).toISOString(), "user", "a@b.c"]];
-          if (sql.startsWith(`delete from "oauth_apps"`)) return [["app"]];
-          return [];
-        },
-      });
-      const remove = (headers: Record<string, string>) =>
-        send(app, "/api/website/servers/app", { method: "DELETE", headers });
-
-      assert.strictEqual((yield* remove({ cookie: "auth_session=session" })).status, 403);
-      assert.isFalse(statements.some(({ sql }) => sql.startsWith("delete")));
-
-      const removed = yield* remove({ cookie: "auth_session=session", origin });
-      assert.strictEqual(removed.status, 204);
-      const deletes = statements.filter(({ sql }) => sql.startsWith("delete"));
-      assert.deepStrictEqual(
-        deletes.map(({ sql }) => sql.match(/^delete from "(\w+)"/)?.[1]),
-        ["oauth_apps", "device_code_sessions", "oauth_sessions"],
-      );
-      assert.includeMembers([...(deletes[0]?.params ?? [])], ["app", "server", "user"]);
     }),
   );
 

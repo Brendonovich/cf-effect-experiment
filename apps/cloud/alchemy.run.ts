@@ -30,6 +30,7 @@ import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
 import WebsiteWorkerLayer, {
   WebsiteAssetsDirectory,
   WebsiteOAuthStateSecret,
+  WebsiteSigningKey,
   WebsiteWorker,
 } from "./src/worker/WebsiteWorker.ts";
 
@@ -99,9 +100,14 @@ export default Alchemy.Stack(
     }).pipe(Effect.provide(IngressWorkerLayer));
 
     const websiteOAuthStateSecret = yield* Alchemy.makeRandom("WebsiteOAuthStateSecret");
+    const websiteSigningKey = yield* Alchemy.KeyPair("WebsiteSigningKey", {
+      algorithm: "rsa",
+      modulusLength: 2048,
+    });
     const websiteWorker = yield* WebsiteWorker.pipe(Alchemy.remote()).pipe(
       Effect.provide(WebsiteWorkerLayer),
       Effect.provideService(WebsiteOAuthStateSecret, websiteOAuthStateSecret),
+      Effect.provideService(WebsiteSigningKey, websiteSigningKey.privateKey),
       Effect.provideService(WebsiteAssetsDirectory, websiteBuild?.outdir),
     );
 

@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -148,7 +149,10 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
     clientAuthPath: resolve(dataDirectory, "macrograph-client-auth.json"),
     ownerPath: resolve(dataDirectory, "macrograph-owner.json"),
     apiKeysPath: resolve(dataDirectory, "macrograph-api-keys.json"),
-    cloudBaseUrl: optionalEnv(env.MACROGRAPH_CLOUD_BASE_URL) ?? "https://www.macrograph.app/api",
+    issuer: (optionalEnv(env.MACROGRAPH_ISSUER) ?? "https://macrograph.app").replace(/\/$/, ""),
+    /** Shown when users approve this server on macrograph.app. */
+    serverName:
+      optionalEnv(env.MACROGRAPH_SERVER_NAME)?.trim() || `MacroGraph server on ${hostname()}`,
     adminIds: new Set(
       (optionalEnv(env.MACROGRAPH_ADMIN_IDS) ?? "")
         .split(",")

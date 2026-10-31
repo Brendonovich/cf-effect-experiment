@@ -1,0 +1,205 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "fd04a167-b2d6-4c6a-b41e-779c3c6f79da",
+  "prevIds": [
+    "8d14646b-bf70-454b-9d99-78588d476524"
+  ],
+  "footprints": [
+    {
+      "statementType": "drop_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "device_code_sessions"
+      ],
+      "writes": [
+        "s|tbl|public.device_code_sessions",
+        "n|tbl|public.device_code_sessions",
+        "e|tbl|public.device_code_sessions",
+        "n|rel|public.device_code_sessions",
+        "n|type|public.device_code_sessions"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "oauth_apps"
+      ],
+      "writes": [
+        "s|tbl|public.oauth_apps",
+        "n|tbl|public.oauth_apps",
+        "e|tbl|public.oauth_apps",
+        "n|rel|public.oauth_apps",
+        "n|type|public.oauth_apps"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "oauth_sessions"
+      ],
+      "writes": [
+        "s|tbl|public.oauth_sessions",
+        "n|tbl|public.oauth_sessions",
+        "e|tbl|public.oauth_sessions",
+        "n|rel|public.oauth_sessions",
+        "n|type|public.oauth_sessions"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "drop_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "server_registration_sessions"
+      ],
+      "writes": [
+        "s|tbl|public.server_registration_sessions",
+        "n|tbl|public.server_registration_sessions",
+        "e|tbl|public.server_registration_sessions",
+        "n|rel|public.server_registration_sessions",
+        "n|type|public.server_registration_sessions"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"device_code_sessions\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"oauth_apps\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"oauth_sessions\"]"
+    },
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"server_registration_sessions\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code_sessions\",\"app_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code_sessions\",\"code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code_sessions\",\"device_code\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code_sessions\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"device_code_sessions\",\"created_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_apps\",\"pk\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_apps\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_apps\",\"type\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_apps\",\"owner_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"app_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"access_token\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"refresh_token\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"expires\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"oauth_sessions\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"server_registration_sessions\",\"id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"server_registration_sessions\",\"userCode\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"server_registration_sessions\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"server_registration_sessions\",\"created_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"device_code_sessions\",\"device_code_sessions_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"oauth_apps\",\"oauth_apps_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"oauth_sessions\",\"oauth_sessions_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"server_registration_sessions\",\"server_registration_sessions_pkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "uniques\u0000[\"public\",\"oauth_sessions\",\"oauth_sessions_access_token_key\"]"
+    },
+    {
+      "op": "drop",
+      "key": "uniques\u0000[\"public\",\"oauth_sessions\",\"oauth_sessions_refresh_token_key\"]"
+    },
+    {
+      "op": "drop",
+      "key": "uniques\u0000[\"public\",\"server_registration_sessions\",\"server_registration_sessions_userCode_key\"]"
+    }
+  ]
+}

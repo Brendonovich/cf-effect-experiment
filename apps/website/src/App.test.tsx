@@ -54,9 +54,9 @@ it("renders the landing page with a login link for signed-out visitors", async (
 
 it("sends signed-out visitors from account pages to login and back", async () => {
   mockApi({ "/api/website/session": null });
-  const { history } = renderApp("/account/servers");
+  const { history } = renderApp("/account/apps");
   await vi.waitFor(() =>
-    expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/servers")}`),
+    expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/apps")}`),
   );
 });
 
@@ -86,7 +86,15 @@ it("switches account tabs without reloading", async () => {
   mockApi({
     "/api/website/session": session,
     "/api/website/credentials": [],
-    "/api/website/servers": [{ id: "server-1", type: "server" }],
+    "/api/website/authorizations": [
+      {
+        id: "grant-1",
+        client: { id: "mgc_1", name: "Ada's server", verified: false },
+        scope: ["openid", "offline_access", "credentials"],
+        createdAt: 0,
+        lastUsedAt: 0,
+      },
+    ],
   });
   const { container, history } = renderApp("/account/credentials");
   const heading = () => container.querySelector("h1")?.textContent;
@@ -94,9 +102,41 @@ it("switches account tabs without reloading", async () => {
 
   const tab = (href: string) => container.querySelector<HTMLAnchorElement>(`nav a[href="${href}"]`);
 
-  tab("/account/servers")?.click();
-  await vi.waitFor(() => expect(heading()).toBe("Servers"));
-  expect(history.get()).toBe("/account/servers");
+  tab("/account/apps")?.click();
+  await vi.waitFor(() => expect(heading()).toBe("Apps"));
+  await vi.waitFor(() => expect(container.textContent).toContain("Ada's server"));
+  expect(history.get()).toBe("/account/apps");
   tab("/account/credentials")?.click();
   await vi.waitFor(() => expect(heading()).toBe("Credentials"));
+});
+
+it("approves a device sign-in after showing who is asking and for what", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/device/lookup": {
+      userCode: "BCDF-GHJK",
+      client: { id: "mgc_1", name: "Ada's server", verified: false },
+      scope: ["openid", "email", "offline_access", "credentials"],
+      requestedAt: 0,
+      expiresAt: 0,
+      requestIp: "203.0.113.7",
+      requestCountry: "NZ",
+    },
+    "/api/website/device/approve": true,
+  });
+  const { container, history } = renderApp("/device?user_code=BCDF-GHJK");
+  await vi.waitFor(() => expect(container.textContent).toContain("Approve sign-in?"));
+  // The code is read once and kept out of history.
+  expect(history.get()).toBe("/device");
+  expect(container.textContent).toContain("BCDF-GHJK");
+  expect(container.textContent).toContain("Ada's server");
+  expect(container.textContent).toContain("Unverified");
+  expect(container.textContent).toContain("203.0.113.7");
+  expect(container.textContent).toContain("Use your connected credentials");
+
+  const approve = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Approve",
+  );
+  approve?.click();
+  await vi.waitFor(() => expect(container.textContent).toContain("Access granted"));
 });

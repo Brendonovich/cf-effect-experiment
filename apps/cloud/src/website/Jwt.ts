@@ -18,11 +18,31 @@ export const base64UrlDecode = (value: string) => {
 
 const encodeJson = (value: unknown) => base64UrlEncode(bytes.encode(JSON.stringify(value)));
 
+/** The public half of an RSA signing key, as published in a JWK Set (RFC 7517). */
+export interface PublicJwk {
+  readonly kty: "RSA";
+  readonly n: string;
+  readonly e: string;
+  readonly alg: "RS256";
+  readonly use: "sig";
+  readonly kid: string;
+}
+
 export interface SigningKey {
   readonly algorithm: "HS256" | "RS256";
   readonly sign: CryptoKey;
   readonly verify: CryptoKey;
+  /** Set for asymmetric keys, which can be published. */
+  readonly publicJwk?: PublicJwk;
 }
+
+/** RFC 7638 JWK thumbprint of an RSA public key, used as its `kid`. */
+export const rsaThumbprint = async (jwk: { readonly n: string; readonly e: string }) => {
+  // Required members only, in lexicographic order, with no whitespace.
+  const canonical = JSON.stringify({ e: jwk.e, kty: "RSA", n: jwk.n });
+  const digest = await crypto.subtle.digest("SHA-256", bytes.encode(canonical));
+  return base64UrlEncode(new Uint8Array(digest));
+};
 
 const signingParams = (algorithm: SigningKey["algorithm"]) =>
   algorithm === "HS256" ? { name: "HMAC" } : { name: "RSASSA-PKCS1-v1_5" };
@@ -50,6 +70,7 @@ export const rsaKey = (pem: string) =>
     const algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
     const sign = await crypto.subtle.importKey("pkcs8", der, algorithm, true, ["sign"]);
     const jwk = await crypto.subtle.exportKey("jwk", sign);
+    if (jwk.n === undefined || jwk.e === undefined) throw new Error("Not an RSA key");
     const verify = await crypto.subtle.importKey(
       "jwk",
       { kty: jwk.kty, n: jwk.n, e: jwk.e },
@@ -57,12 +78,26 @@ export const rsaKey = (pem: string) =>
       false,
       ["verify"],
     );
-    return { algorithm: "RS256", sign, verify };
+    const kid = await rsaThumbprint({ n: jwk.n, e: jwk.e });
+    return {
+      algorithm: "RS256",
+      sign,
+      verify,
+      publicJwk: { kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", use: "sig", kid },
+    };
   });
 
-export const sign = (key: SigningKey, payload: Readonly<Record<string, unknown>>) =>
+export const sign = (
+  key: SigningKey,
+  payload: Readonly<Record<string, unknown>>,
+  header: { readonly typ?: string } = {},
+) =>
   Effect.promise(async () => {
-    const input = `${encodeJson({ alg: key.algorithm })}.${encodeJson(payload)}`;
+    const input = `${encodeJson({
+      alg: key.algorithm,
+      ...(key.publicJwk === undefined ? {} : { kid: key.publicJwk.kid }),
+      ...header,
+    })}.${encodeJson(payload)}`;
     const signature = await crypto.subtle.sign(
       signingParams(key.algorithm),
       key.sign,

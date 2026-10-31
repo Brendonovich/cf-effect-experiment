@@ -96,6 +96,11 @@ const styles = stylex.create({
     paddingLeft: 12,
   },
   pendingTitle: { margin: 0, fontSize: 12, fontWeight: 500, color: colors.gray12 },
+  userCode: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontWeight: 600,
+    letterSpacing: "0.06em",
+  },
   pendingDescription: {
     marginBottom: 0,
     marginTop: 4,
@@ -215,6 +220,11 @@ export function CredentialSettings(props: CredentialSettingsProps) {
     stateByClient.set(client, context);
     actions.update(context);
     return true;
+  };
+
+  const userCode = () => {
+    const status = authorization.context.auth?.status;
+    return status?.state === "pending" ? status.userCode : undefined;
   };
 
   const verificationUrl = () => {
@@ -351,7 +361,11 @@ export function CredentialSettings(props: CredentialSettingsProps) {
     run("refresh", async (client, generation) => {
       if (client === null) return;
       const nextCatalog = await Effect.runPromise(client.RefetchCredentials());
-      if (!update(client, authorization.context.auth, nextCatalog, generation)) return;
+      // Refetching can reveal that the connection was revoked, so re-read its status too.
+      const nextAuth =
+        (await Effect.runPromise(client.GetCredentialAuth()).catch(() => null)) ??
+        authorization.context.auth;
+      if (!update(client, nextAuth, nextCatalog, generation)) return;
       await props.onChanged?.();
     });
 
@@ -445,6 +459,13 @@ export function CredentialSettings(props: CredentialSettingsProps) {
                 <p sx={styles.pendingDescription}>
                   This page checks automatically while you approve the device connection.
                 </p>
+                <Show when={userCode()}>
+                  {(code) => (
+                    <p sx={styles.pendingDescription}>
+                      Confirm the code <strong sx={styles.userCode}>{code()}</strong> matches.
+                    </p>
+                  )}
+                </Show>
                 <div sx={styles.pendingActions}>
                   <Show when={verificationUrl()}>
                     {(url) => (

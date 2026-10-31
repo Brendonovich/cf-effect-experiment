@@ -121,12 +121,10 @@ const styles = stylex.create({
 export function App() {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const store = makeLocalProjectStore(localStorage);
-  const credentialBaseUrl =
-    import.meta.env.VITE_MACROGRAPH_CREDENTIALS_BASE_URL ??
-    (import.meta.env.DEV ? new URL("__macrograph_credentials", location.origin).href : undefined);
+  const issuer = import.meta.env.VITE_MACROGRAPH_ISSUER;
   const credentials = makeBrowserCredentialProvider({
     storage: localStorage,
-    ...(credentialBaseUrl === undefined ? {} : { baseUrl: credentialBaseUrl }),
+    ...(issuer === undefined ? {} : { issuer }),
   });
   const editor = createEditorController({
     connection: credentials.pipe(

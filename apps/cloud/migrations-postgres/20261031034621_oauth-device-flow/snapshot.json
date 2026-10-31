@@ -1,0 +1,1322 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "dc31363d-112d-4ff4-be07-75695487490d",
+  "prevIds": [
+    "fd04a167-b2d6-4c6a-b41e-779c3c6f79da"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_access_tokens"
+      ],
+      "writes": [
+        "s|tbl|public.auth_access_tokens",
+        "n|tbl|public.auth_access_tokens",
+        "e|tbl|public.auth_access_tokens",
+        "n|rel|public.auth_access_tokens",
+        "n|type|public.auth_access_tokens",
+        "n|rel|public.auth_access_tokens_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_clients"
+      ],
+      "writes": [
+        "s|tbl|public.auth_clients",
+        "n|tbl|public.auth_clients",
+        "e|tbl|public.auth_clients",
+        "n|rel|public.auth_clients",
+        "n|type|public.auth_clients",
+        "n|rel|public.auth_clients_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_device_authorizations"
+      ],
+      "writes": [
+        "s|tbl|public.auth_device_authorizations",
+        "n|tbl|public.auth_device_authorizations",
+        "e|tbl|public.auth_device_authorizations",
+        "n|rel|public.auth_device_authorizations",
+        "n|type|public.auth_device_authorizations",
+        "n|rel|public.auth_device_authorizations_pkey",
+        "n|rel|public.auth_device_authorizations_user_code_key"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_grants"
+      ],
+      "writes": [
+        "s|tbl|public.auth_grants",
+        "n|tbl|public.auth_grants",
+        "e|tbl|public.auth_grants",
+        "n|rel|public.auth_grants",
+        "n|type|public.auth_grants",
+        "n|rel|public.auth_grants_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_rate_limits"
+      ],
+      "writes": [
+        "s|tbl|public.auth_rate_limits",
+        "n|tbl|public.auth_rate_limits",
+        "e|tbl|public.auth_rate_limits",
+        "n|rel|public.auth_rate_limits",
+        "n|type|public.auth_rate_limits",
+        "n|rel|public.auth_rate_limits_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_refresh_tokens"
+      ],
+      "writes": [
+        "s|tbl|public.auth_refresh_tokens",
+        "n|tbl|public.auth_refresh_tokens",
+        "e|tbl|public.auth_refresh_tokens",
+        "n|rel|public.auth_refresh_tokens",
+        "n|type|public.auth_refresh_tokens",
+        "n|rel|public.auth_refresh_tokens_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "auth_access_tokens",
+        "auth_access_tokens_grant_idx"
+      ],
+      "writes": [
+        "s|idx|public.auth_access_tokens_grant_idx",
+        "n|idx|public.auth_access_tokens_grant_idx",
+        "e|idx|public.auth_access_tokens_grant_idx",
+        "n|rel|public.auth_access_tokens_grant_idx"
+      ],
+      "reads": [
+        "n|tbl|public.auth_access_tokens",
+        "n|sch|public",
+        "n|col|public.auth_access_tokens.grant_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "auth_device_authorizations",
+        "auth_device_authorizations_client_idx"
+      ],
+      "writes": [
+        "s|idx|public.auth_device_authorizations_client_idx",
+        "n|idx|public.auth_device_authorizations_client_idx",
+        "e|idx|public.auth_device_authorizations_client_idx",
+        "n|rel|public.auth_device_authorizations_client_idx"
+      ],
+      "reads": [
+        "n|tbl|public.auth_device_authorizations",
+        "n|sch|public",
+        "n|col|public.auth_device_authorizations.client_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "auth_grants",
+        "auth_grants_user_idx"
+      ],
+      "writes": [
+        "s|idx|public.auth_grants_user_idx",
+        "n|idx|public.auth_grants_user_idx",
+        "e|idx|public.auth_grants_user_idx",
+        "n|rel|public.auth_grants_user_idx"
+      ],
+      "reads": [
+        "n|tbl|public.auth_grants",
+        "n|sch|public",
+        "n|col|public.auth_grants.user_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "auth_grants",
+        "auth_grants_client_idx"
+      ],
+      "writes": [
+        "s|idx|public.auth_grants_client_idx",
+        "n|idx|public.auth_grants_client_idx",
+        "e|idx|public.auth_grants_client_idx",
+        "n|rel|public.auth_grants_client_idx"
+      ],
+      "reads": [
+        "n|tbl|public.auth_grants",
+        "n|sch|public",
+        "n|col|public.auth_grants.client_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "auth_refresh_tokens",
+        "auth_refresh_tokens_grant_idx"
+      ],
+      "writes": [
+        "s|idx|public.auth_refresh_tokens_grant_idx",
+        "n|idx|public.auth_refresh_tokens_grant_idx",
+        "e|idx|public.auth_refresh_tokens_grant_idx",
+        "n|rel|public.auth_refresh_tokens_grant_idx"
+      ],
+      "reads": [
+        "n|tbl|public.auth_refresh_tokens",
+        "n|sch|public",
+        "n|col|public.auth_refresh_tokens.grant_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_access_tokens"
+      ],
+      "writes": [
+        "s|fk|public.auth_access_tokens.auth_access_tokens_grant_id_auth_grants_id_fkey",
+        "n|fk|public.auth_access_tokens.auth_access_tokens_grant_id_auth_grants_id_fkey",
+        "e|fk|public.auth_access_tokens.auth_access_tokens_grant_id_auth_grants_id_fkey",
+        "n|con|public.auth_access_tokens.auth_access_tokens_grant_id_auth_grants_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.auth_access_tokens",
+        "n|sch|public",
+        "n|tbl|public.auth_grants",
+        "n|sch|public",
+        "n|col|public.auth_access_tokens.grant_id",
+        "n|col|public.auth_grants.id",
+        "e|uniqueness|public.auth_grants.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_device_authorizations"
+      ],
+      "writes": [
+        "s|fk|public.auth_device_authorizations.auth_device_authorizations_user_id_user_id_fkey",
+        "n|fk|public.auth_device_authorizations.auth_device_authorizations_user_id_user_id_fkey",
+        "e|fk|public.auth_device_authorizations.auth_device_authorizations_user_id_user_id_fkey",
+        "n|con|public.auth_device_authorizations.auth_device_authorizations_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.auth_device_authorizations",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.auth_device_authorizations.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_grants"
+      ],
+      "writes": [
+        "s|fk|public.auth_grants.auth_grants_user_id_user_id_fkey",
+        "n|fk|public.auth_grants.auth_grants_user_id_user_id_fkey",
+        "e|fk|public.auth_grants.auth_grants_user_id_user_id_fkey",
+        "n|con|public.auth_grants.auth_grants_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.auth_grants",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.auth_grants.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "auth_refresh_tokens"
+      ],
+      "writes": [
+        "s|fk|public.auth_refresh_tokens.auth_refresh_tokens_grant_id_auth_grants_id_fkey",
+        "n|fk|public.auth_refresh_tokens.auth_refresh_tokens_grant_id_auth_grants_id_fkey",
+        "e|fk|public.auth_refresh_tokens.auth_refresh_tokens_grant_id_auth_grants_id_fkey",
+        "n|con|public.auth_refresh_tokens.auth_refresh_tokens_grant_id_auth_grants_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.auth_refresh_tokens",
+        "n|sch|public",
+        "n|tbl|public.auth_grants",
+        "n|sch|public",
+        "n|col|public.auth_refresh_tokens.grant_id",
+        "n|col|public.auth_grants.id",
+        "e|uniqueness|public.auth_grants.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_access_tokens",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_clients",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_device_authorizations",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_grants",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_rate_limits",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "auth_refresh_tokens",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "token_hash",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "grant_id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "scope",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "expires_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "secret_hash",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "registration_token_hash",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "name",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "software_id",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "software_version",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "token_endpoint_auth_method",
+        "type": "varchar(32)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "scope",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "created_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "last_used_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "created_ip",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "device_code_hash",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "user_code",
+        "type": "varchar(8)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "client_id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "scope",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "status",
+        "type": "varchar(16)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "user_id",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "interval_seconds",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "last_polled_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "expires_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "created_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "request_ip",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "request_country",
+        "type": "varchar(8)",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "client_id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "user_id",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "scope",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "created_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "last_used_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "expires_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_rate_limits",
+        "name": "key",
+        "type": "varchar(255)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_rate_limits",
+        "name": "window_start",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_rate_limits",
+        "name": "count",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "token_hash",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "grant_id",
+        "type": "varchar(64)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "expires_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "rotated_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "auth_access_tokens_grant_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "grant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "auth_device_authorizations_client_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "client_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "auth_grants_user_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "auth_grants_client_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "client_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "auth_refresh_tokens_grant_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "grant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "auth_access_tokens_grant_id_auth_grants_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "grant_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "auth_grants",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "auth_device_authorizations_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "user_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "auth_grants_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "user_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "auth_refresh_tokens_grant_id_auth_grants_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "grant_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "auth_grants",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_access_tokens",
+        "name": "auth_access_tokens_pkey",
+        "columns": [
+          "token_hash"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_clients",
+        "name": "auth_clients_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "auth_device_authorizations_pkey",
+        "columns": [
+          "device_code_hash"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_grants",
+        "name": "auth_grants_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_rate_limits",
+        "name": "auth_rate_limits_pkey",
+        "columns": [
+          "key"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_refresh_tokens",
+        "name": "auth_refresh_tokens_pkey",
+        "columns": [
+          "token_hash"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_device_authorizations",
+        "name": "auth_device_authorizations_user_code_key",
+        "nameExplicit": false,
+        "columns": [
+          "user_code"
+        ],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    }
+  ]
+}

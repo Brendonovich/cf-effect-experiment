@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Data, Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/http";
 
@@ -8,15 +8,12 @@ import { requestOrigin } from "../api/HttpOrigin.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import {
   accountUsers,
-  deviceCodeSessions,
-  oauthApps,
   oauthCredentials,
-  oauthSessions,
   type OAuthToken,
-  serverRegistrationSessions,
 } from "../database/AccountDatabaseSchema.ts";
 import * as Database from "../database/Database.ts";
 import * as Jwt from "./Jwt.ts";
+import * as OAuthServer from "./OAuthServer.ts";
 import * as Password from "./Password.ts";
 import * as Releases from "./Releases.ts";
 import * as Session from "./Session.ts";
@@ -28,18 +25,20 @@ export const websiteOrigins = [
   "https://macrograph.brendonovich.dev",
 ];
 
-const deviceCodeLifetimeMs = 10 * 60 * 1000;
-const userAccessTokenLifetimeMs = 30 * 24 * 60 * 60 * 1000;
 const oauthStateLifetimeSeconds = 60 * 60;
 export interface Options {
   /** HMAC key for OAuth `state` values. */
   readonly stateKey: Effect.Effect<Jwt.SigningKey>;
-  /** RSA key for the JWTs issued to registered MacroGraph servers. */
-  readonly serverKey: Effect.Effect<Jwt.SigningKey | undefined>;
+  /** RSA key that signs ID tokens. */
+  readonly signingKey: Effect.Effect<Jwt.SigningKey>;
+  /** The OAuth issuer. Stages without a public host use each request's origin. */
+  readonly issuer?: string;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
+  /** Overrides the OAuth server's clock, for tests. */
+  readonly now?: () => number;
 }
 
 class Reject extends Data.TaggedError("Reject")<{
@@ -48,9 +47,6 @@ class Reject extends Data.TaggedError("Reject")<{
 
 const reject = (status: number) =>
   Effect.fail(new Reject({ response: HttpServerResponse.empty({ status }) }));
-
-const rejectJson = (status: number, body: unknown) =>
-  Effect.fail(new Reject({ response: HttpServerResponse.jsonUnsafe(body, { status }) }));
 
 const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body, { status });
 
@@ -95,31 +91,25 @@ const escapeHtml = (value: string) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 
-const randomHex = () => crypto.randomUUID().replaceAll("-", "");
-
-const generateUserCode = () => {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const limit = 256 - (256 % alphabet.length);
-  let code = "";
-  while (code.length < 8)
-    for (const byte of crypto.getRandomValues(new Uint8Array(16)))
-      if (byte < limit && code.length < 8) code += alphabet[byte % alphabet.length];
-  return `${code.slice(0, 4)}-${code.slice(4)}`;
-};
-
 const userCodeFrom = (body: Readonly<Record<string, unknown>>) =>
-  typeof body.userCode === "string" && body.userCode.length <= 10 ? body.userCode : undefined;
+  typeof body.userCode === "string" && body.userCode.length <= 16 ? body.userCode : undefined;
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const marshalCredential = (row: typeof oauthCredentials.$inferSelect) => ({
+/** OAuth clients get provider access tokens only; the desktop app still gets refresh tokens. */
+const marshalCredential = (
+  row: typeof oauthCredentials.$inferSelect,
+  includeRefreshToken: boolean,
+) => ({
   provider: row.providerId,
   id: row.providerUserId,
   displayName: row.displayName,
   token: {
     access_token: row.token.access_token,
     expires_in: row.token.expires_in,
-    ...(row.token.refresh_token === undefined ? {} : { refresh_token: row.token.refresh_token }),
+    ...(row.token.refresh_token === undefined || !includeRefreshToken
+      ? {}
+      : { refresh_token: row.token.refresh_token }),
     token_type: row.token.token_type,
     issuedAt: row.issuedAt.getTime(),
   },
@@ -189,26 +179,26 @@ export const layer = (options: Options) =>
           : websiteOrigins[0];
       };
 
+      const oauth = OAuthServer.make({
+        database,
+        signingKey: options.signingKey,
+        issuer: (request) => options.issuer ?? requestOrigin(request),
+        ...(options.now === undefined ? {} : { now: options.now }),
+      });
+      yield* oauth.register;
+
+      const fromOAuth = <A>(effect: Effect.Effect<A, OAuthServer.OAuthReject>) =>
+        effect.pipe(
+          Effect.catchTag("OAuthReject", (rejection) =>
+            Effect.fail(new Reject({ response: rejection.response })),
+          ),
+        );
+
       type AuthData =
         | { readonly source: "session"; readonly userId: string }
-        | { readonly source: "userAccessToken"; readonly userId: string }
-        | { readonly source: "serverJwt"; readonly userId: string; readonly oauthAppId: string };
+        | { readonly source: "oauth"; readonly userId: string };
 
-      const verifyServerJwt = (token: string) =>
-        Effect.gen(function* () {
-          const key = yield* options.serverKey;
-          if (key === undefined) return yield* reject(500);
-          const claims = yield* Jwt.verify(key, token);
-          if (
-            claims === undefined ||
-            typeof claims.oauthAppId !== "string" ||
-            typeof claims.ownerId !== "string"
-          )
-            return yield* reject(400);
-          return { oauthAppId: claims.oauthAppId, ownerId: claims.ownerId };
-        });
-
-      /** Mirrors the original website's API authentication. */
+      /** OAuth access tokens with the `credentials` scope, or a website session. */
       const authenticate = (request: HttpServerRequest.HttpServerRequest) =>
         Effect.gen(function* (): Effect.fn.Return<AuthData | undefined, Reject> {
           const authorization = request.headers.authorization;
@@ -216,35 +206,9 @@ export const layer = (options: Options) =>
           if (authorization !== undefined) {
             if (!authorization.startsWith("Bearer ")) return yield* reject(400);
             const token = authorization.slice("Bearer ".length);
-            if (request.headers["client-id"] !== undefined) {
-              if (token.startsWith("mgu_")) {
-                const rows = yield* database
-                  .select({ userId: oauthSessions.userId })
-                  .from(oauthSessions)
-                  .where(eq(oauthSessions.accessToken, token))
-                  .limit(1)
-                  .pipe(Effect.orDie);
-                const row = rows[0];
-                return row === undefined
-                  ? undefined
-                  : { source: "userAccessToken", userId: row.userId };
-              }
-              const jwt = yield* verifyServerJwt(token);
-              // Server tokens never expire, so deleting the registration is what revokes one.
-              const registrations = yield* database
-                .select({ id: oauthApps.id })
-                .from(oauthApps)
-                .where(
-                  and(
-                    eq(oauthApps.id, jwt.oauthAppId),
-                    eq(oauthApps.type, "server"),
-                    eq(oauthApps.ownerId, jwt.ownerId),
-                  ),
-                )
-                .limit(1)
-                .pipe(Effect.orDie);
-              if (registrations.length === 0) return yield* reject(401);
-              return { source: "serverJwt", userId: jwt.ownerId, oauthAppId: jwt.oauthAppId };
+            if (oauth.isAccessToken(token)) {
+              const granted = yield* fromOAuth(oauth.authenticateBearer(request, "credentials"));
+              return { source: "oauth", userId: granted.userId };
             }
             // The desktop app sends its website session ID as a bearer token.
             sessionId = token;
@@ -354,19 +318,29 @@ export const layer = (options: Options) =>
         ),
       );
 
+      // OAuth clients such as the playground call these from the browser with a bearer token.
+      const withCors = (response: HttpServerResponse.HttpServerResponse) =>
+        HttpServerResponse.setHeaders(response, OAuthServer.cors);
+      for (const path of [
+        "/api/credentials",
+        "/api/credentials/:providerId/:providerUserId/refresh",
+      ] as const)
+        yield* router.add("OPTIONS", path, () =>
+          Effect.succeed(withCors(HttpServerResponse.empty({ status: 204 }))),
+        );
+
       yield* router.add("GET", "/api/credentials", (request) =>
         handle(
           Effect.gen(function* () {
             const auth = yield* requireAuthentication(request);
-            if (auth.source === "userAccessToken") return yield* reject(401);
             const rows = yield* database
               .select()
               .from(oauthCredentials)
               .where(eq(oauthCredentials.userId, auth.userId))
               .pipe(Effect.orDie);
-            return json(rows.map(marshalCredential));
+            return json(rows.map((row) => marshalCredential(row, auth.source === "session")));
           }),
-        ),
+        ).pipe(Effect.map(withCors)),
       );
 
       yield* router.add("POST", "/api/credentials/:providerId/:providerUserId/refresh", (request) =>
@@ -376,7 +350,7 @@ export const layer = (options: Options) =>
             const provider = yield* providerFor(params.providerId);
             const providerUserId = params.providerUserId ?? "";
             const auth = yield* requireAuthentication(request);
-            if (auth.source === "userAccessToken") return yield* reject(401);
+            const includeRefreshToken = auth.source === "session";
             const where = and(
               eq(oauthCredentials.providerId, provider.id),
               eq(oauthCredentials.userId, auth.userId),
@@ -391,9 +365,10 @@ export const layer = (options: Options) =>
             const row = rows[0];
             if (row === undefined) return yield* reject(404);
             const refreshToken = row.token.refresh_token;
-            if (refreshToken === undefined) return json(marshalCredential(row));
+            if (refreshToken === undefined)
+              return json(marshalCredential(row, includeRefreshToken));
             const token = yield* providers.refresh(provider, refreshToken).pipe(Effect.orDie);
-            if (token === undefined) return json(marshalCredential(row));
+            if (token === undefined) return json(marshalCredential(row, includeRefreshToken));
             const issuedAt = new Date();
             yield* database
               .update(oauthCredentials)
@@ -405,182 +380,9 @@ export const layer = (options: Options) =>
               providerId: provider.id,
               providerUserId,
             });
-            return json(marshalCredential({ ...row, token, issuedAt }));
+            return json(marshalCredential({ ...row, token, issuedAt }, includeRefreshToken));
           }),
-        ),
-      );
-
-      yield* router.add("POST", "/api/login/device/code", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const auth = yield* requireAuthentication(request);
-            if (auth.source !== "serverJwt") return yield* reject(401);
-            const deviceCode = randomHex();
-            const userCode = generateUserCode();
-            yield* database
-              .insert(deviceCodeSessions)
-              .values({ appId: auth.oauthAppId, userCode, deviceCode })
-              .pipe(Effect.orDie);
-            const verificationUri = `${publicOrigin(request)}/login/device`;
-            return json({
-              user_code: userCode,
-              device_code: deviceCode,
-              expires_in: 15 * 60,
-              verification_uri: verificationUri,
-              verification_uri_complete: `${verificationUri}?userCode=${encodeURIComponent(userCode)}`,
-            });
-          }),
-        ),
-      );
-
-      yield* router.add("POST", "/api/login/oauth/access_token", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const params = requestUrl(request).searchParams;
-            const deviceCode = params.get("device_code");
-            if (
-              deviceCode === null ||
-              params.get("grant_type") !== "urn:ietf:params:oauth:grant-type:device_code"
-            )
-              return yield* rejectJson(400, { _tag: "HttpApiDecodeError" });
-            const deviceFlowError = (code: string) =>
-              rejectJson(400, { code, _tag: "DeviceFlowError" });
-            const rows = yield* database
-              .select()
-              .from(deviceCodeSessions)
-              .where(eq(deviceCodeSessions.deviceCode, deviceCode))
-              .limit(1)
-              .pipe(Effect.orDie);
-            const session = rows[0];
-            if (session === undefined) return yield* deviceFlowError("incorrect_device_code");
-            if (session.createdAt.getTime() < Date.now() - deviceCodeLifetimeMs)
-              return yield* deviceFlowError("expired_token");
-            if (session.userId === null) return yield* deviceFlowError("authorization_pending");
-            const userId = session.userId;
-            const accessToken = `mgu_${randomHex()}`;
-            const refreshToken = `mgr_${randomHex()}`;
-            const granted = yield* database
-              .transaction((transaction) =>
-                Effect.gen(function* () {
-                  // Deleting the claimed session is the single-use gate for concurrent polls.
-                  const claimed = yield* transaction
-                    .delete(deviceCodeSessions)
-                    .where(
-                      and(
-                        eq(deviceCodeSessions.deviceCode, deviceCode),
-                        isNotNull(deviceCodeSessions.userId),
-                      ),
-                    )
-                    .returning({ deviceCode: deviceCodeSessions.deviceCode });
-                  if (claimed.length === 0) return false;
-                  yield* transaction.insert(oauthSessions).values({
-                    appId: session.appId,
-                    userId,
-                    accessToken,
-                    refreshToken,
-                    expires: new Date(Date.now() + userAccessTokenLifetimeMs),
-                  });
-                  return true;
-                }),
-              )
-              .pipe(Effect.orDie);
-            if (!granted) return yield* deviceFlowError("incorrect_device_code");
-            return json({
-              userId,
-              access_token: accessToken,
-              refresh_token: refreshToken,
-              token_type: "Bearer",
-            });
-          }),
-        ),
-      );
-
-      yield* router.add("POST", "/api/server/registration/start", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const id = randomHex();
-            const userCode = generateUserCode();
-            yield* database
-              .insert(serverRegistrationSessions)
-              .values({ id, userCode })
-              .pipe(Effect.orDie);
-            const verificationUri = `${publicOrigin(request)}/server-registration`;
-            return json({
-              id,
-              userCode,
-              verification_uri: verificationUri,
-              verification_uri_complete: `${verificationUri}?userCode=${encodeURIComponent(userCode)}`,
-            });
-          }),
-        ),
-      );
-
-      yield* router.add("POST", "/api/server/registration", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const body = yield* readJson(request);
-            if (typeof body.id !== "string")
-              return yield* rejectJson(400, { _tag: "HttpApiDecodeError" });
-            const id = body.id;
-            const registrationError = (code: string) =>
-              rejectJson(400, { code, _tag: "ServerRegistrationError" });
-            const rows = yield* database
-              .select()
-              .from(serverRegistrationSessions)
-              .where(eq(serverRegistrationSessions.id, id))
-              .limit(1)
-              .pipe(Effect.orDie);
-            const session = rows[0];
-            if (session === undefined) return yield* registrationError("incorrect_id");
-            if (session.userId === null) return yield* registrationError("authorization_pending");
-            const ownerId = session.userId;
-            const key = yield* options.serverKey;
-            if (key === undefined) return yield* reject(500);
-            const registered = yield* database
-              .transaction((transaction) =>
-                Effect.gen(function* () {
-                  const claimed = yield* transaction
-                    .delete(serverRegistrationSessions)
-                    .where(
-                      and(
-                        eq(serverRegistrationSessions.id, id),
-                        isNotNull(serverRegistrationSessions.userId),
-                      ),
-                    )
-                    .returning({ id: serverRegistrationSessions.id });
-                  if (claimed.length === 0) return false;
-                  yield* transaction.insert(oauthApps).values({ type: "server", id, ownerId });
-                  return true;
-                }),
-              )
-              .pipe(Effect.orDie);
-            if (!registered) return yield* registrationError("incorrect_id");
-            const token = yield* Jwt.sign(key, {
-              oauthAppId: id,
-              ownerId,
-              iat: Math.floor(Date.now() / 1000),
-            });
-            return json({ token });
-          }),
-        ),
-      );
-
-      yield* router.add("GET", "/api/server/registration", (request) =>
-        handle(
-          Effect.gen(function* () {
-            const auth = yield* requireAuthentication(request);
-            if (auth.source !== "serverJwt") return yield* reject(401);
-            const rows = yield* database
-              .select({ ownerId: oauthApps.ownerId })
-              .from(oauthApps)
-              .where(and(eq(oauthApps.id, auth.oauthAppId), eq(oauthApps.type, "server")))
-              .limit(1)
-              .pipe(Effect.orDie);
-            const registration = rows[0];
-            if (registration === undefined) return yield* reject(404);
-            return json({ ownerId: registration.ownerId });
-          }),
-        ),
+        ).pipe(Effect.map(withCors)),
       );
 
       yield* router.add("GET", "/api/desktop/download/latest/:target", () =>
@@ -896,105 +698,54 @@ export const layer = (options: Options) =>
         ),
       );
 
-      yield* router.add("GET", "/api/website/servers", (request) =>
+      // ---- Device verification page and authorized apps (see OAUTH.md) ----
+
+      yield* router.add("POST", "/api/website/device/lookup", (request) =>
         handle(
           Effect.gen(function* () {
             const { user } = yield* websiteSession(request);
-            const rows = yield* database
-              .select({ id: oauthApps.id, type: oauthApps.type })
-              .from(oauthApps)
-              .where(eq(oauthApps.ownerId, user.id))
-              .pipe(Effect.orDie);
-            return json(rows);
+            const userCode = userCodeFrom(yield* readJson(request));
+            if (userCode === undefined) return json(null, 404);
+            const result = yield* oauth.device.lookup(user.id, userCode);
+            if ("error" in result) return json(null, result.error === "rate_limited" ? 429 : 404);
+            return json(result);
           }),
         ),
       );
 
-      // Deleting the registration revokes the server's token; its pending sign-ins go with it.
-      yield* router.add("DELETE", "/api/website/servers/:id", (request) =>
+      for (const [path, decision] of [
+        ["approve", "approved"],
+        ["deny", "denied"],
+      ] as const)
+        yield* router.add("POST", `/api/website/device/${path}`, (request) =>
+          handle(
+            Effect.gen(function* () {
+              const { user } = yield* websiteSession(request);
+              const userCode = userCodeFrom(yield* readJson(request));
+              if (userCode === undefined) return json(false, 404);
+              const decided = yield* oauth.device.decide(user.id, userCode, decision);
+              return json(decided, decided ? 200 : 404);
+            }),
+          ),
+        );
+
+      yield* router.add("GET", "/api/website/authorizations", (request) =>
         handle(
           Effect.gen(function* () {
             const { user } = yield* websiteSession(request);
-            const id = (yield* HttpRouter.params).id ?? "";
-            yield* database
-              .transaction((transaction) =>
-                Effect.gen(function* () {
-                  const removed = yield* transaction
-                    .delete(oauthApps)
-                    .where(
-                      and(
-                        eq(oauthApps.id, id),
-                        eq(oauthApps.type, "server"),
-                        eq(oauthApps.ownerId, user.id),
-                      ),
-                    )
-                    .returning({ id: oauthApps.id });
-                  if (removed.length === 0) return;
-                  yield* transaction
-                    .delete(deviceCodeSessions)
-                    .where(eq(deviceCodeSessions.appId, id));
-                  yield* transaction.delete(oauthSessions).where(eq(oauthSessions.appId, id));
-                }),
-              )
-              .pipe(Effect.orDie);
+            return json(yield* oauth.grants.list(user.id));
+          }),
+        ),
+      );
+
+      yield* router.add("DELETE", "/api/website/authorizations/:id", (request) =>
+        handle(
+          Effect.gen(function* () {
+            const { user } = yield* websiteSession(request);
+            yield* oauth.grants.revoke(user.id, (yield* HttpRouter.params).id ?? "");
             return HttpServerResponse.empty({ status: 204 });
           }),
         ),
       );
-
-      const userCodeRoutes = (
-        path: string,
-        table: typeof deviceCodeSessions | typeof serverRegistrationSessions,
-      ) =>
-        Effect.gen(function* () {
-          yield* router.add("POST", `/api/website/${path}/verify`, (request) =>
-            handle(
-              Effect.gen(function* () {
-                if (!sameOrigin(request)) return yield* reject(403);
-                const userCode = userCodeFrom(yield* readJson(request));
-                if (userCode === undefined) return json(false);
-                const rows = yield* database
-                  .select({ userCode: table.userCode })
-                  .from(table)
-                  .where(eq(table.userCode, userCode))
-                  .limit(1)
-                  .pipe(Effect.orDie);
-                return json(rows.length > 0);
-              }),
-            ),
-          );
-          yield* router.add("POST", `/api/website/${path}/grant`, (request) =>
-            handle(
-              Effect.gen(function* () {
-                const { user } = yield* websiteSession(request);
-                const userCode = userCodeFrom(yield* readJson(request));
-                if (userCode === undefined) return json({ error: "Device session not found" });
-                const result = yield* database
-                  .transaction((transaction) =>
-                    Effect.gen(function* () {
-                      const rows = yield* transaction
-                        .select({ userId: table.userId })
-                        .from(table)
-                        .where(eq(table.userCode, userCode))
-                        .limit(1);
-                      const session = rows[0];
-                      if (session === undefined) return { error: "Device session not found" };
-                      if (session.userId !== null) return { error: "Device already claimed" };
-                      yield* transaction
-                        .update(table)
-                        .set({ userId: user.id })
-                        .where(and(eq(table.userCode, userCode), isNull(table.userId)));
-                      return null;
-                    }),
-                  )
-                  .pipe(Effect.orDie);
-                return json(result);
-              }),
-            ),
-          );
-        });
-
-      yield* userCodeRoutes("device", deviceCodeSessions);
-      yield* userCodeRoutes("server-registration", serverRegistrationSessions);
     }),
   );

@@ -6,11 +6,15 @@ import { Effect } from "effect";
 
 import type { StorageLike } from "./LocalStoragePersistence";
 
-export const MACROGRAPH_AUTH_SESSION_KEY = "macrograph:local-browser:cloud-auth:v1";
+export const MACROGRAPH_AUTH_SESSION_KEY = "macrograph:local-browser:cloud-auth:v2";
+
+/** The playground's built-in public OAuth client on macrograph.app. */
+export const PLAYGROUND_CLIENT_ID = "macrograph-playground";
 
 export interface BrowserCredentialEnvironment {
   readonly storage: StorageLike;
-  readonly baseUrl?: string;
+  /** The OAuth issuer, `https://macrograph.app` unless overridden. */
+  readonly issuer?: string;
   readonly now?: () => number;
 }
 
@@ -47,7 +51,8 @@ export const makeBrowserCredentialProvider = (
   };
   return CloudCredentials.make({
     store,
-    ...(environment.baseUrl === undefined ? {} : { baseUrl: environment.baseUrl }),
+    client: { type: "public", clientId: PLAYGROUND_CLIENT_ID },
+    ...(environment.issuer === undefined ? {} : { issuer: environment.issuer }),
     ...(environment.now === undefined ? {} : { now: environment.now }),
   }).pipe(Effect.map((client) => ({ service: client.credentials })));
 };
