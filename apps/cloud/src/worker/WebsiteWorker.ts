@@ -11,6 +11,7 @@ import { ObservabilityLayer } from "../Observability.ts";
 import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
+import * as InitialData from "../website/InitialData.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
 import { CloudWorker } from "./CloudWorker.ts";
@@ -194,7 +195,35 @@ export default Layer.unwrap(
               environment.ASSETS;
             if (assets === undefined) return HttpServerResponse.empty({ status: 404 });
             const response = yield* Effect.promise(() => assets.fetch(source));
-            return HttpServerResponse.raw(response, { status: response.status });
+            const dataPath = Object.hasOwn(InitialData.pages, url.pathname)
+              ? InitialData.pages[url.pathname]
+              : undefined;
+            if (
+              dataPath === undefined ||
+              request.method !== "GET" ||
+              !response.ok ||
+              !(response.headers.get("content-type") ?? "").includes("text/html")
+            )
+              return HttpServerResponse.raw(response, { status: response.status });
+            // The page's data comes from the same routes, with the visitor's cookies, so it renders
+            // complete on first load instead of fetching in steps.
+            const dataResponse = yield* app.pipe(
+              Effect.provideService(
+                HttpServerRequest.HttpServerRequest,
+                HttpServerRequest.fromWeb(
+                  new Request(new URL(`${dataPath}${url.search}`, url), {
+                    headers: source.headers,
+                  }),
+                ),
+              ),
+            );
+            const data = yield* Effect.promise(() => HttpServerResponse.toWeb(dataResponse).json());
+            const html = yield* Effect.promise(() => response.text());
+            return HttpServerResponse.text(InitialData.inject(html, data), {
+              contentType: "text/html; charset=utf-8",
+              // The page now holds the visitor's session and request, so it must never be cached.
+              headers: { "cache-control": "no-store" },
+            });
           }),
         };
       }).pipe(

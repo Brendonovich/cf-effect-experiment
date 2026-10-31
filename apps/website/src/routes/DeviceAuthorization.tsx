@@ -13,6 +13,7 @@ import {
   decideDeviceRequest,
   lookupDeviceRequest,
 } from "../api";
+import { initialData } from "../initialData";
 import { RequireSession } from "../session";
 
 export const scopeDescriptions: Record<OAuthScope, string> = {
@@ -59,8 +60,19 @@ function DeviceAuthorization(props: { readonly session: Session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const initialCode = untrack(() => new URLSearchParams(location.search).get("user_code") ?? "");
+  // The Worker looks the code up while serving the page, so it opens straight on the request.
+  const embedded = initialData().device;
+  const prefetched =
+    embedded !== undefined && embedded.userCode === initialCode ? embedded : undefined;
   const [code, setCode] = createSignal(initialCode);
-  const [step, setStep] = createSignal<Step>({ state: "enter-code" });
+  const [step, setStep] = createSignal<Step>(
+    prefetched?.request
+      ? { state: "confirm", request: prefetched.request }
+      : { state: "enter-code" },
+  );
+  const [prefetchError, setPrefetchError] = createSignal(
+    prefetched !== undefined && prefetched.request === null,
+  );
 
   const lookup = useMutation(() => ({
     networkMode: "always" as const,
@@ -77,6 +89,7 @@ function DeviceAuthorization(props: { readonly session: Session }) {
       }
     },
     onSuccess: (request) => setStep({ state: "confirm", request }),
+    onMutate: () => setPrefetchError(false),
   }));
 
   const decide = useMutation(() => ({
@@ -95,7 +108,7 @@ function DeviceAuthorization(props: { readonly session: Session }) {
     queueMicrotask(() => {
       // Codes grant access once approved; keep them out of history once read.
       navigate(location.pathname, { replace: true });
-      lookup.mutate(initialCode);
+      if (prefetched === undefined) lookup.mutate(initialCode);
     });
   });
 
@@ -225,7 +238,7 @@ function DeviceAuthorization(props: { readonly session: Session }) {
               autocomplete="off"
               spellcheck={false}
               placeholder="XXXX-XXXX"
-              aria-invalid={lookup.isError ? "true" : "false"}
+              aria-invalid={lookup.isError || prefetchError() ? "true" : "false"}
               sx={styles.codeInput}
             />
             <Show when={lookup.error}>
@@ -234,6 +247,11 @@ function DeviceAuthorization(props: { readonly session: Session }) {
                   {error().message}
                 </p>
               )}
+            </Show>
+            <Show when={prefetchError()}>
+              <p role="alert" sx={styles.error}>
+                That code wasn't recognised or has expired. Check it and try again.
+              </p>
             </Show>
             <Button
               type="submit"

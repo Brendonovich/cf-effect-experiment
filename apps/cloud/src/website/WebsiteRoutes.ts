@@ -700,6 +700,26 @@ export const layer = (options: Options) =>
 
       // ---- Device verification page and authorized apps (see OAUTH.md) ----
 
+      // What `/device` needs on first render; the Worker embeds it in the page (see `InitialData.ts`).
+      yield* router.add("GET", "/api/website/device", (request) =>
+        handle(
+          Effect.gen(function* () {
+            const sessionId = request.cookies[Session.cookieName];
+            const validated =
+              sessionId === undefined ? undefined : yield* sessions.validate(sessionId);
+            if (validated === undefined) return json({ session: null });
+            const session = { user: validated.user, session: { id: validated.session.id } };
+            const userCode = requestUrl(request).searchParams.get("user_code");
+            if (userCode === null || userCode.length > 16) return json({ session });
+            const result = yield* oauth.device.lookup(validated.user.id, userCode);
+            return json({
+              session,
+              device: { userCode, request: "error" in result ? null : result },
+            });
+          }),
+        ),
+      );
+
       yield* router.add("POST", "/api/website/device/lookup", (request) =>
         handle(
           Effect.gen(function* () {
