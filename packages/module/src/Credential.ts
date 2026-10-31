@@ -36,7 +36,12 @@ export const AuthIdentity = Schema.Struct({
 });
 export const AuthStatus = Schema.Union([
   Schema.Struct({ state: Schema.Literal("disconnected") }),
-  Schema.Struct({ state: Schema.Literal("pending"), verificationUrl: Schema.String }),
+  Schema.Struct({
+    state: Schema.Literal("pending"),
+    verificationUrl: Schema.String,
+    /** The code the user confirms on the verification page (RFC 8628). */
+    userCode: Schema.optional(Schema.String),
+  }),
   Schema.Struct({ state: Schema.Literal("connected"), identity: AuthIdentity }),
 ]);
 export type AuthStatus = typeof AuthStatus.Type;

@@ -309,6 +309,9 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.3.15
         version: 0.3.15
+      '@macrograph/cloud-credentials':
+        specifier: workspace:*
+        version: link:../../packages/cloud-credentials
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

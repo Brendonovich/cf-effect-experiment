@@ -1,10 +1,23 @@
+/**
+ * An OAuth 2.0 client for macrograph.app (see `apps/cloud/OAUTH.md`). Servers register themselves
+ * (RFC 7591) and sign users in with the device authorization grant (RFC 8628); the owner's grant,
+ * with a rotating refresh token, gives access to their credentials.
+ */
 import * as Credential from "@macrograph/module/Credential";
 import * as Engine from "@macrograph/module/Engine";
-import { Effect, Redacted, Schema, Scope, Semaphore } from "effect";
+import { Data, Effect, Redacted, Schema, Scope, Semaphore } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 
-export const DEFAULT_BASE_URL = "https://www.macrograph.app/api";
-export const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1_000;
+export const DEFAULT_ISSUER = "https://macrograph.app";
+export const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+
+/** Signs the owner in and keeps a refresh token for their credentials. */
+export const OWNER_SCOPE = "openid email offline_access credentials";
+/** Identifies a user signing in to a server; nothing outlives the sign-in. */
+export const SIGN_IN_SCOPE = "openid email";
+
+const clockSkewSeconds = 60;
+const accessTokenMarginMs = 60_000;
 
 export class SessionStoreError extends Schema.TaggedError<SessionStoreError>()(
   "CloudCredentialSessionStoreError",
@@ -31,53 +44,106 @@ export class CloudCredentialError extends Schema.TaggedError<CloudCredentialErro
   },
 ) {}
 
-const Pending = Schema.Struct({
-  state: Schema.Literal("pending"),
-  id: Schema.String,
-  verificationUrl: Schema.String,
+/** How this client identifies itself to the authorization server. */
+export type ClientConfig =
+  /** A built-in public client, such as the browser playground. */
+  | { readonly type: "public"; readonly clientId: string }
+  /** A confidential client that registers itself on first use, such as a server. */
+  | {
+      readonly type: "registered";
+      readonly name: string;
+      readonly softwareId: string;
+      readonly softwareVersion?: string;
+    };
+
+export interface Options {
+  readonly store: SessionStore;
+  readonly client: ClientConfig;
+  /** The authorization server's issuer identifier. */
+  readonly issuer?: string;
+  readonly now?: () => number;
+}
+
+// ---- Persisted state ----
+
+const RegisteredClient = Schema.Struct({
+  issuer: Schema.String,
+  clientId: Schema.String,
+  clientSecret: Schema.String,
+  registrationAccessToken: Schema.String,
+  registrationClientUri: Schema.String,
+  name: Schema.String,
 });
-const Session = Schema.Struct({
-  state: Schema.Literal("connected"),
-  token: Schema.String,
+const Grant = Schema.Struct({
+  refreshToken: Schema.String,
+  scope: Schema.String,
   userId: Schema.String,
-  email: Schema.String,
+  email: Schema.NullOr(Schema.String),
+});
+const PendingAuthorization = Schema.Struct({
+  deviceCode: Schema.String,
+  userCode: Schema.String,
+  verificationUrl: Schema.String,
+  interval: Schema.Number,
   expiresAt: Schema.Number,
 });
-const StoredState = Schema.Union([Pending, Session]);
-type StoredState = typeof StoredState.Type;
+const Stored = Schema.Struct({
+  version: Schema.Literal(2),
+  client: Schema.optional(RegisteredClient),
+  grant: Schema.optional(Grant),
+  pending: Schema.optional(PendingAuthorization),
+});
+type Stored = typeof Stored.Type;
 
-const RegistrationStart = Schema.Struct({
-  id: Schema.String,
-  userCode: Schema.String,
-  verification_uri: Schema.String,
-  verification_uri_complete: Schema.String,
+// ---- Protocol messages ----
+
+const Metadata = Schema.Struct({
+  issuer: Schema.String,
+  device_authorization_endpoint: Schema.String,
+  token_endpoint: Schema.String,
+  jwks_uri: Schema.String,
+  registration_endpoint: Schema.optional(Schema.String),
+  revocation_endpoint: Schema.optional(Schema.String),
 });
-const RegistrationGrant = Schema.Struct({ token: Schema.String });
-const RegistrationError = Schema.TaggedStruct("ServerRegistrationError", {
-  code: Schema.Literals(["authorization_pending", "incorrect_id", "access_denied"]),
+type Metadata = typeof Metadata.Type;
+
+const Registration = Schema.Struct({
+  client_id: Schema.String,
+  client_secret: Schema.String,
+  registration_access_token: Schema.String,
+  registration_client_uri: Schema.String,
 });
-const RegistrationResult = Schema.Union([RegistrationGrant, RegistrationError]);
-const Registration = Schema.Struct({ ownerId: Schema.String });
-const CloudUser = Schema.NullOr(Schema.Struct({ id: Schema.String, email: Schema.String }));
-const DeviceAuthorization = Schema.Struct({
+const DeviceAuthorizationResponse = Schema.Struct({
   device_code: Schema.String,
-  verification_uri_complete: Schema.String,
+  user_code: Schema.String,
+  verification_uri: Schema.String,
+  verification_uri_complete: Schema.optional(Schema.String),
+  expires_in: Schema.Number,
+  interval: Schema.optional(Schema.Number),
 });
-const DeviceGrant = Schema.Struct({
-  userId: Schema.String,
+const TokenResponse = Schema.Struct({
   access_token: Schema.String,
-  refresh_token: Schema.String,
-  token_type: Schema.Literal("Bearer"),
+  token_type: Schema.String,
+  expires_in: Schema.optional(Schema.Number),
+  scope: Schema.optional(Schema.String),
+  refresh_token: Schema.optional(Schema.String),
+  id_token: Schema.optional(Schema.String),
 });
-const DeviceFlowError = Schema.TaggedStruct("DeviceFlowError", {
-  code: Schema.Literals([
-    "authorization_pending",
-    "expired_token",
-    "incorrect_device_code",
-    "access_denied",
-  ]),
+type TokenResponse = typeof TokenResponse.Type;
+const ErrorResponse = Schema.Struct({
+  error: Schema.String,
+  error_description: Schema.optional(Schema.String),
 });
-const DeviceGrantResult = Schema.Union([DeviceGrant, DeviceFlowError]);
+const Jwks = Schema.Struct({
+  keys: Schema.Array(
+    Schema.Struct({
+      kty: Schema.String,
+      kid: Schema.optional(Schema.String),
+      n: Schema.optional(Schema.String),
+      e: Schema.optional(Schema.String),
+    }),
+  ),
+});
 
 export const CloudCredential = Schema.Struct({
   provider: Schema.String,
@@ -88,18 +154,29 @@ export const CloudCredential = Schema.Struct({
   token: Schema.Struct({
     access_token: Schema.String,
     expires_in: Schema.Number,
-    refresh_token: Schema.optional(Schema.String),
     token_type: Schema.String,
     issuedAt: Schema.Number,
   }),
 });
 const CloudCredentialList = Schema.Array(CloudCredential);
 
-export interface Options {
-  readonly store: SessionStore;
-  readonly baseUrl?: string;
-  readonly now?: () => number;
-  readonly clientId?: string;
+/** An RFC 6749 §5.2 error from the authorization server. */
+class OAuthError extends Data.TaggedError("OAuthError")<{
+  readonly error: string;
+  readonly description: string | undefined;
+}> {}
+
+export interface DeviceSignIn {
+  readonly deviceCode: string;
+  readonly userCode: string;
+  readonly verificationUrl: string;
+  readonly interval: number;
+  readonly expiresIn: number;
+}
+
+export interface Identity {
+  readonly userId: string;
+  readonly email: string;
 }
 
 export type CredentialClient = Engine.CredentialService & {
@@ -110,27 +187,67 @@ export type CredentialClient = Engine.CredentialService & {
 
 export interface Service {
   readonly credentials: CredentialClient;
+  /** Connects the owner's account, whose grant gives access to their credentials. */
   readonly auth: Credential.AuthController;
-  /** Like `auth.poll`, but only completes when the expected MacroGraph account approved the registration. */
+  /** Like `auth.poll`, but only accepts the expected account. */
   readonly pollOwner: (
     ownerId: string,
   ) => Effect.Effect<Credential.AuthStatus, Credential.AuthError>;
-  readonly clientAuth: {
-    readonly start: Effect.Effect<typeof DeviceAuthorization.Type, CloudCredentialError>;
+  /** Identifies a user with a one-off device sign-in. */
+  readonly signIn: {
+    readonly start: Effect.Effect<DeviceSignIn, CloudCredentialError>;
     readonly poll: (
       deviceCode: string,
     ) => Effect.Effect<
-      | { readonly state: "pending" }
-      | { readonly state: "connected"; readonly userId: string; readonly email: string },
+      | { readonly state: "pending"; readonly interval: number }
+      | ({ readonly state: "connected" } & Identity),
       CloudCredentialError
     >;
   };
 }
 
-export const normalizeBaseUrl = (value = DEFAULT_BASE_URL) =>
-  value
-    .replace(/^https:\/\/macrograph\.app(?=\/|$)/, "https://www.macrograph.app")
-    .replace(/\/$/, "");
+// ---- Helpers ----
+
+const base64UrlDecode = (value: string) => {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+  return Uint8Array.from(
+    atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
+    (character) => character.charCodeAt(0),
+  );
+};
+
+const decodeJson = (part: string): unknown => {
+  try {
+    return JSON.parse(new TextDecoder().decode(base64UrlDecode(part)));
+  } catch {
+    return undefined;
+  }
+};
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** RFC 6749 §2.3.1: both parts are form-encoded before Basic encoding. */
+const basicAuthorization = (clientId: string, secret: string) => {
+  const encode = (value: string) => encodeURIComponent(value).replaceAll("%20", "+");
+  return `Basic ${btoa(`${encode(clientId)}:${encode(secret)}`)}`;
+};
+
+const isLoopback = (url: URL) =>
+  url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+
+const safeUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || (url.protocol === "http:" && isLoopback(url))) &&
+      url.username === "" &&
+      url.password === ""
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const sensitiveKey = (key: string) => {
   const normalized = key.replaceAll(/[^a-z0-9]/gi, "").toLowerCase();
@@ -181,232 +298,574 @@ const toSummary = (credential: typeof CloudCredential.Type): Credential.Summary 
   displayName: credential.displayName,
   status: "available",
   scopes: credential.scopes ?? [],
-  metadata: sanitize(credential.metadata ?? {}, [
-    credential.token.access_token,
-    credential.token.refresh_token ?? "",
-  ]) as Readonly<Record<string, Schema.Json>>,
+  metadata: sanitize(credential.metadata ?? {}, [credential.token.access_token]) as Readonly<
+    Record<string, Schema.Json>
+  >,
 });
+
+const failure = (code: CloudCredentialError["code"], reason: string) =>
+  new CloudCredentialError({ code, reason });
+
+const requestFailed = () =>
+  failure("request-failed", "MacroGraph could not complete the request; try again");
+const invalidResponse = () =>
+  failure("invalid-response", "MacroGraph returned an invalid response");
 
 export const make = Effect.fnUntraced(function* (
   options: Options,
 ): Effect.fn.Return<Service, never, HttpClient.HttpClient> {
-  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const issuer = (options.issuer ?? DEFAULT_ISSUER).replace(/\/$/, "");
   const http = HttpClient.withScope(yield* HttpClient.HttpClient);
   const now = options.now ?? Date.now;
   const lock = Semaphore.makeUnsafe(1);
+  const clientLock = Semaphore.makeUnsafe(1);
   const subscribers = new Set<() => Effect.Effect<void>>();
   let loaded = false;
-  let stored: StoredState | undefined;
+  let stored: Stored = { version: 2 };
+  let metadata: Metadata | undefined;
+  const keys = new Map<string, CryptoKey>();
+  let access: { readonly token: string; readonly expiresAt: number } | undefined;
   let cachedCredentials: ReadonlyArray<typeof CloudCredential.Type> | undefined;
   let authorizationChanged = false;
+  /** When each device code may next be polled, so callers polling faster don't trip `slow_down`. */
+  const polls = new Map<string, { nextAt: number; interval: number }>();
 
-  const storageError = (error: SessionStoreError): Credential.AuthError =>
+  // ---- Storage ----
+
+  const storageError = (error: SessionStoreError) =>
     new Credential.AuthError({ reason: error.reason });
+  const load = Effect.gen(function* () {
+    if (loaded) return;
+    const raw = yield* options.store.read;
+    if (raw !== null) {
+      const decoded = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(Stored)(JSON.parse(raw)),
+        catch: () => undefined,
+      }).pipe(Effect.option);
+      // Unreadable or older state is discarded; the server registers and connects again.
+      if (decoded._tag === "Some") stored = decoded.value;
+      else yield* options.store.clear;
+    }
+    loaded = true;
+  });
+  const save = (next: Stored) =>
+    options.store.write(JSON.stringify(next)).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          stored = next;
+        }),
+      ),
+    );
+  /** The stored state with only the given parts kept. */
+  const keep = (parts: { readonly client?: boolean; readonly grant?: boolean }): Stored => ({
+    version: 2,
+    ...(parts.client && stored.client !== undefined ? { client: stored.client } : {}),
+    ...(parts.grant && stored.grant !== undefined ? { grant: stored.grant } : {}),
+  });
+  const clearGrant = Effect.gen(function* () {
+    yield* save(keep({ client: true }));
+    access = undefined;
+    cachedCredentials = undefined;
+    authorizationChanged = true;
+  });
+
   const notify = Effect.forEach(subscribers, (subscriber) => subscriber(), { discard: true });
   const notifyIfAuthorizationChanged = Effect.suspend(() => {
     if (!authorizationChanged) return Effect.void;
     authorizationChanged = false;
     return notify;
   });
-  const decodeStored = (raw: string) =>
-    Effect.try({
-      try: () => Schema.decodeUnknownSync(StoredState)(JSON.parse(raw)),
-      catch: () => new SessionStoreError({ reason: "Stored MacroGraph authorization is invalid" }),
-    });
-  const load = Effect.gen(function* () {
-    if (loaded) return;
-    const raw = yield* options.store.read;
-    if (raw !== null)
-      stored = yield* decodeStored(raw).pipe(
-        Effect.catch(() => options.store.clear.pipe(Effect.as(undefined))),
-      );
-    loaded = true;
-  });
-  const clear = Effect.gen(function* () {
-    yield* options.store.clear;
-    stored = undefined;
-    cachedCredentials = undefined;
-  });
-  const activeSession = Effect.gen(function* () {
-    yield* load;
-    if (stored?.state !== "connected") return undefined;
-    if (stored.expiresAt > now()) return stored;
-    yield* clear;
-    authorizationChanged = true;
-    return undefined;
-  });
-  const request = <A, I>(
-    path: string,
-    schema: Schema.Codec<A, I>,
-    init?: { readonly method?: "POST"; readonly body?: string },
-    token?: string,
-    acceptedErrorStatus?: number,
-  ) =>
+
+  // ---- HTTP ----
+
+  const execute = (request: HttpClientRequest.HttpClientRequest) =>
     Effect.gen(function* () {
-      let outgoing = HttpClientRequest.make(init?.method ?? "GET")(`${baseUrl}${path}`, {
-        headers: {
-          ...(token === undefined
-            ? {}
-            : {
-                authorization: `Bearer ${token}`,
-                "client-id": options.clientId ?? "macrograph-server",
-              }),
-        },
-      });
-      if (init?.body !== undefined)
-        outgoing = HttpClientRequest.bodyText(outgoing, init.body, "application/json");
-      const response = yield* http.execute(outgoing).pipe(
-        Effect.mapError(
-          () =>
-            new CloudCredentialError({
-              code: "request-failed",
-              reason: "MacroGraph could not complete the credential request",
-            }),
-        ),
-      );
-      if (response.status === 401)
-        return yield* new CloudCredentialError({
-          code: "authorization-expired",
-          reason: "MacroGraph authorization expired; reconnect the account",
-        });
-      if (
-        (response.status < 200 || response.status >= 300) &&
-        response.status !== acceptedErrorStatus
-      )
-        return yield* new CloudCredentialError({
-          code: "request-failed",
-          reason: "MacroGraph could not complete the credential request",
-        });
-      return yield* response.json.pipe(
-        Effect.flatMap(Schema.decodeUnknownEffect(schema)),
-        Effect.mapError(
-          () =>
-            new CloudCredentialError({
-              code: "invalid-response",
-              reason: "MacroGraph returned an invalid credential response",
-            }),
-        ),
-      );
+      const response = yield* http.execute(request).pipe(Effect.mapError(requestFailed));
+      const body = yield* response.json.pipe(Effect.catch(() => Effect.succeed(undefined)));
+      return { status: response.status, body };
     }).pipe(
       Effect.scoped,
       Effect.timeoutOrElse({
         duration: "10 seconds",
-        orElse: () =>
-          Effect.fail(
-            new CloudCredentialError({
-              code: "request-failed",
-              reason: "MacroGraph credential request timed out; try again",
-            }),
-          ),
+        orElse: () => Effect.fail(failure("request-failed", "MacroGraph took too long to respond")),
       }),
     );
-  const fetchCredentials = Effect.gen(function* () {
-    const session = yield* activeSession;
-    if (session === undefined)
-      return yield* new CloudCredentialError({
-        code: "not-connected",
-        reason: "MacroGraph is not connected",
-      });
-    const credentials = yield* request(
-      "/credentials",
-      CloudCredentialList,
-      undefined,
-      session.token,
+
+  const decode = <A, I>(schema: Schema.Codec<A, I>, value: unknown) =>
+    Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError(invalidResponse));
+
+  /** Decodes a success body, or fails with the RFC 6749 error the server returned. */
+  const oauthResult = <A, I>(
+    schema: Schema.Codec<A, I>,
+    response: { readonly status: number; readonly body: unknown },
+  ) =>
+    Effect.gen(function* () {
+      if (response.status >= 200 && response.status < 300)
+        return yield* decode(schema, response.body);
+      const error = yield* decode(ErrorResponse, response.body);
+      return yield* new OAuthError({ error: error.error, description: error.error_description });
+    });
+
+  const discover = Effect.gen(function* () {
+    if (metadata !== undefined) return metadata;
+    const response = yield* execute(
+      HttpClientRequest.get(`${issuer}/.well-known/oauth-authorization-server`),
     );
-    cachedCredentials = credentials;
-    return credentials;
-  }).pipe(
-    Effect.tapError((error) =>
-      error instanceof CloudCredentialError && error.code === "authorization-expired"
-        ? clear.pipe(
-            Effect.tap(() => Effect.sync(() => (authorizationChanged = true))),
-            Effect.ignore,
-          )
-        : Effect.void,
+    if (response.status !== 200) return yield* requestFailed();
+    const discovered = yield* decode(Metadata, response.body);
+    // RFC 8414 §3.3: the metadata must describe the issuer it was fetched for.
+    if (discovered.issuer !== issuer) return yield* invalidResponse();
+    metadata = discovered;
+    return discovered;
+  });
+
+  // ---- Clients ----
+
+  interface ActiveClient {
+    readonly clientId: string;
+    readonly authenticate: (
+      request: HttpClientRequest.HttpClientRequest,
+      params: Record<string, string>,
+    ) => HttpClientRequest.HttpClientRequest;
+  }
+
+  const form = (request: HttpClientRequest.HttpClientRequest, params: Record<string, string>) =>
+    HttpClientRequest.bodyText(
+      HttpClientRequest.setHeader(request, "accept", "application/json"),
+      new URLSearchParams(params).toString(),
+      "application/x-www-form-urlencoded",
+    );
+
+  const register = (config: Extract<ClientConfig, { type: "registered" }>) =>
+    Effect.gen(function* () {
+      const { registration_endpoint } = yield* discover;
+      if (registration_endpoint === undefined) return yield* invalidResponse();
+      const response = yield* execute(
+        HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(registration_endpoint), {
+          client_name: config.name,
+          grant_types: [DEVICE_CODE_GRANT, "refresh_token"],
+          token_endpoint_auth_method: "client_secret_basic",
+          software_id: config.softwareId,
+          ...(config.softwareVersion === undefined
+            ? {}
+            : { software_version: config.softwareVersion }),
+        }),
+      );
+      const registration = yield* oauthResult(Registration, response).pipe(
+        Effect.catchTag("OAuthError", () => Effect.fail(requestFailed())),
+      );
+      const client: typeof RegisteredClient.Type = {
+        issuer,
+        clientId: registration.client_id,
+        clientSecret: registration.client_secret,
+        registrationAccessToken: registration.registration_access_token,
+        registrationClientUri: registration.registration_client_uri,
+        name: config.name,
+      };
+      // A new client cannot use grants issued to the old one.
+      yield* save({ version: 2, client }).pipe(Effect.mapError(requestFailed));
+      access = undefined;
+      return client;
+    });
+
+  /** Keeps the registered name current (RFC 7592); a failure leaves the old name. */
+  const rename = (client: typeof RegisteredClient.Type, name: string) =>
+    Effect.gen(function* () {
+      const response = yield* execute(
+        HttpClientRequest.bodyJsonUnsafe(
+          HttpClientRequest.setHeader(
+            HttpClientRequest.put(client.registrationClientUri),
+            "authorization",
+            `Bearer ${client.registrationAccessToken}`,
+          ),
+          { client_id: client.clientId, client_name: name },
+        ),
+      );
+      if (response.status !== 200) return client;
+      const renamed = { ...client, name };
+      yield* save({ ...stored, client: renamed }).pipe(Effect.mapError(requestFailed));
+      return renamed;
+    }).pipe(Effect.catch(() => Effect.succeed(client)));
+
+  const activeClient = clientLock.withPermit(
+    Effect.gen(function* (): Effect.fn.Return<ActiveClient, CloudCredentialError> {
+      yield* load.pipe(Effect.mapError(requestFailed));
+      const config = options.client;
+      if (config.type === "public")
+        return {
+          clientId: config.clientId,
+          authenticate: (request, params) =>
+            form(request, { ...params, client_id: config.clientId }),
+        };
+      let client =
+        stored.client !== undefined && stored.client.issuer === issuer
+          ? stored.client
+          : yield* register(config);
+      if (client.name !== config.name) client = yield* rename(client, config.name);
+      const { clientId, clientSecret } = client;
+      return {
+        clientId,
+        authenticate: (request, params) =>
+          form(
+            HttpClientRequest.setHeader(
+              request,
+              "authorization",
+              basicAuthorization(clientId, clientSecret),
+            ),
+            params,
+          ),
+      };
+    }),
+  );
+
+  /** Runs a client request, registering again once if the server no longer knows the client. */
+  const withClient = <A, R>(
+    run: (client: ActiveClient) => Effect.Effect<A, CloudCredentialError | OAuthError, R>,
+  ) =>
+    activeClient.pipe(
+      Effect.flatMap(run),
+      Effect.catchTag("OAuthError", (error) =>
+        error.error === "invalid_client" && options.client.type === "registered"
+          ? clientLock.withPermit(save({ version: 2 }).pipe(Effect.mapError(requestFailed))).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  access = undefined;
+                  authorizationChanged = true;
+                }),
+              ),
+              Effect.andThen(activeClient),
+              Effect.flatMap(run),
+            )
+          : Effect.fail(error),
+      ),
+    );
+
+  const tokenRequest = (client: ActiveClient, params: Record<string, string>) =>
+    Effect.gen(function* () {
+      const { token_endpoint } = yield* discover;
+      const response = yield* execute(
+        client.authenticate(HttpClientRequest.post(token_endpoint), params),
+      );
+      const tokens = yield* oauthResult(TokenResponse, response);
+      if (tokens.token_type.toLowerCase() !== "bearer") return yield* invalidResponse();
+      return tokens;
+    });
+
+  const revoke = (client: ActiveClient, token: string, hint: "access_token" | "refresh_token") =>
+    Effect.gen(function* () {
+      const { revocation_endpoint } = yield* discover;
+      if (revocation_endpoint === undefined) return;
+      yield* execute(
+        client.authenticate(HttpClientRequest.post(revocation_endpoint), {
+          token,
+          token_type_hint: hint,
+        }),
+      );
+    }).pipe(Effect.ignore);
+
+  // ---- ID tokens (OpenID Connect Core §3.1.3.7) ----
+
+  const signingKey = (kid: string | undefined, refresh: boolean) =>
+    Effect.gen(function* () {
+      const cacheKey = kid ?? "";
+      const cached = keys.get(cacheKey);
+      if (cached !== undefined && !refresh) return cached;
+      const { jwks_uri } = yield* discover;
+      const response = yield* execute(HttpClientRequest.get(jwks_uri));
+      const jwks = yield* decode(Jwks, response.body);
+      keys.clear();
+      for (const key of jwks.keys) {
+        if (key.kty !== "RSA" || key.n === undefined || key.e === undefined) continue;
+        const imported = yield* Effect.tryPromise({
+          try: () =>
+            crypto.subtle.importKey(
+              "jwk",
+              { kty: "RSA", n: key.n!, e: key.e! },
+              { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+              false,
+              ["verify"],
+            ),
+          catch: invalidResponse,
+        });
+        keys.set(key.kid ?? "", imported);
+      }
+      return keys.get(cacheKey);
+    });
+
+  const verifyIdToken = (token: string, clientId: string) =>
+    Effect.gen(function* () {
+      const [headerPart, payloadPart, signaturePart] = token.split(".");
+      if (headerPart === undefined || payloadPart === undefined || signaturePart === undefined)
+        return yield* invalidResponse();
+      const header = decodeJson(headerPart);
+      const claims = decodeJson(payloadPart);
+      if (!isRecord(header) || !isRecord(claims) || header.alg !== "RS256")
+        return yield* invalidResponse();
+      const kid = typeof header.kid === "string" ? header.kid : undefined;
+      const key = (yield* signingKey(kid, false)) ?? (yield* signingKey(kid, true));
+      if (key === undefined) return yield* invalidResponse();
+      const valid = yield* Effect.tryPromise({
+        try: () =>
+          crypto.subtle.verify(
+            "RSASSA-PKCS1-v1_5",
+            key,
+            base64UrlDecode(signaturePart),
+            new TextEncoder().encode(`${headerPart}.${payloadPart}`),
+          ),
+        catch: invalidResponse,
+      });
+      const seconds = now() / 1000;
+      const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+      if (
+        !valid ||
+        claims.iss !== issuer ||
+        !audience.includes(clientId) ||
+        (audience.length > 1 && claims.azp !== clientId) ||
+        typeof claims.exp !== "number" ||
+        claims.exp + clockSkewSeconds < seconds ||
+        typeof claims.iat !== "number" ||
+        claims.iat - clockSkewSeconds > seconds ||
+        typeof claims.sub !== "string"
+      )
+        return yield* failure("invalid-response", "MacroGraph returned an invalid ID token");
+      return {
+        userId: claims.sub,
+        email: typeof claims.email === "string" ? claims.email : null,
+      };
+    });
+
+  // ---- Device flow (RFC 8628) ----
+
+  const startDevice = (client: ActiveClient, scope: string) =>
+    Effect.gen(function* () {
+      const { device_authorization_endpoint } = yield* discover;
+      const response = yield* execute(
+        client.authenticate(HttpClientRequest.post(device_authorization_endpoint), { scope }),
+      );
+      const started = yield* oauthResult(DeviceAuthorizationResponse, response);
+      const verificationUrl = safeUrl(
+        started.verification_uri_complete ?? started.verification_uri,
+      );
+      if (verificationUrl === undefined)
+        return yield* failure("invalid-response", "MacroGraph returned an unsafe verification URL");
+      const interval = started.interval ?? 5;
+      polls.set(started.device_code, { nextAt: now() + interval * 1000, interval });
+      return {
+        deviceCode: started.device_code,
+        userCode: started.user_code,
+        verificationUrl,
+        interval,
+        expiresIn: started.expires_in,
+      } satisfies DeviceSignIn;
+    });
+
+  /** One token request for a device code, or `pending` while it is too soon to ask again. */
+  const pollDevice = (client: ActiveClient, deviceCode: string) =>
+    Effect.gen(function* (): Effect.fn.Return<
+      { readonly state: "pending"; readonly interval: number } | TokenResponse,
+      CloudCredentialError | OAuthError
+    > {
+      const schedule = polls.get(deviceCode) ?? { nextAt: 0, interval: 5 };
+      if (now() < schedule.nextAt) return { state: "pending", interval: schedule.interval };
+      const result = yield* tokenRequest(client, {
+        grant_type: DEVICE_CODE_GRANT,
+        device_code: deviceCode,
+      }).pipe(
+        Effect.map((tokens) => ({ tokens })),
+        Effect.catchTag("OAuthError", (error) =>
+          error.error === "authorization_pending" || error.error === "slow_down"
+            ? Effect.succeed({ wait: error.error === "slow_down" ? 5 : 0 })
+            : Effect.fail(error),
+        ),
+      );
+      if ("tokens" in result) {
+        polls.delete(deviceCode);
+        return result.tokens;
+      }
+      const interval = schedule.interval + result.wait;
+      polls.set(deviceCode, { nextAt: now() + interval * 1000, interval });
+      return { state: "pending", interval };
+    });
+
+  const denied = (error: OAuthError) =>
+    failure(
+      "authorization-denied",
+      error.error === "expired_token"
+        ? "The code expired before it was approved; try again"
+        : error.error === "access_denied"
+          ? "The request was denied on macrograph.app"
+          : (error.description ?? "MacroGraph sign in failed"),
+    );
+
+  // ---- The owner's grant ----
+
+  const accessToken = (force: boolean) =>
+    Effect.gen(function* () {
+      yield* load.pipe(Effect.mapError(requestFailed));
+      if (!force && access !== undefined && access.expiresAt - accessTokenMarginMs > now())
+        return access.token;
+      const grant = stored.grant;
+      if (grant === undefined)
+        return yield* failure("not-connected", "MacroGraph is not connected");
+      const tokens = yield* withClient((client) =>
+        tokenRequest(client, { grant_type: "refresh_token", refresh_token: grant.refreshToken }),
+      ).pipe(
+        Effect.catchTag("OAuthError", () =>
+          // The grant was revoked, expired, or its refresh token was replayed.
+          clearGrant.pipe(
+            Effect.mapError(requestFailed),
+            Effect.andThen(
+              Effect.fail(
+                failure(
+                  "authorization-expired",
+                  "MacroGraph authorization ended; reconnect the account",
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      // Refresh tokens rotate; persist the new one before using anything it unlocks.
+      if (tokens.refresh_token !== undefined)
+        yield* save({ ...stored, grant: { ...grant, refreshToken: tokens.refresh_token } }).pipe(
+          Effect.mapError(requestFailed),
+        );
+      access = {
+        token: tokens.access_token,
+        expiresAt: now() + (tokens.expires_in ?? 3600) * 1000,
+      };
+      return tokens.access_token;
+    });
+
+  /** Calls the credentials API, refreshing the access token once if it was rejected. */
+  const credentialsRequest = <A, I>(
+    path: string,
+    schema: Schema.Codec<A, I>,
+    method: "GET" | "POST",
+  ) =>
+    Effect.gen(function* () {
+      const attempt = (token: string) =>
+        execute(
+          HttpClientRequest.setHeader(
+            HttpClientRequest.make(method)(`${issuer}/api${path}`),
+            "authorization",
+            `Bearer ${token}`,
+          ),
+        );
+      let response = yield* attempt(yield* accessToken(false));
+      if (response.status === 401) response = yield* attempt(yield* accessToken(true));
+      if (response.status === 401 || response.status === 403) {
+        yield* clearGrant.pipe(Effect.mapError(requestFailed));
+        return yield* failure(
+          "authorization-expired",
+          "MacroGraph authorization ended; reconnect the account",
+        );
+      }
+      if (response.status < 200 || response.status >= 300) return yield* requestFailed();
+      return yield* decode(schema, response.body);
+    });
+
+  const fetchCredentials = credentialsRequest("/credentials", CloudCredentialList, "GET").pipe(
+    Effect.tap((credentials) =>
+      Effect.sync(() => {
+        cachedCredentials = credentials;
+      }),
     ),
   );
-  const catalogFrom = (
-    credentials: ReadonlyArray<typeof CloudCredential.Type>,
-  ): Credential.Catalog => ({
-    _tag: "CredentialCatalogAvailable",
-    credentials: credentials.map(toSummary),
-  });
-  const unavailable = (message: string): Credential.Catalog =>
-    Credential.unavailable("request-failed", message);
 
   const statusUnlocked = Effect.gen(function* (): Effect.fn.Return<
     Credential.AuthStatus,
     SessionStoreError
   > {
     yield* load;
-    const session = yield* activeSession;
-    if (session !== undefined)
+    if (stored.grant !== undefined)
       return {
         state: "connected",
-        identity: { id: session.userId, displayName: session.email },
+        identity: {
+          id: stored.grant.userId,
+          displayName: stored.grant.email ?? stored.grant.userId,
+        },
       };
-    return stored?.state === "pending"
-      ? { state: "pending", verificationUrl: stored.verificationUrl }
+    const pending = stored.pending;
+    return pending !== undefined && pending.expiresAt > now()
+      ? { state: "pending", verificationUrl: pending.verificationUrl, userCode: pending.userCode }
       : { state: "disconnected" };
   });
 
-  const pollRegistration = (expectedOwnerId: string | undefined) =>
-    lock
-      .withPermit(
-        Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
-          yield* load.pipe(Effect.mapError(storageError));
-          if (stored?.state !== "pending")
-            return yield* statusUnlocked.pipe(Effect.mapError(storageError));
-          const pending = stored;
-          const result = yield* request(
-            "/server/registration",
-            RegistrationResult,
-            {
-              method: "POST",
-              body: JSON.stringify({ id: pending.id }),
-            },
-            undefined,
-            400,
-          ).pipe(Effect.mapError((error) => new Credential.AuthError({ reason: error.reason })));
-          if ("code" in result) {
-            if (result.code === "authorization_pending")
-              return { state: "pending" as const, verificationUrl: pending.verificationUrl };
-            yield* clear.pipe(Effect.mapError(storageError));
-            return yield* new Credential.AuthError({
-              reason: "MacroGraph authorization was denied or expired",
-            });
-          }
-          const [registration, user] = yield* Effect.all([
-            request("/server/registration", Registration, undefined, result.token),
-            request("/user", CloudUser, undefined, result.token),
-          ]).pipe(Effect.mapError((error) => new Credential.AuthError({ reason: error.reason })));
-          if (user === null || user.id !== registration.ownerId)
-            return yield* new Credential.AuthError({
-              reason: "MacroGraph returned an invalid account identity",
-            });
-          if (expectedOwnerId !== undefined && registration.ownerId !== expectedOwnerId) {
-            yield* clear.pipe(Effect.mapError(storageError));
-            return yield* new Credential.AuthError({
-              reason: "Only the server owner's MacroGraph account can connect this server",
-            });
-          }
-          const session: StoredState = {
-            state: "connected",
-            token: result.token,
-            userId: registration.ownerId,
-            email: user.email,
-            expiresAt: now() + SESSION_LIFETIME_MS,
-          };
-          yield* options.store.write(JSON.stringify(session)).pipe(Effect.mapError(storageError));
-          stored = session;
-          cachedCredentials = undefined;
-          return {
-            state: "connected" as const,
-            identity: { id: user.id, displayName: user.email },
-          };
-        }),
-      )
-      .pipe(Effect.tap(() => notify));
+  const authError = (error: CloudCredentialError | SessionStoreError) =>
+    new Credential.AuthError({ reason: error.reason });
+
+  const pollOwnerUnlocked = (expectedOwnerId: string | undefined) =>
+    Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
+      yield* load.pipe(Effect.mapError(storageError));
+      const pending = stored.pending;
+      if (pending === undefined || stored.grant !== undefined)
+        return yield* statusUnlocked.pipe(Effect.mapError(storageError));
+      const pendingStatus: Credential.AuthStatus = {
+        state: "pending",
+        verificationUrl: pending.verificationUrl,
+        userCode: pending.userCode,
+      };
+      const clearPending = Effect.suspend(() => save(keep({ client: true, grant: true }))).pipe(
+        Effect.mapError(storageError),
+      );
+
+      const outcome = yield* withClient((client) =>
+        pollDevice(client, pending.deviceCode).pipe(
+          Effect.flatMap((result) =>
+            "state" in result
+              ? Effect.succeed(undefined)
+              : verifyIdToken(result.id_token ?? "", client.clientId).pipe(
+                  Effect.map((identity) => ({ client, tokens: result, identity })),
+                ),
+          ),
+        ),
+      ).pipe(
+        Effect.catchTag("OAuthError", (error) =>
+          clearPending.pipe(Effect.andThen(Effect.fail(authError(denied(error))))),
+        ),
+        Effect.mapError((error) =>
+          error instanceof Credential.AuthError ? error : authError(error),
+        ),
+      );
+      if (outcome === undefined) return pendingStatus;
+
+      const { client, tokens, identity } = outcome;
+      if (tokens.refresh_token === undefined) {
+        yield* clearPending;
+        return yield* new Credential.AuthError({
+          reason: "MacroGraph did not grant offline access",
+        });
+      }
+      if (expectedOwnerId !== undefined && identity.userId !== expectedOwnerId) {
+        yield* revoke(client, tokens.refresh_token, "refresh_token");
+        yield* clearPending;
+        return yield* new Credential.AuthError({
+          reason: "Only the server owner's MacroGraph account can connect this server",
+        });
+      }
+      yield* save({
+        ...keep({ client: true }),
+        grant: {
+          refreshToken: tokens.refresh_token,
+          scope: tokens.scope ?? OWNER_SCOPE,
+          userId: identity.userId,
+          email: identity.email,
+        },
+      }).pipe(Effect.mapError(storageError));
+      access = {
+        token: tokens.access_token,
+        expiresAt: now() + (tokens.expires_in ?? 3600) * 1000,
+      };
+      cachedCredentials = undefined;
+      return {
+        state: "connected" as const,
+        identity: { id: identity.userId, displayName: identity.email ?? identity.userId },
+      };
+    });
+
+  const pollOwner = (expectedOwnerId: string | undefined) =>
+    lock.withPermit(pollOwnerUnlocked(expectedOwnerId)).pipe(Effect.tap(() => notify));
 
   const auth: Credential.AuthController = {
     providerName: "MacroGraph",
@@ -418,39 +877,59 @@ export const make = Effect.fnUntraced(function* (
       Effect.gen(function* (): Effect.fn.Return<Credential.AuthStatus, Credential.AuthError> {
         const current = yield* statusUnlocked.pipe(Effect.mapError(storageError));
         if (current.state !== "disconnected") return current;
-        const started = yield* request("/server/registration/start", RegistrationStart, {
-          method: "POST",
-        }).pipe(Effect.mapError((error) => new Credential.AuthError({ reason: error.reason })));
-        const verificationUrl = new URL(started.verification_uri_complete);
-        if (
-          verificationUrl.protocol !== "https:" ||
-          verificationUrl.username !== "" ||
-          verificationUrl.password !== ""
-        )
-          return yield* new Credential.AuthError({
-            reason: "MacroGraph returned an unsafe verification URL",
-          });
-        const pending: StoredState = {
-          state: "pending",
-          id: started.id,
-          verificationUrl: verificationUrl.href,
+        const started = yield* withClient((client) => startDevice(client, OWNER_SCOPE)).pipe(
+          Effect.catchTag("OAuthError", (error) => Effect.fail(denied(error))),
+          Effect.mapError(authError),
+        );
+        yield* save({
+          ...stored,
+          pending: {
+            deviceCode: started.deviceCode,
+            userCode: started.userCode,
+            verificationUrl: started.verificationUrl,
+            interval: started.interval,
+            expiresAt: now() + started.expiresIn * 1000,
+          },
+        }).pipe(Effect.mapError(storageError));
+        return {
+          state: "pending" as const,
+          verificationUrl: started.verificationUrl,
+          userCode: started.userCode,
         };
-        yield* options.store.write(JSON.stringify(pending)).pipe(Effect.mapError(storageError));
-        stored = pending;
-        return { state: "pending" as const, verificationUrl: verificationUrl.href };
       }),
     ),
-    poll: pollRegistration(undefined),
+    poll: pollOwner(undefined),
     disconnect: lock
-      .withPermit(clear.pipe(Effect.mapError(storageError)))
+      .withPermit(
+        Effect.gen(function* () {
+          yield* load;
+          const grant = stored.grant;
+          if (grant !== undefined)
+            yield* withClient((client) => revoke(client, grant.refreshToken, "refresh_token")).pipe(
+              Effect.ignore,
+            );
+          yield* clearGrant;
+        }).pipe(Effect.mapError(storageError)),
+      )
       .pipe(Effect.andThen(notify)),
   };
+
+  // ---- Credentials ----
+
+  const unavailable = (message: string): Credential.Catalog =>
+    Credential.unavailable("request-failed", message);
+  const catalogFrom = (
+    credentials: ReadonlyArray<typeof CloudCredential.Type>,
+  ): Credential.Catalog => ({
+    _tag: "CredentialCatalogAvailable",
+    credentials: credentials.map(toSummary),
+  });
+  const connected = load.pipe(Effect.map(() => stored.grant !== undefined));
 
   const get = lock
     .withPermit(
       Effect.gen(function* () {
-        const session = yield* activeSession;
-        if (session === undefined) return [];
+        if (!(yield* connected)) return [];
         const source = cachedCredentials ?? (yield* fetchCredentials);
         return source.map(toEngineCredential);
       }).pipe(Effect.catch(() => Effect.succeed<Array<Engine.Credential>>([]))),
@@ -459,8 +938,7 @@ export const make = Effect.fnUntraced(function* (
   const catalog = lock
     .withPermit(
       Effect.gen(function* () {
-        const session = yield* activeSession;
-        if (session === undefined)
+        if (!(yield* connected))
           return Credential.unavailable("not-connected", "MacroGraph is not connected.");
         return catalogFrom(cachedCredentials ?? (yield* fetchCredentials));
       }).pipe(
@@ -481,28 +959,15 @@ export const make = Effect.fnUntraced(function* (
     lock
       .withPermit(
         Effect.gen(function* () {
-          const session = yield* activeSession;
-          if (session === undefined)
-            return yield* new CloudCredentialError({
-              code: "not-connected",
-              reason: "MacroGraph is not connected",
-            });
-          yield* request(
+          const credential = yield* credentialsRequest(
             `/credentials/${encodeURIComponent(provider)}/${encodeURIComponent(id)}/refresh`,
             CloudCredential,
-            { method: "POST" },
-            session.token,
+            "POST",
           );
-          const credentials = yield* fetchCredentials;
-          const credential = credentials.find(
-            (candidate) => candidate.provider === provider && candidate.id === id,
+          cachedCredentials = (cachedCredentials ?? []).map((candidate) =>
+            candidate.provider === provider && candidate.id === id ? credential : candidate,
           );
-          return credential === undefined
-            ? yield* new CloudCredentialError({
-                code: "invalid-response",
-                reason: "MacroGraph did not return the refreshed credential",
-              })
-            : toEngineCredential(credential);
+          return toEngineCredential(credential);
         }),
       )
       .pipe(
@@ -523,65 +988,31 @@ export const make = Effect.fnUntraced(function* (
       );
     });
 
-  const startClientAuth = Effect.gen(function* () {
-    const session = yield* activeSession.pipe(
-      Effect.mapError(
-        (error) => new CloudCredentialError({ code: "request-failed", reason: error.reason }),
-      ),
-    );
-    if (session === undefined)
-      return yield* new CloudCredentialError({
-        code: "not-connected",
-        reason: "The server must be connected to MacroGraph before clients can sign in",
-      });
-    const authorization = yield* request(
-      "/login/device/code",
-      DeviceAuthorization,
-      { method: "POST" },
-      session.token,
-    );
-    const verificationUrl = new URL(authorization.verification_uri_complete);
-    if (
-      verificationUrl.protocol !== "https:" ||
-      verificationUrl.username !== "" ||
-      verificationUrl.password !== ""
-    )
-      return yield* new CloudCredentialError({
-        code: "invalid-response",
-        reason: "MacroGraph returned an unsafe verification URL",
-      });
-    return { ...authorization, verification_uri_complete: verificationUrl.href };
-  });
+  // ---- One-off sign-in for a server's users ----
 
-  const pollClientAuth = (deviceCode: string) =>
-    Effect.gen(function* () {
-      const result = yield* request(
-        `/login/oauth/access_token?device_code=${encodeURIComponent(deviceCode)}&grant_type=${encodeURIComponent("urn:ietf:params:oauth:grant-type:device_code")}`,
-        DeviceGrantResult,
-        { method: "POST" },
-        undefined,
-        400,
-      );
-      if ("code" in result) {
-        if (result.code === "authorization_pending") return { state: "pending" as const };
-        return yield* new CloudCredentialError({
-          code: "authorization-denied",
-          reason: "MacroGraph sign in was denied or expired",
-        });
-      }
-      const user = yield* request("/user", CloudUser, undefined, result.access_token);
-      if (user === null || user.id !== result.userId)
-        return yield* new CloudCredentialError({
-          code: "invalid-response",
-          reason: "MacroGraph returned an invalid account identity",
-        });
-      return { state: "connected" as const, userId: user.id, email: user.email };
-    });
+  const signIn: Service["signIn"] = {
+    start: withClient((client) => startDevice(client, SIGN_IN_SCOPE)).pipe(
+      Effect.catchTag("OAuthError", (error) => Effect.fail(denied(error))),
+    ),
+    poll: (deviceCode) =>
+      withClient((client) =>
+        Effect.gen(function* () {
+          const result = yield* pollDevice(client, deviceCode);
+          if ("state" in result) return result;
+          const identity = yield* verifyIdToken(result.id_token ?? "", client.clientId);
+          // The server keeps its own session; nothing else needs this token.
+          yield* revoke(client, result.access_token, "access_token");
+          if (identity.email === null)
+            return yield* failure("invalid-response", "MacroGraph did not share an email address");
+          return { state: "connected" as const, userId: identity.userId, email: identity.email };
+        }),
+      ).pipe(Effect.catchTag("OAuthError", (error) => Effect.fail(denied(error)))),
+  };
 
   return {
     auth,
-    pollOwner: pollRegistration,
-    clientAuth: { start: startClientAuth, poll: pollClientAuth },
+    pollOwner: (ownerId) => pollOwner(ownerId),
+    signIn,
     credentials: { get, refresh, subscribe, catalog, refetch, auth },
   };
 });

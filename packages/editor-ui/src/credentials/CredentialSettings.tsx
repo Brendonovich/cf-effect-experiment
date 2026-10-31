@@ -96,6 +96,11 @@ const styles = stylex.create({
     paddingLeft: 12,
   },
   pendingTitle: { margin: 0, fontSize: 12, fontWeight: 500, color: colors.gray12 },
+  userCode: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontWeight: 600,
+    letterSpacing: "0.06em",
+  },
   pendingDescription: {
     marginBottom: 0,
     marginTop: 4,
@@ -215,6 +220,11 @@ export function CredentialSettings(props: CredentialSettingsProps) {
     stateByClient.set(client, context);
     actions.update(context);
     return true;
+  };
+
+  const userCode = () => {
+    const status = authorization.context.auth?.status;
+    return status?.state === "pending" ? status.userCode : undefined;
   };
 
   const verificationUrl = () => {
@@ -445,6 +455,13 @@ export function CredentialSettings(props: CredentialSettingsProps) {
                 <p sx={styles.pendingDescription}>
                   This page checks automatically while you approve the device connection.
                 </p>
+                <Show when={userCode()}>
+                  {(code) => (
+                    <p sx={styles.pendingDescription}>
+                      Confirm the code <strong sx={styles.userCode}>{code()}</strong> matches.
+                    </p>
+                  )}
+                </Show>
                 <div sx={styles.pendingActions}>
                   <Show when={verificationUrl()}>
                     {(url) => (

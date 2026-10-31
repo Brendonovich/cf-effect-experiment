@@ -59,6 +59,7 @@
     "@distilled.cloud/cloudflare-rolldown-plugin": "^0.5.4",
     "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.3.15",
+    "@macrograph/cloud-credentials": "workspace:*",
     "@types/node": "^24",
     "drizzle-kit": "1.0.0-rc.5",
     "mprocs": "^0.9.6",
