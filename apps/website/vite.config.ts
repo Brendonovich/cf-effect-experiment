@@ -1,6 +1,7 @@
 import opencode from "@brendonovich/vite-plugin-opencode";
 import { Icons } from "@macrograph/icons/vite";
 import { stylexProps } from "@macrograph/module/vite";
+import { playgroundModuleSettings } from "@macrograph/playground/vite";
 import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
@@ -17,6 +18,7 @@ export default defineConfig({
   plugins: [
     opencode({ skills: ["solidjs"] }),
     Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
+    playgroundModuleSettings(),
     stylexProps(),
     stylex.vite({
       sxPropName: false,

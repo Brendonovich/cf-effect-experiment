@@ -13,6 +13,7 @@
   "dependencies": {
     "@macrograph/editor-ui": "workspace:*",
     "@macrograph/module": "workspace:*",
+    "@macrograph/playground": "workspace:*",
     "@solidjs/router": "2.0.0-next.17",
     "@solidjs/web": "2.0.0-rc.9",
     "@stylexjs/stylex": "catalog:",

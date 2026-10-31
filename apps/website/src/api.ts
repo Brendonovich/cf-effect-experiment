@@ -71,8 +71,6 @@ export interface WorkerBindings {
   readonly API?: { readonly fetch: (request: Request) => Promise<Response> };
   /** CloudWorker, for stages without Worker Routes. */
   readonly CLOUD?: { readonly fetch: (request: Request) => Promise<Response> };
-  /** The playground, for stages without Worker Routes. */
-  readonly PLAYGROUND?: { readonly fetch: (request: Request) => Promise<Response> };
   /** Set on pull request previews, which only let allowed accounts in. */
   readonly PREVIEW_GATE?: string;
 }

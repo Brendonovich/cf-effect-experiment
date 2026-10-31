@@ -10,5 +10,9 @@
     "jsxImportSource": "@solidjs/web"
   },
   "include": ["src"],
-  "references": [{ "path": "../../packages/editor-ui" }, { "path": "../../packages/module" }]
+  "references": [
+    { "path": "../../packages/editor-ui" },
+    { "path": "../../packages/module" },
+    { "path": "../playground" }
+  ]
 }

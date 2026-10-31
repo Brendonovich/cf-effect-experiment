@@ -12,6 +12,7 @@ import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { LandingRoute } from "./routes/Landing";
 import { NotFoundRoute } from "./routes/NotFound";
+import { PlaygroundRoute } from "./routes/Playground";
 import { Redirect, useSession } from "./session";
 import { Toaster } from "./Toasts";
 
@@ -35,6 +36,7 @@ export const routes = [
   { path: "/login", component: () => <AuthRoute mode="login" /> },
   { path: "/signup", component: () => <AuthRoute mode="signup" /> },
   { path: "/device", component: DeviceAuthorizationRoute },
+  { path: "/playground", component: PlaygroundRoute },
   {
     path: "/account",
     component: AccountLayout,

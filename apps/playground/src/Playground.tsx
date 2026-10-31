@@ -1,3 +1,5 @@
+import type { JSX } from "@solidjs/web";
+
 import { randomUUID } from "@macrograph/editor";
 import {
   Button,
@@ -20,12 +22,6 @@ import {
   makeLocalProjectStore,
   type LocalProjectStatus,
 } from "./local/LocalStoragePersistence";
-
-const localPath = (path: string) =>
-  new URL(
-    path.replace(/^\//, ""),
-    new URL(`${import.meta.env.BASE_URL.replace(/\/$/, "")}/`, location.origin),
-  );
 
 const localUserId = () => {
   const key = "macrograph:local-user";
@@ -118,7 +114,20 @@ const styles = stylex.create({
   main: { flex: 1, minHeight: 0 },
 });
 
-export function App() {
+export interface PlaygroundHeaderParts {
+  /** The editor and events tabs. */
+  readonly nav: JSX.Element;
+  /** Project settings, export, import, and reset. */
+  readonly actions: JSX.Element;
+}
+
+/**
+ * The browser playground. `header` lets a host page render its own header around the playground's
+ * tabs and actions; by default the playground renders a compact one.
+ */
+export function Playground(props: {
+  readonly header?: (parts: PlaygroundHeaderParts) => JSX.Element;
+}) {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const store = makeLocalProjectStore(localStorage);
   const issuer = import.meta.env.VITE_MACROGRAPH_ISSUER;
@@ -178,7 +187,7 @@ export function App() {
       try {
         if (typeof reader.result !== "string") throw new Error("The selected file is not text.");
         store.importProject(reader.result);
-        location.assign(localPath("editor"));
+        location.reload();
       } catch (error) {
         setStatus({
           type: "error",
@@ -195,7 +204,7 @@ export function App() {
     if (!window.confirm("Reset the local project? All graphs and module settings will be deleted."))
       return;
     if (store.reset()) {
-      location.assign(localPath("editor"));
+      location.reload();
     }
   };
   const controls = () => (
@@ -223,31 +232,39 @@ export function App() {
     </div>
   );
 
+  const nav = () => (
+    <nav sx={styles.nav} aria-label="Workspace">
+      <For each={["editor", "events"] as const}>
+        {(tab) => (
+          <button
+            type="button"
+            sx={[styles.navItem, view() === tab ? styles.navActive : styles.navIdle]}
+            aria-current={view() === tab ? "page" : undefined}
+            onClick={() => setView(tab)}
+          >
+            {tab}
+          </button>
+        )}
+      </For>
+    </nav>
+  );
+
   const rootAttrs = stylex.attrs(styles.root);
 
   return (
     <div {...rootAttrs}>
-      <header sx={styles.header}>
-        <div sx={styles.brand}>
-          <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
-          <span sx={styles.title}>MacroGraph</span>
-        </div>
-        <nav sx={styles.nav} aria-label="Workspace">
-          <For each={["editor", "events"] as const}>
-            {(tab) => (
-              <button
-                type="button"
-                sx={[styles.navItem, view() === tab ? styles.navActive : styles.navIdle]}
-                aria-current={view() === tab ? "page" : undefined}
-                onClick={() => setView(tab)}
-              >
-                {tab}
-              </button>
-            )}
-          </For>
-        </nav>
-        {controls()}
-      </header>
+      {props.header === undefined ? (
+        <header sx={styles.header}>
+          <div sx={styles.brand}>
+            <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
+            <span sx={styles.title}>MacroGraph</span>
+          </div>
+          {nav()}
+          {controls()}
+        </header>
+      ) : (
+        props.header({ nav: nav(), actions: controls() })
+      )}
       <input
         ref={importInput}
         style={{ display: "none" }}

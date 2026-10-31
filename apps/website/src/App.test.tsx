@@ -49,10 +49,7 @@ it("renders the landing page with a login link for signed-out visitors", async (
   await vi.waitFor(() => expect(container.textContent).toContain("Log in"));
   expect(container.querySelector("h1")?.textContent).toBe("MacroGraph");
   expect(container.textContent).toContain("Visual programming for streamers");
-  const playground = container.querySelector<HTMLAnchorElement>('a[href="/playground/"]');
-  expect(playground?.textContent).toBe("Playground");
-  // The playground is a separate app, so the router must not handle the link.
-  expect(playground?.rel).toBe("external");
+  expect(container.querySelector('a[href="/playground"]')?.textContent).toBe("Playground");
 });
 
 it("sends signed-out visitors from account pages to login and back", async () => {
@@ -77,6 +74,15 @@ it("lists credentials grouped by provider for signed-in users", async () => {
   // Discord has no accounts, so it is offered under Available.
   expect(container.textContent).toContain("Discord");
   expect(container.textContent).not.toContain("Status");
+});
+
+it("renders the playground inside the site", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/playground");
+  await vi.waitFor(() =>
+    expect(container.querySelector("header")?.textContent).toContain("Log in"),
+  );
+  expect(container.textContent).not.toContain("Page not found");
 });
 
 it("switches account tabs without reloading", async () => {
