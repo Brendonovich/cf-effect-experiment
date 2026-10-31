@@ -1035,6 +1035,8 @@ export const make = Effect.fnUntraced(function* (
 export interface SessionOptions {
   /** The macrograph.app origin; defaults to the page's own. */
   readonly origin?: string;
+  /** Whether a user is signed in, so signed-out pages skip requests that would be refused. */
+  readonly signedIn?: Effect.Effect<boolean>;
 }
 
 /**
@@ -1053,20 +1055,23 @@ export const makeSession = Effect.fnUntraced(function* (
   const notify = Effect.suspend(() =>
     Effect.forEach(Array.from(subscribers), (subscriber) => subscriber(), { discard: true }),
   );
+  const signedOut = failure("not-connected", "Log in to macrograph.app to use your credentials.");
   const request = <A, I>(method: "GET" | "POST", path: string, schema: Schema.Codec<A, I>) =>
     Effect.gen(function* () {
       const response = yield* http
         .execute(HttpClientRequest.make(method)(`${origin}/api${path}`))
         .pipe(Effect.mapError(requestFailed));
       // The API answers 403 without a session.
-      if (response.status === 401 || response.status === 403)
-        return yield* failure("not-connected", "Log in to macrograph.app to use your credentials.");
+      if (response.status === 401 || response.status === 403) return yield* signedOut;
       if (response.status < 200 || response.status >= 300) return yield* requestFailed();
       const body = yield* response.json.pipe(Effect.mapError(invalidResponse));
       return yield* Schema.decodeUnknownEffect(schema)(body).pipe(Effect.mapError(invalidResponse));
     }).pipe(Effect.scoped);
 
-  const fetchCredentials = request("GET", "/credentials", CloudCredentialList).pipe(
+  const fetchCredentials = Effect.gen(function* () {
+    if (options.signedIn !== undefined && !(yield* options.signedIn)) return yield* signedOut;
+    return yield* request("GET", "/credentials", CloudCredentialList);
+  }).pipe(
     Effect.tap((credentials) =>
       Effect.sync(() => {
         cached = credentials;
@@ -1075,7 +1080,7 @@ export const makeSession = Effect.fnUntraced(function* (
     Effect.tapError((error) =>
       Effect.sync(() => {
         // Signed out: nothing is available until the user logs in again.
-        if (error.code === "not-connected") cached = [];
+        if (error.code === "not-connected") cached = undefined;
       }),
     ),
   );

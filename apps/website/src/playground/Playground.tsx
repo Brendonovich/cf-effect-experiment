@@ -3,11 +3,13 @@ import { randomUUID } from "@macrograph/editor";
 import { Button, createEditorController, RealtimeWorkspace } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import { useQueryClient } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
+import { getSession, sessionKey } from "../api";
 import { Header } from "../Header";
 import { makeLocalConnection } from "./local/LocalRuntime";
 import {
@@ -85,8 +87,17 @@ const styles = stylex.create({
 export function Playground() {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const store = makeLocalProjectStore(localStorage);
+  const queryClient = useQueryClient();
   const editor = createEditorController({
-    connection: CloudCredentials.makeSession().pipe(
+    connection: CloudCredentials.makeSession({
+      // If the session can't be checked, the credentials request decides.
+      signedIn: Effect.tryPromise(() =>
+        queryClient.fetchQuery({ queryKey: sessionKey, queryFn: getSession, staleTime: 60_000 }),
+      ).pipe(
+        Effect.map((session) => session !== null),
+        Effect.orElseSucceed(() => true),
+      ),
+    }).pipe(
       Effect.flatMap((provider) => makeLocalConnection(store, provider)),
       Effect.provide(FetchHttpClient.layer),
     ),
