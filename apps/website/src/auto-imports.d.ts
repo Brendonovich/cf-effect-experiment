@@ -33,6 +33,7 @@ declare global {
   const IconTablerPlug: typeof import('~icons/tabler/plug.jsx').default
   const IconTablerPlus: typeof import('~icons/tabler/plus.jsx').default
   const IconTablerRobot: typeof import('~icons/tabler/robot.jsx').default
+  const IconTablerSandbox: typeof import('~icons/tabler/sandbox.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerServer: typeof import('~icons/tabler/server.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
