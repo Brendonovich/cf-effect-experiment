@@ -74,6 +74,7 @@ describe("website Worker", () => {
         if (request.headers.get("x-macrograph-preview-gate") === null)
           return new Response(`api ${new URL(request.url).pathname}`);
         expect(request.body).toBeNull();
+        expect(request.redirect).toBe("manual");
         return (request.headers.get("cookie") ?? "").includes("macrograph_preview=")
           ? new Response(null, { status: 204 })
           : Response.redirect("https://macrograph.app/auth/preview?origin=x", 302);

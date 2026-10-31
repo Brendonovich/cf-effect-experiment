@@ -29,7 +29,10 @@ const previewDenial = async (request: Request, env: WorkerBindings) => {
   if (env.API === undefined) return new Response(null, { status: 503 });
   const headers = new Headers(request.headers);
   headers.set(gateCheckHeader, "1");
-  const answer = await env.API.fetch(new Request(request.url, { method: request.method, headers }));
+  // Subrequests follow redirects by default; the gate's redirect is the answer, not a hop.
+  const answer = await env.API.fetch(
+    new Request(request.url, { method: request.method, headers, redirect: "manual" }),
+  );
   return answer.status === 204 ? undefined : answer;
 };
 
