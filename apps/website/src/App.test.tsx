@@ -34,7 +34,7 @@ const renderApp = (path: string) => {
     dispose();
     container.remove();
   });
-  return { container, history };
+  return { container, history, queryClient };
 };
 
 const cleanups: Array<() => void> = [];
@@ -143,4 +143,28 @@ it("approves a device sign-in after showing who is asking and for what", async (
   );
   approve?.click();
   await vi.waitFor(() => expect(container.textContent).toContain("Access granted"));
+});
+
+it("keeps a linked device code when the session refetches", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/device/lookup": {
+      userCode: "BCDF-GHJK",
+      client: { id: "mgc_1", name: "Ada's server", verified: true },
+      scope: ["openid"],
+      requestedAt: 0,
+      expiresAt: 0,
+      requestIp: null,
+      requestCountry: null,
+    },
+  });
+  const { container, history, queryClient } = renderApp("/device?user_code=BCDF-GHJK");
+  await vi.waitFor(() => expect(container.textContent).toContain("Approve sign-in?"));
+  await vi.waitFor(() => expect(history.get()).toBe("/device"));
+
+  // Returning to the tab after the session goes stale refetches it.
+  await queryClient.refetchQueries({ queryKey: ["session"] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(container.textContent).toContain("Approve sign-in?");
+  expect(container.textContent).toContain("BCDF-GHJK");
 });

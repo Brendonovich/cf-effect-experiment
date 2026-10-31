@@ -87,7 +87,7 @@ const requestOrigin = (request: DeviceRequest) =>
     .filter((part) => part !== null)
     .join(" · ");
 
-function DeviceAuthorization(props: { readonly session: Session }) {
+function DeviceAuthorization(props: { readonly session: () => Session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const initialCode = untrack(() => new URLSearchParams(location.search).get("user_code") ?? "");
@@ -146,7 +146,7 @@ function DeviceAuthorization(props: { readonly session: Session }) {
 
   const signedInAs = () => (
     <p sx={styles.signedIn}>
-      Signed in as <strong sx={styles.email}>{props.session.user.email}</strong>
+      Signed in as <strong sx={styles.email}>{props.session().user.email}</strong>
     </p>
   );
 
