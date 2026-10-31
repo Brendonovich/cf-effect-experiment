@@ -29,14 +29,18 @@ declare global {
   const IconTablerCopy: typeof import('~icons/tabler/copy.jsx').default
   const IconTablerDeviceDesktopDown: typeof import('~icons/tabler/device-desktop-down.jsx').default
   const IconTablerFunction: typeof import('~icons/tabler/function.jsx').default
+  const IconTablerKey: typeof import('~icons/tabler/key.jsx').default
+  const IconTablerMail: typeof import('~icons/tabler/mail.jsx').default
   const IconTablerPackage: typeof import('~icons/tabler/package.jsx').default
   const IconTablerPlug: typeof import('~icons/tabler/plug.jsx').default
   const IconTablerPlus: typeof import('~icons/tabler/plus.jsx').default
+  const IconTablerRefresh: typeof import('~icons/tabler/refresh.jsx').default
   const IconTablerRobot: typeof import('~icons/tabler/robot.jsx').default
   const IconTablerSandbox: typeof import('~icons/tabler/sandbox.jsx').default
   const IconTablerSearch: typeof import('~icons/tabler/search.jsx').default
   const IconTablerServer: typeof import('~icons/tabler/server.jsx').default
   const IconTablerSettings: typeof import('~icons/tabler/settings.jsx').default
   const IconTablerTrash: typeof import('~icons/tabler/trash.jsx').default
+  const IconTablerUser: typeof import('~icons/tabler/user.jsx').default
   const IconTablerX: typeof import('~icons/tabler/x.jsx').default
 }
