@@ -33,6 +33,7 @@ export function Header(props: { readonly nav?: JSX.Element; readonly actions?: J
             fallback={
               <ButtonLink
                 href={loginPath(`${location.pathname}${location.search}`)}
+                size="sm"
                 variant="secondary"
                 sx={styles.login}
               >
@@ -63,10 +64,10 @@ const styles = stylex.create({
     display: "grid",
     gridTemplateColumns: { default: "auto minmax(0, 1fr)", [md]: "1fr auto 1fr" },
     // Every page's header row is the same height; `nav` wraps onto its own row on narrow screens.
-    gridTemplateRows: "minmax(56px, auto)",
+    gridTemplateRows: "minmax(44px, auto)",
     alignItems: "center",
-    columnGap: 16,
-    paddingInline: 20,
+    columnGap: 12,
+    paddingInline: 12,
     borderBottomColor: colors.gray4,
     borderBottomStyle: "solid",
     borderBottomWidth: 1,
@@ -74,14 +75,14 @@ const styles = stylex.create({
   brand: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    fontSize: 16,
+    gap: 8,
+    fontSize: 14,
     fontWeight: 700,
     letterSpacing: "-0.01em",
     color: colors.gray12,
     textDecoration: "none",
   },
-  logo: { width: 28, height: 28, borderRadius: 6 },
+  logo: { width: 24, height: 24, borderRadius: 5 },
   nav: {
     display: "flex",
     alignSelf: "stretch",
@@ -93,15 +94,15 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: 16,
+    gap: 8,
     gridColumn: "-2",
     gridRow: "1",
     minWidth: 0,
   },
   login: { borderRadius: 6 },
   placeholder: {
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     borderRadius: 9999,
     backgroundColor: colors.gray4,
   },
