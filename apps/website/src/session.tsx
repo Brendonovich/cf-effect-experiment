@@ -49,8 +49,13 @@ export function Redirect(props: { readonly href: string }) {
   return null;
 }
 
-/** Renders its children for signed-in users and sends everyone else to the login page. */
-export function RequireSession(props: { readonly children: (session: Session) => JSX.Element }) {
+/**
+ * Renders its children for signed-in users and sends everyone else to the login page. Children
+ * stay mounted while the session refetches, since each fetch yields a new object.
+ */
+export function RequireSession(props: {
+  readonly children: (session: () => Session) => JSX.Element;
+}) {
   const session = useSession();
   const location = useLocation();
   return (
@@ -60,7 +65,6 @@ export function RequireSession(props: { readonly children: (session: Session) =>
     >
       <Show
         when={session.data}
-        keyed
         fallback={<Redirect href={loginPath(`${location.pathname}${location.search}`)} />}
       >
         {/* Called in JSX so what the children read (such as the matched route) stays tracked. */}
