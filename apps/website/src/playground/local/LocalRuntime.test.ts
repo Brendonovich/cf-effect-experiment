@@ -5,7 +5,6 @@ import { StaticRegistry } from "@macrograph/module-host/core";
 import { ModuleId } from "@macrograph/module/ModuleId";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { readFileSync } from "node:fs";
 import { vi } from "vitest";
 
 import { makeLocalConnection, type LocalEditorConnection } from "./LocalRuntime";
@@ -321,14 +320,14 @@ describe("local browser runtime", () => {
           modules.map((module) => [StaticRegistry.id(module.static), "loaded"]).sort(),
         );
         for (const module of modules) {
-          const packageJson = JSON.parse(
-            readFileSync(
+          const packageJson = yield* Effect.promise(() =>
+            import(
               new URL(
-                `../../../../packages/modules/${module.static.manifest.name}/package.json`,
+                `../../../../../packages/modules/${module.static.manifest.name}/package.json`,
                 import.meta.url,
-              ),
-              "utf8",
-            ),
+              ).href,
+              { with: { type: "json" } }
+            ).then((json) => json.default),
           );
           const config = packageJson.macrograph;
           assert.deepStrictEqual(

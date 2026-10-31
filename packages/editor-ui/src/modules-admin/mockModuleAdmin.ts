@@ -4,6 +4,8 @@ import { type Rpc, RpcTest } from "effect/rpc";
 
 import type { ModuleAdminClient, SubscribeModulesChanged } from "./client.ts";
 
+import { runFork } from "../observability/browserTracing.ts";
+
 type Handlers = {
   readonly [Current in ModuleAdminRpc.ModuleAdminRpcs as Current["_tag"]]: Rpc.ToHandlerFn<
     Current,
@@ -337,6 +339,6 @@ export const createMockModuleAdmin = (options: MockModuleAdminOptions = {}): Moc
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    dispose: () => Effect.runFork(Scope.close(scope, Exit.void)),
+    dispose: () => runFork(Scope.close(scope, Exit.void)),
   };
 };

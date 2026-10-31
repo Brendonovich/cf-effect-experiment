@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createSign, generateKeyPairSync } from "node:crypto";
 import { createServer, request } from "node:http";
@@ -7,6 +8,7 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const appDirectory = resolve(import.meta.dirname, "..");
+const hasMidiSequencer = process.platform !== "linux" || existsSync("/dev/snd/seq");
 let child: ChildProcess;
 let origin = "";
 let dataDirectory = "";
@@ -509,6 +511,11 @@ describe("built self-hosted server", () => {
       readonly inputs: ReadonlyArray<unknown>;
       readonly outputs: ReadonlyArray<unknown>;
     };
+    // Without an ALSA sequencer RtMidi can't start, but reaching that error still means the addon ran.
+    if (!hasMidiSequencer) {
+      expect(state.error).toBe("Failed to list MIDI ports: Failed to initialise RtMidi");
+      return;
+    }
     expect(state.error).toBeUndefined();
     expect(state.available).toBe(true);
     expect(Array.isArray(state.inputs)).toBe(true);
