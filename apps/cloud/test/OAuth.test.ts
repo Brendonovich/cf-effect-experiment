@@ -99,7 +99,8 @@ const listAuthorizations = (app: App, session: Record<string, string>) =>
 const scoped = <A, E>(test: (harness: Harness) => Effect.Effect<A, E>) =>
   Effect.scoped(Effect.flatMap(harness, test));
 
-describe("OAuth authorization server", () => {
+// Each test starts its own in-memory Postgres with every migration applied.
+describe("OAuth authorization server", { timeout: 30_000 }, () => {
   it.effect("publishes RFC 8414 metadata and a JWK set", () =>
     scoped(({ app }) =>
       Effect.gen(function* () {

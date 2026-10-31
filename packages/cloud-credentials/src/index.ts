@@ -932,12 +932,18 @@ export const make = Effect.fnUntraced(function* (
     credentials: credentials.map(toSummary),
   });
   const connected = load.pipe(Effect.map(() => stored.grant !== undefined));
+  /**
+   * Cached credentials last only as long as the access token, so a grant revoked on macrograph.app
+   * is noticed within the hour instead of when the process restarts.
+   */
+  const cached = () =>
+    access !== undefined && access.expiresAt > now() ? cachedCredentials : undefined;
 
   const get = lock
     .withPermit(
       Effect.gen(function* () {
         if (!(yield* connected)) return [];
-        const source = cachedCredentials ?? (yield* fetchCredentials);
+        const source = cached() ?? (yield* fetchCredentials);
         return source.map(toEngineCredential);
       }).pipe(Effect.catch(() => Effect.succeed<Array<Engine.Credential>>([]))),
     )
@@ -947,7 +953,7 @@ export const make = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         if (!(yield* connected))
           return Credential.unavailable("not-connected", "MacroGraph is not connected.");
-        return catalogFrom(cachedCredentials ?? (yield* fetchCredentials));
+        return catalogFrom(cached() ?? (yield* fetchCredentials));
       }).pipe(
         Effect.catch(() =>
           Effect.succeed(unavailable("Credentials could not be loaded from MacroGraph.")),

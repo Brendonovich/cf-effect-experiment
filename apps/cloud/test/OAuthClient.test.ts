@@ -74,7 +74,8 @@ const approve = (app: App, session: Record<string, string>, userCode: unknown) =
 const scoped = <A, E>(test: (setup: Harness) => Effect.Effect<A, E>) =>
   Effect.scoped(Effect.flatMap(harness, test));
 
-describe("OAuth client against the authorization server", () => {
+// Each test starts its own in-memory Postgres with every migration applied.
+describe("OAuth client against the authorization server", { timeout: 30_000 }, () => {
   it.effect("registers, connects the owner, and reads credentials through rotating tokens", () =>
     scoped((setup) =>
       Effect.gen(function* () {

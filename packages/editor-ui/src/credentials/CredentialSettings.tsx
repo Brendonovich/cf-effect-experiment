@@ -361,7 +361,11 @@ export function CredentialSettings(props: CredentialSettingsProps) {
     run("refresh", async (client, generation) => {
       if (client === null) return;
       const nextCatalog = await Effect.runPromise(client.RefetchCredentials());
-      if (!update(client, authorization.context.auth, nextCatalog, generation)) return;
+      // Refetching can reveal that the connection was revoked, so re-read its status too.
+      const nextAuth =
+        (await Effect.runPromise(client.GetCredentialAuth()).catch(() => null)) ??
+        authorization.context.auth;
+      if (!update(client, nextAuth, nextCatalog, generation)) return;
       await props.onChanged?.();
     });
 
