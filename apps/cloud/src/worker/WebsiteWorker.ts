@@ -26,6 +26,12 @@ export class WebsiteOAuthStateSecret extends Context.Service<
   Alchemy.Output<Redacted.Redacted<string>>
 >()("WebsiteOAuthStateSecret") {}
 
+/** PEM PKCS#8 RSA key that signs OAuth ID tokens, generated once per stage. */
+export class WebsiteSigningKey extends Context.Service<
+  WebsiteSigningKey,
+  Alchemy.Output<Redacted.Redacted<string>>
+>()("WebsiteSigningKey") {}
+
 /**
  * Serves the MacroGraph website and the account APIs used by desktop and servers. It owns the
  * stage's hostname as a Custom Domain; Cloud claims `/cloud` on it with Worker Routes.
@@ -33,11 +39,13 @@ export class WebsiteOAuthStateSecret extends Context.Service<
 export class WebsiteWorker extends Cloudflare.Worker<WebsiteWorker, {}>()("WebsiteWorker") {}
 
 const stateSecretKey = "WEBSITE_OAUTH_STATE_SECRET";
+const signingKeyKey = "WEBSITE_OAUTH_SIGNING_KEY";
 export const productionWorkerName = "macrograph-website";
 
 export default Layer.unwrap(
   Effect.gen(function* () {
     const stateSecret = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteOAuthStateSecret));
+    const signingKeyPem = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteSigningKey));
     // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
     const assetsDirectory = Option.getOrUndefined(
@@ -49,7 +57,6 @@ export default Layer.unwrap(
         ...["TWITCH", "DISCORD", "GITHUB", "SPOTIFY", "GOOGLE", "PATREON", "STREAMLABS"].flatMap(
           (provider) => [`${provider}_CLIENT_ID`, `${provider}_CLIENT_SECRET`],
         ),
-        "JWT_PRIVATE_KEY",
         "AUTH_SECRET",
       ].flatMap((name) => {
         // `WEBSITE_`-prefixed values configure only this Worker, e.g. providers Cloud doesn't offer.
@@ -106,6 +113,7 @@ export default Layer.unwrap(
       Effect.gen(function* () {
         const runtimeContext = yield* Alchemy.RuntimeContext;
         if (stateSecret !== undefined) yield* runtimeContext.set(stateSecretKey, stateSecret);
+        if (signingKeyPem !== undefined) yield* runtimeContext.set(signingKeyKey, signingKeyPem);
         // Without a dedicated hostname there are no Worker Routes (they only run on zones we own),
         // so this Worker forwards Cloud's paths and its workers.dev URL serves both apps.
         const cloud =
@@ -126,11 +134,11 @@ export default Layer.unwrap(
             return yield* Jwt.hmacKey(Redacted.value(secret));
           }),
         );
-        const serverKey = yield* Effect.cached(
+        const signingKey = yield* Effect.cached(
           Effect.gen(function* () {
-            const pem = yield* Config.option(Config.Redacted("JWT_PRIVATE_KEY"));
-            if (Option.isNone(pem)) return undefined;
-            return yield* Jwt.rsaKey(Redacted.value(pem.value));
+            const pem = yield* runtimeContext.get<Redacted.Redacted<string>>(signingKeyKey);
+            if (pem === undefined) return yield* Effect.die("Website signing key is unavailable");
+            return yield* Jwt.rsaKey(Redacted.value(pem));
           }).pipe(Effect.orDie),
         );
         const authRedirectOrigin = yield* Config.String("WEBSITE_AUTH_REDIRECT_ORIGIN").pipe(
@@ -140,7 +148,8 @@ export default Layer.unwrap(
 
         const app = yield* WebsiteRoutes.layer({
           stateKey,
-          serverKey,
+          signingKey,
+          ...(publicHost === undefined ? {} : { issuer: `https://${publicHost}` }),
           authRedirectOrigin,
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
         }).pipe(
@@ -166,7 +175,11 @@ export default Layer.unwrap(
               // A raw body passes the native response through untouched, including WebSockets.
               return HttpServerResponse.raw(response, { status: response.status });
             }
-            const isApi = url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/");
+            const isApi =
+              url.pathname.startsWith("/api/") ||
+              url.pathname.startsWith("/auth/") ||
+              url.pathname.startsWith("/oauth/") ||
+              url.pathname === "/.well-known/oauth-authorization-server";
             if (isApi) return yield* app;
             if (
               PublicHost.legacyBrowserHosts.has(url.hostname) &&

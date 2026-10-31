@@ -1,4 +1,13 @@
-import { json, pgTable, primaryKey, serial, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  json,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export interface OAuthToken {
   readonly access_token: string;
@@ -33,33 +42,97 @@ export const oauthCredentials = pgTable(
   (table) => [primaryKey({ columns: [table.providerId, table.userId, table.providerUserId] })],
 );
 
-export const deviceCodeSessions = pgTable("device_code_sessions", {
-  appId: varchar("app_id", { length: 255 }).notNull(),
-  userCode: varchar("code", { length: 10 }).notNull(),
-  deviceCode: varchar("device_code", { length: 255 }).primaryKey(),
-  userId: varchar("user_id", { length: 255 }),
+// ---- OAuth authorization server (see OAUTH.md) ----
+
+/** Clients registered through RFC 7591. Built-in public clients are defined in code. */
+export const authClients = pgTable("auth_clients", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  secretHash: varchar("secret_hash", { length: 64 }).notNull(),
+  registrationTokenHash: varchar("registration_token_hash", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  softwareId: varchar("software_id", { length: 255 }),
+  softwareVersion: varchar("software_version", { length: 255 }),
+  tokenEndpointAuthMethod: varchar("token_endpoint_auth_method", {
+    length: 32,
+    enum: ["client_secret_basic", "client_secret_post"],
+  }).notNull(),
+  scope: text("scope").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
+  createdIp: varchar("created_ip", { length: 64 }),
 });
 
-export const oauthSessions = pgTable("oauth_sessions", {
-  id: serial("id").primaryKey(),
-  appId: varchar("app_id", { length: 255 }).notNull(),
-  accessToken: varchar("access_token", { length: 255 }).notNull().unique(),
-  refreshToken: varchar("refresh_token", { length: 255 }).notNull().unique(),
-  expires: timestamp("expires").notNull(),
-  userId: varchar("user_id", { length: 255 }).notNull(),
-});
+export const authDeviceAuthorizations = pgTable(
+  "auth_device_authorizations",
+  {
+    deviceCodeHash: varchar("device_code_hash", { length: 64 }).primaryKey(),
+    userCode: varchar("user_code", { length: 8 }).notNull().unique(),
+    /** A registered client's ID or a built-in public client's. */
+    clientId: varchar("client_id", { length: 64 }).notNull(),
+    scope: text("scope").notNull(),
+    status: varchar("status", { length: 16, enum: ["pending", "approved", "denied"] }).notNull(),
+    userId: varchar("user_id", { length: 255 }).references(() => accountUsers.id, {
+      onDelete: "cascade",
+    }),
+    intervalSeconds: integer("interval_seconds").notNull(),
+    lastPolledAt: timestamp("last_polled_at"),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    requestIp: varchar("request_ip", { length: 64 }),
+    requestCountry: varchar("request_country", { length: 8 }),
+  },
+  (table) => [index("auth_device_authorizations_client_idx").on(table.clientId)],
+);
 
-export const oauthApps = pgTable("oauth_apps", {
-  pk: serial("pk").primaryKey(),
-  id: varchar("id", { length: 255 }).notNull(),
-  type: varchar("type", { enum: ["server"] }),
-  ownerId: varchar("owner_id", { length: 255 }).notNull(),
-});
+export const authGrants = pgTable(
+  "auth_grants",
+  {
+    id: varchar("id", { length: 64 }).primaryKey(),
+    clientId: varchar("client_id", { length: 64 }).notNull(),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => accountUsers.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at").notNull().defaultNow(),
+    /** When the grant ends; refreshing an `offline_access` grant extends it. */
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => [
+    index("auth_grants_user_idx").on(table.userId),
+    index("auth_grants_client_idx").on(table.clientId),
+  ],
+);
 
-export const serverRegistrationSessions = pgTable("server_registration_sessions", {
-  id: varchar("id", { length: 255 }).primaryKey(),
-  userCode: varchar("userCode", { length: 10 }).notNull().unique(),
-  userId: varchar("user_id", { length: 255 }),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
+export const authRefreshTokens = pgTable(
+  "auth_refresh_tokens",
+  {
+    tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
+    grantId: varchar("grant_id", { length: 64 })
+      .notNull()
+      .references(() => authGrants.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at").notNull(),
+    /** Set when the token is exchanged; presenting it again revokes the grant. */
+    rotatedAt: timestamp("rotated_at"),
+  },
+  (table) => [index("auth_refresh_tokens_grant_idx").on(table.grantId)],
+);
+
+export const authAccessTokens = pgTable(
+  "auth_access_tokens",
+  {
+    tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
+    grantId: varchar("grant_id", { length: 64 })
+      .notNull()
+      .references(() => authGrants.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => [index("auth_access_tokens_grant_idx").on(table.grantId)],
+);
+
+export const authRateLimits = pgTable("auth_rate_limits", {
+  key: varchar("key", { length: 255 }).primaryKey(),
+  windowStart: timestamp("window_start").notNull(),
+  count: integer("count").notNull(),
 });

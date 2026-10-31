@@ -34,6 +34,8 @@ export default defineConfig({
     proxy: {
       "/api": { target: workerUrl, changeOrigin: true },
       "/auth": { target: workerUrl, changeOrigin: true },
+      "/oauth": { target: workerUrl, changeOrigin: true },
+      "/.well-known/oauth-authorization-server": { target: workerUrl, changeOrigin: true },
       "/cloud": { target: cloudUrl, ws: true },
     },
   },
