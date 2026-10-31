@@ -17,7 +17,6 @@ import {
   makeLocalProjectStore,
   type LocalProjectStatus,
 } from "./local/LocalStoragePersistence";
-import { PlaygroundCredentials } from "./PlaygroundCredentials";
 
 const localUserId = () => {
   const key = "macrograph:local-user";
@@ -104,7 +103,6 @@ export function Playground() {
     workspaceId: "local-browser",
     userId: localUserId(),
     settingsDescriptors: discoveredModuleSettings,
-    projectSettings: true,
   });
   const [status, setStatus] = createSignal<LocalProjectStatus>();
   const statusMessage = () => {
@@ -170,17 +168,6 @@ export function Playground() {
   };
   const controls = () => (
     <div sx={styles.controls}>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={() => {
-          setView("editor");
-          editor.openProjectSettings();
-        }}
-      >
-        Settings
-      </Button>
       <Button type="button" size="sm" variant="secondary" onClick={exportProject}>
         Export
       </Button>
@@ -242,9 +229,6 @@ export function Playground() {
           controller={editor}
           runtimeLabel="Browser"
           view={view()}
-          renderProjectSettings={(context) => (
-            <PlaygroundCredentials client={context.client} onChanged={context.refreshModuleData} />
-          )}
         />
       </main>
     </div>
