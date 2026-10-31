@@ -121,6 +121,10 @@ export const signIn = (pg: PGlite, id: string) =>
       `${id}@example.com`,
     ]);
     await pg.query(
+      `insert into "user_identity" (provider_id, provider_user_id, user_id) values ('github', $1, $1)`,
+      [id],
+    );
+    await pg.query(
       `insert into "session" (id, user_id, expires_at) values ($1, $2, now() + interval '20 days')`,
       [`session-${id}`, id],
     );

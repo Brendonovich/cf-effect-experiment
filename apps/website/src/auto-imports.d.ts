@@ -9,6 +9,7 @@ declare global {
   const IconBiPlus: typeof import('~icons/bi/plus.jsx').default
   const IconBiX: typeof import('~icons/bi/x.jsx').default
   const IconIcBaselineDiscord: typeof import('~icons/ic/baseline-discord.jsx').default
+  const IconLogosGoogleIcon: typeof import('~icons/logos/google-icon.jsx').default
   const IconMdiDotsHorizontal: typeof import('~icons/mdi/dots-horizontal.jsx').default
   const IconMdiGithub: typeof import('~icons/mdi/github.jsx').default
   const IconPhSquareSplitHorizontal: typeof import('~icons/ph/square-split-horizontal.jsx').default

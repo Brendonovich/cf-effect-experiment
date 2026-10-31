@@ -20,8 +20,28 @@ export interface OAuthToken {
 export const accountUsers = pgTable("user", {
   id: varchar("id", { length: 255 }).primaryKey(),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
+  /** Only accounts created before sign-in providers have one. */
+  hashedPassword: varchar("hashed_password", { length: 255 }),
 });
+
+/** Provider accounts a user signs in with. Separate from `oauth_credential`, which graphs use. */
+export const userIdentities = pgTable(
+  "user_identity",
+  {
+    providerId: varchar("provider_id", { length: 255 }).notNull(),
+    providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
+    userId: varchar("user_id", { length: 255 })
+      .notNull()
+      .references(() => accountUsers.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 255 }),
+    displayName: varchar("display_name", { length: 255 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.providerId, table.providerUserId] }),
+    index("user_identity_user_idx").on(table.userId),
+  ],
+);
 
 export const accountSessions = pgTable("session", {
   id: varchar("id", { length: 255 }).primaryKey(),

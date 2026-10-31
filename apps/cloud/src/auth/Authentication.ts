@@ -39,7 +39,8 @@ export const make = Effect.gen(function* () {
       const sessionId = request.cookies[Session.cookieName];
       if (!sessionId) return undefined;
       const validated = yield* sessions.validate(sessionId);
-      if (validated === undefined) return undefined;
+      // The website's login page asks these accounts to connect a sign-in provider first.
+      if (validated === undefined || !validated.user.hasSignInMethod) return undefined;
       if (validated.session.fresh) {
         const secure = new URL(requestOrigin(request)).protocol === "https:";
         const context = yield* Effect.context<never>();
@@ -47,7 +48,7 @@ export const make = Effect.gen(function* () {
           Effect.succeed(Session.refreshCookie(validated.session.id, secure)(response)),
         );
       }
-      return validated.user;
+      return { id: validated.user.id, email: validated.user.email };
     });
 
   const authenticateSession = (request: HttpServerRequest.HttpServerRequest) =>

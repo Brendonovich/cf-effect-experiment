@@ -4,7 +4,7 @@ export type Event =
   | { readonly event: "user signed up"; readonly email: string }
   | { readonly event: "user logged in" }
   | {
-      readonly event: "credential connected" | "credential refreshed";
+      readonly event: "credential connected" | "credential refreshed" | "sign-in method connected";
       readonly providerId: string;
       readonly providerUserId: string;
     };
