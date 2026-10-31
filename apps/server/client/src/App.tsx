@@ -5,6 +5,7 @@ import {
   AccountMenu,
   ApiKeySettings,
   Button,
+  ButtonLink,
   createEditorController,
   CredentialSettings,
   RealtimeWorkspace,
@@ -172,7 +173,6 @@ const styles = stylex.create({
   },
   actions: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 },
   error: { color: colors.red11, lineHeight: 1.5, margin: 0, overflowWrap: "anywhere" },
-  link: { color: colors.gray12, textDecoration: "underline", textUnderlineOffset: 3 },
   authNotice: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, padding: 12 },
 });
 
@@ -276,12 +276,6 @@ export function App() {
     const { signal } = startOperation();
     const setup = key !== undefined;
     const endpoint = setup ? "auth/setup" : "auth";
-    const authorizationWindow = window.open("about:blank", "macrograph-client-sign-in");
-    const closeWindow = () => {
-      clearTimeout(timeout);
-      authorizationWindow?.close();
-    };
-    signal.addEventListener("abort", closeWindow, { once: true });
     setSigningIn(true);
     setApprovalError(null);
     setVerificationUrl(null);
@@ -312,12 +306,10 @@ export function App() {
         !authorization.verificationUrl
       )
         throw new Error(authorization.error ?? "Could not start MacroGraph approval");
+      // Shown with a link rather than opened automatically, so a failed start (such as a wrong
+      // setup key) never flashes a tab open and shut.
       setVerificationUrl(authorization.verificationUrl);
       setUserCode(authorization.userCode ?? null);
-      if (authorizationWindow !== null) {
-        authorizationWindow.opener = null;
-        authorizationWindow.location.replace(authorization.verificationUrl);
-      }
       while (!signal.aborted) {
         await new Promise<void>((resolve) => {
           const cancel = () => {
@@ -362,8 +354,6 @@ export function App() {
         setApprovalError(error instanceof Error ? error.message : "MacroGraph approval failed");
     } finally {
       clearTimeout(timeout);
-      signal.removeEventListener("abort", closeWindow);
-      closeWindow();
       if (!signal.aborted) {
         setSigningIn(false);
         setVerificationUrl(null);
@@ -409,7 +399,9 @@ export function App() {
       </Show>
       <Show when={signingIn()}>
         <p sx={styles.description} role="status">
-          {verificationUrl() ? "Waiting for approval on macrograph.app..." : "Starting approval..."}
+          {verificationUrl()
+            ? "Approve on macrograph.app. This page continues once you have."
+            : "Starting approval..."}
         </p>
         <Show when={userCode()}>
           {(code) => (
@@ -422,18 +414,15 @@ export function App() {
         <div sx={styles.actions}>
           <Show when={verificationUrl()}>
             {(url) => (
-              <a href={url()} target="_blank" rel="noopener noreferrer" sx={styles.link}>
-                Open approval page
-              </a>
+              <ButtonLink href={url()} target="_blank" rel="noopener noreferrer">
+                Open macrograph.app
+              </ButtonLink>
             )}
           </Show>
           <Button type="button" variant="secondary" onClick={cancelSignIn}>
             Cancel
           </Button>
         </div>
-        <Show when={verificationUrl()}>
-          <p sx={styles.description}>If the popup did not open, use the approval link above.</p>
-        </Show>
       </Show>
     </div>
   );
@@ -490,7 +479,9 @@ export function App() {
                   sx={styles.form}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (!signingIn() && setupKey().trim()) void signIn(setupKey().trim());
+                    // Keys wrap in narrow terminals; pasted line breaks and spaces aren't part of it.
+                    const key = setupKey().replaceAll(/\s+/g, "");
+                    if (!signingIn() && key !== "") void signIn(key);
                   }}
                 >
                   <label for="setup-key" sx={styles.label}>
