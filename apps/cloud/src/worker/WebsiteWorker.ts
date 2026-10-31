@@ -115,9 +115,14 @@ export default Layer.unwrap(
             return yield* Jwt.rsaKey(Redacted.value(pem));
           }).pipe(Effect.orDie),
         );
-        const authRedirectOrigin = yield* Config.String("WEBSITE_AUTH_REDIRECT_ORIGIN").pipe(
-          // The original website's AUTH_REDIRECT_PROXY_URL, registered with every OAuth provider.
-          Config.withDefault("https://macrograph.brendonovich.dev"),
+        // A configured origin (such as a dev tunnel) serves every provider. Otherwise providers use
+        // the original website's AUTH_REDIRECT_PROXY_URL, unless they've registered the main site.
+        const configuredRedirectOrigin = yield* Config.option(
+          Config.String("WEBSITE_AUTH_REDIRECT_ORIGIN"),
+        );
+        const authRedirectOrigin = Option.getOrElse(
+          configuredRedirectOrigin,
+          () => `https://${PublicHost.authRedirectHost}`,
         );
 
         const previewGate = PublicHost.isPreviewStage(stage)
@@ -137,6 +142,9 @@ export default Layer.unwrap(
           signingKey,
           ...(publicHost === undefined ? {} : { issuer: `https://${publicHost}` }),
           authRedirectOrigin,
+          ...(Option.isNone(configuredRedirectOrigin)
+            ? { providerRedirectOrigins: PublicHost.providerRedirectOrigins }
+            : {}),
           preview: PublicHost.isPreviewStage(stage),
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
         }).pipe(

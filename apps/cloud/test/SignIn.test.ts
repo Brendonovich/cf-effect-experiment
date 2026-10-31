@@ -2,7 +2,7 @@ import { afterEach, assert, describe, it, vi } from "@effect/vitest";
 import { Effect } from "effect";
 
 import * as Password from "../src/website/Password.ts";
-import { type App, body, harness, send, string } from "./OAuthHarness.ts";
+import { type App, body, harness, harnessWith, send, string } from "./OAuthHarness.ts";
 
 interface TwitchUser {
   readonly sub: string;
@@ -11,14 +11,17 @@ interface TwitchUser {
   readonly email_verified?: boolean;
 }
 
-/** Answers Twitch's token and userinfo endpoints as `user`. */
+/** Answers Twitch's token and userinfo endpoints as `user`, recording token requests. */
+const tokenRequests: Array<URLSearchParams> = [];
 const twitchAs = (user: TwitchUser) =>
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: string | URL | Request) => {
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
-      if (url === "https://id.twitch.tv/oauth2/token")
+      if (url === "https://id.twitch.tv/oauth2/token") {
+        tokenRequests.push(new URLSearchParams(String(init?.body)));
         return Response.json({ access_token: "access", token_type: "bearer", expires_in: 3600 });
+      }
       if (url === "https://id.twitch.tv/oauth2/userinfo") return Response.json(user);
       return new Response(null, { status: 404 });
     }),
@@ -78,7 +81,29 @@ const streamer = {
 describe("signing in with a provider", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    tokenRequests.length = 0;
   });
+
+  it.effect("returns through a provider's own redirect origin", () =>
+    Effect.gen(function* () {
+      const { app } = yield* harnessWith({
+        authRedirectOrigin: "https://macrograph.brendonovich.dev",
+        providerRedirectOrigins: { twitch: "https://macrograph.app" },
+      });
+      twitchAs(streamer);
+      const { authorize, callback } = yield* signInWithTwitch(app);
+      assert.strictEqual(
+        authorize.searchParams.get("redirect_uri"),
+        "https://macrograph.app/auth/proxy",
+      );
+      assert.isNull(location(callback).searchParams.get("error"));
+      // The code exchange repeats the redirect URI the code was issued for.
+      assert.strictEqual(
+        tokenRequests[0]?.get("redirect_uri"),
+        "https://macrograph.app/auth/proxy",
+      );
+    }),
+  );
 
   it.effect("creates an account from a verified provider account", () =>
     Effect.gen(function* () {

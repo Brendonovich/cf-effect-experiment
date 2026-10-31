@@ -48,6 +48,8 @@ export interface Options {
   readonly issuer?: string;
   /** Origin whose `/auth/proxy` is registered as each OAuth provider's redirect URI. */
   readonly authRedirectOrigin: string;
+  /** Providers that registered `/auth/proxy` on another origin, by provider ID. */
+  readonly providerRedirectOrigins?: Readonly<Record<string, string>>;
   /** Pull request previews serve the website from their own workers.dev origin. */
   readonly preview?: boolean;
   readonly capture: Analytics.Capture;
@@ -199,7 +201,8 @@ export const layer = (options: Options) =>
       const database = yield* Database.Service;
       const providers = yield* OAuthProviders.Service;
       const sessions = yield* Session.make;
-      const proxyRedirectUri = `${options.authRedirectOrigin}/auth/proxy`;
+      const proxyRedirectUri = (provider: OAuthProviders.Provider) =>
+        `${options.providerRedirectOrigins?.[provider.id] ?? options.authRedirectOrigin}/auth/proxy`;
 
       /**
        * The request's origin when it is a known website origin. OAuth callbacks and verification
@@ -353,7 +356,7 @@ export const layer = (options: Options) =>
       const exchangeCode = (provider: OAuthProviders.Provider, code: string | null) =>
         code === null
           ? reject(400)
-          : providers.exchange(provider, code, proxyRedirectUri).pipe(
+          : providers.exchange(provider, code, proxyRedirectUri(provider)).pipe(
               Effect.map(
                 (token): OAuthToken => ({
                   access_token: token.access_token,
@@ -369,7 +372,7 @@ export const layer = (options: Options) =>
             );
 
       const authorizationUrl = (provider: OAuthProviders.Provider, state: string) =>
-        providers.authorizeUrl(provider, proxyRedirectUri, state);
+        providers.authorizeUrl(provider, proxyRedirectUri(provider), state);
 
       // ---- Signing in with a provider account ----
 
@@ -479,7 +482,7 @@ export const layer = (options: Options) =>
             const current = yield* optionalWebsiteSession(request);
             if (current?.user.id !== state.userId) return failed("expired");
           }
-          const result = yield* providers.exchange(provider, code, proxyRedirectUri).pipe(
+          const result = yield* providers.exchange(provider, code, proxyRedirectUri(provider)).pipe(
             Effect.flatMap((token) => providers.identity(provider, token.access_token)),
             Effect.flatMap((identity) => resolveSignIn(provider, identity, state.userId)),
             Effect.catchTag("OAuthProviderError", (error) =>
@@ -815,7 +818,7 @@ export const layer = (options: Options) =>
               returnTo: PreviewAuth.safeNext(requestUrl(request).searchParams.get("returnTo")),
               ...(current === undefined ? {} : { userId: current.user.id }),
             });
-            const url = providers.signInUrl(provider, proxyRedirectUri, state);
+            const url = providers.signInUrl(provider, proxyRedirectUri(provider), state);
             if (url === undefined) return yield* reject(400);
             return HttpServerResponse.redirect(url).pipe(
               HttpServerResponse.setCookieUnsafe(signInNonceCookie, nonce, {
