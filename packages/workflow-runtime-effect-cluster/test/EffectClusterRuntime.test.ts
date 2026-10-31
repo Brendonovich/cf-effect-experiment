@@ -77,7 +77,9 @@ const project: Project.Model = {
 const ClusterLayer = ClusterWorkflowEngine.layer.pipe(Layer.provide(TestRunner.layer));
 const TestLayer = EffectClusterRuntime.layer({ modules }).pipe(Layer.provideMerge(ClusterLayer));
 
-it.effect("executes nodes as idempotent Effect Cluster workflow activities", () =>
+// Effect Cluster schedules shard acquisition, registration waits and polling on
+// the clock, so a TestClock can stall it whenever the fast path loses a race.
+it.live("executes nodes as idempotent Effect Cluster workflow activities", () =>
   Effect.scoped(
     Effect.gen(function* () {
       executions = 0;
