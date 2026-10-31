@@ -12,6 +12,7 @@ import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
 import * as Jwt from "../website/Jwt.ts";
+import * as PreviewAuth from "../website/PreviewAuth.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
 import { CloudWorker } from "./CloudWorker.ts";
 
@@ -94,6 +95,9 @@ export default Layer.unwrap(
         main: import.meta.url,
         env: {
           ...environment,
+          ...(PublicHost.isPreviewStage(stage)
+            ? { PREVIEW_ALLOWED_USERS: process.env.PREVIEW_ALLOWED_USERS ?? "" }
+            : {}),
           ...(process.env.WEBSITE_AUTH_REDIRECT_ORIGIN === undefined
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
@@ -146,6 +150,18 @@ export default Layer.unwrap(
           Config.withDefault("https://macrograph.brendonovich.dev"),
         );
 
+        const previewGate = PublicHost.isPreviewStage(stage)
+          ? PreviewAuth.makeGate({
+              allowedUsers: new Set(
+                (yield* Config.String("PREVIEW_ALLOWED_USERS").pipe(Config.withDefault("")))
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter((id) => id !== ""),
+              ),
+              cookieKey: stateKey,
+            })
+          : undefined;
+
         const app = yield* WebsiteRoutes.layer({
           stateKey,
           signingKey,
@@ -162,8 +178,15 @@ export default Layer.unwrap(
           fetch: Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest;
             const source = request.source;
-            if (!(source instanceof Request)) return yield* app;
+            if (!(source instanceof Request))
+              return previewGate === undefined
+                ? yield* app
+                : HttpServerResponse.empty({ status: 403 });
             const url = new URL(source.url);
+            if (previewGate !== undefined) {
+              const denied = yield* previewGate(request, url);
+              if (denied !== undefined) return denied;
+            }
             if (cloud !== undefined && CloudMount.claims(url.pathname)) {
               const environment = yield* Cloudflare.WorkerEnvironment;
               // `bindWorker` names the service binding after the Worker's logical ID.

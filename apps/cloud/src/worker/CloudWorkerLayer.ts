@@ -97,6 +97,8 @@ export default Layer.unwrap(
         // Cloud has no hostname of its own; this detaches the retired `cloud.macrograph.app`,
         // which omitting `domain` would leave attached.
         domain: null,
+        // Previews reach Cloud only through WebsiteWorker, whose gate restricts who gets in.
+        ...(PublicHost.isPreviewStage(stage) ? { workersDev: false } : {}),
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
