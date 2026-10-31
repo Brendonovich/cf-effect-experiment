@@ -135,7 +135,7 @@ it("approves a device sign-in after showing who is asking and for what", async (
   expect(container.textContent).toContain("Ada's server");
   expect(container.textContent).toContain("Unverified");
   expect(container.textContent).toContain("203.0.113.7");
-  expect(container.textContent).toContain("Use your connected credentials");
+  expect(container.textContent).toContain("Use your connected accounts");
 
   const approve = [...container.querySelectorAll("button")].find(
     (button) => button.textContent === "Approve",

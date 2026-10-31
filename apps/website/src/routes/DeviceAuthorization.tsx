@@ -16,10 +16,17 @@ import {
 import { RequireSession } from "../session";
 
 export const scopeDescriptions: Record<OAuthScope, string> = {
-  openid: "Confirm which MacroGraph account you are",
+  openid: "Know which account you are",
   email: "See your email address",
-  offline_access: "Stay connected until you remove it from your account",
-  credentials: "Use your connected credentials, such as Twitch and Discord",
+  offline_access: "Stay signed in until you remove it",
+  credentials: "Use your connected accounts, like Twitch and Discord",
+};
+
+const scopeIcons: Record<OAuthScope, typeof IconTablerUser> = {
+  openid: IconTablerUser,
+  email: IconTablerMail,
+  offline_access: IconTablerRefresh,
+  credentials: IconTablerKey,
 };
 
 /** Approves a device authorization request (RFC 8628) started by a server or app. */
@@ -170,35 +177,32 @@ function DeviceAuthorization(props: { readonly session: Session }) {
               <p sx={styles.code} aria-label="Code">
                 {request().userCode}
               </p>
-              <p sx={styles.hint}>Only continue if this matches the code shown on your device.</p>
+              <p sx={styles.hint}>Check this matches your device.</p>
 
-              <dl sx={styles.details}>
-                <div sx={styles.detail}>
-                  <dt sx={styles.term}>App</dt>
-                  <dd sx={styles.definition}>
-                    <span sx={styles.clientName}>{request().client.name}</span>
-                    <Show when={!request().client.verified}>
-                      <span sx={styles.badge}>Unverified</span>
-                    </Show>
-                  </dd>
+              <div sx={styles.details}>
+                <div sx={styles.client}>
+                  <span sx={styles.clientName}>{request().client.name}</span>
+                  <Show when={!request().client.verified}>
+                    <span sx={styles.badge} title="MacroGraph hasn't checked who runs this server">
+                      Unverified
+                    </span>
+                  </Show>
                 </div>
                 <Show when={requestOrigin(request()) !== ""}>
-                  <div sx={styles.detail}>
-                    <dt sx={styles.term}>Requested from</dt>
-                    <dd sx={styles.definition}>{requestOrigin(request())}</dd>
-                  </div>
+                  <p sx={styles.origin}>{requestOrigin(request())}</p>
                 </Show>
-              </dl>
-              <Show when={!request().client.verified}>
-                <p sx={styles.note}>
-                  Whoever runs this server chose its name. MacroGraph hasn't checked it.
-                </p>
-              </Show>
-
-              <div sx={styles.scopes}>
-                <p sx={styles.scopesTitle}>It will be able to</p>
                 <ul sx={styles.scopeList}>
-                  <For each={request().scope}>{(scope) => <li>{scopeDescriptions[scope]}</li>}</For>
+                  <For each={request().scope}>
+                    {(scope) => {
+                      const Icon = scopeIcons[scope];
+                      return (
+                        <li sx={styles.scope}>
+                          <Icon {...stylex.attrs(styles.scopeIcon)} />
+                          {scopeDescriptions[scope]}
+                        </li>
+                      );
+                    }}
+                  </For>
                 </ul>
               </div>
 
@@ -335,14 +339,9 @@ const styles = stylex.create({
     letterSpacing: "0.12em",
   },
   details: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
     width: "100%",
-    margin: 0,
-    marginTop: 20,
-    paddingBlock: 14,
-    paddingInline: 16,
+    marginTop: 24,
+    padding: 16,
     boxSizing: "border-box",
     borderColor: colors.gray4,
     borderStyle: "solid",
@@ -351,22 +350,15 @@ const styles = stylex.create({
     backgroundColor: colors.gray1,
     textAlign: "left",
   },
-  detail: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 },
-  term: { color: colors.gray10 },
-  definition: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
-    margin: 0,
-    color: colors.gray12,
-  },
+  client: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 },
   clientName: {
     overflow: "hidden",
-    fontWeight: 500,
+    fontSize: 14,
+    fontWeight: 600,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  origin: { margin: 0, marginTop: 2, fontSize: 12, color: colors.gray10 },
   badge: {
     flexShrink: 0,
     paddingBlock: 1,
@@ -377,20 +369,24 @@ const styles = stylex.create({
     fontWeight: 500,
     color: "#ffc53d",
   },
-  note: { margin: 0, marginTop: 8, fontSize: 12, lineHeight: "18px", color: colors.gray10 },
-  scopes: { width: "100%", marginTop: 20, textAlign: "left" },
-  scopesTitle: { margin: 0, fontSize: 13, fontWeight: 500, color: colors.gray11 },
   scopeList: {
     display: "flex",
     flexDirection: "column",
-    gap: 6,
+    gap: 10,
     margin: 0,
-    marginTop: 8,
-    paddingLeft: 18,
+    marginTop: 14,
+    paddingTop: 14,
+    paddingLeft: 0,
+    borderTopColor: colors.gray4,
+    borderTopStyle: "solid",
+    borderTopWidth: 1,
+    listStyle: "none",
     fontSize: 13,
-    lineHeight: "18px",
+    lineHeight: "20px",
     color: colors.gray12,
   },
+  scope: { display: "flex", alignItems: "flex-start", gap: 10 },
+  scopeIcon: { flexShrink: 0, width: 16, height: 16, marginTop: 2, color: colors.gray10 },
   form: { display: "flex", flexDirection: "column", gap: 12, width: "100%", marginTop: 24 },
   codeLabel: { fontSize: 13, fontWeight: 500, color: colors.gray11 },
   codeInput: {
