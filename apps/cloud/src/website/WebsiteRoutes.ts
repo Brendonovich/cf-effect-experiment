@@ -910,6 +910,38 @@ export const layer = (options: Options) =>
         ),
       );
 
+      // Deleting the registration revokes the server's token; its pending sign-ins go with it.
+      yield* router.add("DELETE", "/api/website/servers/:id", (request) =>
+        handle(
+          Effect.gen(function* () {
+            const { user } = yield* websiteSession(request);
+            const id = (yield* HttpRouter.params).id ?? "";
+            yield* database
+              .transaction((transaction) =>
+                Effect.gen(function* () {
+                  const removed = yield* transaction
+                    .delete(oauthApps)
+                    .where(
+                      and(
+                        eq(oauthApps.id, id),
+                        eq(oauthApps.type, "server"),
+                        eq(oauthApps.ownerId, user.id),
+                      ),
+                    )
+                    .returning({ id: oauthApps.id });
+                  if (removed.length === 0) return;
+                  yield* transaction
+                    .delete(deviceCodeSessions)
+                    .where(eq(deviceCodeSessions.appId, id));
+                  yield* transaction.delete(oauthSessions).where(eq(oauthSessions.appId, id));
+                }),
+              )
+              .pipe(Effect.orDie);
+            return HttpServerResponse.empty({ status: 204 });
+          }),
+        ),
+      );
+
       const userCodeRoutes = (
         path: string,
         table: typeof deviceCodeSessions | typeof serverRegistrationSessions,

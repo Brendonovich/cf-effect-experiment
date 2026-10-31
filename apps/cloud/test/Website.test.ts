@@ -39,16 +39,18 @@ const generateRsaPem = Effect.promise(async () => {
 });
 
 // Queries return `rows(sql)`, which by default finds nothing to exercise the not-found paths.
-const databaseLayer = (rows: (sql: string) => ReadonlyArray<ReadonlyArray<unknown>> = () => []) =>
+type Rows = (sql: string, params: ReadonlyArray<unknown>) => ReadonlyArray<ReadonlyArray<unknown>>;
+const databaseLayer = (rows: Rows = () => []) =>
   Layer.effect(Database.Service)(
     Effect.gen(function* () {
       const unsupported = () => Effect.die("Unexpected SQL operation");
-      const execute: SqlConnection.Connection["executeValues"] = (sql) =>
-        Effect.succeed(rows(sql).map((row) => [...row]));
+      const execute: SqlConnection.Connection["executeValues"] = (sql, params) =>
+        Effect.succeed(rows(sql, params).map((row) => [...row]));
       const connection: SqlConnection.Connection = {
         execute: (sql, params) => execute(sql, params).pipe(Effect.as([])),
         executeRaw: execute,
-        executeUnprepared: unsupported,
+        // Transactions issue BEGIN/COMMIT unprepared.
+        executeUnprepared: (sql, params) => execute(sql, params).pipe(Effect.as([])),
         executeValuesUnprepared: unsupported,
         executeStream: () => Stream.die("Unexpected SQL stream"),
         executeValues: execute,
@@ -84,7 +86,7 @@ const makeApp = makeAppWith();
 function makeAppWith(
   options: {
     readonly serverKey?: CryptoKey;
-    readonly rows?: (sql: string) => ReadonlyArray<ReadonlyArray<unknown>>;
+    readonly rows?: Rows;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -234,6 +236,35 @@ describe("website routes", () => {
         method: "POST",
       });
       assert.strictEqual(refresh.status, 401);
+    }),
+  );
+
+  it.effect("removes only the signed-in owner's server and its pending sign-ins", () =>
+    Effect.gen(function* () {
+      const statements: Array<{ sql: string; params: ReadonlyArray<unknown> }> = [];
+      const app = yield* makeAppWith({
+        rows: (sql, params) => {
+          statements.push({ sql, params });
+          if (sql.includes(`from "session"`))
+            return [["session", new Date(Date.now() + 86_400_000).toISOString(), "user", "a@b.c"]];
+          if (sql.startsWith(`delete from "oauth_apps"`)) return [["app"]];
+          return [];
+        },
+      });
+      const remove = (headers: Record<string, string>) =>
+        send(app, "/api/website/servers/app", { method: "DELETE", headers });
+
+      assert.strictEqual((yield* remove({ cookie: "auth_session=session" })).status, 403);
+      assert.isFalse(statements.some(({ sql }) => sql.startsWith("delete")));
+
+      const removed = yield* remove({ cookie: "auth_session=session", origin });
+      assert.strictEqual(removed.status, 204);
+      const deletes = statements.filter(({ sql }) => sql.startsWith("delete"));
+      assert.deepStrictEqual(
+        deletes.map(({ sql }) => sql.match(/^delete from "(\w+)"/)?.[1]),
+        ["oauth_apps", "device_code_sessions", "oauth_sessions"],
+      );
+      assert.includeMembers([...(deletes[0]?.params ?? [])], ["app", "server", "user"]);
     }),
   );
 

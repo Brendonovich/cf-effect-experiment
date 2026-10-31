@@ -75,6 +75,9 @@ export const removeCredential = (credential: { readonly provider: string; readon
     { method: "DELETE" },
   );
 
+export const removeServer = (id: string) =>
+  websiteRequest<void>(`/servers/${encodeURIComponent(id)}`, { method: "DELETE" });
+
 export class PopupBlockedError extends Error {
   constructor() {
     super("Your browser blocked the login window. Allow popups for this site and try again.");

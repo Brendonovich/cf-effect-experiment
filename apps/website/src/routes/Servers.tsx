@@ -1,13 +1,22 @@
-import { LoadingState } from "@macrograph/editor-ui";
+import { Button, LoadingState } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import { createQuery } from "@tanstack/solid-query";
+import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
 import { For, Show } from "solid-js";
 
-import { getServers, serversKey } from "../api";
+import { getServers, removeServer, serversKey } from "../api";
+import { showToast } from "../Toasts";
 
 export function ServersRoute() {
+  const queryClient = useQueryClient();
   const servers = createQuery(() => ({ queryKey: serversKey, queryFn: getServers }));
+  const remove = useMutation(() => ({
+    networkMode: "always" as const,
+    mutationFn: removeServer,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: serversKey }),
+    onError: () =>
+      showToast({ tone: "error", content: "Could not remove the server. Please try again." }),
+  }));
 
   return (
     <div sx={styles.root}>
@@ -47,6 +56,22 @@ export function ServersRoute() {
                     <p sx={styles.name}>MacroGraph server</p>
                     <p sx={styles.id}>{server.id}</p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    sx={styles.remove}
+                    disabled={remove.isPending && remove.variables === server.id}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Remove this server? It loses access to your credentials and must be set up again to reconnect.",
+                        )
+                      )
+                        remove.mutate(server.id);
+                    }}
+                  >
+                    {remove.isPending && remove.variables === server.id ? "Removing..." : "Remove"}
+                  </Button>
                 </div>
               )}
             </For>
@@ -97,7 +122,8 @@ const styles = stylex.create({
     color: colors.gray11,
   },
   iconSvg: { width: 17, height: 17 },
-  body: { minWidth: 0 },
+  body: { flex: 1, minWidth: 0 },
+  remove: { flexShrink: 0, borderRadius: 6 },
   name: { margin: 0, fontSize: 15, lineHeight: "20px", fontWeight: 500 },
   id: {
     margin: 0,
