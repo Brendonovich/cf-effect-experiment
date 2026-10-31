@@ -159,6 +159,29 @@ describe("local browser runtime", () => {
       ),
   );
 
+  it.effect("doesn't request credentials for signed-out visitors", () =>
+    Effect.gen(function* () {
+      const requests: Array<string> = [];
+      const credentials = yield* CloudCredentials.makeSession({
+        signedIn: Effect.succeed(false),
+      }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.sync(() => {
+              requests.push(request.url);
+              return HttpClientResponse.fromWeb(request, new Response(null, { status: 403 }));
+            }),
+          ),
+        ),
+      );
+      assert.deepStrictEqual(yield* credentials.get, []);
+      const catalog = yield* credentials.catalog!;
+      assert.strictEqual(catalog._tag, "CredentialCatalogUnavailable");
+      assert.deepStrictEqual(requests, []);
+    }),
+  );
+
   it.effect("projects editor mutations and exposes only browser-safe modules", () =>
     Effect.scoped(
       Effect.gen(function* () {
