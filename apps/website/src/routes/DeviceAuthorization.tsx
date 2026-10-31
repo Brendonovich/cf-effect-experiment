@@ -29,6 +29,17 @@ const scopeIcons: Record<OAuthScope, typeof IconTablerUser> = {
   credentials: IconTablerKey,
 };
 
+/** Scopes that let the client act as the user elsewhere, shown with a warning. */
+const scopeWarnings: Partial<Record<OAuthScope, string>> = {
+  credentials:
+    "This server can post, read, and act as you on those services. Only approve servers you trust.",
+};
+
+const sortedScopes = (scopes: ReadonlyArray<OAuthScope>) => [
+  ...scopes.filter((scope) => scopeWarnings[scope] === undefined),
+  ...scopes.filter((scope) => scopeWarnings[scope] !== undefined),
+];
+
 /** Approves a device authorization request (RFC 8628) started by a server or app. */
 export function DeviceAuthorizationRoute() {
   return (
@@ -174,10 +185,12 @@ function DeviceAuthorization(props: { readonly session: Session }) {
             <>
               <h1 sx={styles.title}>Approve sign-in?</h1>
               {signedInAs()}
-              <p sx={styles.code} aria-label="Code">
-                {request().userCode}
-              </p>
-              <p sx={styles.hint}>Check this matches your device.</p>
+              <div sx={styles.codePanel}>
+                <p sx={styles.codePanelLabel}>Check this matches your device</p>
+                <p sx={styles.code} aria-label="Code">
+                  {request().userCode}
+                </p>
+              </div>
 
               <div sx={styles.details}>
                 <div sx={styles.client}>
@@ -192,13 +205,24 @@ function DeviceAuthorization(props: { readonly session: Session }) {
                   <p sx={styles.origin}>{requestOrigin(request())}</p>
                 </Show>
                 <ul sx={styles.scopeList}>
-                  <For each={request().scope}>
+                  <For each={sortedScopes(request().scope)}>
                     {(scope) => {
                       const Icon = scopeIcons[scope];
+                      const warning = scopeWarnings[scope];
                       return (
-                        <li sx={styles.scope}>
-                          <Icon {...stylex.attrs(styles.scopeIcon)} />
-                          {scopeDescriptions[scope]}
+                        <li sx={[styles.scope, warning !== undefined && styles.dangerScope]}>
+                          <Icon
+                            {...stylex.attrs(
+                              styles.scopeIcon,
+                              warning !== undefined && styles.dangerIcon,
+                            )}
+                          />
+                          <div>
+                            {scopeDescriptions[scope]}
+                            <Show when={warning}>
+                              {(text) => <p sx={styles.scopeWarning}>{text()}</p>}
+                            </Show>
+                          </div>
                         </li>
                       );
                     }}
@@ -304,14 +328,14 @@ const styles = stylex.create({
   brand: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    fontSize: 22,
+    gap: 14,
+    fontSize: 30,
     fontWeight: 800,
     letterSpacing: "-0.02em",
     color: colors.gray12,
     textDecoration: "none",
   },
-  logo: { width: 44, height: 44, borderRadius: 10 },
+  logo: { width: 56, height: 56, borderRadius: 12 },
   card: {
     display: "flex",
     flexDirection: "column",
@@ -327,20 +351,35 @@ const styles = stylex.create({
     textAlign: "center",
   },
   title: { margin: 0, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em" },
-  signedIn: { margin: 0, marginTop: 6, fontSize: 13, color: colors.gray10 },
+  signedIn: { margin: 0, marginTop: 6, fontSize: 13, color: colors.gray11 },
   email: { fontWeight: 500, color: colors.gray12 },
   description: { margin: 0, marginTop: 16, fontSize: 14, lineHeight: "22px", color: colors.gray11 },
+  codePanel: {
+    width: "100%",
+    marginTop: 24,
+    paddingBlock: 16,
+    boxSizing: "border-box",
+    borderColor: colors.gray4,
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: colors.gray1,
+  },
+  codePanelLabel: { margin: 0, fontSize: 12, color: colors.gray11 },
   code: {
     margin: 0,
-    marginTop: 20,
+    marginTop: 8,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     fontSize: 30,
     fontWeight: 600,
+    lineHeight: "36px",
     letterSpacing: "0.12em",
+    // Letter spacing trails the last character; offset it so the code stays centred.
+    paddingLeft: "0.12em",
   },
   details: {
     width: "100%",
-    marginTop: 24,
+    marginTop: 12,
     padding: 16,
     boxSizing: "border-box",
     borderColor: colors.gray4,
@@ -387,6 +426,22 @@ const styles = stylex.create({
   },
   scope: { display: "flex", alignItems: "flex-start", gap: 10 },
   scopeIcon: { flexShrink: 0, width: 16, height: 16, marginTop: 2, color: colors.gray10 },
+  // Bleeds into the details padding so its icon and text line up with the other scopes, keeping
+  // the same 8px gutter on the sides and bottom. Warning scopes are sorted last.
+  dangerScope: {
+    marginInline: -8,
+    marginBottom: -8,
+    paddingBlock: 8,
+    paddingInline: 8,
+    borderColor: colors.red6,
+    borderStyle: "solid",
+    borderWidth: 1,
+    borderRadius: 6,
+    backgroundColor: colors.red3,
+    color: colors.red12,
+  },
+  dangerIcon: { color: colors.red11 },
+  scopeWarning: { margin: 0, marginTop: 2, fontSize: 12, lineHeight: "18px", color: colors.red11 },
   form: { display: "flex", flexDirection: "column", gap: 12, width: "100%", marginTop: 24 },
   codeLabel: { fontSize: 13, fontWeight: 500, color: colors.gray11 },
   codeInput: {
