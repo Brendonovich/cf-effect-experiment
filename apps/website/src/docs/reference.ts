@@ -119,8 +119,8 @@ export const useNodeIO = (id: () => ModuleId.Id, definitions: () => t.Definition
       current = false;
     };
   });
-  return (schemaId: string, input: SchemaReferenceIOInput): NodeIO | undefined => {
-    const schema = schemas()?.get(schemaId);
+  return (input: SchemaReferenceIOInput): NodeIO | undefined => {
+    const schema = schemas()?.get(input.schema.id);
     if (schema === undefined) return undefined;
     try {
       return Package.nodeIO(

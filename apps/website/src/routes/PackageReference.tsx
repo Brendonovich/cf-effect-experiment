@@ -138,39 +138,39 @@ function PackageShell(props: {
               sx={styles.search}
             />
             <nav aria-label={`${props.summary.displayName} reference`} sx={styles.sidebarNav}>
-            <a
-              href={packagePath(props.summary)}
-              aria-current={current(packagePath(props.summary)) ? "page" : undefined}
-              sx={[styles.item, current(packagePath(props.summary)) && styles.activeItem]}
-            >
-              Overview
-            </a>
-            <For each={groups()}>
-              {(group) => (
-                <section sx={styles.group}>
-                  <h2 sx={styles.groupLabel}>
-                    <span sx={[styles.swatch, variantColor(group.type)]} />
-                    {group.label}
-                  </h2>
-                  <For each={group.schemas}>
-                    {(schema) => (
-                      <a
-                        href={nodePath(props.summary, schema.id)}
-                        aria-current={
-                          current(nodePath(props.summary, schema.id)) ? "page" : undefined
-                        }
-                        sx={[
-                          styles.item,
-                          current(nodePath(props.summary, schema.id)) && styles.activeItem,
-                        ]}
-                      >
-                        {schema.name}
-                      </a>
-                    )}
-                  </For>
-                </section>
-              )}
-            </For>
+              <a
+                href={packagePath(props.summary)}
+                aria-current={current(packagePath(props.summary)) ? "page" : undefined}
+                sx={[styles.item, current(packagePath(props.summary)) && styles.activeItem]}
+              >
+                Overview
+              </a>
+              <For each={groups()}>
+                {(group) => (
+                  <section sx={styles.group}>
+                    <h2 sx={styles.groupLabel}>
+                      <span sx={[styles.swatch, variantColor(group.type)]} />
+                      {group.label}
+                    </h2>
+                    <For each={group.schemas}>
+                      {(schema) => (
+                        <a
+                          href={nodePath(props.summary, schema.id)}
+                          aria-current={
+                            current(nodePath(props.summary, schema.id)) ? "page" : undefined
+                          }
+                          sx={[
+                            styles.item,
+                            current(nodePath(props.summary, schema.id)) && styles.activeItem,
+                          ]}
+                        >
+                          {schema.name}
+                        </a>
+                      )}
+                    </For>
+                  </section>
+                )}
+              </For>
               <Show when={reference.data() !== undefined && groups().length === 0}>
                 <p sx={styles.empty}>No matching nodes.</p>
               </Show>
@@ -299,7 +299,7 @@ export function NodeReferenceRoute() {
                   package={pkg()}
                   schema={schema()}
                   definitions={pkg().types ?? {}}
-                  generateIO={(input) => generateIO(schema().id, input)}
+                  generateIO={generateIO}
                 />
               </div>
             )}

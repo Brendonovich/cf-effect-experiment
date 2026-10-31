@@ -100,6 +100,7 @@ const resolveWildcards = (type: t.Type, values: Readonly<Record<string, t.Type>>
 };
 
 export interface SchemaReferenceIOInput {
+  readonly schema: Package.SchemaModel;
   /** The schema's declared IO, or a function call's IO when a function is selected. */
   readonly declared: NodeIO;
   readonly properties: Readonly<Record<string, unknown>>;
@@ -127,7 +128,6 @@ export function SchemaReference(props: {
   >({});
   const [previewSelected, setPreviewSelected] = createSignal(false);
   const [measured, setMeasured] = createSignal<{
-    readonly schema: string;
     readonly width: number;
     readonly height: number;
   }>();
@@ -163,6 +163,7 @@ export function SchemaReference(props: {
     const selectedValues = wildcardValues()[schema.id] ?? {};
     const preview =
       props.generateIO?.({
+        schema,
         declared,
         properties: values(),
         resolve: (type) => resolveWildcards(type, selectedValues),
@@ -197,7 +198,7 @@ export function SchemaReference(props: {
   }));
   const previewSize = createMemo(() => {
     const size = measured();
-    if (size !== undefined && size.schema === props.schema.id) return size;
+    if (size !== undefined) return size;
     const io = previewIO();
     return {
       width: graphNodeWidth(io, props.schema.name),
@@ -271,7 +272,7 @@ export function SchemaReference(props: {
             io={previewIO()}
             definitions={props.definitions}
             allowInputDefaults={false}
-            onSizeChange={(_nodeId, size) => setMeasured({ schema: props.schema.id, ...size })}
+            onSizeChange={(_nodeId, size) => setMeasured(size)}
             connectedInputIds={new Set()}
             connectedOutputIds={new Set()}
             selected={previewSelected()}

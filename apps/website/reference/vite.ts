@@ -8,7 +8,7 @@ import type { CollectedModule } from "./collect";
 
 const virtualId = "virtual:macrograph-reference";
 const packagePrefix = `${virtualId}/package/`;
-const workspaceRoot = resolve(import.meta.dirname, "../../../..");
+const workspaceRoot = resolve(import.meta.dirname, "../../..");
 const watched = ["packages/modules", "packages/module/src", "packages/core/src"].map(
   (path) => `${resolve(workspaceRoot, path)}/`,
 );

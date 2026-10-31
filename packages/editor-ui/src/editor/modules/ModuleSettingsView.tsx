@@ -358,9 +358,9 @@ function ReferenceView(props: {
               schema={schema()}
               definitions={props.definitions}
               functions={props.functions}
-              generateIO={(input) => {
+              generateIO={({ schema: target, ...input }) => {
                 const generated = props.authoring
-                  .get({ package: props.package.id, schema: schema().id })
+                  .get({ package: props.package.id, schema: target.id })
                   ?.generateIO?.({
                     ...input,
                     definitions: props.definitions,

@@ -9,7 +9,7 @@
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web"
   },
-  "include": ["src"],
+  "include": ["src", "reference"],
   "references": [
     {
       "path": "../../packages/core"

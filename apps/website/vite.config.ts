@@ -5,7 +5,7 @@ import solid from "@solidjs/vite-plugin";
 import stylex from "@stylexjs/unplugin";
 import { defineConfig } from "vite";
 
-import { reference } from "./src/docs/vite";
+import { reference } from "./reference/vite";
 import { playground } from "./src/playground/vite";
 
 // `pnpm alchemy dev` serves WebsiteWorker, which owns every /api and /auth route. Cloud's dev
