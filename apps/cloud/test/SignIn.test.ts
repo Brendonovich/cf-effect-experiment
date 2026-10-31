@@ -27,6 +27,28 @@ const twitchAs = (user: TwitchUser) =>
     }),
   );
 
+/** Answers GitHub as a GitHub App without the "Email addresses" permission. */
+const githubAppAs = (user: {
+  readonly id: number;
+  readonly login: string;
+  readonly email: string | null;
+}) =>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url === "https://github.com/login/oauth/access_token")
+        return Response.json({ access_token: "access", token_type: "bearer", expires_in: 28800 });
+      if (url === "https://api.github.com/user") return Response.json(user);
+      if (url === "https://api.github.com/user/emails")
+        return Response.json(
+          { message: "Resource not accessible by integration" },
+          { status: 403 },
+        );
+      return new Response(null, { status: 404 });
+    }),
+  );
+
 const cookieValue = (response: Response, name: string) =>
   response.headers
     .getSetCookie()
@@ -39,16 +61,21 @@ const location = (response: Response) => {
   return new URL(response.headers.get("location") ?? "", "https://macrograph.app");
 };
 
-/** Signs in with Twitch from `returnTo`, optionally as an existing session. */
+/** Signs in with a provider (Twitch by default) from `returnTo`, optionally as a session. */
 const signInWithTwitch = (
   app: App,
-  options: { readonly session?: string; readonly returnTo?: string; readonly nonce?: string } = {},
+  options: {
+    readonly provider?: string;
+    readonly session?: string;
+    readonly returnTo?: string;
+    readonly nonce?: string;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const sessionCookie = options.session === undefined ? {} : { cookie: options.session };
     const start = yield* send(
       app,
-      `/api/website/sign-in/twitch?returnTo=${encodeURIComponent(options.returnTo ?? "/login?next=%2Fcloud")}`,
+      `/api/website/sign-in/${options.provider ?? "twitch"}?returnTo=${encodeURIComponent(options.returnTo ?? "/login?next=%2Fcloud")}`,
       { headers: sessionCookie },
     );
     const authorize = location(start);
@@ -56,7 +83,7 @@ const signInWithTwitch = (
     const cookies = [`sign_in_nonce=${nonce}`, ...(options.session ? [options.session] : [])];
     const callback = yield* send(
       app,
-      `/api/auth/twitch/callback?code=code&state=${authorize.searchParams.get("state")}`,
+      `/api/auth/${options.provider ?? "twitch"}/callback?code=code&state=${authorize.searchParams.get("state")}`,
       { headers: { cookie: cookies.join("; ") } },
     );
     return { authorize, callback };
@@ -131,6 +158,37 @@ describe("signing in with a provider", () => {
       assert.strictEqual((yield* sessionOf(app, again.callback)).user.id, user.id);
       const users = yield* Effect.promise(() => pg.query(`select id from "user"`));
       assert.strictEqual(users.rows.length, 1);
+    }),
+  );
+
+  it.effect("signs in with GitHub Apps that can't list emails", () =>
+    Effect.gen(function* () {
+      const { app } = yield* harness;
+      githubAppAs({ id: 77, login: "ada", email: "Ada@Example.com" });
+      const created = yield* signInWithTwitch(app, { provider: "github" });
+      assert.isNull(location(created.callback).searchParams.get("error"));
+      const { cookie, user } = yield* sessionOf(app, created.callback);
+      // The profile's public email stands in for the email list.
+      assert.strictEqual(user.email, "ada@example.com");
+
+      // Connecting needs no email at all.
+      githubAppAs({ id: 78, login: "ada-alt", email: null });
+      const linked = yield* signInWithTwitch(app, {
+        provider: "github",
+        session: cookie,
+        returnTo: "/account/sign-in",
+      });
+      assert.isNull(location(linked.callback).searchParams.get("error"));
+      const methods = yield* send(app, "/api/website/sign-in-methods", { headers: { cookie } });
+      assert.lengthOf(yield* Effect.promise(() => methods.json()), 2);
+
+      // Without a public email, there's still no address to create an account with.
+      githubAppAs({ id: 79, login: "private", email: null });
+      const unverified = yield* signInWithTwitch(app, { provider: "github" });
+      assert.strictEqual(
+        location(unverified.callback).searchParams.get("error"),
+        "email_unverified",
+      );
     }),
   );
 
