@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer as createNodeServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const appDirectory = resolve(import.meta.dirname, "..");
+const hasMidiSequencer = process.platform !== "linux" || existsSync("/dev/snd/seq");
 let server: ViteDevServer | undefined;
 let dataDirectory = "";
 let origin = "";
@@ -112,6 +114,11 @@ it("loads MIDI's native addon from source through its own dependency", async () 
   const { result } = (await response.json()) as {
     readonly result?: { readonly available: boolean; readonly error?: string };
   };
+  // Without an ALSA sequencer RtMidi can't start, but reaching that error still means the addon ran.
+  if (!hasMidiSequencer) {
+    expect(result?.error).toBe("Failed to list MIDI ports: Failed to initialise RtMidi");
+    return;
+  }
   expect(result?.error).toBeUndefined();
   expect(result?.available).toBe(true);
 });
