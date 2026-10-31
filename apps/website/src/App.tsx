@@ -42,7 +42,7 @@ export const routes = [
     component: AccountLayout,
     children: [
       { path: "/", component: () => <Redirect href="/account/credentials" /> },
-      { path: "/credentials", component: CredentialsRoute },
+      { path: "/credentials", component: () => <CredentialsRoute /> },
       { path: "/apps", component: AppsRoute },
     ],
   },

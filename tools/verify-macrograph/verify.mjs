@@ -3,6 +3,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -38,7 +39,7 @@ const manifest = {
   mode,
   status: "running",
   startedAt: new Date().toISOString(),
-  app: { name: "@macrograph/playground", url: null, port: null },
+  app: { name: "@macrograph/website", url: null, port: null },
   environment: {
     node: process.version,
     platform: process.platform,
@@ -52,6 +53,7 @@ const manifest = {
 };
 
 let appProcess;
+let apiServer;
 let appLogHandle;
 let appLogPath;
 let context;
@@ -102,14 +104,10 @@ async function doctor() {
     pnpm.stdout.trim() || pnpm.stderr.trim(),
   );
   try {
-    await access(join(root, "apps/playground/package.json"));
-    check("playground app present", "passed", "apps/playground/package.json");
+    await access(join(root, "apps/website/package.json"));
+    check("website app present", "passed", "apps/website/package.json");
   } catch (error) {
-    check(
-      "playground app present",
-      "failed",
-      error instanceof Error ? error.message : String(error),
-    );
+    check("website app present", "failed", error instanceof Error ? error.message : String(error));
   }
   let browser;
   try {
@@ -149,17 +147,41 @@ async function availablePort() {
   });
 }
 
-async function startApp() {
+/**
+ * Stands in for the website API, which the dev server proxies to: a signed-in user with no
+ * credentials, so the playground runs as it does for an account that has connected nothing.
+ */
+async function startApi() {
   const port = await availablePort();
-  const url = `http://127.0.0.1:${port}/`;
+  const responses = {
+    "/api/website/session": {
+      user: { id: "verify-user", email: "verify@example.com" },
+      session: { id: "verify-session" },
+    },
+    "/api/credentials": [],
+    "/api/website/credentials": [],
+  };
+  apiServer = createHttpServer((request, response) => {
+    const body = responses[new URL(request.url ?? "/", "http://localhost").pathname];
+    response.writeHead(body === undefined ? 404 : 200, { "content-type": "application/json" });
+    response.end(body === undefined ? undefined : JSON.stringify(body));
+  });
+  await new Promise((resolveListen) => apiServer.listen(port, "127.0.0.1", resolveListen));
+  return `http://127.0.0.1:${port}`;
+}
+
+async function startApp() {
+  const apiUrl = await startApi();
+  const port = await availablePort();
+  const url = `http://127.0.0.1:${port}/playground`;
   manifest.app = { ...manifest.app, port, url };
-  appLogPath = join(outputDirectory, "playground.log");
+  appLogPath = join(outputDirectory, "website.log");
   appLogHandle = await open(appLogPath, "w");
   appProcess = spawn(
     "pnpm",
     [
       "--filter",
-      "@macrograph/playground",
+      "@macrograph/website",
       "dev",
       "--host",
       "127.0.0.1",
@@ -170,7 +192,7 @@ async function startApp() {
     {
       cwd: root,
       detached: process.platform !== "win32",
-      env: { ...process.env, NO_COLOR: "1" },
+      env: { ...process.env, NO_COLOR: "1", VITE_WEBSITE_WORKER_URL: apiUrl },
       stdio: ["ignore", appLogHandle.fd, appLogHandle.fd],
     },
   );
@@ -182,9 +204,10 @@ async function startApp() {
   while (Date.now() < deadline) {
     if (spawnError !== undefined) throw spawnError;
     if (appProcess.exitCode !== null)
-      throw new Error(`Playground exited with code ${appProcess.exitCode}`);
+      throw new Error(`Website exited with code ${appProcess.exitCode}`);
     try {
-      const response = await fetch(url);
+      // The dev server only renders pages for requests that accept HTML.
+      const response = await fetch(url, { headers: { accept: "text/html" } });
       if (response.ok) {
         check("playground started on isolated port", "passed", url);
         return { url };
@@ -211,55 +234,60 @@ async function openBrowser(url) {
     acceptDownloads: true,
   });
   if (browserName === "chromium")
-    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: new URL(url).origin,
+    });
   const page = context.pages()[0] ?? (await context.newPage());
   page.setDefaultTimeout(interactionTimeout);
   page.on("console", (message) => {
     const location = message.location();
-    const ignored = isUnavailableOpenCodePicker(location.url);
+    const reason = ignoredReason(location.url);
     manifest.browser.console.push({
       type: message.type(),
       text: message.text(),
       location,
-      ...(ignored
-        ? { ignored: true, reason: "OpenCode picker is unavailable in standalone verification" }
-        : {}),
+      ...(reason === undefined ? {} : { ignored: true, reason }),
     });
   });
   page.on("pageerror", (error) => manifest.browser.pageErrors.push(error.message));
   page.on("response", (response) => {
     if (response.status() >= 400) {
       const responseUrl = response.url();
-      const ignored = isUnavailableOpenCodePicker(responseUrl);
+      const reason = ignoredReason(responseUrl);
       manifest.browser.httpErrors.push({
         status: response.status(),
         url: responseUrl,
-        ...(ignored
-          ? { ignored: true, reason: "OpenCode picker is unavailable in standalone verification" }
-          : {}),
+        ...(reason === undefined ? {} : { ignored: true, reason }),
       });
     }
   });
   page.on("requestfailed", (request) => {
+    const reason = ignoredReason(request.url());
     manifest.browser.failedRequests.push({
       url: request.url(),
       error: request.failure()?.errorText ?? "unknown",
+      ...(reason === undefined ? {} : { ignored: true, reason }),
     });
   });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   return page;
 }
 
-function isUnavailableOpenCodePicker(url) {
+/** Why a request may fail during standalone verification without failing the run. */
+function ignoredReason(url) {
   try {
-    return new URL(url).pathname === "/__vite_opencode_picker";
-  } catch {
-    return false;
-  }
+    const parsed = new URL(url);
+    if (parsed.pathname === "/__vite_opencode_picker")
+      return "OpenCode picker is unavailable in standalone verification";
+    // The website checks for MacroGraph Desktop on this port for signed-in visitors.
+    if (parsed.origin === "http://localhost:25000")
+      return "MacroGraph Desktop is not running during verification";
+  } catch {}
+  return undefined;
 }
 
 async function waitForAppShell(page) {
-  await page.getByRole("img", { name: "MacroGraph" }).waitFor();
+  await page.getByRole("navigation", { name: "Workspace" }).waitFor();
   await page.getByRole("button", { name: "Export", exact: true }).waitFor();
 }
 
@@ -577,6 +605,10 @@ async function cleanup() {
       } catch {}
     }
   }
+  if (apiServer !== undefined) {
+    await new Promise((resolveClose) => apiServer.close(resolveClose));
+    apiServer = undefined;
+  }
   if (appLogHandle !== undefined) {
     await appLogHandle.close().catch(() => {});
     appLogHandle = undefined;
@@ -615,6 +647,9 @@ async function main() {
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
     if (mode === "function-queues" || mode === "all") await functionQueues(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
+    const unexpectedFailedRequests = manifest.browser.failedRequests.filter(
+      (request) => request.ignored !== true,
+    );
     const unexpectedHttpErrors = manifest.browser.httpErrors.filter(
       (response) => response.ignored !== true,
     );
@@ -635,8 +670,8 @@ async function main() {
     );
     check(
       "failed browser requests",
-      manifest.browser.failedRequests.length === 0 ? "passed" : "failed",
-      manifest.browser.failedRequests
+      unexpectedFailedRequests.length === 0 ? "passed" : "failed",
+      unexpectedFailedRequests
         .map((request) => `${request.error} ${request.url}`)
         .join("; "),
     );

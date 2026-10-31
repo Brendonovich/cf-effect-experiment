@@ -217,27 +217,4 @@ describe("OAuth client against the authorization server", { timeout: 30_000 }, (
       }),
     ),
   );
-
-  it.effect("connects the playground as a public client", () =>
-    scoped((setup) =>
-      Effect.gen(function* () {
-        const session = yield* signIn(setup.pg, "user");
-        yield* addTwitchCredential(setup.pg, "user");
-        const store = new MemoryStore();
-        const client = yield* CloudCredentials.make({
-          store,
-          issuer: origin,
-          now: setup.now,
-          client: { type: "public", clientId: "macrograph-playground" },
-        }).pipe(Effect.provide(httpClient(setup.app)));
-        const pending = yield* client.auth.start;
-        if (pending.state !== "pending") return assert.fail("expected a pending authorization");
-        yield* approve(setup.app, session, pending.userCode);
-        setup.advance(6_000);
-        assert.strictEqual((yield* client.auth.poll).state, "connected");
-        assert.notProperty(store.parsed, "client");
-        assert.lengthOf(yield* client.credentials.get, 1);
-      }),
-    ),
-  );
 });

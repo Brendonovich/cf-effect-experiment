@@ -1,7 +1,7 @@
 # MacroGraph OAuth
 
 `macrograph.app` is an OAuth 2.0 authorization server. Every MacroGraph client that acts for a
-user (self-hosted servers, the browser playground, later the desktop app) signs in with the
+user (self-hosted servers, later the desktop app) signs in with the
 **device authorization grant** and nothing else. One approval page, one token endpoint, one kind of
 grant.
 
@@ -46,8 +46,8 @@ where RFC 8414 requires it. `/device` is a page, served by the website's own Wor
 | UserInfo             | `GET`, `POST /api/oauth/userinfo`                     |
 | Verification page    | `/device` (`?user_code=` pre-fills it)                |
 
-Everything under `/api/oauth/` and the metadata allow any origin (CORS `*`, no cookies), because the
-playground calls them from the browser. Requests are `application/x-www-form-urlencoded` except
+Everything under `/api/oauth/` and the metadata allow any origin (CORS `*`, no cookies), so browser
+clients can call them. Requests are `application/x-www-form-urlencoded` except
 registration, which is JSON as RFC 7591 requires. Token, device and registration responses carry
 `Cache-Control: no-store` and `Pragma: no-cache`.
 
@@ -73,12 +73,6 @@ refresh grants may be registered; `redirect_uris` and `response_types` must be a
 Registration is open, so it is rate limited per IP, and clients that never get a grant are deleted
 after 30 days. A server that gets `invalid_client` registers again.
 
-**Public clients.** Built in, no secret, `token_endpoint_auth_method: none`:
-
-| `client_id`             | Name                  |
-| ----------------------- | --------------------- |
-| `macrograph-playground` | MacroGraph Playground |
-
 ## Scopes
 
 | Scope            | Grants                                                                 |
@@ -88,8 +82,7 @@ after 30 days. A server that gets `invalid_client` registers again.
 | `offline_access` | A refresh token, so the grant outlives the access token                |
 | `credentials`    | Read and refresh the user's connected credentials (`/api/credentials`) |
 
-Signing in to a server asks for `openid email`. Connecting a server's owner, or the playground,
-asks for `openid email offline_access credentials`.
+Signing in to a server asks for `openid email`. Connecting a server's owner asks for `openid email offline_access credentials`.
 
 ## Device flow
 

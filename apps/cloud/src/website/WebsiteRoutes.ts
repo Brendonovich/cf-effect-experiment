@@ -301,7 +301,7 @@ export const layer = (options: Options) =>
       const authorizationUrl = (provider: OAuthProviders.Provider, state: string) =>
         providers.authorizeUrl(provider, proxyRedirectUri, state);
 
-      // ---- Original public API, used by desktop, servers, and the old playground ----
+      // ---- Original public API, used by desktop, servers, and the playground ----
 
       yield* router.add("GET", "/api/user", (request) =>
         handle(
@@ -319,7 +319,7 @@ export const layer = (options: Options) =>
         ),
       );
 
-      // OAuth clients such as the playground call these from the browser with a bearer token.
+      // OAuth clients may call these from a browser with a bearer token.
       const withCors = (response: HttpServerResponse.HttpServerResponse) =>
         HttpServerResponse.setHeaders(response, OAuthServer.cors);
       for (const path of [

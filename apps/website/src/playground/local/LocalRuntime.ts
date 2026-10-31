@@ -35,14 +35,13 @@ import { ModuleMount } from "@macrograph/project-host/ModuleMount";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { RpcTest, type Rpc } from "effect/rpc";
 
-import type { BrowserCredentialProvider } from "./BrowserCredentials";
 import type { LocalProjectStore } from "./LocalStoragePersistence";
 
 import { browserServices } from "./BrowserServices";
 
 export const makeLocalConnection = (
   store: LocalProjectStore,
-  credentials?: BrowserCredentialProvider,
+  credentials?: Engine.CredentialService,
 ): Effect.Effect<EditorConnection, unknown, Scope.Scope> => {
   const persistence = store.layer;
   const base = Layer.mergeAll(
@@ -53,7 +52,7 @@ export const makeLocalConnection = (
     QueueRuntime.layer,
     credentials === undefined
       ? Engine.emptyCredentialsLayer
-      : Layer.succeed(Engine.Credentials)(credentials.service),
+      : Layer.succeed(Engine.Credentials)(credentials),
   );
   const events = EditorEvents.layer.pipe(Layer.provideMerge(base));
   const editor = Editor.layer.pipe(Layer.provideMerge(events));

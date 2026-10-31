@@ -1,13 +1,6 @@
-import type { JSX } from "@solidjs/web";
-
+import { CloudCredentials } from "@macrograph/cloud-credentials";
 import { randomUUID } from "@macrograph/editor";
-import {
-  Button,
-  CredentialSettings,
-  createEditorController,
-  RealtimeWorkspace,
-  macrographLogo,
-} from "@macrograph/editor-ui";
+import { Button, createEditorController, RealtimeWorkspace } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { Effect } from "effect";
@@ -15,13 +8,14 @@ import { FetchHttpClient } from "effect/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
-import { makeBrowserCredentialProvider } from "./local/BrowserCredentials";
+import { Header } from "../Header";
 import { makeLocalConnection } from "./local/LocalRuntime";
 import {
   MAX_LOCAL_PROJECT_BYTES,
   makeLocalProjectStore,
   type LocalProjectStatus,
 } from "./local/LocalStoragePersistence";
+import { PlaygroundCredentials } from "./PlaygroundCredentials";
 
 const localUserId = () => {
   const key = "macrograph:local-user";
@@ -48,31 +42,7 @@ const styles = stylex.create({
     overflow: "hidden",
     width: "100vw",
   },
-  header: {
-    alignItems: "center",
-    borderBottomColor: colors.gray5,
-    borderBottomStyle: "solid",
-    borderBottomWidth: 1,
-    display: "grid",
-    gridTemplateColumns: {
-      default: "auto minmax(0, 1fr)",
-      "@media (min-width: 768px)": "1fr auto 1fr",
-    },
-    flexShrink: 0,
-    columnGap: 8,
-    minHeight: 44,
-    paddingInline: 12,
-  },
-  brand: { display: "flex", alignItems: "center", gap: 8, minHeight: 44 },
-  logo: { borderRadius: 6, height: 28, width: 28 },
-  title: { fontWeight: 600, letterSpacing: "-0.025em" },
-  nav: {
-    display: "flex",
-    alignSelf: "stretch",
-    justifySelf: "center",
-    gridColumn: { default: "1 / -1", "@media (min-width: 768px)": "2" },
-    gridRowStart: { default: 2, "@media (min-width: 768px)": 1 },
-  },
+  nav: { display: "flex", alignSelf: "stretch" },
   navItem: {
     borderBottomStyle: "solid",
     borderBottomWidth: 2,
@@ -95,9 +65,6 @@ const styles = stylex.create({
     flexWrap: "wrap",
     gap: 8,
     justifyContent: "flex-end",
-    justifySelf: "end",
-    gridRowStart: 1,
-    gridColumnStart: -2,
     minWidth: 0,
   },
   reset: {
@@ -114,29 +81,12 @@ const styles = stylex.create({
   main: { flex: 1, minHeight: 0 },
 });
 
-export interface PlaygroundHeaderParts {
-  /** The editor and events tabs. */
-  readonly nav: JSX.Element;
-  /** Project settings, export, import, and reset. */
-  readonly actions: JSX.Element;
-}
-
-/**
- * The browser playground. `header` lets a host page render its own header around the playground's
- * tabs and actions; by default the playground renders a compact one.
- */
-export function Playground(props: {
-  readonly header?: (parts: PlaygroundHeaderParts) => JSX.Element;
-}) {
+/** The browser playground, run on local storage with the signed-in user's credentials. */
+export function Playground() {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const store = makeLocalProjectStore(localStorage);
-  const issuer = import.meta.env.VITE_MACROGRAPH_ISSUER;
-  const credentials = makeBrowserCredentialProvider({
-    storage: localStorage,
-    ...(issuer === undefined ? {} : { issuer }),
-  });
   const editor = createEditorController({
-    connection: credentials.pipe(
+    connection: CloudCredentials.makeSession().pipe(
       Effect.flatMap((provider) => makeLocalConnection(store, provider)),
       Effect.provide(FetchHttpClient.layer),
     ),
@@ -253,18 +203,7 @@ export function Playground(props: {
 
   return (
     <div {...rootAttrs}>
-      {props.header === undefined ? (
-        <header sx={styles.header}>
-          <div sx={styles.brand}>
-            <img src={macrographLogo} alt="MacroGraph" sx={styles.logo} />
-            <span sx={styles.title}>MacroGraph</span>
-          </div>
-          {nav()}
-          {controls()}
-        </header>
-      ) : (
-        props.header({ nav: nav(), actions: controls() })
-      )}
+      <Header nav={nav()} actions={controls()} />
       <input
         ref={importInput}
         style={{ display: "none" }}
@@ -293,17 +232,7 @@ export function Playground(props: {
           runtimeLabel="Browser"
           view={view()}
           renderProjectSettings={(context) => (
-            <CredentialSettings
-              client={context.client}
-              description={
-                <>
-                  Authorize this browser to use credentials managed by macrograph.app. Authorization
-                  stays in this browser, separate from project exports, imports, and resets.
-                </>
-              }
-              loadingLabel="Loading browser authorization..."
-              onChanged={context.refreshModuleData}
-            />
+            <PlaygroundCredentials client={context.client} onChanged={context.refreshModuleData} />
           )}
         />
       </main>

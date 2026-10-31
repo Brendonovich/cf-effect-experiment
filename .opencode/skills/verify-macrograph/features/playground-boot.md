@@ -7,7 +7,7 @@
 
 ## User-visible contract
 
-The real `@macrograph/playground` app starts on an isolated loopback port and renders the MacroGraph shell, Export action, and New graph action.
+The real `@macrograph/website` dev server starts on an isolated loopback port, with a stub API for a signed-in account, and `/playground` renders the workspace tabs, Export action, and New graph action.
 
 ## Assertions and evidence
 

@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
+import { CloudCredentials } from "@macrograph/cloud-credentials";
 import { GraphId, NodeId, PackageId, Project, ResourceConstant, SchemaId } from "@macrograph/core";
 import { Effect, Exit, Option, Scope, Stream } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { vi } from "vitest";
 
-import { MACROGRAPH_AUTH_SESSION_KEY, makeBrowserCredentialProvider } from "./BrowserCredentials";
 import { makeLocalConnection } from "./LocalRuntime";
 import {
   encodeLocalProject,
@@ -75,91 +75,88 @@ const obsAuthentication = async (password: string) => {
   return digest(`${await digest(`${password}salt`)}challenge`);
 };
 
-const connectedState = JSON.stringify({
-  version: 2,
-  grant: {
-    refreshToken: "mgrt_initial",
-    scope: "openid email offline_access credentials",
-    userId: "user-1",
-    email: "user@example.com",
+const sessionCredentials = [
+  {
+    provider: "twitch",
+    id: "twitch-1",
+    displayName: "Streamer",
+    token: { access_token: "twitch-access", expires_in: 3600, token_type: "bearer", issuedAt: 1 },
   },
-});
+];
 
-const respondAsAuthorizationServer = (path: string) =>
-  path === "/.well-known/oauth-authorization-server"
-    ? Response.json({
-        issuer: "https://macrograph.app",
-        device_authorization_endpoint: "https://macrograph.app/oauth/device_authorization",
-        token_endpoint: "https://macrograph.app/oauth/token",
-        jwks_uri: "https://macrograph.app/oauth/jwks",
-      })
-    : path === "/oauth/token"
-      ? Response.json({ access_token: "mgat_access", token_type: "Bearer", expires_in: 3600 })
-      : Response.json([
-          {
-            provider: "twitch",
-            id: "twitch-1",
-            displayName: "Streamer",
-            token: {
-              access_token: "twitch-access",
-              expires_in: 3600,
-              token_type: "bearer",
-              issuedAt: 1,
-            },
-          },
-        ]);
+/** The website API, signed in until `signOut` is called. */
+const websiteApi = () => {
+  let signedIn = true;
+  return {
+    signOut: () => {
+      signedIn = false;
+    },
+    client: HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new URL(request.url).pathname === "/api/credentials" && signedIn
+            ? Response.json(sessionCredentials)
+            : new Response(null, { status: 403 }),
+        ),
+      ),
+    ),
+  };
+};
 
 describe("local browser runtime", () => {
-  it.effect("exposes connected Twitch credentials in module settings and resources", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const storage = new MemoryStorage();
-        storage.setItem(MACROGRAPH_AUTH_SESSION_KEY, connectedState);
-        const credentials = yield* makeBrowserCredentialProvider({ storage }).pipe(
-          Effect.provideService(
-            HttpClient.HttpClient,
-            HttpClient.make((request) =>
-              Effect.succeed(
-                HttpClientResponse.fromWeb(
-                  request,
-                  respondAsAuthorizationServer(new URL(request.url).pathname),
-                ),
-              ),
+  it.effect(
+    "exposes the signed-in user's Twitch credentials in module settings and resources",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const api = websiteApi();
+          const credentials = yield* CloudCredentials.makeSession({
+            origin: "https://macrograph.app",
+          }).pipe(Effect.provideService(HttpClient.HttpClient, api.client));
+          const connection = yield* makeLocalConnection(
+            makeLocalProjectStore(new MemoryStorage()),
+            credentials,
+          );
+          const catalog = yield* connection.client.GetCredentialCatalog();
+          assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
+          const settings = connection.moduleSettings.get("twitch")!;
+          assert.deepStrictEqual(
+            yield* settings.load((moduleId) =>
+              connection.client.GetModuleClientState({ moduleId }),
             ),
-          ),
-        );
-        const connection = yield* makeLocalConnection(makeLocalProjectStore(storage), credentials);
-        const catalog = yield* connection.client.GetCredentialCatalog();
-        assert.strictEqual(catalog._tag, "CredentialCatalogAvailable");
-        const settings = connection.moduleSettings.get("twitch")!;
-        assert.deepStrictEqual(
-          yield* settings.load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
-          {
-            transport: "websocket",
-            accounts: [
-              {
-                id: "twitch-1",
-                displayName: "Streamer",
-                eventSubSocket: { state: "disconnected" },
-                enabledSubscriptions: [],
-              },
-            ],
-          },
-        );
-        assert.deepStrictEqual(
-          yield* connection.client.GetResourceValues({
-            package: "twitch",
-            resource: "TwitchAccount",
-          }),
-          [{ id: "twitch-1", display: "Streamer" }],
-        );
-        yield* connection.client.DisconnectCredentialAuth();
-        assert.deepStrictEqual(
-          yield* settings.load((moduleId) => connection.client.GetModuleClientState({ moduleId })),
-          { transport: "websocket", accounts: [] },
-        );
-      }),
-    ),
+            {
+              transport: "websocket",
+              accounts: [
+                {
+                  id: "twitch-1",
+                  displayName: "Streamer",
+                  eventSubSocket: { state: "disconnected" },
+                  enabledSubscriptions: [],
+                },
+              ],
+            },
+          );
+          assert.deepStrictEqual(
+            yield* connection.client.GetResourceValues({
+              package: "twitch",
+              resource: "TwitchAccount",
+            }),
+            [{ id: "twitch-1", display: "Streamer" }],
+          );
+          api.signOut();
+          assert.strictEqual(
+            (yield* connection.client.RefetchCredentials())._tag,
+            "CredentialCatalogUnavailable",
+          );
+          assert.deepStrictEqual(
+            yield* settings.load((moduleId) =>
+              connection.client.GetModuleClientState({ moduleId }),
+            ),
+            { transport: "websocket", accounts: [] },
+          );
+        }),
+      ),
   );
 
   it.effect("projects editor mutations and exposes only browser-safe modules", () =>

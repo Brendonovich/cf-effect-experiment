@@ -1,14 +1,19 @@
-import opencode from "@brendonovich/vite-plugin-opencode";
-import { Icons } from "@macrograph/icons/vite";
-import { stylexProps } from "@macrograph/module/vite";
-import solid from "@solidjs/vite-plugin";
-import stylex from "@stylexjs/unplugin";
-import { defineConfig, type Plugin } from "vite";
+import type { Plugin } from "vite";
 
-import { playgroundModuleSettings } from "./src/vite";
+import { moduleSettings } from "@macrograph/module/vite";
+
+/** Modules whose settings the playground offers. */
+const browserSettings = new Set([
+  "@macrograph/module-obs",
+  "@macrograph/module-twitch",
+  "@macrograph/module-utilities",
+  "@macrograph/module-websocket-client",
+]);
 
 const browserImportAudit: Plugin = {
   name: "macrograph-browser-import-audit",
+  // The server bundle runs in a Worker; only what ships to browsers is audited.
+  applyToEnvironment: (environment) => environment.name === "client",
   generateBundle(_options, bundle) {
     const forbidden = [
       "/apps/cloud/",
@@ -59,8 +64,7 @@ const browserImportAudit: Plugin = {
       "/packages/modules/twitch/src/Engine.ts",
       "/packages/modules/twitch/src/WebSocketEventSub.ts",
       "/packages/modules/websocket-client/src/Engine.ts",
-      "/apps/playground/src/local/BrowserCredentials.ts",
-      "/apps/playground/src/local/BrowserServices.ts",
+      "/apps/website/src/playground/local/BrowserServices.ts",
     ];
     for (const expected of required) {
       if (!modules.some((id) => id.includes(expected)))
@@ -69,29 +73,11 @@ const browserImportAudit: Plugin = {
   },
 };
 
-export default defineConfig({
-  appType: "spa",
-  base: process.env.MACROGRAPH_BASE_PATH ?? "/",
-  server: {
-    port: 5173,
-    strictPort: true,
-  },
-  preview: { port: 4173, strictPort: true },
-  plugins: [
-    opencode({ skills: ["solidjs"] }),
-    playgroundModuleSettings(),
-    Icons(new URL("./src/auto-imports.d.ts", import.meta.url).pathname),
-    stylexProps(),
-    stylex.vite({
-      sxPropName: false,
-      useCSSLayers: { before: ["reset"], prefix: "stylex" },
-      runtimeInjection: false,
-      unstable_moduleResolution: {
-        type: "commonJS",
-        rootDir: new URL("../..", import.meta.url).pathname,
-      },
-    }),
-    solid(),
-    browserImportAudit,
-  ],
-});
+/**
+ * The playground's build plugins: `virtual:macrograph-module-settings`, and a check that the
+ * browser bundle has the modules it runs and nothing that only works on a server.
+ */
+export const playground = (): Plugin[] => [
+  moduleSettings(undefined, browserSettings),
+  browserImportAudit,
+];
