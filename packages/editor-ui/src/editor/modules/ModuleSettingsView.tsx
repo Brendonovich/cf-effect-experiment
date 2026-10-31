@@ -21,6 +21,7 @@ import type { PackageViewState } from "../workspace/workspace";
 
 import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
+import { Description, plainDescription } from "../../ui/Description";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
 import { GraphNode } from "../graph/GraphNode";
@@ -317,7 +318,11 @@ function ReferenceView(props: {
         ...variant,
         schemas: props.schemas.filter(
           (schema) =>
-            schema.type === variant.type && matchesSearch(schema.name, schema.description),
+            schema.type === variant.type &&
+            matchesSearch(
+              schema.name,
+              schema.description === undefined ? undefined : plainDescription(schema.description),
+            ),
         ),
       }))
       .filter((group) => group.schemas.length > 0),
@@ -554,7 +559,9 @@ function ReferenceView(props: {
                     schema().description === undefined ? styles.missingDescription : null,
                   ]}
                 >
-                  {schema().description ?? "No description provided."}
+                  <Show when={schema().description} fallback="No description provided.">
+                    {(description) => <Description text={description()} />}
+                  </Show>
                 </p>
               </header>
               <div sx={styles.nodeConfiguration}>
