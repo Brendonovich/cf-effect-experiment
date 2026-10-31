@@ -5,17 +5,18 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "build": "rm -rf dist && pnpm --dir client build && pnpm build:backend",
+    "build": "rm -rf dist && pnpm --dir client build && pnpm build:backend && pnpm build:modules",
     "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/",
+    "build:modules": "rm -rf dist/modules && macrograph-module package --dependencies-of . --out dist/modules",
     "typecheck": "tsgo --build",
     "start": "node --env-file-if-exists=.env dist/esm/index.js",
     "test": "vitest run",
     "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
     "dev": "vite",
-    "agent:rest": "node scripts/rest-agent.mjs"
+    "agent:rest": "node scripts/rest-agent.mjs",
+    "verify:browser": "node scripts/verify-modules-browser.mjs"
   },
   "dependencies": {
-    "@julusian/midi": "^3.8.1",
     "@effect/opentelemetry": "catalog:",
     "@effect/platform-node": "catalog:",
     "@macrograph/cloud-api": "workspace:*",
@@ -31,8 +32,10 @@
     "@macrograph/module-fs": "workspace:*",
     "@macrograph/module-github": "workspace:*",
     "@macrograph/module-goxlr": "workspace:*",
+    "@macrograph/module-host": "workspace:*",
     "@macrograph/module-http-client": "workspace:*",
     "@macrograph/module-ikea-tradfri": "workspace:*",
+    "@macrograph/module-installer": "workspace:*",
     "@macrograph/module-json": "workspace:*",
     "@macrograph/module-lifx": "workspace:*",
     "@macrograph/module-list": "workspace:*",
@@ -67,6 +70,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@iconify/json": "2.2.196",
+    "@macrograph/module-build": "workspace:*",
     "@macrograph/server-client": "workspace:*",
     "rolldown": "^1.0.1",
     "typescript": "^5.8",

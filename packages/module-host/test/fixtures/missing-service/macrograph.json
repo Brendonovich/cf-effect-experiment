@@ -1,0 +1,10 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "missing-service",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Missing host service",
+  "server": "server.cjs",
+  "requires": ["http-client", "credentials"]
+}

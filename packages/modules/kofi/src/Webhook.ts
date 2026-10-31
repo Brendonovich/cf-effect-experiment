@@ -13,7 +13,6 @@ export type WebhookConfiguration = typeof WebhookConfiguration.Type;
 
 export const WebhookIngress = HttpIngress.make({
   id: "kofi:payment",
-  moduleId: "kofi",
   displayName: "Webhook",
   method: "POST",
   metadata: WebhookMetadata,

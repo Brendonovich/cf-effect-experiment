@@ -29,6 +29,17 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/Local.ts"
+    "publisher": "macrograph",
+    "name": "http-client",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "HTTP Client",
+    "description": "Send HTTP requests and work with URLs.",
+    "entries": {
+      "server": "./src/Deployment/Local.ts"
+    },
+    "requires": [
+      "http-client"
+    ]
   }
 }

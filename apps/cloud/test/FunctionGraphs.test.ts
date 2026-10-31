@@ -16,7 +16,7 @@ import { t } from "@macrograph/module";
 import { ProjectExecutor } from "@macrograph/project-host";
 import { Effect, Schema } from "effect";
 
-import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
+import * as CloudModules from "../src/modules/CloudModules.ts";
 
 describe("hosted function graphs", () => {
   it.effect("executes a deployed function call from an event graph", () =>
@@ -59,7 +59,10 @@ describe("hosted function graphs", () => {
                 [tickId]: {
                   id: tickId,
                   name: "Tick",
-                  schema: { package: PackageId.make("util"), schema: SchemaId.make("Tick") },
+                  schema: {
+                    package: PackageId.make("macrograph.app/macrograph/utilities"),
+                    schema: SchemaId.make("Tick"),
+                  },
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
@@ -114,14 +117,17 @@ describe("hosted function graphs", () => {
       assert.property(snapshot.graphs, functionId);
       const steps = new Map<string, Executor.NodeExecutionResult>();
       const executor = yield* ProjectExecutor.make(deployed, {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
         executionEnvironment: Executor.durableExecution((key, nodeExecutor) =>
           nodeExecutor
             .executeNode(key)
             .pipe(Effect.tap((result) => Effect.sync(() => void steps.set(key.nodeId, result)))),
         ),
       });
-      yield* ExecutorModules.registry.handle(executor, "util", { _tag: "TickEvent", tick: 1 });
+      yield* CloudModules.executorRegistry.handle(executor, "macrograph.app/macrograph/utilities", {
+        _tag: "TickEvent",
+        tick: 1,
+      });
       assert.deepStrictEqual(steps.get(GraphFunction.InputBoundaryNodeId)?.outputs, [
         { outputId: value.id, value: "cloud" },
       ]);

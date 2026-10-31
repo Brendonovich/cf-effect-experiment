@@ -5,7 +5,6 @@ import { Effect, Option } from "effect";
 const validCount = (count: number) => Number.isSafeInteger(count) && count >= 0 && count <= 1024;
 
 const LogicModule = Module.make({
-  id: "logic",
   name: "Logic",
   description: "Branch, compare, and combine values with logical operations.",
   effect: Effect.fnUntraced(function* (context) {

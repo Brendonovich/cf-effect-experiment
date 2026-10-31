@@ -16,6 +16,7 @@ import * as Dns from "./src/Dns.ts";
 import { DurableObjectMigrationBundle } from "./src/editor/DurableObjectMigrationBundle.ts";
 import { axiomConfigured, traceDatasetName } from "./src/Observability.ts";
 import * as PublicHost from "./src/PublicHost.ts";
+import { RegistryTarballsBucket } from "./src/registry/TarballStore.ts";
 import {
   DatabaseHyperdrive,
   DeploymentObjectsBucket,
@@ -28,6 +29,7 @@ import CloudWorkerLayer, {
 } from "./src/worker/CloudWorkerLayer.ts";
 import { IngressWorker } from "./src/worker/IngressWorker.ts";
 import IngressWorkerLayer from "./src/worker/IngressWorkerLayer.ts";
+import RegistryWorkerLayer, { RegistryWorker } from "./src/worker/RegistryWorker.ts";
 import WebsiteWorkerLayer, {
   WebsiteOAuthStateSecret,
   WebsiteSigningKey,
@@ -58,6 +60,7 @@ export default Alchemy.Stack(
     const ctx = yield* Alchemy.AlchemyContext;
     yield* DatabaseHyperdrive;
     yield* DeploymentObjectsBucket;
+    yield* RegistryTarballsBucket;
     if ((yield* Alchemy.Stage) === "production") {
       yield* Dns.records;
       yield* Dns.brendonovichDevRecordSet;
@@ -79,6 +82,10 @@ export default Alchemy.Stack(
           },
         })
       : undefined;
+
+    const registryWorker = yield* RegistryWorker.pipe(Alchemy.remote()).pipe(
+      Effect.provide(RegistryWorkerLayer),
+    );
 
     const { cloudWorker, ingressWorker } = yield* Effect.gen(function* () {
       const ingressWorker = yield* IngressWorker.pipe(Alchemy.remote());
@@ -147,6 +154,7 @@ export default Alchemy.Stack(
       publicIngressUrl: ingressWorker.url,
       websiteUrl: website.url,
       websiteWorkerUrl: websiteWorker.url,
+      registryWorkerUrl: registryWorker.url,
     };
   }),
 );

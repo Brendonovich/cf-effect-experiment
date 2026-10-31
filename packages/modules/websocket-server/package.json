@@ -11,7 +11,8 @@
     "./Engine": "./src/Engine.ts",
     "./Listener": "./src/Listener.ts",
     "./Listener/Node": "./src/Listener/Node.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -37,6 +38,28 @@
     "ws": "^8.18.3"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/Local.ts"
+    "publisher": "macrograph",
+    "name": "websocket-server",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "WebSocket Server",
+    "description": "Host a WebSocket server and exchange messages with clients.",
+    "entries": {
+      "server": "./src/Deployment/Local.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "buffer",
+      "crypto",
+      "events",
+      "http",
+      "https",
+      "net",
+      "stream",
+      "tls",
+      "url",
+      "util",
+      "zlib"
+    ]
   }
 }

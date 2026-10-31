@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { ConnectionId, IoId, NodeId, OutputRef, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -10,53 +10,55 @@ class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
 const payload = Option.some([DateTime.makeUnsafe("2026-09-05T12:00:00Z")]);
 const type = t.Option(t.List(t.DateTime));
 const fixture = (captured: unknown[], wrong = false) =>
-  Module.make({
-    id: "wildcards",
-    engine: TestEngine,
-    effect: Effect.fnUntraced(function* (context) {
-      yield* context.schema.register({
-        id: "event",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: (io) => ({ output: io.data.out("out", type) }),
-        run: ({ io }) => Effect.sync(() => io.output(payload)),
-      });
-      yield* context.schema.register({
-        id: "identity",
-        io: (io) => {
-          const wildcard = io.wildcard("T");
-          return { input: io.data.in("in", wildcard), output: io.data.out("out", wildcard) };
-        },
-        run: ({ io }) => Effect.sync(() => io.output(wrong ? "invalid" : io.input)),
-      });
-      yield* context.schema.register({
-        id: "sink",
-        io: (io) => ({ input: io.data.in("in", type) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            captured.push(io.input);
-          }),
-      });
-      yield* context.schema.register({
-        id: "unresolved",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: (io) => ({ output: io.data.out("out", io.wildcard("T")) }),
-        run: () =>
-          Effect.sync(() => {
-            captured.push("must not run");
-          }),
-      });
-      yield* context.schema.register({
-        id: "stringSink",
-        io: (io) => ({ input: io.data.in("in", t.String) }),
-        run: () =>
-          Effect.sync(() => {
-            captured.push("must not run");
-          }),
-      });
+  Module.identify(
+    ModuleId.Id.make("local/test/wildcards"),
+    Module.make({
+      engine: TestEngine,
+      effect: Effect.fnUntraced(function* (context) {
+        yield* context.schema.register({
+          id: "event",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: (io) => ({ output: io.data.out("out", type) }),
+          run: ({ io }) => Effect.sync(() => io.output(payload)),
+        });
+        yield* context.schema.register({
+          id: "identity",
+          io: (io) => {
+            const wildcard = io.wildcard("T");
+            return { input: io.data.in("in", wildcard), output: io.data.out("out", wildcard) };
+          },
+          run: ({ io }) => Effect.sync(() => io.output(wrong ? "invalid" : io.input)),
+        });
+        yield* context.schema.register({
+          id: "sink",
+          io: (io) => ({ input: io.data.in("in", type) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              captured.push(io.input);
+            }),
+        });
+        yield* context.schema.register({
+          id: "unresolved",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: (io) => ({ output: io.data.out("out", io.wildcard("T")) }),
+          run: () =>
+            Effect.sync(() => {
+              captured.push("must not run");
+            }),
+        });
+        yield* context.schema.register({
+          id: "stringSink",
+          io: (io) => ({ input: io.data.in("in", t.String) }),
+          run: () =>
+            Effect.sync(() => {
+              captured.push("must not run");
+            }),
+        });
+      }),
     }),
-  });
+  );
 const project = (unresolved = false) =>
   Schema.decodeUnknownSync(Project.Model)({
     ...Project.empty(),
@@ -71,7 +73,7 @@ const project = (unresolved = false) =>
               {
                 id,
                 name: id,
-                schema: { package: "wildcards", schema: id },
+                schema: { package: "local/test/wildcards", schema: id },
                 properties: {},
                 inputDefaults: {},
                 position: { x: 0, y: 0 },
@@ -118,9 +120,12 @@ it.effect(
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -137,9 +142,12 @@ it.effect("validates actual wildcard output values against the inferred type", (
     const executor = yield* Executor.make(project());
     yield* executor.module(
       module,
-      Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("Not hosted")),
+      Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        ),
       ),
     );
     expect((yield* Effect.flip(executor.handleEvent(module, new Trigger({}))))._tag).toBe(
@@ -156,9 +164,12 @@ it.effect("rejects unresolved wildcard IO before any side effects", () =>
     const executor = yield* Executor.make(project(true));
     yield* executor.module(
       module,
-      Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("Not hosted")),
+      Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        ),
       ),
     );
     const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
@@ -200,9 +211,12 @@ it.effect(
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
@@ -271,9 +285,12 @@ for (const reached of [false, true])
         });
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         if (reached) {

@@ -20,8 +20,8 @@ import {
   HttpClientResponse,
 } from "effect/http";
 
-import * as ExecutorModules from "../src/execution/ExecutorModules.ts";
 import * as WorkflowRuntime from "../src/execution/WorkflowRuntime.ts";
+import * as CloudModules from "../src/modules/CloudModules.ts";
 
 const chat = { message: "Hello", model: "gpt-4o-mini", historyIn: "[]" };
 const speech = {
@@ -32,7 +32,10 @@ const speech = {
 };
 const projectWithKeys = (openAI: string, elevenLabs: string): Project.Model => ({
   ...Project.empty(),
-  engines: { openai: { apiKey: openAI }, elevenlabs: { apiKey: elevenLabs } },
+  engines: {
+    "macrograph.app/macrograph/openai": { apiKey: openAI },
+    "macrograph.app/macrograph/elevenlabs": { apiKey: elevenLabs },
+  },
 });
 const mock = (respond: (request: HttpClientRequest.HttpClientRequest) => Response) =>
   HttpClient.make((request) =>
@@ -48,12 +51,18 @@ const setup = Effect.fnUntraced(function* (
   );
   return {
     engineClient,
-    openAI: (yield* engineClient("openai")) as Engine.RuntimeClientOf<typeof OpenAIEngine>,
-    elevenLabs: (yield* engineClient("elevenlabs")) as Engine.RuntimeClientOf<
-      typeof ElevenLabsEngine
+    openAI: (yield* engineClient("macrograph.app/macrograph/openai")) as Engine.RuntimeClientOf<
+      typeof OpenAIEngine
     >,
-    http: (yield* engineClient("http-client")) as Engine.RuntimeClientOf<typeof HttpClientEngine>,
-    opencode: (yield* engineClient("opencode")) as Engine.RuntimeClientOf<typeof OpenCodeEngine>,
+    elevenLabs: (yield* engineClient(
+      "macrograph.app/macrograph/elevenlabs",
+    )) as Engine.RuntimeClientOf<typeof ElevenLabsEngine>,
+    http: (yield* engineClient("macrograph.app/macrograph/http-client")) as Engine.RuntimeClientOf<
+      typeof HttpClientEngine
+    >,
+    opencode: (yield* engineClient("macrograph.app/macrograph/opencode")) as Engine.RuntimeClientOf<
+      typeof OpenCodeEngine
+    >,
   };
 });
 
@@ -63,8 +72,8 @@ describe("WorkflowRuntime", () => {
       const project: Project.Model = Object.freeze({
         ...Project.empty(),
         engines: Object.freeze({
-          openai: Object.freeze({ apiKey: "snapshot-openai" }),
-          elevenlabs: Object.freeze({ apiKey: "snapshot-elevenlabs" }),
+          "macrograph.app/macrograph/openai": Object.freeze({ apiKey: "snapshot-openai" }),
+          "macrograph.app/macrograph/elevenlabs": Object.freeze({ apiKey: "snapshot-elevenlabs" }),
         }),
       });
       const before = JSON.stringify(project);
@@ -204,7 +213,7 @@ describe("WorkflowRuntime", () => {
         {
           ...Project.empty(),
           engines: {
-            opencode: {
+            "macrograph.app/macrograph/opencode": {
               connections: {
                 [connectionId]: {
                   name: "Writer",
@@ -242,8 +251,14 @@ describe("WorkflowRuntime", () => {
       const httpClient = mock(() => assert.fail("Unconfigured engines must not send requests"));
       const storageCases: ReadonlyArray<Project.Model["engines"]> = [
         {},
-        { openai: { apiKey: null }, elevenlabs: { apiKey: null } },
-        { openai: { apiKey: " " }, elevenlabs: { apiKey: " " } },
+        {
+          "macrograph.app/macrograph/openai": { apiKey: null },
+          "macrograph.app/macrograph/elevenlabs": { apiKey: null },
+        },
+        {
+          "macrograph.app/macrograph/openai": { apiKey: " " },
+          "macrograph.app/macrograph/elevenlabs": { apiKey: " " },
+        },
       ];
       for (const engines of storageCases) {
         const { openAI, elevenLabs } = yield* setup({ ...Project.empty(), engines }, httpClient);
@@ -261,7 +276,10 @@ describe("WorkflowRuntime", () => {
     Effect.gen(function* () {
       const project: Project.Model = {
         ...Project.empty(),
-        engines: { openai: { apiKey: 123 }, elevenlabs: { apiKey: false } },
+        engines: {
+          "macrograph.app/macrograph/openai": { apiKey: 123 },
+          "macrograph.app/macrograph/elevenlabs": { apiKey: false },
+        },
       };
       const { engineClient, http } = yield* setup(
         project,
@@ -269,16 +287,22 @@ describe("WorkflowRuntime", () => {
       );
       const requested: Array<string> = [];
       yield* ProjectExecutor.make(project, {
-        modules: ExecutorModules.registry,
+        modules: CloudModules.executorRegistry,
         engineClient: (id) => {
           requested.push(id);
           return engineClient(id);
         },
       });
-      assert.include(requested, "openai");
-      assert.include(requested, "elevenlabs");
-      for (const id of ["json", "list", "logic", "math", "string"]) {
-        assert.isTrue(ExecutorModules.registry.entries.some((entry) => entry.id === id));
+      assert.include(requested, "macrograph.app/macrograph/openai");
+      assert.include(requested, "macrograph.app/macrograph/elevenlabs");
+      for (const id of [
+        "macrograph.app/macrograph/json",
+        "macrograph.app/macrograph/list",
+        "macrograph.app/macrograph/logic",
+        "macrograph.app/macrograph/math",
+        "macrograph.app/macrograph/string",
+      ]) {
+        assert.isTrue(CloudModules.executorRegistry.entries.some((entry) => entry.id === id));
         assert.notInclude(requested, id);
       }
       assert.strictEqual(
@@ -299,8 +323,8 @@ describe("WorkflowRuntime", () => {
         {
           ...Project.empty(),
           engines: {
-            openai: { apiKey: { secret: "must-not-leak" } },
-            elevenlabs: { apiKey: "valid" },
+            "macrograph.app/macrograph/openai": { apiKey: { secret: "must-not-leak" } },
+            "macrograph.app/macrograph/elevenlabs": { apiKey: "valid" },
           },
         },
         httpClient,
@@ -314,8 +338,8 @@ describe("WorkflowRuntime", () => {
         {
           ...Project.empty(),
           engines: {
-            openai: { apiKey: "valid" },
-            elevenlabs: { apiKey: { secret: "must-not-leak" } },
+            "macrograph.app/macrograph/openai": { apiKey: "valid" },
+            "macrograph.app/macrograph/elevenlabs": { apiKey: { secret: "must-not-leak" } },
           },
         },
         httpClient,
@@ -344,7 +368,9 @@ describe("WorkflowRuntime", () => {
       );
       assert.strictEqual(failure._tag, "HttpClientRequestFailure");
       assert.strictEqual(calls, 1);
-      const twitch = (yield* engineClient("twitch")) as typeof unavailableTwitchRuntime;
+      const twitch = (yield* engineClient(
+        "macrograph.app/macrograph/twitch",
+      )) as typeof unavailableTwitchRuntime;
       assert.strictEqual(twitch, unavailableTwitchRuntime);
       const twitchFailure = yield* Effect.flip(twitch.SendChatMessage());
       assert.strictEqual(twitchFailure._tag, "TwitchExecutionUnavailable");
@@ -372,14 +398,18 @@ describe("WorkflowRuntime", () => {
           project,
           mock(() => new Response()),
         ).pipe(
-          Effect.flatMap(({ engineClient }) => engineClient("discord")),
+          Effect.flatMap(({ engineClient }) => engineClient("macrograph.app/macrograph/discord")),
           Effect.map((client) => client as Engine.RuntimeClientOf<typeof DiscordEngine>),
         );
 
       const discord = yield* discordClient({
         ...Project.empty(),
         engines: {
-          discord: { token: "snapshot-discord", gatewayEnabled: true, messageContent: false },
+          "macrograph.app/macrograph/discord": {
+            token: "snapshot-discord",
+            gatewayEnabled: true,
+            messageContent: false,
+          },
         },
       });
       assert.sameMembers(Object.keys(discord), [
@@ -404,7 +434,7 @@ describe("WorkflowRuntime", () => {
 
       const malformed = yield* discordClient({
         ...Project.empty(),
-        engines: { discord: { token: 42 } },
+        engines: { "macrograph.app/macrograph/discord": { token: 42 } },
       });
       const failure = yield* Effect.flip(
         malformed.DiscordSendMessage({ channelId: "123", message: "hi", everyone: false }),

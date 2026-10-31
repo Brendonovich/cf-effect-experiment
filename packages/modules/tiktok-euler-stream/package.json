@@ -10,7 +10,8 @@
     "./Deployment": "./src/Deployment.ts",
     "./Settings": "./src/Settings.tsx",
     "./Transport": "./src/Transport.ts",
-    "./Events": "./src/Events.ts"
+    "./Events": "./src/Events.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -36,6 +37,38 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "tiktok-euler-stream",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "TikTok (Euler Stream)",
+    "description": "React to TikTok LIVE events through Euler Stream.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "assert",
+      "buffer",
+      "crypto",
+      "diagnostics_channel",
+      "dns",
+      "events",
+      "fs",
+      "http",
+      "http2",
+      "https",
+      "net",
+      "os",
+      "path",
+      "process",
+      "stream",
+      "timers/promises",
+      "tls",
+      "tty",
+      "url",
+      "util",
+      "zlib"
+    ]
   }
 }

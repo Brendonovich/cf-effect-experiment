@@ -86,7 +86,7 @@ export const runNodeStep = async <E = never>(
         ...(engineClient === undefined ? {} : { engineClient }),
       });
       return yield* executor.executeSerializedNode(input.request).pipe(Effect.orDie);
-    }),
+    }).pipe(Effect.scoped),
   );
 
 export * as VercelRuntime from "./VercelRuntime.ts";

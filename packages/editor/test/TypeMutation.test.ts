@@ -13,9 +13,9 @@ import {
   SchemaId,
   TypeDefinition,
 } from "@macrograph/core";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import { t } from "@macrograph/module";
-import ListModule from "@macrograph/module-list";
+import ListModuleDefinition from "@macrograph/module-list";
 import { Persistence, PersistenceError } from "@macrograph/persistence";
 import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect";
 import { RpcTest } from "effect/rpc";
@@ -31,6 +31,8 @@ import {
   Presence,
 } from "../src/index.ts";
 import { apply } from "../src/projectEventProjection.ts";
+
+const ListModule = Module.identify(Module.builtinId("list"), ListModuleDefinition);
 
 const personId = t.DefinitionId.make("person");
 const groupId = t.DefinitionId.make("group");
@@ -280,13 +282,19 @@ describe("type authoring preserve-invalid", () => {
         const persistence = yield* Persistence.Service;
         const create = node(
           "list-create",
-          { package: PackageId.make("list"), schema: SchemaId.make("ListCreate") },
+          {
+            package: PackageId.make("macrograph.app/macrograph/list"),
+            schema: SchemaId.make("ListCreate"),
+          },
           { "value-0": [] },
           { number: 1 },
         );
         const push = node(
           "list-push",
-          { package: PackageId.make("list"), schema: SchemaId.make("PushListValue") },
+          {
+            package: PackageId.make("macrograph.app/macrograph/list"),
+            schema: SchemaId.make("PushListValue"),
+          },
           { list: [{ _type: "person", name: "Ada" }], value: { _type: "person", name: "Grace" } },
         );
         yield* persistence.saveNode("second", create);
@@ -688,16 +696,18 @@ describe("type authoring preserve-invalid", () => {
         };
         yield* mutate(editor, { _tag: "Upsert", definition });
         yield* editor.module(
-          Module.make({
-            id: "enum-test",
-            effect: (context) =>
-              context.schema.register({
-                id: "anchor",
-                type: "pure",
-                io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
-                run: () => Effect.void,
-              }),
-          }),
+          Module.identify(
+            ModuleId.Id.make("local/test/enum-test"),
+            Module.make({
+              effect: (context) =>
+                context.schema.register({
+                  id: "anchor",
+                  type: "pure",
+                  io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
+                  run: () => Effect.void,
+                }),
+            }),
+          ),
         );
         const catalog = (yield* (yield* Packages.Service).getPackages()).find(
           (pkg) => pkg.id === CustomTypes.packageId,
@@ -721,7 +731,10 @@ describe("type authoring preserve-invalid", () => {
         const anchor = yield* editor.node.create({
           graphID: "second",
           node: {
-            schema: { package: PackageId.make("enum-test"), schema: SchemaId.make("anchor") },
+            schema: {
+              package: PackageId.make("local/test/enum-test"),
+              schema: SchemaId.make("anchor"),
+            },
           },
         });
         yield* editor.connection.create({

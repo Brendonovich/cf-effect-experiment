@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import { For, Show, action, createSignal, type Component } from "solid-js";
 
 import { ClientRpcs, ClientState, type WebhookId } from "./Definition.ts";
-import KofiModule from "./Module.ts";
 
 const sm = "@media (min-width: 640px)";
 const styles = stylex.create({
@@ -476,7 +475,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: KofiModule,
   state: ClientState,
   initial: { webhooks: [] },
   rpcs: ClientRpcs,

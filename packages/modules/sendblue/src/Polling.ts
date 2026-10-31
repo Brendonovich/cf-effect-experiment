@@ -38,7 +38,6 @@ export class ProviderFailure extends Schema.TaggedError<ProviderFailure>()(
 
 export const handler = PollingIngress.make({
   id: "sendblue:messages",
-  moduleId: "sendblue",
   displayName: "Received Messages",
   intervalMs: 5_000,
   configuration: Configuration,

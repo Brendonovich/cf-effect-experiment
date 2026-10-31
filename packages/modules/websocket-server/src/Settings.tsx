@@ -13,7 +13,6 @@ import {
   type ServerState,
   type ServerStatus,
 } from "./Definition.ts";
-import WebSocketServerModule from "./Module.ts";
 
 const sm = "@media (min-width: 640px)";
 const styles = stylex.create({
@@ -472,7 +471,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: WebSocketServerModule,
   state: ClientState,
   initial: { servers: [] },
   rpcs: ClientRpcs,

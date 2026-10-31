@@ -18,14 +18,6 @@ declare module "*.webp" {
   export default src;
 }
 
-declare module "virtual:macrograph-module-settings" {
-  import type { ClientSettings } from "@macrograph/module";
-  import type { JSX } from "@solidjs/web";
-
-  const settings: ReadonlyArray<ClientSettings.Descriptor<JSX.Element>>;
-  export default settings;
-}
-
 interface ImportMetaEnv {
   readonly BASE_URL: string;
   readonly SSR: boolean;

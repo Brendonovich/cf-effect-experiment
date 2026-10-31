@@ -10,7 +10,8 @@
     "./Engine": "./src/Engine.ts",
     "./Protocol": "./src/Protocol.ts",
     "./Settings": "./src/Settings.tsx",
-    "./Transport": "./src/Transport.ts"
+    "./Transport": "./src/Transport.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -34,6 +35,27 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "midi",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "MIDI",
+    "description": "Send and receive MIDI messages.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "events",
+      "stream"
+    ],
+    "build": {
+      "native": {
+        "midi": "@julusian/midi/prebuilds/midi-{target}/node-napi-v7.node"
+      },
+      "alias": {
+        "@julusian/midi/load-native.js": "./src/native/loadMidi.ts"
+      }
+    }
   }
 }

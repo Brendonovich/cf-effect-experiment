@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { defaultModel, ElevenLabsEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "elevenlabs",
   name: "ElevenLabs",
   engine: ElevenLabsEngine,
   effect: Effect.fnUntraced(function* (context) {

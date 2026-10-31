@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import {
   Array as EffectArray,
   Cause,
@@ -41,7 +41,10 @@ class Message extends Schema.TaggedClass<Message>()("Message", {
   values: Schema.Array(Schema.Number),
 }) {}
 class TestEngine extends Engine.make({ events: EffectArray.empty<Message>() }) {}
-const module = Module.make({ id: "replay-test", engine: TestEngine, effect: () => Effect.void });
+const module = Module.identify(
+  ModuleId.Id.make("local/test/replay-test"),
+  Module.make({ engine: TestEngine, effect: () => Effect.void }),
+);
 
 describe("RuntimeActivity", () => {
   it.effect("replays the full original input with fresh IDs and the current executor", () =>

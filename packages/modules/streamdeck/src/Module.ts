@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { StreamDeckEngine, StreamDeckServer } from "./Definition.ts";
 
 const StreamDeckModule = Module.make({
-  id: "streamdeck",
   name: "Stream Deck WebSocket",
   engine: StreamDeckEngine,
   effect: Effect.fnUntraced(function* (context) {

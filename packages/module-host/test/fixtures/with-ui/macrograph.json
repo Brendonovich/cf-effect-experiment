@@ -1,0 +1,11 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "with-ui",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "With UI",
+  "server": "server.cjs",
+  "ui": { "entry": "ui/index.js", "styles": ["ui/styles.css"] },
+  "icon": "assets/icon.svg"
+}

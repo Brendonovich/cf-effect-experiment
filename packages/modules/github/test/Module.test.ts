@@ -49,7 +49,6 @@ describe("GitHub module", () => {
           "webhook:release",
         ],
       );
-      assert.strictEqual(deployment.moduleId, "github");
       assert.strictEqual(deployment.definition, module.engine);
     }),
   );
@@ -143,12 +142,12 @@ describe("GitHub module", () => {
           }),
         }),
       )(outputs.get("payload"));
-      assert.strictEqual(payload._type, "github/ReleasePayload");
+      assert.strictEqual(payload._type, "ReleasePayload");
       assert.deepStrictEqual(payload.action, {
-        _type: "github/ReleaseAction",
+        _type: "ReleaseAction",
         _tag: "published",
       });
-      assert.strictEqual(payload.release._type, "github/Release");
+      assert.strictEqual(payload.release._type, "Release");
       assert.strictEqual(payload.release.tag_name, "v1.0.0");
       assert.deepStrictEqual(payload.release.name, Option.none());
       assert.deepStrictEqual(payload.release.body, Option.some("Release notes"));

@@ -12,7 +12,8 @@
     "./Deployment/Webhook": "./src/Deployment/Webhook.ts",
     "./Engine": "./src/Engine.ts",
     "./Settings": "./src/Settings.tsx",
-    "./Webhook": "./src/Webhook.ts"
+    "./Webhook": "./src/Webhook.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -35,6 +36,15 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "github",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "GitHub",
+    "description": "Call the GitHub API and react to repository events.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    }
   }
 }

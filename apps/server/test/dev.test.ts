@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer as createNodeServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const appDirectory = resolve(import.meta.dirname, "..");
+const hasMidiSequencer = process.platform !== "linux" || existsSync("/dev/snd/seq");
 let server: ViteDevServer | undefined;
 let dataDirectory = "";
 let origin = "";
@@ -71,6 +73,54 @@ it("serves the client and backend through one Vite server", async () => {
     setupRequired: true,
     hasOwner: false,
   });
+});
+
+it("loads built-ins from source and points their UI at Vite-served sources", async () => {
+  const response = await fetch(`${origin}${basePath}/rpc`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "GetModules", params: {} }),
+  });
+  const { result } = (await response.json()) as {
+    readonly result: ReadonlyArray<{
+      readonly id: string;
+      readonly status: string;
+      readonly source: string;
+      readonly ui?: { readonly entryUrl: string };
+    }>;
+  };
+  const utilities = result.find((entry) => entry.id === "macrograph.app/macrograph/utilities");
+  expect(utilities).toMatchObject({ status: "loaded", source: "shipped" });
+  expect(utilities?.ui?.entryUrl).toMatch(
+    new RegExp(`^${basePath}/@fs/.*/packages/modules/utilities/src/UI\\.ts$`),
+  );
+  const ui = await fetch(`${origin}${utilities?.ui?.entryUrl}`);
+  expect(ui.status).toBe(200);
+  expect(ui.headers.get("content-type")).toContain("javascript");
+  expect(await ui.text()).toContain("ModuleUI");
+});
+
+it("loads MIDI's native addon from source through its own dependency", async () => {
+  const response = await fetch(`${origin}${basePath}/rpc`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "GetModuleClientState",
+      params: { moduleId: "macrograph.app/macrograph/midi" },
+    }),
+  });
+  const { result } = (await response.json()) as {
+    readonly result?: { readonly available: boolean; readonly error?: string };
+  };
+  // Without an ALSA sequencer RtMidi can't start, but reaching that error still means the addon ran.
+  if (!hasMidiSequencer) {
+    expect(result?.error).toBe("Failed to list MIDI ports: Failed to initialise RtMidi");
+    return;
+  }
+  expect(result?.error).toBeUndefined();
+  expect(result?.available).toBe(true);
 });
 
 it.each([

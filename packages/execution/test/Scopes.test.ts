@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { t, Engine, Module, Registration } from "@macrograph/module";
+import { t, Engine, Module, Registration, ModuleId } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -29,44 +29,46 @@ const wire = (
 ) => ({ id, outNodeId, outIo: { _tag: "Port" as const, id: outPortId }, inNodeId, inIoId });
 
 const fixture = (captured: unknown[]) =>
-  Module.make({
-    id: "scope-test",
-    engine: TestEngine,
-    effect: Effect.fnUntraced(function* (context) {
-      yield* context.schema.register({
-        id: "event",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: (io) => ({ output: io.scope.out("payload", fields) }),
-        run: ({ io }) => Effect.succeed(io.output(payload)),
-      });
-      yield* context.schema.register({
-        id: "sink",
-        io: (io) => ({ value: io.data.in("value", fields.value) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            captured.push(io.value);
-          }),
-      });
-      yield* context.schema.register({
-        id: "scopeSink",
-        type: "base",
-        io: (io) => ({ input: io.scope.in("payload", fields) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            // The scope input is materialized with its inferred TypeScript value type.
-            const value: Option.Option<ReadonlyArray<DateTime.DateTime>> = io.input.value;
-            captured.push(value);
-          }),
-      });
-      yield* context.schema.register({
-        id: "wrongSink",
-        type: "base",
-        io: (io) => ({ input: io.scope.in("payload", { value: t.String }) }),
-        run: () => Effect.die("Invalid graph must not run"),
-      });
+  Module.identify(
+    ModuleId.Id.make("local/test/scope-test"),
+    Module.make({
+      engine: TestEngine,
+      effect: Effect.fnUntraced(function* (context) {
+        yield* context.schema.register({
+          id: "event",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: (io) => ({ output: io.scope.out("payload", fields) }),
+          run: ({ io }) => Effect.succeed(io.output(payload)),
+        });
+        yield* context.schema.register({
+          id: "sink",
+          io: (io) => ({ value: io.data.in("value", fields.value) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              captured.push(io.value);
+            }),
+        });
+        yield* context.schema.register({
+          id: "scopeSink",
+          type: "base",
+          io: (io) => ({ input: io.scope.in("payload", fields) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              // The scope input is materialized with its inferred TypeScript value type.
+              const value: Option.Option<ReadonlyArray<DateTime.DateTime>> = io.input.value;
+              captured.push(value);
+            }),
+        });
+        yield* context.schema.register({
+          id: "wrongSink",
+          type: "base",
+          io: (io) => ({ input: io.scope.in("payload", { value: t.String }) }),
+          run: () => Effect.die("Invalid graph must not run"),
+        });
+      }),
     }),
-  });
+  );
 
 const project = (target = "break") =>
   Schema.decodeUnknownSync(Project.Model)({
@@ -77,10 +79,10 @@ const project = (target = "break") =>
           id: "graph",
           name: "Scopes",
           nodes: {
-            event: node("event", "scope-test", "event"),
-            sink: node("sink", "scope-test", "sink"),
-            scopeSink: node("scopeSink", "scope-test", "scopeSink"),
-            wrongSink: node("wrongSink", "scope-test", "wrongSink"),
+            event: node("event", "local/test/scope-test", "event"),
+            sink: node("sink", "local/test/scope-test", "sink"),
+            scopeSink: node("scopeSink", "local/test/scope-test", "scopeSink"),
+            wrongSink: node("wrongSink", "local/test/scope-test", "wrongSink"),
           },
           scopeProjections: { break: { id: "break", position: { x: 0, y: 0 } } },
           connections:
@@ -99,18 +101,20 @@ const project = (target = "break") =>
 describe("scope execution", () => {
   it.effect("executes an explicitly empty scope payload", () =>
     Effect.gen(function* () {
-      const module = Module.make({
-        id: "empty-scope",
-        engine: TestEngine,
-        effect: (context) =>
-          context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({ output: io.scope.out("empty", {}) }),
-            run: ({ io }) => Effect.succeed(io.output({})),
-          }),
-      });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/scope-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: (context) =>
+            context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({ output: io.scope.out("empty", {}) }),
+              run: ({ io }) => Effect.succeed(io.output({})),
+            }),
+        }),
+      );
       const model = Schema.decodeUnknownSync(Project.Model)({
         ...Project.empty(),
         graphs: {
@@ -136,9 +140,12 @@ describe("scope execution", () => {
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -149,25 +156,27 @@ describe("scope execution", () => {
   it.effect("validates custom types used only by scope fields before side effects", () =>
     Effect.gen(function* () {
       let ran = false;
-      const module = Module.make({
-        id: "missing-scope-type",
-        engine: TestEngine,
-        effect: (context) =>
-          context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({
-              output: io.scope.out("payload", {
-                value: t.Struct(t.DefinitionId.make("missing")),
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/scope-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: (context) =>
+            context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({
+                output: io.scope.out("payload", {
+                  value: t.Struct(t.DefinitionId.make("missing")),
+                }),
               }),
+              run: () =>
+                Effect.sync(() => {
+                  ran = true;
+                }),
             }),
-            run: () =>
-              Effect.sync(() => {
-                ran = true;
-              }),
-          }),
-      });
+        }),
+      );
       const model = Schema.decodeUnknownSync(Project.Model)({
         ...Project.empty(),
         graphs: {
@@ -184,9 +193,12 @@ describe("scope execution", () => {
       const executor = yield* Executor.make(model);
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       expect(yield* Effect.flip(executor.handleEvent(module, new Trigger({})))).toBeInstanceOf(
@@ -219,9 +231,12 @@ describe("scope execution", () => {
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -240,9 +255,12 @@ describe("scope execution", () => {
       const executor = yield* Executor.make(project("scopeSink"));
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -263,9 +281,12 @@ describe("scope execution", () => {
         });
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         expect(yield* Effect.flip(executor.handleEvent(module, new Trigger({})))).toBeInstanceOf(
@@ -298,9 +319,12 @@ describe("scope execution", () => {
           });
           yield* executor.module(
             module,
-            Engine.deployment(
-              module,
-              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            Engine.identify(
+              module.id,
+              Engine.deployment(
+                module,
+                TestEngine.toLayer(() => Effect.die("Not hosted")),
+              ),
             ),
           );
           expect(yield* Effect.flip(executor.handleEvent(module, new Trigger({})))).toBeInstanceOf(

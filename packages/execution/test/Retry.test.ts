@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module, Registration, Retry } from "@macrograph/module";
+import { t, Engine, Module, Registration, Retry, ModuleId } from "@macrograph/module";
 import { Array, Cause, Effect, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -17,22 +17,27 @@ const setup = Effect.fnUntraced(function* (
   retry = false,
   replay?: Registration.Replay,
 ) {
-  const module = Module.make({
-    id: "retry",
-    engine: TestEngine,
-    effect: (registration) =>
-      registration.schema.register({
-        id: "event",
-        type: "event",
-        ...(replay === undefined ? {} : { replay }),
-        event: () => Effect.succeed(true),
-        io: (io) => ({ value: io.data.out("value", t.String) }),
-        run: ({ io }) => run(io.value),
-      }),
-  });
-  const deployment = Engine.deployment(
-    module,
-    TestEngine.toLayer(() => Effect.die("not hosted")),
+  const module = Module.identify(
+    ModuleId.Id.make("local/test/retry"),
+    Module.make({
+      engine: TestEngine,
+      effect: (registration) =>
+        registration.schema.register({
+          id: "event",
+          type: "event",
+          ...(replay === undefined ? {} : { replay }),
+          event: () => Effect.succeed(true),
+          io: (io) => ({ value: io.data.out("value", t.String) }),
+          run: ({ io }) => run(io.value),
+        }),
+    }),
+  );
+  const deployment = Engine.identify(
+    module.id,
+    Engine.deployment(
+      module,
+      TestEngine.toLayer(() => Effect.die("not hosted")),
+    ),
   );
   const graphId = GraphId.make("retry-graph");
   const nodeId = NodeId.make("retry-event");
@@ -50,7 +55,10 @@ const setup = Effect.fnUntraced(function* (
               properties: {},
               inputDefaults: {},
               foldPins: false,
-              schema: { package: PackageId.make("retry"), schema: SchemaId.make("event") },
+              schema: {
+                package: PackageId.make("local/test/retry"),
+                schema: SchemaId.make("event"),
+              },
               position: { x: 0, y: 0 },
             },
           },

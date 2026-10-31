@@ -20,5 +20,16 @@
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "publisher": "macrograph",
+    "name": "json",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "JSON",
+    "description": "Build, inspect, and transform JSON values.",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
   }
 }

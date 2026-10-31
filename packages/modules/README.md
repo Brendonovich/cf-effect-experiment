@@ -9,11 +9,18 @@ The Electron follow-up is based on jdudetv's upstream `ELECTRON` branch at
 instead of depending on `window.electronAPI`. See [Electron catalog](ELECTRON.md)
 for coverage and remaining capability requirements.
 
-Stateless modules only export `Module.make({ id, effect })`; no engine definition,
-deployment, RPC group, or client state is required. Standalone discovery uses the
-package's `.` export when no `macrograph.standaloneDeployment` is specified, and
-registers it directly if it has no engine. Modules with engines still need an
-explicit deployment for the host. Programmatic registration is `editor.module(module)`
+Stateless modules only export `Module.make({ effect })`; no engine definition,
+deployment, RPC group, or client state is required. The package's `entries.server`
+default-exports the module itself in that case, or the module's deployment when it has an
+engine; hosts attach the module id when they load it.
+
+Each module's `package.json` has a `macrograph` field (publisher, name, version, `api`,
+display name, `entries.server`, optional `entries.ui`, `requires` and `node`) that
+`macrograph-module build` from `@macrograph/module-build` turns into a module package folder
+(`macrograph.json`, `server.cjs`, `ui/`, `assets/`). Modules with settings have a `src/UI.ts`
+that default-exports `ModuleUI.make({ settings })`. The server entry's deployment may only require
+the host services listed in `@macrograph/module/HostService`; anything else it needs, such
+as a URL policy or a WebSocket listener, is provided inside the deployment itself. Programmatic registration is `editor.module(module)`
 and `executor.module(module)`, or `ModuleMount.register(executor, module)` for both.
 
 Engine implementation layers use `MyEngine.toLayer((mg) => Effect.gen(...))`.
@@ -73,10 +80,27 @@ must be reachable **from the runtime host**, not just the editor's browser. In a
 container, `localhost` refers to the container. No new device-connected modules
 are mounted in Cloudflare runtimes.
 
+## Hosts that bundle modules
+
+The cloud and the playground can't load modules from disk, so they bundle them and feed one
+static list into the same `ModuleRegistry` the server uses (`StaticRegistry` from
+`@macrograph/module-host/core`, which has no Node imports). Each list entry carries the
+metadata of the package's `macrograph` field (tests check they match) and everything the
+host needs to run the module. Module UIs load from the packages' bundled `UI` exports with
+`createModuleUILoader({ static })`.
+
+- **Playground:** `apps/playground/src/local/PlaygroundModules.ts`. Module RPCs run
+  in-process.
+- **Cloud:** `apps/cloud/src/modules/CloudModules.ts`. Each entry says how `ProjectEditorDO`
+  mounts the module, its executor entry and its workflow runtime client; the ingress
+  deployments sit beside the list. Module RPCs go over HTTP to
+  `/rpc/projects/<project>/module/<namespace>/<publisher>/<name>/rpc`, which the worker
+  authorizes by project access and forwards into the project's editor, where they need edit
+  access.
+
 ## Cloudflare
 
-The hosted editor and execution registry share the new module lists in
-`apps/cloud/src/modules/CloudModules.ts`. Existing editor Durable Objects
+Existing editor Durable Objects
 rebuild the in-memory catalog when updated Worker code initializes them; no
 project storage migration or reset is required. Reconnect the editor after
 deploying the Worker to fetch the updated catalog.

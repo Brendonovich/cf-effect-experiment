@@ -36,6 +36,9 @@
       "path": "../../packages/module"
     },
     {
+      "path": "../../packages/module-host"
+    },
+    {
       "path": "../../packages/project-host"
     },
     {

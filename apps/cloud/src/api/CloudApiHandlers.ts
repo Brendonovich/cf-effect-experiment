@@ -153,7 +153,8 @@ export const editorRpcHandlers = HttpApiBuilder.group(
     const editorRpc = yield* EditorRpc.Service;
     return handlers
       .handleRaw("connect", ({ request }) => editorRpc.handle(request))
-      .handleRaw("request", ({ request }) => editorRpc.handle(request));
+      .handleRaw("request", ({ request }) => editorRpc.handle(request))
+      .handleRaw("moduleRpc", ({ request, params }) => editorRpc.handleModuleRpc(request, params));
   }),
 );
 

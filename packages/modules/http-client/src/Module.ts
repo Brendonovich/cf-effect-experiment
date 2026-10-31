@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { HttpClientEngine, UrlComponentFailure } from "./Definition.ts";
 
 const HttpClientModule = Module.make({
-  id: "http-client",
   name: "HTTP Client",
   engine: HttpClientEngine,
   effect: Effect.fnUntraced(function* (context) {
