@@ -39,8 +39,12 @@ is a compatibility alias for readiness.
 ### First-time setup
 
 On an unconfigured server, startup prints `MACROGRAPH_SETUP_KEY <key>`. Open the server in
-your browser, enter that key on the setup page, and approve the MacroGraph sign-in and server
-registration. For Docker, find the key with `docker logs macrograph`.
+your browser, enter that key on the setup page, and approve the code it shows at
+`macrograph.app/device`. For Docker, find the key with `docker logs macrograph`.
+
+The server registers itself with macrograph.app as an OAuth client the first time it is used, and
+everyone signs in to it with the same device code flow (see `apps/cloud/OAUTH.md`). The client
+registration and the owner's grant are stored in `MACROGRAPH_DATA_DIR/macrograph-auth.json`.
 
 The approving account becomes the server administrator and supplies its cloud-managed credentials.
 The browser is signed in automatically and remembers its session. Other visitors cannot claim the
@@ -50,9 +54,11 @@ user ID is included in `MACROGRAPH_ADMIN_IDS`.
 The key is invalidated after setup and changes if an unconfigured server restarts. Treat logs as
 sensitive, and use HTTPS when accessing the server remotely. Ownership is persisted separately in
 `MACROGRAPH_DATA_DIR/macrograph-owner.json`, with the same file protections as authorization data.
-Cloud authorization expiry or disconnection does not reopen setup or remove the administrator.
-Existing registered installations retain their owner automatically when upgrading. Keep the owner
-file along with the authorization files when backing up or moving the server.
+When the owner's connection ends (for example after removing the server under **Account → Apps** on
+macrograph.app), setup does not reopen: the owner signs in and reconnects from **Settings**, and
+only their account is accepted. Servers set up before the OAuth flow keep their owner but must
+reconnect. Keep the owner file along with the authorization files when backing up or moving the
+server.
 
 ### REST API and MCP
 
@@ -70,8 +76,9 @@ with the same file protections as the authorization files.
 
 - `PORT` and `HOST`: listener, default `3001` and `0.0.0.0`.
 - `MACROGRAPH_DATA_DIR`: persistent SQLite directory, default current directory; mount `/data` in the image.
-- `MACROGRAPH_CLOUD_BASE_URL`: MacroGraph credential service base, default exactly
-  `https://www.macrograph.app/api`. The legacy no-`www` origin is normalized automatically.
+- `MACROGRAPH_ISSUER`: the MacroGraph OAuth issuer, default `https://macrograph.app`.
+- `MACROGRAPH_SERVER_NAME`: the name users see when approving this server, default
+  `MacroGraph server on <hostname>`.
 - `MACROGRAPH_ADMIN_IDS`: optional comma-separated MacroGraph user IDs that may edit this server's
   project in addition to the account that registered the server.
 - `MACROGRAPH_BASE_PATH`: public path such as `/macrograph`. Set it at both image build and runtime.

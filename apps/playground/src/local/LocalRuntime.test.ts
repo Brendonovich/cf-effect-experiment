@@ -75,44 +75,54 @@ const obsAuthentication = async (password: string) => {
   return digest(`${await digest(`${password}salt`)}challenge`);
 };
 
+const connectedState = JSON.stringify({
+  version: 2,
+  grant: {
+    refreshToken: "mgrt_initial",
+    scope: "openid email offline_access credentials",
+    userId: "user-1",
+    email: "user@example.com",
+  },
+});
+
+const respondAsAuthorizationServer = (path: string) =>
+  path === "/.well-known/oauth-authorization-server"
+    ? Response.json({
+        issuer: "https://macrograph.app",
+        device_authorization_endpoint: "https://macrograph.app/oauth/device_authorization",
+        token_endpoint: "https://macrograph.app/oauth/token",
+        jwks_uri: "https://macrograph.app/oauth/jwks",
+      })
+    : path === "/oauth/token"
+      ? Response.json({ access_token: "mgat_access", token_type: "Bearer", expires_in: 3600 })
+      : Response.json([
+          {
+            provider: "twitch",
+            id: "twitch-1",
+            displayName: "Streamer",
+            token: {
+              access_token: "twitch-access",
+              expires_in: 3600,
+              token_type: "bearer",
+              issuedAt: 1,
+            },
+          },
+        ]);
+
 describe("local browser runtime", () => {
   it.effect("exposes connected Twitch credentials in module settings and resources", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const storage = new MemoryStorage();
-        storage.setItem(
-          MACROGRAPH_AUTH_SESSION_KEY,
-          JSON.stringify({
-            state: "connected",
-            token: "session-secret",
-            userId: "user-1",
-            email: "user@example.com",
-            expiresAt: 60_000,
-          }),
-        );
-        const credentials = yield* makeBrowserCredentialProvider({
-          storage,
-          now: () => 1_000,
-        }).pipe(
+        storage.setItem(MACROGRAPH_AUTH_SESSION_KEY, connectedState);
+        const credentials = yield* makeBrowserCredentialProvider({ storage }).pipe(
           Effect.provideService(
             HttpClient.HttpClient,
             HttpClient.make((request) =>
               Effect.succeed(
                 HttpClientResponse.fromWeb(
                   request,
-                  Response.json([
-                    {
-                      provider: "twitch",
-                      id: "twitch-1",
-                      displayName: "Streamer",
-                      token: {
-                        access_token: "twitch-access",
-                        expires_in: 3600,
-                        token_type: "bearer",
-                        issuedAt: 1,
-                      },
-                    },
-                  ]),
+                  respondAsAuthorizationServer(new URL(request.url).pathname),
                 ),
               ),
             ),

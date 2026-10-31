@@ -79,13 +79,6 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    proxy: {
-      "/__macrograph_credentials": {
-        target: "https://www.macrograph.app",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/__macrograph_credentials/, "/api"),
-      },
-    },
   },
   preview: { port: 4173, strictPort: true },
   plugins: [

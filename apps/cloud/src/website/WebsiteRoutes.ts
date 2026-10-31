@@ -48,9 +48,6 @@ class Reject extends Data.TaggedError("Reject")<{
 const reject = (status: number) =>
   Effect.fail(new Reject({ response: HttpServerResponse.empty({ status }) }));
 
-const rejectJson = (status: number, body: unknown) =>
-  Effect.fail(new Reject({ response: HttpServerResponse.jsonUnsafe(body, { status }) }));
-
 const json = (body: unknown, status = 200) => HttpServerResponse.jsonUnsafe(body, { status });
 
 const handle = <R>(

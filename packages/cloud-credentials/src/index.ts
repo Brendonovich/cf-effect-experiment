@@ -369,7 +369,14 @@ export const make = Effect.fnUntraced(function* (
     authorizationChanged = true;
   });
 
-  const notify = Effect.forEach(subscribers, (subscriber) => subscriber(), { discard: true });
+  // Clears the pending change first: a subscriber that reads credentials must not notify again
+  // from inside this notification, re-entering itself.
+  const notify = Effect.suspend(() => {
+    authorizationChanged = false;
+    return Effect.forEach(Array.from(subscribers), (subscriber) => subscriber(), {
+      discard: true,
+    });
+  });
   const notifyIfAuthorizationChanged = Effect.suspend(() => {
     if (!authorizationChanged) return Effect.void;
     authorizationChanged = false;

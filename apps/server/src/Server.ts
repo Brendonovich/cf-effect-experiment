@@ -45,7 +45,8 @@ mkdirSync(config.dataDirectory, { recursive: true });
 const authFile = makeAtomicFileStore(config.cloudAuthPath);
 const cloudCredentials = Effect.runSync(
   CloudCredentials.make({
-    baseUrl: config.cloudBaseUrl,
+    issuer: config.issuer,
+    client: { type: "registered", name: config.serverName, softwareId: "macrograph-server" },
     store: {
       read: authFile.read.pipe(
         Effect.mapError((error) => new SessionStoreError({ reason: error.reason })),
@@ -63,17 +64,13 @@ const cloudCredentials = Effect.runSync(
 const clientSessions = ClientSessions.make(makeAtomicFileStore(config.clientAuthPath));
 const setup = ServerSetup.make({
   store: makeAtomicFileStore(config.ownerPath),
-  legacyAuthStore: authFile,
   auth: cloudCredentials.auth,
-  pollOwner: cloudCredentials.pollOwner,
   sessions: clientSessions,
-  onKeyIssued: (key, reason) =>
+  onKeyIssued: (key) =>
     Effect.gen(function* () {
       yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
       yield* Effect.logInfo(
-        reason === "unclaimed"
-          ? "Open the server in your browser and enter the setup key to configure its administrator."
-          : "This server is not connected to MacroGraph. Open the server in your browser and enter the setup key to reconnect it.",
+        "Open the server in your browser and enter the setup key to configure its administrator.",
       );
     }),
 });
@@ -203,12 +200,14 @@ const ClientAuthRoutes = Layer.effectDiscard(
     yield* router.add(
       "POST",
       "/auth/start",
-      cloudCredentials.clientAuth.start.pipe(
+      cloudCredentials.signIn.start.pipe(
         Effect.map((authorization) =>
           HttpServerResponse.jsonUnsafe(
             {
-              deviceCode: authorization.device_code,
-              verificationUrl: authorization.verification_uri_complete,
+              deviceCode: authorization.deviceCode,
+              userCode: authorization.userCode,
+              verificationUrl: authorization.verificationUrl,
+              interval: authorization.interval,
             },
             { headers: { "cache-control": "no-store" } },
           ),
@@ -217,7 +216,7 @@ const ClientAuthRoutes = Layer.effectDiscard(
           Effect.succeed(
             HttpServerResponse.jsonUnsafe(
               { error: error.reason, code: error.code },
-              { status: 409, headers: { "cache-control": "no-store" } },
+              { status: 502, headers: { "cache-control": "no-store" } },
             ),
           ),
         ),
@@ -236,13 +235,16 @@ const ClientAuthRoutes = Layer.effectDiscard(
           typeof body.deviceCode !== "string"
         )
           return HttpServerResponse.jsonUnsafe({ error: "Invalid request" }, { status: 400 });
-        const result = yield* cloudCredentials.clientAuth
+        const result = yield* cloudCredentials.signIn
           .poll(body.deviceCode)
           .pipe(Effect.mapError((error) => error.reason));
-        if (result.state === "pending") return HttpServerResponse.jsonUnsafe(result);
+        if (result.state === "pending")
+          return HttpServerResponse.jsonUnsafe(result, {
+            headers: { "cache-control": "no-store" },
+          });
         const token = yield* clientSessions.create({ userId: result.userId, email: result.email });
         return HttpServerResponse.jsonUnsafe(
-          { ...result, token },
+          { state: result.state, userId: result.userId, email: result.email, token },
           {
             headers: { "cache-control": "no-store" },
           },
@@ -383,7 +385,7 @@ const AppLayer = HttpRoutes.pipe(
       NodeServices.layer,
     ),
   ),
-  // Issues and logs a setup key whenever the server is unclaimed or loses its MacroGraph connection.
+  // Issues and logs a setup key while the server is unclaimed.
   Layer.provide(
     Layer.effectDiscard(
       Effect.gen(function* () {

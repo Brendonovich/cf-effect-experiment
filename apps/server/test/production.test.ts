@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { createSign, generateKeyPairSync } from "node:crypto";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -14,47 +15,85 @@ let setupKey = "";
 let approved = false;
 let ownerToken = "";
 let readerToken = "";
+// A stand-in for macrograph.app's OAuth authorization server (see apps/cloud/OAUTH.md).
+const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const base64Url = (value: string | Buffer) => Buffer.from(value).toString("base64url");
+const idToken = (issuer: string, sub: string) => {
+  const now = Math.floor(Date.now() / 1000);
+  const input = `${base64Url(JSON.stringify({ alg: "RS256", kid: "test" }))}.${base64Url(
+    JSON.stringify({
+      iss: issuer,
+      sub,
+      aud: "server-client",
+      iat: now,
+      exp: now + 300,
+      email: `${sub}@example.com`,
+    }),
+  )}`;
+  return `${input}.${base64Url(createSign("RSA-SHA256").update(input).sign(privateKey))}`;
+};
 const cloud = createServer((request, response) => {
-  response.setHeader("content-type", "application/json");
+  const issuer = `http://${request.headers.host}`;
   const path = request.url?.split("?")[0];
-  if (path === "/server/registration/start") {
-    response.end(
-      JSON.stringify({
-        id: "setup-registration",
-        userCode: "SETUP",
-        verification_uri: "https://www.macrograph.app/connect",
-        verification_uri_complete: "https://www.macrograph.app/connect?code=SETUP",
-      }),
-    );
-  } else if (path === "/server/registration" && request.method === "POST") {
-    response.statusCode = approved ? 200 : 400;
-    response.end(
-      JSON.stringify(
-        approved
-          ? { token: "cloud-registration-token" }
-          : { _tag: "ServerRegistrationError", code: "authorization_pending" },
-      ),
-    );
-  } else if (path === "/server/registration") {
-    response.end(JSON.stringify({ ownerId: "setup-owner" }));
-  } else if (path === "/user") {
-    const id = request.headers.authorization === "Bearer reader-token" ? "reader" : "setup-owner";
-    response.end(JSON.stringify({ id, email: `${id}@example.com` }));
-  } else if (path === "/login/oauth/access_token") {
-    response.end(
-      JSON.stringify({
-        userId: "reader",
-        access_token: "reader-token",
-        refresh_token: "refresh",
-        token_type: "Bearer",
-      }),
-    );
-  } else if (path === "/credentials") {
-    response.end("[]");
-  } else {
-    response.statusCode = 404;
-    response.end("{}");
-  }
+  let body = "";
+  request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+  request.on("end", () => {
+    const send = (value: unknown, status = 200) => {
+      response.statusCode = status;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(value));
+    };
+    const params = new URLSearchParams(body);
+    const tokens = (sub: string, offline: boolean) => ({
+      access_token: `${sub}-access`,
+      token_type: "Bearer",
+      expires_in: 3600,
+      id_token: idToken(issuer, sub),
+      ...(offline ? { refresh_token: `${sub}-refresh` } : {}),
+    });
+    if (path === "/.well-known/oauth-authorization-server")
+      send({
+        issuer,
+        device_authorization_endpoint: `${issuer}/oauth/device_authorization`,
+        token_endpoint: `${issuer}/oauth/token`,
+        registration_endpoint: `${issuer}/oauth/register`,
+        revocation_endpoint: `${issuer}/oauth/revoke`,
+        jwks_uri: `${issuer}/oauth/jwks`,
+      });
+    else if (path === "/oauth/jwks")
+      send({ keys: [{ ...publicKey.export({ format: "jwk" }), kid: "test" }] });
+    else if (path === "/oauth/register")
+      send(
+        {
+          client_id: "server-client",
+          client_secret: "server-secret",
+          registration_access_token: "registration-token",
+          registration_client_uri: `${issuer}/oauth/register/server-client`,
+        },
+        201,
+      );
+    else if (path === "/oauth/device_authorization") {
+      const owner = params.get("scope")?.includes("credentials") === true;
+      send({
+        device_code: owner ? "setup-device" : "reader-device",
+        user_code: owner ? "BCDF-GHJK" : "LMNP-QRST",
+        verification_uri: `${issuer}/device`,
+        verification_uri_complete: `${issuer}/device?user_code=${owner ? "BCDF-GHJK" : "LMNP-QRST"}`,
+        expires_in: 600,
+        interval: 0,
+      });
+    } else if (path === "/oauth/token") {
+      expect(request.headers.authorization).toBe(
+        `Basic ${Buffer.from("server-client:server-secret").toString("base64")}`,
+      );
+      if (params.get("grant_type") === "refresh_token") send(tokens("setup-owner", true));
+      else if (params.get("device_code") === "reader-device") send(tokens("reader", false));
+      else if (approved) send(tokens("setup-owner", true));
+      else send({ error: "authorization_pending" }, 400);
+    } else if (path === "/oauth/revoke") send({});
+    else if (path === "/api/credentials") send([]);
+    else send({ error: "not_found" }, 404);
+  });
 });
 
 const rawStatus = (path: string) =>
@@ -90,7 +129,7 @@ beforeAll(async () => {
       HOST: "127.0.0.1",
       MACROGRAPH_DATA_DIR: dataDirectory,
       MACROGRAPH_BASE_PATH: basePath,
-      MACROGRAPH_CLOUD_BASE_URL: `http://127.0.0.1:${cloudAddress.port}`,
+      MACROGRAPH_ISSUER: `http://127.0.0.1:${cloudAddress.port}`,
       MACROGRAPH_ADMIN_IDS: "",
       OTEL_EXPORTER_OTLP_ENDPOINT: "",
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
@@ -227,11 +266,14 @@ describe("built self-hosted server", () => {
     }
   });
 
-  it("reports that sign in is unavailable until the server is connected", async () => {
+  it("starts a device sign-in for visitors, registering the server on first use", async () => {
     const signIn = await fetch(`${origin}${basePath}/auth/start`, { method: "POST" });
-    expect(signIn.status).toBe(409);
+    expect(signIn.status).toBe(200);
     expect(signIn.headers.get("cache-control")).toBe("no-store");
-    expect(await signIn.json()).toMatchObject({ code: "not-connected" });
+    expect(await signIn.json()).toMatchObject({ deviceCode: "reader-device", userCode: "LMNP-QRST" });
+    expect(
+      JSON.parse(await readFile(join(dataDirectory, "macrograph-auth.json"), "utf8")),
+    ).toMatchObject({ version: 2, client: { clientId: "server-client" } });
   });
 
   it("rejects inherited-property session tokens at the HTTP module gate", async () => {
@@ -310,7 +352,7 @@ describe("built self-hosted server", () => {
       });
     const started = await setupRequest("start");
     expect(started.status).toBe(200);
-    expect(await started.json()).toMatchObject({ state: "pending" });
+    expect(await started.json()).toMatchObject({ state: "pending", userCode: "BCDF-GHJK" });
     expect(await (await setupRequest("poll")).json()).toMatchObject({ state: "pending" });
     approved = true;
     const completed = await setupRequest("poll");
@@ -335,9 +377,9 @@ describe("built self-hosted server", () => {
     expect(
       JSON.parse(await readFile(join(dataDirectory, "macrograph-auth.json"), "utf8")),
     ).toMatchObject({
-      state: "connected",
-      userId: "setup-owner",
-      token: "cloud-registration-token",
+      version: 2,
+      client: { clientId: "server-client" },
+      grant: { userId: "setup-owner", refreshToken: "setup-owner-refresh" },
     });
     expect((await setupRequest("start")).status).toBe(403);
     expect((await setupRequest("poll")).status).toBe(403);

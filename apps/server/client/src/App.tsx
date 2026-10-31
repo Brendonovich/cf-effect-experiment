@@ -149,6 +149,12 @@ const styles = stylex.create({
   },
   setupTitle: { fontSize: 24, fontWeight: 600, letterSpacing: "-0.025em", margin: 0 },
   description: { color: colors.gray11, lineHeight: 1.6, margin: 0, overflowWrap: "anywhere" },
+  userCode: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontWeight: 600,
+    letterSpacing: "0.06em",
+    color: colors.gray12,
+  },
   form: { display: "flex", flexDirection: "column", gap: 12 },
   label: { fontWeight: 500 },
   input: {
@@ -174,12 +180,12 @@ export function App() {
   const [view, setView] = createSignal<"editor" | "events">("editor");
   const [auth, setAuth] = createSignal<AuthContext>({ session: null, user: null });
   const [setupRequired, setSetupRequired] = createSignal<boolean | null>(null);
-  const [hasOwner, setHasOwner] = createSignal(false);
   const [canEdit, setCanEdit] = createSignal(false);
   const [sessionError, setSessionError] = createSignal<string | null>(null);
   const [setupKey, setSetupKey] = createSignal("");
   const [signingIn, setSigningIn] = createSignal(false);
   const [verificationUrl, setVerificationUrl] = createSignal<string | null>(null);
+  const [userCode, setUserCode] = createSignal<string | null>(null);
   const [approvalError, setApprovalError] = createSignal<string | null>(null);
   let operation: AbortController | undefined;
   const startOperation = () => {
@@ -230,7 +236,6 @@ export function App() {
       } else {
         setAuth({ session: token, user: state.user });
       }
-      setHasOwner(state.hasOwner);
       setCanEdit(state.canEdit);
       setSetupRequired(state.setupRequired);
     } catch (error) {
@@ -265,6 +270,7 @@ export function App() {
     operation?.abort();
     setSigningIn(false);
     setVerificationUrl(null);
+    setUserCode(null);
   };
   const signIn = async (key?: string) => {
     const { signal } = startOperation();
@@ -279,6 +285,7 @@ export function App() {
     setSigningIn(true);
     setApprovalError(null);
     setVerificationUrl(null);
+    setUserCode(null);
     const timeout = setTimeout(() => {
       if (signal.aborted) return;
       cancelSignIn();
@@ -294,18 +301,11 @@ export function App() {
       const authorization = (await started.json()) as {
         readonly state?: "pending";
         readonly deviceCode?: string;
+        readonly userCode?: string;
         readonly verificationUrl?: string;
         readonly error?: string;
-        readonly code?: string;
       };
       if (signal.aborted) return;
-      if (!setup && authorization.code === "not-connected") {
-        // The server lost its MacroGraph connection since the last status check.
-        setSigningIn(false);
-        setVerificationUrl(null);
-        void refreshSession();
-        return;
-      }
       if (
         !started.ok ||
         (setup ? authorization.state !== "pending" : !authorization.deviceCode) ||
@@ -313,6 +313,7 @@ export function App() {
       )
         throw new Error(authorization.error ?? "Could not start MacroGraph approval");
       setVerificationUrl(authorization.verificationUrl);
+      setUserCode(authorization.userCode ?? null);
       if (authorizationWindow !== null) {
         authorizationWindow.opener = null;
         authorizationWindow.location.replace(authorization.verificationUrl);
@@ -366,6 +367,7 @@ export function App() {
       if (!signal.aborted) {
         setSigningIn(false);
         setVerificationUrl(null);
+        setUserCode(null);
       }
     }
   };
@@ -409,6 +411,14 @@ export function App() {
         <p sx={styles.description} role="status">
           {verificationUrl() ? "Waiting for approval on macrograph.app..." : "Starting approval..."}
         </p>
+        <Show when={userCode()}>
+          {(code) => (
+            <p sx={styles.description}>
+              Check that macrograph.app shows the code{" "}
+              <strong sx={styles.userCode}>{code()}</strong>
+            </p>
+          )}
+        </Show>
         <div sx={styles.actions}>
           <Show when={verificationUrl()}>
             {(url) => (
@@ -465,22 +475,12 @@ export function App() {
                 }
               >
                 <h1 id="setup-title" sx={styles.setupTitle}>
-                  {hasOwner() ? "Reconnect your server" : "Set up your server"}
+                  Set up your server
                 </h1>
-                <Show
-                  when={hasOwner()}
-                  fallback={
-                    <p sx={styles.description}>
-                      The MacroGraph account that approves setup becomes this server's administrator
-                      and can edit its projects.
-                    </p>
-                  }
-                >
-                  <p sx={styles.description}>
-                    This server is no longer connected to MacroGraph. Only the server
-                    administrator's MacroGraph account can approve reconnecting it.
-                  </p>
-                </Show>
+                <p sx={styles.description}>
+                  The MacroGraph account that approves setup becomes this server's administrator and
+                  can edit its projects.
+                </p>
                 <p sx={styles.description}>
                   Approval also authorizes this server to use your cloud-managed credentials.
                   Provider tokens stay on the server, not in project data. Only continue if you

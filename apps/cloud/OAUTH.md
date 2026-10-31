@@ -130,7 +130,8 @@ may narrow the scope but never widen it.
 
 **ID token claims:** `iss`, `sub` (the account ID), `aud` (the `client_id`), `exp`, `iat`, and with
 `email` scope `email` and `email_verified` (always `false`: addresses are not verified yet).
-Signed with `JWT_PRIVATE_KEY`, `kid` is its RFC 7638 thumbprint, published at `/oauth/jwks`.
+Signed with a 2048-bit RSA key that each stage generates once and keeps in its alchemy state
+(`WebsiteSigningKey`); `kid` is its RFC 7638 thumbprint, published at `/oauth/jwks`.
 Clients validate them per OpenID Connect Core §3.1.3.7: signature, `iss`, `aud` contains their
 `client_id`, `azp` when there are several audiences, `exp`, and `iat`.
 
@@ -178,4 +179,5 @@ All in the account schema (`src/database/AccountDatabaseSchema.ts`):
 | `auth_access_tokens` | Hashed token, grant, scope, expiry |
 | `auth_rate_limits` | Fixed-window counters for registration and code lookups |
 
-Grants cascade to their tokens, and clients cascade to their grants and device flows.
+Grants cascade to their tokens. Deleting a client deletes its grants and device flows in the same
+transaction (no foreign key, since built-in public clients have no row).

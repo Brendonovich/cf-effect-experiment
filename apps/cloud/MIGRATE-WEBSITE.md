@@ -16,16 +16,14 @@ migration. Both apps can safely serve traffic at the same time during the cutove
   working.
 - **Passwords:** Argon2id hashes use oslo's PHC format and parameters; existing hashes verify
   and new hashes remain readable by the original app.
-- **Server JWTs:** registered servers hold RS256 JWTs signed with the original app's
-  `JWT_PRIVATE_KEY`. The Worker must use the same key, or every registered server must
-  reconnect.
+- **Servers:** the original server JWTs and device-code endpoints are gone. Servers now use the
+  OAuth device flow in [OAUTH.md](./OAUTH.md) and have to be set up again.
 - **OAuth:** providers have `https://macrograph.brendonovich.dev/auth/proxy` registered as the
   redirect URI (the original `AUTH_REDIRECT_PROXY_URL`). See [OAuth Proxy Host](#oauth-proxy-host).
 - **Playground shares:** production adopts and retains the existing
   `macrograph-saved-shares` KV namespace.
-- **Public API:** `/api/user`, `/api/credentials`, credential refresh, the device-code flow,
-  server registration, `/api/cloud-login`, `/api/cloud-logout`, desktop downloads, and the
-  `/auth/*` routes keep their paths, status codes, and response bodies.
+- **Public API:** `/api/user`, `/api/credentials`, credential refresh, desktop downloads, and the
+  `/auth/*` routes keep their paths, status codes, and response bodies for the desktop app.
 
 Intentional changes: the web OAuth flow only posts tokens to MacroGraph or localhost origins,
 OAuth state expires after an hour and is bound to its provider, credential connections are
