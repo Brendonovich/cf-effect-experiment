@@ -483,7 +483,7 @@ async function moduleReference(page) {
     .pressSequentially("Send Chat Message");
   await page.getByRole("button", { name: "Send Chat Message", exact: true }).click();
   await page.getByRole("heading", { name: "Send Chat Message", exact: true }).waitFor();
-  const docsLink = page.getByRole("link", { name: /documentation/i });
+  const docsLink = page.getByRole("link", { name: "Twitch docs", exact: true });
   const docsHref = await docsLink.getAttribute("href");
   const docsPath = join(outputDirectory, "module-reference-docs-link.png");
   await page.screenshot({ path: docsPath, fullPage: true });

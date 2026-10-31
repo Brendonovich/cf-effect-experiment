@@ -50,7 +50,6 @@ export const SchemaModel = Schema.Struct({
   internal: Schema.optional(Schema.Boolean),
   name: Schema.String,
   description: Schema.optional(Schema.String),
-  docsUrl: Schema.optional(Schema.String),
   type: Schema.Literals(["base", "event", "exec", "pure"]),
   properties: Schema.Array(PropertyDefinition).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),

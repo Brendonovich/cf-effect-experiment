@@ -2375,7 +2375,6 @@ export const layer = Layer.effect(Service)(
             internal: schema.internal ?? false,
             name: schema.name,
             ...(schema.description === undefined ? {} : { description: schema.description }),
-            ...(schema.docsUrl === undefined ? {} : { docsUrl: schema.docsUrl }),
             type: schema.type,
             properties: schema.properties.map((property) =>
               "resource" in property

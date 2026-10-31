@@ -29,7 +29,6 @@ type Event = {
   readonly name: string;
   readonly tag: string;
   readonly description: string;
-  readonly docsUrl: string;
   readonly outputs: ReadonlyArray<Field>;
 };
 
@@ -120,13 +119,16 @@ const eventDocsAnchors: Readonly<Record<string, string>> = {
   "channel.shared_chat.session.update": "channelshared_chatupdate",
   "channel.shared_chat.session.end": "channelshared_chatend",
 };
+const withDocs = (description: string, url: string) => `${description} [Twitch docs](${url})`;
 const event = (id: string, name: string, tag: string, outputs: ReadonlyArray<Field>): Event => ({
   id,
   name,
   tag,
   outputs,
-  description: eventDescriptions[id] ?? name,
-  docsUrl: `https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#${eventDocsAnchors[tag] ?? tag.replaceAll(".", "")}`,
+  description: withDocs(
+    eventDescriptions[id] ?? name,
+    `https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/#${eventDocsAnchors[tag] ?? tag.replaceAll(".", "")}`,
+  ),
 });
 
 export const events: ReadonlyArray<Event> = [
@@ -498,7 +500,6 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       id: definition.id,
       name: definition.name,
       description: definition.description,
-      docsUrl: definition.docsUrl,
       type: "event",
       properties: eventSubProperty,
       event: (value, { properties }) =>
@@ -521,8 +522,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "SendChatMessage",
     name: "Send Chat Message",
-    description: "Sends a message to a Twitch channel's chat.",
-    docsUrl: apiReference("send-chat-message"),
+    description: withDocs(
+      "Sends a message to a Twitch channel's chat.",
+      apiReference("send-chat-message"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -552,8 +555,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "GetChatSettings",
     replay: "safe",
     name: "Get Chat Settings",
-    description: "Gets chat settings for a broadcaster's channel.",
-    docsUrl: apiReference("get-chat-settings"),
+    description: withDocs(
+      "Gets chat settings for a broadcaster's channel.",
+      apiReference("get-chat-settings"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -579,8 +584,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "UpdateChatSettings",
     name: "Update Chat Settings",
-    description: "Updates chat settings for a broadcaster's channel.",
-    docsUrl: apiReference("update-chat-settings"),
+    description: withDocs(
+      "Updates chat settings for a broadcaster's channel.",
+      apiReference("update-chat-settings"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -653,8 +660,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "GetChannelInformation",
     replay: "safe",
     name: "Get Channel Information",
-    description: "Gets information about a Twitch channel.",
-    docsUrl: apiReference("get-channel-information"),
+    description: withDocs(
+      "Gets information about a Twitch channel.",
+      apiReference("get-channel-information"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -688,8 +697,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "ModifyChannelInformation",
     name: "Modify Channel Information",
-    description: "Modifies channel information for a broadcaster.",
-    docsUrl: apiReference("modify-channel-information"),
+    description: withDocs(
+      "Modifies channel information for a broadcaster.",
+      apiReference("modify-channel-information"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -719,8 +730,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "GetStreams",
     replay: "safe",
     name: "Get Streams",
-    description: "Looks up a user's active Twitch stream.",
-    docsUrl: apiReference("get-streams"),
+    description: withDocs("Looks up a user's active Twitch stream.", apiReference("get-streams")),
     properties: accountProperty,
     io: (io) => ({
       userId: io.data.in("userId", t.String, { name: "User ID" }),
@@ -744,8 +754,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "CreateClip",
     name: "Create Clip",
-    description: "Creates a clip from the broadcaster's stream.",
-    docsUrl: apiReference("create-clip"),
+    description: withDocs(
+      "Creates a clip from the broadcaster's stream.",
+      apiReference("create-clip"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -767,8 +779,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "CreatePoll",
     name: "Create Poll",
-    description: "Creates a poll with two choices for a broadcaster's channel.",
-    docsUrl: apiReference("create-poll"),
+    description: withDocs(
+      "Creates a poll with two choices for a broadcaster's channel.",
+      apiReference("create-poll"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -794,8 +808,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "EndPoll",
     name: "End Poll",
-    description: "Ends a poll that is currently active.",
-    docsUrl: apiReference("end-poll"),
+    description: withDocs("Ends a poll that is currently active.", apiReference("end-poll")),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -821,8 +834,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "CreatePrediction",
     name: "Create Prediction",
-    description: "Creates a prediction with two outcomes for a broadcaster's channel.",
-    docsUrl: apiReference("create-prediction"),
+    description: withDocs(
+      "Creates a prediction with two outcomes for a broadcaster's channel.",
+      apiReference("create-prediction"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -851,8 +866,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
   yield* context.schema.register({
     id: "EndPrediction",
     name: "End Prediction",
-    description: "Ends a prediction that is currently active.",
-    docsUrl: apiReference("end-prediction"),
+    description: withDocs(
+      "Ends a prediction that is currently active.",
+      apiReference("end-prediction"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -888,8 +905,7 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "GetUsers",
     replay: "safe",
     name: "Get Users",
-    description: "Gets a Twitch user by ID or login.",
-    docsUrl: apiReference("get-users"),
+    description: withDocs("Gets a Twitch user by ID or login.", apiReference("get-users")),
     properties: accountProperty,
     io: (io) => ({
       userId: io.data.in("userId", t.Option(t.String), { name: "User ID" }),
@@ -920,8 +936,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
     id: "GetFollowers",
     replay: "safe",
     name: "Get Followers",
-    description: "Gets the total followers for a broadcaster.",
-    docsUrl: apiReference("get-channel-followers"),
+    description: withDocs(
+      "Gets the total followers for a broadcaster.",
+      apiReference("get-channel-followers"),
+    ),
     properties: accountProperty,
     io: (io) => ({
       broadcasterId: io.data.in("broadcasterId", t.String, { name: "Broadcaster ID" }),
@@ -942,8 +960,10 @@ export const register = Effect.fnUntraced(function* (context: Context) {
       id: action.id,
       replay: action.method === "GET" ? "safe" : "unsafe",
       name: action.name,
-      docsUrl: action.docsUrl,
-      description: `${action.name} using authenticated Twitch ${action.id === "ValidateToken" ? "OAuth validation" : "Helix"}.${action.scopes.length ? ` Requires ${action.scopes.join(" or ")}.` : ""}`,
+      description: withDocs(
+        `${action.name} using authenticated Twitch ${action.id === "ValidateToken" ? "OAuth validation" : "Helix"}.${action.scopes.length ? ` Requires ${action.scopes.join(" or ")}.` : ""}`,
+        action.docsUrl,
+      ),
       properties: accountProperty,
       io: (io) => ({
         inputs: action.inputs.map((field) => {

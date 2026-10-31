@@ -21,6 +21,7 @@ import type { PackageViewState } from "../workspace/workspace";
 
 import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
+import { Description, plainDescription } from "../../ui/Description";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
 import { GraphNode } from "../graph/GraphNode";
@@ -181,15 +182,6 @@ const styles = stylex.create({
   },
   detailDescription: { color: colors.gray10, fontSize: 12, lineHeight: 1.5 },
   missingDescription: { fontStyle: "italic" },
-  docsLink: {
-    alignSelf: "flex-start",
-    borderRadius: 2,
-    color: { default: colors.gray11, ":hover": colors.gray12 },
-    fontSize: 12,
-    outline: "none",
-    textDecoration: { default: "none", ":hover": "underline" },
-    boxShadow: { default: null, ":focus-visible": `0 0 0 1px ${colors.focus}` },
-  },
   nodeConfiguration: {
     alignItems: "start",
     display: "grid",
@@ -326,7 +318,11 @@ function ReferenceView(props: {
         ...variant,
         schemas: props.schemas.filter(
           (schema) =>
-            schema.type === variant.type && matchesSearch(schema.name, schema.description),
+            schema.type === variant.type &&
+            matchesSearch(
+              schema.name,
+              schema.description === undefined ? undefined : plainDescription(schema.description),
+            ),
         ),
       }))
       .filter((group) => group.schemas.length > 0),
@@ -563,15 +559,10 @@ function ReferenceView(props: {
                     schema().description === undefined ? styles.missingDescription : null,
                   ]}
                 >
-                  {schema().description ?? "No description provided."}
+                  <Show when={schema().description} fallback="No description provided.">
+                    {(description) => <Description text={description()} />}
+                  </Show>
                 </p>
-                <Show when={schema().docsUrl}>
-                  {(href) => (
-                    <a sx={styles.docsLink} href={href()} target="_blank" rel="noreferrer">
-                      View documentation ↗
-                    </a>
-                  )}
-                </Show>
               </header>
               <div sx={styles.nodeConfiguration}>
                 <div
