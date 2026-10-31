@@ -1,127 +1,227 @@
-import { Button, macrographLogo } from "@macrograph/editor-ui";
+import { Button, ButtonLink, LoadingState, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { useMutation, useQueryClient } from "@tanstack/solid-query";
-import { Show } from "solid-js";
+import { createQuery, useMutation, useQueryClient } from "@tanstack/solid-query";
+import { For, Match, Show, Switch, createSignal } from "solid-js";
 
-import { safeNextPath, sessionKey, submitCredentials } from "../api";
-import { Redirect, useGoTo, useSession } from "../session";
-import { showToast } from "../Toasts";
+import {
+  getSignInProviders,
+  logInWithPassword,
+  safeNextPath,
+  sessionKey,
+  signInErrorMessage,
+  signInProvidersKey,
+  signInUrl,
+  withoutSignInError,
+} from "../api";
+import { Redirect, useLogOut, useSession } from "../session";
 
-const copy = {
-  login: {
-    title: "Log in to MacroGraph",
-    submit: "Log in",
-    pending: "Logging in...",
-    switchPrompt: "Don't have an account?",
-    switchLabel: "Sign up",
-    switchPath: "/signup",
-    autocomplete: "current-password",
-  },
-  signup: {
-    title: "Create your MacroGraph account",
-    submit: "Create account",
-    pending: "Creating account...",
-    switchPrompt: "Already have an account?",
-    switchLabel: "Log in",
-    switchPath: "/login",
-    autocomplete: "new-password",
-  },
-} as const;
+/** Each provider's mark in its brand colors, as they show on a dark background. */
+export function ProviderIcon(props: { readonly provider: string }) {
+  return (
+    <Switch fallback={<IconTablerKey {...stylex.attrs(styles.providerIcon)} />}>
+      <Match when={props.provider === "twitch"}>
+        <IconSimpleIconsTwitch {...stylex.attrs(styles.providerIcon, styles.twitch)} />
+      </Match>
+      <Match when={props.provider === "github"}>
+        <IconSimpleIconsGithub {...stylex.attrs(styles.providerIcon, styles.github)} />
+      </Match>
+      <Match when={props.provider === "google"}>
+        <IconLogosGoogleIcon {...stylex.attrs(styles.providerIcon)} />
+      </Match>
+      <Match when={props.provider === "discord"}>
+        <IconSimpleIconsDiscord {...stylex.attrs(styles.providerIcon, styles.discord)} />
+      </Match>
+    </Switch>
+  );
+}
 
-export function AuthRoute(props: { readonly mode: "login" | "signup" }) {
+/**
+ * Links that sign in with each provider, or connect it when signed in. The provider returns to
+ * `returnTo`, with `?error=` when it fails.
+ */
+export function SignInProviderButtons(props: {
+  readonly returnTo: string;
+  readonly label: (provider: string) => string;
+}) {
+  const providers = createQuery(() => ({
+    queryKey: signInProvidersKey,
+    queryFn: getSignInProviders,
+    staleTime: Infinity,
+  }));
+  return (
+    <Show
+      when={!providers.isPending}
+      fallback={<LoadingState label="Loading sign-in options" style={styles.providersLoading} />}
+    >
+      <div sx={styles.providers}>
+        <For each={providers.data ?? []}>
+          {(provider) => (
+            <ButtonLink
+              // The API, not the website router, handles this path.
+              rel="external"
+              href={signInUrl(provider.id, props.returnTo)}
+              variant="secondary"
+              sx={styles.provider}
+            >
+              <ProviderIcon provider={provider.id} />
+              {props.label(provider.displayName)}
+            </ButtonLink>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
+export function SignInError(props: { readonly inCard?: boolean }) {
+  const location = useLocation();
+  return (
+    <Show when={signInErrorMessage(new URLSearchParams(location.search).get("error"))}>
+      {(message) => (
+        <p role="alert" sx={[styles.error, props.inCard && styles.cardError]}>
+          {message()}
+        </p>
+      )}
+    </Show>
+  );
+}
+
+export function AuthRoute() {
   const session = useSession();
-  const queryClient = useQueryClient();
-  const goTo = useGoTo();
   const location = useLocation();
   const next = () => safeNextPath(new URLSearchParams(location.search).get("next"));
-  const text = () => copy[props.mode];
+  const returnTo = () => withoutSignInError(location.pathname, location.search);
+
+  return (
+    <main sx={styles.page}>
+      <Show when={!session.isPending} fallback={<LoadingState label="Checking your session" />}>
+        <Show when={session.data} fallback={<LogIn returnTo={returnTo()} />}>
+          {(current) => (
+            <Show
+              when={current().user.hasSignInMethod}
+              fallback={<ConnectSignInMethod email={current().user.email} returnTo={returnTo()} />}
+            >
+              <Redirect href={next()} />
+            </Show>
+          )}
+        </Show>
+      </Show>
+    </main>
+  );
+}
+
+function LogIn(props: { readonly returnTo: string }) {
+  const queryClient = useQueryClient();
+  const [showPassword, setShowPassword] = createSignal(false);
 
   const submit = useMutation(() => ({
     networkMode: "always" as const,
     mutationFn: async (form: FormData) => {
-      const result = await submitCredentials(
-        props.mode,
+      const result = await logInWithPassword(
         String(form.get("email") ?? ""),
         String(form.get("password") ?? ""),
       );
       if (!result.success) throw new Error(result.error);
       return result;
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: sessionKey });
-      showToast({
-        tone: "success",
-        content: props.mode === "login" ? "You are now logged in" : "Welcome to MacroGraph",
-      });
-      goTo(next());
-    },
+    // The route then redirects, or asks password-only accounts to connect a sign-in method.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionKey }),
   }));
 
   return (
-    <main sx={styles.page}>
+    <div sx={styles.card}>
+      <a href="/" aria-label="MacroGraph home" sx={styles.logoLink}>
+        <img src={macrographLogo} alt="" sx={styles.logo} />
+      </a>
+      <h1 sx={styles.title}>Log in to MacroGraph</h1>
+      <p sx={styles.description}>New to MacroGraph? Continuing creates your account.</p>
+      <SignInError inCard />
+      <SignInProviderButtons
+        returnTo={props.returnTo}
+        label={(provider) => `Continue with ${provider}`}
+      />
       <Show
-        // A successful submit already navigates; redirecting again would load the page twice.
-        when={!session.data || submit.isPending || submit.isSuccess}
-        fallback={<Redirect href={next()} />}
+        when={showPassword()}
+        fallback={
+          <button type="button" sx={styles.legacyToggle} onClick={() => setShowPassword(true)}>
+            Log in with email and password
+          </button>
+        }
       >
-        <div sx={styles.card}>
-          <a href="/" aria-label="MacroGraph home" sx={styles.logoLink}>
-            <img src={macrographLogo} alt="" sx={styles.logo} />
-          </a>
-          <h1 sx={styles.title}>{text().title}</h1>
-          <form
-            sx={styles.form}
-            onSubmit={(event) => {
-              event.preventDefault();
-              submit.mutate(new FormData(event.currentTarget));
-            }}
-          >
-            <fieldset sx={styles.fieldset} disabled={submit.isPending}>
-              <label sx={styles.field}>
-                <span sx={styles.label}>Email</span>
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  autocomplete="email"
-                  placeholder="you@example.com"
-                  sx={styles.input}
-                />
-              </label>
-              <label sx={styles.field}>
-                <span sx={styles.label}>Password</span>
-                <input
-                  name="password"
-                  type="password"
-                  required
-                  minlength={props.mode === "signup" ? 8 : undefined}
-                  autocomplete={text().autocomplete}
-                  sx={styles.input}
-                />
-              </label>
-              <Show when={submit.error}>
-                {(error) => (
-                  <p role="alert" sx={styles.error}>
-                    {error().message}
-                  </p>
-                )}
-              </Show>
-              <Button type="submit" sx={styles.submit}>
-                {submit.isPending ? text().pending : text().submit}
-              </Button>
-            </fieldset>
-          </form>
-          <p sx={styles.switch}>
-            {text().switchPrompt}{" "}
-            <a href={`${text().switchPath}${location.search}`} sx={[styles.switchLink]}>
-              {text().switchLabel}
-            </a>
-          </p>
-        </div>
+        <form
+          sx={styles.form}
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit.mutate(new FormData(event.currentTarget));
+          }}
+        >
+          <fieldset sx={styles.fieldset} disabled={submit.isPending}>
+            <p sx={styles.legacyNote}>
+              Email and password login is only for existing accounts, which need to connect a
+              sign-in provider next.
+            </p>
+            <label sx={styles.field}>
+              <span sx={styles.label}>Email</span>
+              <input
+                name="email"
+                type="email"
+                required
+                autocomplete="email"
+                placeholder="you@example.com"
+                sx={styles.input}
+              />
+            </label>
+            <label sx={styles.field}>
+              <span sx={styles.label}>Password</span>
+              <input
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                sx={styles.input}
+              />
+            </label>
+            <Show when={submit.error}>
+              {(error) => (
+                <p role="alert" sx={styles.error}>
+                  {error().message}
+                </p>
+              )}
+            </Show>
+            <Button type="submit" sx={styles.submit}>
+              {submit.isPending ? "Logging in..." : "Log in"}
+            </Button>
+          </fieldset>
+        </form>
       </Show>
-    </main>
+    </div>
+  );
+}
+
+/** Password accounts connect a provider here before they can use anything else. */
+function ConnectSignInMethod(props: { readonly email: string; readonly returnTo: string }) {
+  const logOut = useLogOut();
+  return (
+    <div sx={styles.card}>
+      <a href="/" aria-label="MacroGraph home" sx={styles.logoLink}>
+        <img src={macrographLogo} alt="" sx={styles.logo} />
+      </a>
+      <h1 sx={styles.title}>Connect a sign-in method</h1>
+      <p sx={styles.description}>
+        MacroGraph is retiring email and password login. Connect an account to keep using{" "}
+        <strong sx={styles.email}>{props.email}</strong>, and use it to log in from now on.
+      </p>
+      <SignInError inCard />
+      <SignInProviderButtons
+        returnTo={props.returnTo}
+        label={(provider) => `Connect ${provider}`}
+      />
+      <button type="button" sx={styles.legacyToggle} onClick={() => logOut.mutate()}>
+        Log out
+      </button>
+    </div>
   );
 }
 
@@ -139,7 +239,47 @@ const styles = stylex.create({
   logoLink: { display: "inline-block" },
   logo: { width: 72, height: 72, borderRadius: 16 },
   title: { margin: 0, marginTop: 20, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" },
-  form: { marginTop: 28 },
+  description: {
+    margin: 0,
+    marginTop: 8,
+    marginBottom: 24,
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: colors.gray10,
+  },
+  email: { color: colors.gray12, fontWeight: 500 },
+  providers: { display: "flex", flexDirection: "column", gap: 8 },
+  providersLoading: { height: 96 },
+  provider: {
+    width: "100%",
+    height: 40,
+    boxSizing: "border-box",
+    borderRadius: 8,
+    gap: 8,
+    fontSize: 14,
+    textDecoration: "none",
+  },
+  providerIcon: { width: 16, height: 16, flexShrink: 0 },
+  twitch: { color: "#9146FF" },
+  github: { color: "#FFFFFF" },
+  discord: { color: "#5865F2" },
+  legacyToggle: {
+    marginTop: 24,
+    padding: 0,
+    border: 0,
+    backgroundColor: "transparent",
+    fontSize: 13,
+    color: { default: colors.gray10, ":hover": colors.gray12 },
+    cursor: "pointer",
+  },
+  legacyNote: { margin: 0, fontSize: 12, lineHeight: 1.5, color: colors.gray10 },
+  form: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopColor: colors.gray4,
+    borderTopStyle: "solid",
+    borderTopWidth: 1,
+  },
   fieldset: {
     display: "flex",
     flexDirection: "column",
@@ -176,8 +316,8 @@ const styles = stylex.create({
     backgroundColor: colors.red3,
     fontSize: 13,
     color: colors.red11,
+    textAlign: "left",
   },
+  cardError: { marginBottom: 16 },
   submit: { width: "100%", height: 40, marginTop: 4, borderRadius: 8, fontSize: 14 },
-  switch: { margin: 0, marginTop: 24, fontSize: 13, color: colors.gray10 },
-  switchLink: { color: colors.gray12, fontWeight: 500 },
 });

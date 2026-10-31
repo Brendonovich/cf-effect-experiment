@@ -16,6 +16,7 @@ import { For, Loading, Show, createMemo, createSignal, onCleanup } from "solid-j
 import type { PackageViewState } from "../workspace/workspace";
 
 import { colors } from "../../tokens.stylex.ts";
+import { plainDescription } from "../../ui/Description";
 import { LoadingState } from "../../ui/LoadingState";
 import { SearchInput } from "../catalog/SearchInput";
 import { SchemaReference } from "./SchemaReference";
@@ -244,7 +245,11 @@ function ReferenceView(props: {
         ...variant,
         schemas: props.schemas.filter(
           (schema) =>
-            schema.type === variant.type && matchesSearch(schema.name, schema.description),
+            schema.type === variant.type &&
+            matchesSearch(
+              schema.name,
+              schema.description === undefined ? undefined : plainDescription(schema.description),
+            ),
         ),
       }))
       .filter((group) => group.schemas.length > 0),

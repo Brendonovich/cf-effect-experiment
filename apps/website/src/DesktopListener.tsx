@@ -64,14 +64,14 @@ export function DesktopListener() {
     });
   };
 
-  createEffect(
-    () => session.data,
-    (current) => void check(current),
-  );
+  // Password-only accounts must connect a sign-in method before signing anything else in.
+  const ready = () => (session.data?.user.hasSignInMethod ? session.data : null);
+
+  createEffect(ready, (current) => void check(current));
   createEffect(
     () => undefined,
     () => {
-      const onFocus = () => void check(untrack(() => session.data));
+      const onFocus = () => void check(untrack(ready));
       window.addEventListener("focus", onFocus);
       return () => window.removeEventListener("focus", onFocus);
     },

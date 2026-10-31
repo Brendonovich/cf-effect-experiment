@@ -46,6 +46,7 @@ export function Header(props: { readonly nav?: JSX.Element; readonly actions?: J
                 email={current().user.email}
                 items={[
                   { label: "Credentials", onSelect: () => navigate("/account/credentials") },
+                  { label: "Sign-in methods", onSelect: () => navigate("/account/sign-in") },
                   { label: "Apps", onSelect: () => navigate("/account/apps") },
                 ]}
                 onSignOut={() => logOut.mutate()}

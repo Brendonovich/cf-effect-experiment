@@ -8,9 +8,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const session = {
-  user: { id: "user-1", email: "ada@example.com" },
+  user: { id: "user-1", email: "ada@example.com", hasSignInMethod: true },
   session: { id: "session-1" },
 };
+
+const signInProviders = [
+  { id: "twitch", displayName: "Twitch" },
+  { id: "github", displayName: "GitHub" },
+];
 
 const mockApi = (routes: Record<string, unknown>) =>
   vi.stubGlobal(
@@ -98,6 +103,75 @@ it("sends signed-out visitors from account pages to login and back", async () =>
   await vi.waitFor(() =>
     expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/apps")}`),
   );
+});
+
+it("offers provider sign-in and explains why one failed", async () => {
+  mockApi({
+    "/api/website/session": null,
+    "/api/website/sign-in/providers": signInProviders,
+  });
+  const { container } = renderApp("/login?next=%2Fcloud&error=account_exists");
+  await vi.waitFor(() => expect(container.textContent).toContain("Continue with Twitch"));
+  const twitch = container.querySelector<HTMLAnchorElement>(
+    'a[href^="/api/website/sign-in/twitch"]',
+  );
+  // The provider returns to this page without the old error, which then continues to `next`.
+  expect(new URL(twitch?.href ?? "", "http://localhost").searchParams.get("returnTo")).toBe(
+    "/login?next=%2Fcloud",
+  );
+  expect(twitch?.rel).toBe("external");
+  expect(container.textContent).toContain("Continue with GitHub");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "already uses that email",
+  );
+  // Email and password stays available for existing accounts, but out of the way.
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+});
+
+it("sends signups to the login page", async () => {
+  mockApi({ "/api/website/session": null, "/api/website/sign-in/providers": signInProviders });
+  const { history } = renderApp("/signup?next=%2Fcloud");
+  await vi.waitFor(() => expect(history.get()).toBe("/login?next=%2Fcloud"));
+});
+
+it("makes password-only accounts connect a sign-in method first", async () => {
+  mockApi({
+    "/api/website/session": { ...session, user: { ...session.user, hasSignInMethod: false } },
+    "/api/website/sign-in/providers": signInProviders,
+  });
+  const { container, history } = renderApp("/account/credentials");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Connect a sign-in method"),
+  );
+  expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/credentials")}`);
+  expect(container.textContent).toContain("ada@example.com");
+  const github = container.querySelector<HTMLAnchorElement>(
+    'a[href^="/api/website/sign-in/github"]',
+  );
+  expect(github?.textContent).toBe("Connect GitHub");
+});
+
+it("lists sign-in methods and keeps the last one", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/sign-in/providers": signInProviders,
+    "/api/website/sign-in-methods": [
+      {
+        providerId: "twitch",
+        providerUserId: "1001",
+        displayName: "ada",
+        email: "ada@example.com",
+      },
+    ],
+  });
+  const { container } = renderApp("/account/sign-in");
+  await vi.waitFor(() => expect(container.textContent).toContain("ada@example.com"));
+  expect(container.querySelector("h1")?.textContent).toBe("Sign-in methods");
+  const remove = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Remove",
+  );
+  expect(remove?.disabled).toBe(true);
+  await vi.waitFor(() => expect(container.textContent).toContain("Connect GitHub"));
 });
 
 it("lists credentials grouped by provider for signed-in users", async () => {

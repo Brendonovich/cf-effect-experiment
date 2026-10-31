@@ -10,6 +10,7 @@ export { PresenceList, type PresenceListProps } from "./presence/PresenceList.ts
 export { Button, type ButtonProps, ButtonLink, type ButtonLinkProps } from "./ui/Button.tsx";
 export { LoadingState } from "./ui/LoadingState.tsx";
 export { DataTypePicker } from "./ui/DataTypePicker.tsx";
+export { plainDescription } from "./ui/Description.tsx";
 export { createStateMachine } from "./ui/createStateMachine.ts";
 export {
   initializeBrowserTracing,

@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 
 import { type Package } from "@macrograph/core";
-import { LoadingState, SchemaReference } from "@macrograph/editor-ui";
+import { LoadingState, SchemaReference, plainDescription } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useParams } from "@solidjs/router";
 import { httpStatus, isServer } from "@solidjs/web";
@@ -61,7 +61,8 @@ function PackageShell(props: {
     const matches = (schema: Package.SchemaModel) =>
       query.length === 0 ||
       schema.name.toLocaleLowerCase().includes(query) ||
-      schema.description?.toLocaleLowerCase().includes(query) === true;
+      (schema.description !== undefined &&
+        plainDescription(schema.description).toLocaleLowerCase().includes(query));
     return schemaVariants
       .map((variant) => ({
         ...variant,

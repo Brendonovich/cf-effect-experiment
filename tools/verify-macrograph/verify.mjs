@@ -475,6 +475,27 @@ async function moduleReference(page) {
   await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await page.getByRole("menuitem", { name: "Delete graph", exact: true }).click();
   await newGraph.waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await page.getByRole("button", { name: "Twitch", exact: true }).click();
+  await page.getByRole("tab", { name: "Reference", exact: true }).click();
+  await page
+    .getByRole("searchbox", { name: "Search reference", exact: true })
+    .pressSequentially("Send Chat Message");
+  await page.getByRole("button", { name: "Send Chat Message", exact: true }).click();
+  await page.getByRole("heading", { name: "Send Chat Message", exact: true }).waitFor();
+  const docsLink = page.getByRole("link", { name: "Twitch docs", exact: true });
+  const docsHref = await docsLink.getAttribute("href");
+  const docsPath = join(outputDirectory, "module-reference-docs-link.png");
+  await page.screenshot({ path: docsPath, fullPage: true });
+  await evidence(docsPath, "screenshot");
+  check(
+    "module reference links a node to its external documentation",
+    docsHref === "https://dev.twitch.tv/docs/api/reference/#send-chat-message" &&
+      (await docsLink.getAttribute("target")) === "_blank"
+      ? "passed"
+      : "failed",
+    docsHref ?? undefined,
+  );
   check(
     "module navigation avoids broad reactive subscriptions",
     manifest.browser.console.some((message) => message.text.includes("[HUGE_FAN_IN]"))

@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { Show, createSignal, onSettled } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { Description } from "../../ui/Description";
 
 const enter = stylex.keyframes({
   from: { opacity: 0, transform: "translateX(8px)" },
@@ -207,7 +208,9 @@ export function SchemaInfoButton(props: {
             </div>
             <div sx={styles.detail}>
               <span sx={styles.detailLabel}>Description</span>
-              <span sx={styles.detailValue}>{props.schema.description}</span>
+              <span sx={styles.detailValue}>
+                <Description text={props.schema.description ?? ""} />
+              </span>
             </div>
           </div>
           <div sx={styles.actions}>

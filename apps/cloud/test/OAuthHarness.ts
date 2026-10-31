@@ -51,28 +51,36 @@ export interface Harness {
   readonly now: () => number;
 }
 
-export const harness = Effect.gen(function* () {
-  const pg = yield* PgliteDatabase.make;
-  const stateKey = yield* Jwt.hmacKey("state-secret");
-  const signingKey = yield* Jwt.rsaKey(yield* generateRsaPem);
-  let offset = 0;
-  const app = yield* WebsiteRoutes.layer({
-    stateKey: Effect.succeed(stateKey),
-    signingKey: Effect.succeed(signingKey),
-    issuer: origin,
-    authRedirectOrigin: origin,
-    capture: Analytics.disabled,
-    now: () => Date.now() + offset,
-  }).pipe(Layer.provide([PgliteDatabase.layer(pg), providersLayer]), HttpRouter.toHttpEffect);
-  return {
-    app,
-    pg,
-    advance: (ms: number) => {
-      offset += ms;
-    },
-    now: () => Date.now() + offset,
-  } satisfies Harness;
-});
+export const harnessWith = (
+  overrides: Partial<
+    Pick<WebsiteRoutes.Options, "authRedirectOrigin" | "providerRedirectOrigins">
+  > = {},
+) =>
+  Effect.gen(function* () {
+    const pg = yield* PgliteDatabase.make;
+    const stateKey = yield* Jwt.hmacKey("state-secret");
+    const signingKey = yield* Jwt.rsaKey(yield* generateRsaPem);
+    let offset = 0;
+    const app = yield* WebsiteRoutes.layer({
+      stateKey: Effect.succeed(stateKey),
+      signingKey: Effect.succeed(signingKey),
+      issuer: origin,
+      authRedirectOrigin: origin,
+      capture: Analytics.disabled,
+      now: () => Date.now() + offset,
+      ...overrides,
+    }).pipe(Layer.provide([PgliteDatabase.layer(pg), providersLayer]), HttpRouter.toHttpEffect);
+    return {
+      app,
+      pg,
+      advance: (ms: number) => {
+        offset += ms;
+      },
+      now: () => Date.now() + offset,
+    } satisfies Harness;
+  });
+
+export const harness = harnessWith();
 
 export const send = (app: App, path: string, init?: RequestInit) =>
   Effect.gen(function* () {
@@ -120,6 +128,10 @@ export const signIn = (pg: PGlite, id: string) =>
       id,
       `${id}@example.com`,
     ]);
+    await pg.query(
+      `insert into "user_identity" (provider_id, provider_user_id, user_id) values ('github', $1, $1)`,
+      [id],
+    );
     await pg.query(
       `insert into "session" (id, user_id, expires_at) values ($1, $2, now() + interval '20 days')`,
       [`session-${id}`, id],

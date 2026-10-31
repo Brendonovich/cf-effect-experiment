@@ -10,6 +10,7 @@ import { RequireSession } from "../session";
 
 const tabs = [
   { href: "/account/credentials", label: "Credentials" },
+  { href: "/account/sign-in", label: "Sign-in" },
   { href: "/account/apps", label: "Apps" },
 ];
 
