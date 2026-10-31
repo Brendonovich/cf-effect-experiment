@@ -10,17 +10,17 @@ This replaces server registration codes, server JWTs, the old device-code endpoi
 
 ## Standards
 
-| Spec                                                             | Used for                                                                           |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| RFC 6749 (OAuth 2.0)                                             | Token endpoint, client authentication, error responses, refresh grant              |
-| RFC 8628 (Device Authorization Grant)                            | The only user-facing flow                                                          |
-| RFC 7591 / RFC 7592 (Dynamic Client Registration and Management) | Servers register themselves                                                        |
-| RFC 7009 (Token Revocation)                                      | Sign out, disconnect                                                               |
-| RFC 6750 (Bearer Token Usage)                                    | Calling `/api/credentials` and UserInfo                                            |
-| RFC 8414 (Authorization Server Metadata)                         | Discovery                                                                          |
-| RFC 7517 / RFC 7638 (JWK, JWK Thumbprint)                        | Signing keys and `kid`                                                             |
-| RFC 9700 (OAuth 2.0 Security BCP)                                | Refresh token rotation and reuse detection                                         |
-| OpenID Connect Core 1.0                                          | ID token format and validation, UserInfo, `openid`/`email`/`offline_access` scopes |
+| Spec | Used for |
+| --- | --- |
+| RFC 6749 (OAuth 2.0) | Token endpoint, client authentication, error responses, refresh grant |
+| RFC 8628 (Device Authorization Grant) | The only user-facing flow |
+| RFC 7591 / RFC 7592 (Dynamic Client Registration and Management) | Servers register themselves |
+| RFC 7009 (Token Revocation) | Sign out, disconnect |
+| RFC 6750 (Bearer Token Usage) | Calling `/api/credentials` and UserInfo |
+| RFC 8414 (Authorization Server Metadata) | Discovery |
+| RFC 7517 / RFC 7638 (JWK, JWK Thumbprint) | Signing keys and `kid` |
+| RFC 9700 (OAuth 2.0 Security BCP) | Refresh token rotation and reuse detection |
+| OpenID Connect Core 1.0 | ID token format and validation, UserInfo, `openid`/`email`/`offline_access` scopes |
 
 We are **not** an OpenID Provider: OpenID Connect requires the authorization endpoint, which we do
 not have. ID tokens, UserInfo and claims follow OpenID Connect exactly, but we publish only RFC
@@ -32,17 +32,17 @@ The issuer is `https://macrograph.app` in production. Other stages use the reque
 preview's workers.dev URL, or localhost). Metadata is served without a path suffix, so it does not
 collide with Cloud's `/.well-known/oauth-authorization-server/cloud`.
 
-| Endpoint             | Path                                              |
-| -------------------- | ------------------------------------------------- |
-| Metadata             | `GET /.well-known/oauth-authorization-server`     |
-| JWKS                 | `GET /oauth/jwks`                                 |
-| Registration         | `POST /oauth/register`                            |
+| Endpoint | Path |
+| --- | --- |
+| Metadata | `GET /.well-known/oauth-authorization-server` |
+| JWKS | `GET /oauth/jwks` |
+| Registration | `POST /oauth/register` |
 | Client configuration | `GET`, `PUT`, `DELETE /oauth/register/:client_id` |
-| Device authorization | `POST /oauth/device_authorization`                |
-| Token                | `POST /oauth/token`                               |
-| Revocation           | `POST /oauth/revoke`                              |
-| UserInfo             | `GET`, `POST /oauth/userinfo`                     |
-| Verification page    | `/device` (`?user_code=` pre-fills it)            |
+| Device authorization | `POST /oauth/device_authorization` |
+| Token | `POST /oauth/token` |
+| Revocation | `POST /oauth/revoke` |
+| UserInfo | `GET`, `POST /oauth/userinfo` |
+| Verification page | `/device` (`?user_code=` pre-fills it) |
 
 Everything under `/oauth/` and the metadata allow any origin (CORS `*`, no cookies), because the
 playground calls them from the browser. Requests are `application/x-www-form-urlencoded` except
@@ -73,18 +73,18 @@ after 30 days. A server that gets `invalid_client` registers again.
 
 **Public clients.** Built in, no secret, `token_endpoint_auth_method: none`:
 
-| `client_id`             | Name                  |
-| ----------------------- | --------------------- |
+| `client_id` | Name |
+| --- | --- |
 | `macrograph-playground` | MacroGraph Playground |
 
 ## Scopes
 
-| Scope            | Grants                                                                 |
-| ---------------- | ---------------------------------------------------------------------- |
-| `openid`         | An ID token (`sub`) and UserInfo                                       |
-| `email`          | `email` and `email_verified` claims                                    |
-| `offline_access` | A refresh token, so the grant outlives the access token                |
-| `credentials`    | Read and refresh the user's connected credentials (`/api/credentials`) |
+| Scope | Grants |
+| --- | --- |
+| `openid` | An ID token (`sub`) and UserInfo |
+| `email` | `email` and `email_verified` claims |
+| `offline_access` | A refresh token, so the grant outlives the access token |
+| `credentials` | Read and refresh the user's connected credentials (`/api/credentials`) |
 
 Signing in to a server asks for `openid email`. Connecting a server's owner, or the playground,
 asks for `openid email offline_access credentials`.
@@ -113,13 +113,13 @@ The token response is the RFC 6749 shape plus `id_token` when `openid` was grant
 `access_token`, `token_type: "Bearer"`, `expires_in`, `scope`, `refresh_token` (only with
 `offline_access`), `id_token`.
 
-| Token                             | Format          | Lifetime                     | Stored       |
-| --------------------------------- | --------------- | ---------------------------- | ------------ |
-| Access token                      | opaque `mgat_…` | 1 hour                       | SHA-256 hash |
-| Refresh token                     | opaque `mgrt_…` | 90 days, renewed on each use | SHA-256 hash |
-| ID token                          | RS256 JWT       | 5 minutes                    | not stored   |
-| Device code                       | opaque          | 10 minutes                   | SHA-256 hash |
-| Client secret, registration token | opaque          | until rotated or deleted     | SHA-256 hash |
+| Token | Format | Lifetime | Stored |
+| --- | --- | --- | --- |
+| Access token | opaque `mgat_…` | 1 hour | SHA-256 hash |
+| Refresh token | opaque `mgrt_…` | 90 days, renewed on each use | SHA-256 hash |
+| ID token | RS256 JWT | 5 minutes | not stored |
+| Device code | opaque | 10 minutes | SHA-256 hash |
+| Client secret, registration token | opaque | until rotated or deleted | SHA-256 hash |
 
 Access tokens are opaque so revocation takes effect immediately.
 
@@ -170,14 +170,14 @@ The desktop app still sends its website session ID as a bearer token until it mo
 
 All in the account schema (`src/database/AccountDatabaseSchema.ts`):
 
-| Table                        | Holds                                                                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `auth_clients`               | Registered clients: hashed secret and registration token, metadata, created IP                                                        |
+| Table | Holds |
+| --- | --- |
+| `auth_clients` | Registered clients: hashed secret and registration token, metadata, created IP |
 | `auth_device_authorizations` | Pending device flows: hashed device code, user code, client, scope, status, user, interval, last poll, expiry, request IP and country |
-| `auth_grants`                | Client, user, scope, created, last used, expiry                                                                                       |
-| `auth_refresh_tokens`        | Hashed token, grant, expiry, when it was retired                                                                                      |
-| `auth_access_tokens`         | Hashed token, grant, scope, expiry                                                                                                    |
-| `auth_rate_limits`           | Fixed-window counters for registration and code lookups                                                                               |
+| `auth_grants` | Client, user, scope, created, last used, expiry |
+| `auth_refresh_tokens` | Hashed token, grant, expiry, when it was retired |
+| `auth_access_tokens` | Hashed token, grant, scope, expiry |
+| `auth_rate_limits` | Fixed-window counters for registration and code lookups |
 
 Grants cascade to their tokens. Deleting a client deletes its grants and device flows in the same
 transaction (no foreign key, since built-in public clients have no row).
