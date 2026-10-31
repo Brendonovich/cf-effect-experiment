@@ -183,10 +183,7 @@ function DeviceAuthorization(props: { readonly session: Session }) {
                 <div sx={styles.client}>
                   <span sx={styles.clientName}>{request().client.name}</span>
                   <Show when={!request().client.verified}>
-                    <span
-                      sx={styles.badge}
-                      title="MacroGraph hasn't checked who runs this server"
-                    >
+                    <span sx={styles.badge} title="MacroGraph hasn't checked who runs this server">
                       Unverified
                     </span>
                   </Show>
