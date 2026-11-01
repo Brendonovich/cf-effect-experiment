@@ -24,7 +24,7 @@ const pkg: Package.Model = {
   resources: [{ id: "account", name: "Account" }],
   schemas: [
     {
-      id: SchemaId.make("send-message"),
+      id: SchemaId.make("sendMessage"),
       name: "Send message",
       description: "Sends a message to the configured destination.",
       type: "exec",
@@ -44,7 +44,7 @@ const pkg: Package.Model = {
       executionOutputs: [],
     },
     {
-      id: SchemaId.make("internal-helper"),
+      id: SchemaId.make("internalHelper"),
       name: "Internal helper",
       internal: true,
       type: "pure",
@@ -70,7 +70,7 @@ const functions: ReadonlyArray<GraphFunction.Model> = [
 const authoring = BuiltinAuthoring.registry.with({
   model: pkg,
   schemas: {
-    "send-message": {
+    sendMessage: {
       generateIO: ({ declared, properties }) =>
         Result.succeed({
           ...declared,

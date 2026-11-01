@@ -95,7 +95,7 @@ describe("event graph preflight", () => {
                   }),
               });
               yield* context.schema.register({
-                id: "pure-cycle",
+                id: "pureCycle",
                 type: "pure",
                 io: (io) => ({ value: io.data.in("value", type), out: io.data.out("value", type) }),
                 run: ({ io }) => Effect.sync(() => io.out(io.value)),
@@ -149,7 +149,7 @@ describe("event graph preflight", () => {
               ...base,
               nodes: {
                 ...base.nodes,
-                source: node("source", "deleted-generated", {}, CustomTypes.packageId),
+                source: node("source", "deletedGenerated", {}, CustomTypes.packageId),
                 sink: node("sink", "sink"),
               },
               connections: [...base.connections, wire("data", "source", "value", "sink", "value")],
@@ -228,7 +228,7 @@ describe("event graph preflight", () => {
             types: definitions,
             graph: {
               ...base,
-              nodes: { ...base.nodes, a: node("a", "pure-cycle"), b: node("b", "pure-cycle") },
+              nodes: { ...base.nodes, a: node("a", "pureCycle"), b: node("b", "pureCycle") },
               connections: [
                 ...base.connections,
                 wire("a", "a", "value", "b", "value"),

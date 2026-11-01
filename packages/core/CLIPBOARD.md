@@ -25,7 +25,8 @@ removed along with their connections before the available fragment is pasted. Co
 schema metadata provides module and schema display names for this confirmation. Every
 retry revalidates against current destination state; cancel inserts nothing.
 
-Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`).
+Custom event PR #17 registers `project-events` schemas (`emit:<id>` / `on:<id>`); schema IDs
+must now be PascalCase or camelCase, so those need renaming when the branches are combined.
 Missing event definitions are removed rather than rebound to other events.
 That PR is not merged into this branch; actual event-runtime integration must be
 verified after combining the branches. Function definitions require their package's

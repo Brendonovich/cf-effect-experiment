@@ -355,7 +355,7 @@ it("cancels or skips nodes with missing schemas", async () => {
   const schemas: Clipboard.MissingSchema[] = [
     {
       package: "missing",
-      schema: "emit:node",
+      schema: "EmitNode",
       moduleName: "Missing Module",
       schemaName: "Node Created",
     },

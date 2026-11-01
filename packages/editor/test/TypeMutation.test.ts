@@ -84,7 +84,7 @@ const pkg: Package.Model = {
       executionOutputs: [],
     },
     {
-      id: SchemaId.make("person-source"),
+      id: SchemaId.make("personSource"),
       name: "Person Source",
       type: "pure",
       properties: [],
@@ -146,7 +146,7 @@ const seed: Project.Model = {
         name: "First",
         nodes: {
           make: node("make", make, { [field]: { _tag: "Some", value: "Ada" } }),
-          source: node("source", { package: pkg.id, schema: SchemaId.make("person-source") }),
+          source: node("source", { package: pkg.id, schema: SchemaId.make("personSource") }),
           break: node("break", breakRef, { value: { _type: "person", name: "Ada" } }),
           string: node("string", { package: pkg.id, schema: SchemaId.make("string") }),
         },
