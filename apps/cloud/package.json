@@ -25,6 +25,7 @@
     "@macrograph/core": "workspace:*",
     "@macrograph/editor": "workspace:*",
     "@macrograph/execution": "workspace:*",
+    "@macrograph/gateway": "workspace:*",
     "@macrograph/http-ingress": "workspace:*",
     "@macrograph/module": "workspace:*",
     "@macrograph/module-build": "workspace:*",

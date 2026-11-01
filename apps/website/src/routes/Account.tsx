@@ -3,25 +3,38 @@ import type { JSX } from "@solidjs/web";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation } from "@solidjs/router";
 import * as stylex from "@stylexjs/stylex";
-import { For } from "solid-js";
+import { createQuery } from "@tanstack/solid-query";
+import { createMemo, For } from "solid-js";
 
+import { gatewayAccessKey, getGatewayAccess } from "../api";
 import { Header } from "../Header";
-import { RequireSession } from "../session";
+import { RequireSession, useSession } from "../session";
 
 const tabs = [
   { href: "/account/credentials", label: "Credentials" },
   { href: "/account/sign-in", label: "Sign-in" },
+  { href: "/account/gateway", label: "Gateway", gateway: true },
   { href: "/account/apps", label: "Apps" },
 ];
 
 export function AccountLayout(props: { readonly children?: JSX.Element }) {
   const location = useLocation();
+  const session = useSession();
+  // Only accounts the gateway is enabled for see its tab.
+  const gateway = createQuery(() => ({
+    queryKey: gatewayAccessKey,
+    queryFn: getGatewayAccess,
+    enabled: session.data !== null && session.data !== undefined,
+  }));
+  const visibleTabs = createMemo(() =>
+    tabs.filter((tab) => !("gateway" in tab) || gateway.data?.enabled === true),
+  );
   return (
     <div sx={styles.page}>
       <Header />
       <div sx={styles.container}>
         <nav sx={styles.tabs} aria-label="Account">
-          <For each={tabs}>
+          <For each={visibleTabs()}>
             {(tab) => (
               <a
                 href={tab.href}

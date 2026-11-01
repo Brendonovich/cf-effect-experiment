@@ -12,6 +12,7 @@ import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { DocsIndexRoute, DocsLayout } from "./routes/Docs";
 import { DocsShell } from "./routes/DocsShell";
+import { GatewayRoute } from "./routes/Gateway";
 import { LandingRoute } from "./routes/Landing";
 import { ModulesIndexRoute, ModulesLayout } from "./routes/Modules";
 import { NotFoundRoute } from "./routes/NotFound";
@@ -85,6 +86,7 @@ export const routes = [
       { path: "/", component: () => <Redirect href="/account/credentials" /> },
       { path: "/credentials", component: () => <CredentialsRoute /> },
       { path: "/sign-in", component: SignInMethodsRoute },
+      { path: "/gateway", component: GatewayRoute },
       { path: "/apps", component: AppsRoute },
     ],
   },

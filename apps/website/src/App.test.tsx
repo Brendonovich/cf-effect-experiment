@@ -356,3 +356,113 @@ it("keeps a linked device code when the session refetches", async () => {
   expect(container.textContent).toContain("Approve sign-in?");
   expect(container.textContent).toContain("BCDF-GHJK");
 });
+
+it("lets the user choose tool policies and approve gateway calls", async () => {
+  const calls: Array<{ readonly method: string; readonly path: string; readonly body?: unknown }> =
+    [];
+  const approval = {
+    id: "approval-1",
+    tool: "twitch_ban_user",
+    title: "Ban User",
+    provider: "twitch",
+    account: { id: "1234", displayName: "brendonovich" },
+    arguments: { userId: "99", reason: "spam" },
+    caller: "OpenCode",
+    status: "pending",
+    result: null,
+    error: null,
+    createdAt: "2026-11-01T00:00:00.000Z",
+    expiresAt: "2026-11-01T00:10:00.000Z",
+  };
+  let approvals: ReadonlyArray<typeof approval> = [approval];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      const method = init?.method ?? "GET";
+      if (method !== "GET") {
+        calls.push({
+          method,
+          path: url.pathname,
+          ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) } : {}),
+        });
+        if (url.pathname.endsWith("/approve")) {
+          approvals = [];
+          return Response.json({ ...approval, status: "succeeded" });
+        }
+        return new Response(null, { status: 204 });
+      }
+      if (url.pathname === "/api/website/session") return Response.json(session);
+      if (url.pathname === "/api/website/gateway/access") return Response.json({ enabled: true });
+      if (url.pathname === "/api/website/gateway/approvals") return Response.json(approvals);
+      if (url.pathname === "/api/website/gateway/tools")
+        return Response.json({
+          providers: [
+            {
+              id: "twitch",
+              displayName: "Twitch",
+              accounts: [{ id: "1234", displayName: "brendonovich" }],
+              tools: [
+                {
+                  name: "twitch_ban_user",
+                  title: "Ban User",
+                  description: "Ban User on Twitch.",
+                  method: "POST",
+                  readOnly: false,
+                  policy: "approve",
+                  defaultPolicy: "approve",
+                },
+              ],
+            },
+          ],
+        });
+      return new Response(null, { status: 404 });
+    }),
+  );
+  const { container } = renderApp("/account/gateway?approval=approval-1");
+  await vi.waitFor(() => expect(container.textContent).toContain("OpenCode wants to Ban User"));
+  expect(container.querySelector('a[href="/account/gateway"]')?.textContent).toBe("Gateway");
+  expect(container.textContent).toContain('"reason": "spam"');
+  expect(container.textContent).toContain("/cloud/api/gateway/mcp");
+  expect(container.textContent).toContain("As brendonovich");
+
+  const policy = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>('[data-tool="twitch_ban_user"] button')].find(
+      (button) => button.textContent === label,
+    );
+  expect(policy("Ask")?.getAttribute("aria-pressed")).toBe("true");
+  expect(policy("Block")).toBeUndefined();
+  policy("Allow")?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "PUT",
+      path: "/api/website/gateway/tools/twitch_ban_user",
+      body: { policy: "allow" },
+    }),
+  );
+
+  [...container.querySelectorAll("button")]
+    .find((button) => button.textContent === "Approve")
+    ?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: "/api/website/gateway/approvals/approval-1/approve",
+    }),
+  );
+  await vi.waitFor(() => expect(container.textContent).not.toContain("wants to Ban User"));
+});
+
+it("hides the gateway from accounts it isn't enabled for", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/gateway/access": { enabled: false },
+    "/api/website/authorizations": [],
+  });
+  const { container } = renderApp("/account/gateway");
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain("This page isn't available for your account."),
+  );
+  expect(container.querySelector('a[href="/account/apps"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/account/gateway"]')).toBeNull();
+});

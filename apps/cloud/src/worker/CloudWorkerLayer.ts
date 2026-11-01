@@ -4,6 +4,7 @@ import * as Output from "alchemy/Output";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import {
   Etag,
+  FetchHttpClient,
   HttpMiddleware,
   HttpPlatform,
   HttpRouter,
@@ -22,6 +23,7 @@ import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
 import * as McpOAuth from "../auth/McpOAuth.ts";
+import * as McpOAuthConfig from "../auth/McpOAuthConfig.ts";
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
@@ -30,6 +32,8 @@ import * as EditorRpc from "../editor/EditorRpc.ts";
 import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
 import * as EventPolicy from "../execution/EventPolicy.ts";
+import { Gateway } from "../gateway/Gateway.ts";
+import { GatewayMcp } from "../gateway/GatewayMcp.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as Project from "../project/Project.ts";
@@ -102,6 +106,8 @@ export default Layer.unwrap(
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
+          // Comma-separated user IDs that may use the gateway while it is being tried out.
+          GATEWAY_ALLOWED_USERS: process.env.GATEWAY_ALLOWED_USERS ?? "",
           MCP_OAUTH_PUBLIC_ORIGIN:
             process.env.MCP_OAUTH_PUBLIC_ORIGIN ??
             `https://${publicHost ?? PublicHost.zoneName}${cloudPathPrefix}`,
@@ -139,7 +145,11 @@ export default Layer.unwrap(
           EditorRpcPolicy.layer,
           EventPolicy.layer,
         ).pipe(Layer.provideMerge(Layer.mergeAll(ProjectPolicy.layer, TeamPolicy.layer)));
-        const services = Layer.mergeAll(EditorRpc.layer, Event.layer(workerOperations)).pipe(
+        const services = Layer.mergeAll(
+          EditorRpc.layer,
+          Event.layer(workerOperations),
+          Gateway.layer.pipe(Layer.provide(FetchHttpClient.layer)),
+        ).pipe(
           Layer.provideMerge(Credential.layer),
           Layer.provideMerge(Deployment.layer(workerOperations, deploymentsResource)),
           Layer.provideMerge(Project.layer(workerOperations, deploymentsResource)),
@@ -216,6 +226,7 @@ export default Layer.unwrap(
             apiRoutes,
             docsRoutes,
             mcpRoutes,
+            GatewayMcp.layer(),
             McpOAuth.layer({
               authenticateSession: authentication.authenticateSession,
               limitRegistration: (key) => mcpOAuthRegistrationRateLimit.limit({ key }),
@@ -250,6 +261,11 @@ export default Layer.unwrap(
                   return yield* CloudMcp.authenticated(
                     app,
                     authentication.authenticateMcpBearer(),
+                  ).pipe(HttpMiddleware.cors());
+                if (resolved.path === GatewayMcp.path)
+                  return yield* GatewayMcp.authenticated(
+                    app,
+                    authentication.authenticateMcpBearer(McpOAuthConfig.gateway),
                   ).pipe(HttpMiddleware.cors());
                 if (forwarded.headers.get("upgrade")?.toLowerCase() === "websocket")
                   return yield* app;
