@@ -194,7 +194,9 @@ export const gatewayKeys = {
 };
 
 export const gateway = {
-  access: () => gatewayRequest<{ readonly enabled: boolean }>("/access"),
+  /** Treats an unreachable gateway as disabled, since every signed-in page checks this. */
+  access: () =>
+    gatewayRequest<{ readonly enabled: boolean }>("/access").catch(() => ({ enabled: false })),
   tools: () => gatewayRequest<{ readonly providers: ReadonlyArray<GatewayProvider> }>("/tools"),
   setPolicy: (input: { readonly tool: string; readonly policy: GatewayPolicy }) =>
     gatewayRequest<void>(`/tools/${encodeURIComponent(input.tool)}`, {
