@@ -58,7 +58,7 @@ export interface Harness {
 
 export const harnessWith = (
   overrides: Partial<
-    Pick<WebsiteRoutes.Options, "authRedirectOrigin" | "providerRedirectOrigins">
+    Pick<WebsiteRoutes.Options, "authRedirectOrigin" | "providerRedirectOrigins" | "devSignIn">
   > = {},
 ) =>
   Effect.gen(function* () {

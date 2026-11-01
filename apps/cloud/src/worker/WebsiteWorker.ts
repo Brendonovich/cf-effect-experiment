@@ -5,6 +5,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
+import * as EarlyAccess from "../EarlyAccess.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive } from "../Storage.ts";
@@ -41,6 +42,7 @@ export default Layer.unwrap(
     const signingKeyPem = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteSigningKey));
     // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
+    const dev = yield* EarlyAccess.isDev;
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
       [
@@ -82,6 +84,7 @@ export default Layer.unwrap(
           ...(PublicHost.isPreviewStage(stage)
             ? { PREVIEW_ALLOWED_USERS: process.env.PREVIEW_ALLOWED_USERS ?? "" }
             : {}),
+          ...(dev ? { WEBSITE_DEV_SIGN_IN: "1" } : {}),
           ...(process.env.WEBSITE_AUTH_REDIRECT_ORIGIN === undefined
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
@@ -146,6 +149,8 @@ export default Layer.unwrap(
             ? { providerRedirectOrigins: PublicHost.providerRedirectOrigins }
             : {}),
           preview: PublicHost.isPreviewStage(stage),
+          devSignIn:
+            (yield* Config.String("WEBSITE_DEV_SIGN_IN").pipe(Config.withDefault(""))) === "1",
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
         }).pipe(
           Layer.provide(OAuthProviders.layer),
