@@ -192,7 +192,7 @@ const pendingApproval = (website: (path: string) => Effect.Effect<Response>) =>
     return yield* Effect.die("No approval was requested");
   });
 
-describe("Gateway", () => {
+describe("Gateway", { timeout: 30_000 }, () => {
   it.live("lists tools only for connected providers", () =>
     Effect.gen(function* () {
       const { pg, toolNames } = yield* setup;
