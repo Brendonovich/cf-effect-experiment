@@ -27,6 +27,7 @@ import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as DeploymentPolicy from "../deployment/DeploymentPolicy.ts";
+import * as EarlyAccess from "../EarlyAccess.ts";
 import * as EditorRpc from "../editor/EditorRpc.ts";
 import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
@@ -108,7 +109,7 @@ export default Layer.unwrap(
         env: {
           ...credentialEnvironment,
           // Comma-separated user IDs that may use the gateway while it is being tried out.
-          GATEWAY_ALLOWED_USERS: process.env.GATEWAY_ALLOWED_USERS ?? "",
+          GATEWAY_ALLOWED_USERS: yield* EarlyAccess.allowedUsers("GATEWAY_ALLOWED_USERS"),
           MCP_OAUTH_PUBLIC_ORIGIN:
             process.env.MCP_OAUTH_PUBLIC_ORIGIN ??
             `https://${publicHost ?? PublicHost.zoneName}${cloudPathPrefix}`,
