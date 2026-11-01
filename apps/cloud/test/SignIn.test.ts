@@ -1,8 +1,9 @@
 import { afterEach, assert, describe, it, vi } from "@effect/vitest";
 import { Effect } from "effect";
 
+import * as EarlyAccess from "../src/EarlyAccess.ts";
 import * as Password from "../src/website/Password.ts";
-import { type App, body, harness, harnessWith, send, string } from "./OAuthHarness.ts";
+import { type App, body, harness, harnessWith, send, signIn, string } from "./OAuthHarness.ts";
 
 interface TwitchUser {
   readonly sub: string;
@@ -339,6 +340,8 @@ describe("dev sign-in", () => {
       const first = yield* devSignIn(app);
       assert.strictEqual(location(first).pathname, "/cloud");
       const { user } = yield* sessionOf(app, first);
+      // A fixed ID, so early access allowlists can include it.
+      assert.strictEqual(user.id, EarlyAccess.devUserId);
       assert.strictEqual(user.email, "dev@macrograph.localhost");
       assert.isTrue(user.hasSignInMethod);
 
@@ -356,25 +359,14 @@ describe("dev sign-in", () => {
     }),
   );
 
-  it.effect("connects to a signed-in password account", () =>
+  it.effect("signs in as the dev account even when signed in", () =>
     Effect.gen(function* () {
       const { app, pg } = yield* harnessWith({ devSignIn: true });
-      yield* Effect.promise(() =>
-        pg.exec(
-          `insert into "user" (id, email, hashed_password) values ('legacy', 'legacy@example.com', 'x');
-           insert into "session" (id, user_id, expires_at) values ('legacy-session', 'legacy', now() + interval '20 days')`,
-        ),
-      );
-      const cookie = "auth_session=legacy-session";
-      const response = yield* devSignIn(app, { cookie });
+      const other = yield* signIn(pg, "other");
+      const response = yield* devSignIn(app, { cookie: other.cookie });
       assert.isNull(location(response).searchParams.get("error"));
-      assert.isUndefined(cookieValue(response, "auth_session"));
-      const session = yield* body(
-        yield* send(app, "/api/website/session", { headers: { ...local, cookie } }),
-      );
-      const user = session.user as Record<string, unknown>;
-      assert.strictEqual(user.id, "legacy");
-      assert.isTrue(user.hasSignInMethod);
+      const { user } = yield* sessionOf(app, response);
+      assert.strictEqual(user.id, EarlyAccess.devUserId);
     }),
   );
 });

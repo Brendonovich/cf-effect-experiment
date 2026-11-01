@@ -13,6 +13,7 @@ import {
   userIdentities,
 } from "../database/AccountDatabaseSchema.ts";
 import * as Database from "../database/Database.ts";
+import * as EarlyAccess from "../EarlyAccess.ts";
 import * as Jwt from "./Jwt.ts";
 import * as OAuthServer from "./OAuthServer.ts";
 import * as Password from "./Password.ts";
@@ -62,7 +63,8 @@ export interface Options {
   readonly preview?: boolean;
   /**
    * Offers a shared dev account that signs in without a provider, from localhost only. Providers
-   * return to production's `/auth/proxy`, which can't finish a local sign-in.
+   * return to production's `/auth/proxy`, which can't finish a local sign-in. The account's ID is
+   * {@link EarlyAccess.devUserId}, which `alchemy dev` adds to early access allowlists.
    */
   readonly devSignIn?: boolean;
   readonly capture: Analytics.Capture;
@@ -411,6 +413,7 @@ export const layer = (options: Options) =>
         providerId: string,
         identity: OAuthProviders.Identity,
         linkUserId: string | undefined,
+        newUserId = Session.generateId(15),
       ) =>
         Effect.gen(function* (): Effect.fn.Return<
           | { readonly userId: string; readonly event: Analytics.Event }
@@ -460,7 +463,7 @@ export const layer = (options: Options) =>
             .limit(1)
             .pipe(Effect.orDie);
           if (taken.length > 0) return { error: "account_exists" };
-          const userId = Session.generateId(15);
+          const userId = newUserId;
           const created = yield* database
             .transaction((transaction) =>
               Effect.gen(function* () {
@@ -841,13 +844,14 @@ export const layer = (options: Options) =>
               const returnTo = PreviewAuth.safeNext(
                 requestUrl(request).searchParams.get("returnTo"),
               );
-              const current = yield* optionalWebsiteSession(request);
+              // Always the dev account, even when signed in, so early access allowlists apply.
               const result = yield* resolveSignIn(
                 devSignInProvider.id,
                 devIdentity,
-                current?.user.id,
+                undefined,
+                EarlyAccess.devUserId,
               );
-              return yield* finishSignIn(request, returnTo, result, current !== undefined);
+              return yield* finishSignIn(request, returnTo, result, false);
             }),
           ),
         );
