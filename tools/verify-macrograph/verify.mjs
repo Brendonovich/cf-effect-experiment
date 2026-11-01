@@ -24,6 +24,7 @@ const supportedModes = new Set([
   "function-queues",
   "module-reference",
   "journey",
+  "print-log",
   "all",
 ]);
 const interactionTimeout = Number(process.env.MACROGRAPH_VERIFY_INTERACTION_TIMEOUT ?? 10_000);
@@ -609,6 +610,135 @@ async function persistenceExportJourney(page) {
   await evidence(path, "screenshot");
 }
 
+async function printLog(page) {
+  const graphId = "verify-print-graph";
+  const connection = (id, outNodeId, inNodeId) => ({
+    id,
+    outNodeId,
+    outIo: { _tag: "Port", id: "exec" },
+    inNodeId,
+    inIoId: "exec",
+  });
+  const node = (id, name, schema, position, properties = {}, inputDefaults = {}) => ({
+    id,
+    name,
+    properties,
+    inputDefaults,
+    schema: { package: "macrograph.app/macrograph/utilities", schema },
+    position,
+  });
+  const projectPath = join(outputDirectory, "print-project.json");
+  await writeFile(
+    projectPath,
+    JSON.stringify({
+      version: 1,
+      project: {
+        name: "Print verification",
+        functions: {},
+        engines: {},
+        constants: {},
+        types: {},
+        queues: {},
+        graphs: {
+          [graphId]: {
+            canvas: {
+              id: graphId,
+              name: "Print Graph",
+              nodes: {
+                tick: node("tick", "Every Second", "Tick", { x: 0, y: 0 }, { intervalSeconds: 1 }),
+                print: node(
+                  "print",
+                  "Verify Print",
+                  "Print",
+                  { x: 1200, y: 900 },
+                  {},
+                  { in: "printed by verification" },
+                ),
+              },
+              connections: [connection("tick-print", "tick", "print")],
+            },
+          },
+        },
+      },
+    }),
+  );
+  await evidence(projectPath, "project-import");
+  await waitForAppShell(page);
+  page.once("dialog", (dialog) => dialog.accept());
+  const importNavigation = page.waitForEvent("framenavigated");
+  await page.locator('input[type="file"]').setInputFiles(projectPath);
+  await importNavigation;
+  await waitForAppShell(page);
+
+  const properties = page.getByRole("region", { name: "Properties", exact: true });
+  const print = page.getByRole("region", { name: "Print", exact: true });
+  await properties.waitFor({ timeout: uiTimeout });
+  const entries = print.locator("[data-print-entry]");
+  await entries
+    .filter({ hasText: "printed by verification" })
+    .first()
+    .waitFor({ timeout: uiTimeout });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-print-entry]").length >= 2,
+    undefined,
+    { timeout: uiTimeout },
+  );
+  const times = await entries
+    .locator("time")
+    .evaluateAll((elements) =>
+      elements.map((element) => Date.parse(element.getAttribute("datetime") ?? "")),
+    );
+  check(
+    "print entries are ordered newest first",
+    times.length >= 2 && times.every((time, index) => index === 0 || times[index - 1] >= time)
+      ? "passed"
+      : "failed",
+    times.join(", "),
+  );
+
+  await print.getByRole("button", { name: "Verify Print", exact: true }).first().click();
+  await page.getByRole("button", { name: "Print Graph", exact: true }).first().waitFor();
+  await properties.getByText("Node", { exact: true }).waitFor({ timeout: interactionTimeout });
+  await properties
+    .getByRole("button", { name: "Verify Print", exact: true })
+    .waitFor({ timeout: interactionTimeout });
+  const nodeBox = await page.locator('[data-node-id="print"]').first().boundingBox();
+  const viewport = page.viewportSize();
+  const centre = nodeBox && { x: nodeBox.x + nodeBox.width / 2, y: nodeBox.y + nodeBox.height / 2 };
+  check(
+    "clicking a print node name opens the graph centred on the selected node",
+    centre !== null &&
+      viewport !== null &&
+      centre.x > 0 &&
+      centre.x < viewport.width &&
+      centre.y > 0 &&
+      centre.y < viewport.height
+      ? "passed"
+      : "failed",
+    centre === null
+      ? "node not rendered"
+      : `node centre ${Math.round(centre.x)},${Math.round(centre.y)}`,
+  );
+  const navigatedPath = join(outputDirectory, "print-log-navigated.png");
+  await page.screenshot({ path: navigatedPath, fullPage: true });
+  await evidence(navigatedPath, "screenshot");
+
+  await page.keyboard.press("Delete");
+  await print
+    .getByText("Deleted node", { exact: true })
+    .first()
+    .waitFor({ timeout: interactionTimeout });
+  check(
+    "entries from a deleted node are not navigable",
+    (await print.getByRole("button", { name: "Verify Print", exact: true }).count()) === 0
+      ? "passed"
+      : "failed",
+  );
+  const deletedPath = join(outputDirectory, "print-log-deleted.png");
+  await page.screenshot({ path: deletedPath, fullPage: true });
+  await evidence(deletedPath, "screenshot");
+}
+
 async function cleanup() {
   if (context !== undefined) await context.close().catch(() => {});
   if (appProcess !== undefined && appProcess.exitCode === null) {
@@ -655,7 +785,7 @@ process.once("SIGTERM", () => void handleSignal("SIGTERM"));
 async function main() {
   if (!supportedModes.has(mode))
     throw new Error(
-      `Usage: verify.mjs [doctor|smoke|function-navigation|function-queues|module-reference|journey|all]`,
+      `Usage: verify.mjs [doctor|smoke|function-navigation|function-queues|module-reference|journey|print-log|all]`,
     );
   await mkdir(outputDirectory, { recursive: true });
   await doctor();
@@ -667,6 +797,7 @@ async function main() {
     if (mode === "module-reference" || mode === "all") await moduleReference(page);
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
     if (mode === "function-queues" || mode === "all") await functionQueues(page);
+    if (mode === "print-log" || mode === "all") await printLog(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
     const unexpectedFailedRequests = manifest.browser.failedRequests.filter(
       (request) => request.ignored !== true,
@@ -692,9 +823,7 @@ async function main() {
     check(
       "failed browser requests",
       unexpectedFailedRequests.length === 0 ? "passed" : "failed",
-      unexpectedFailedRequests
-        .map((request) => `${request.error} ${request.url}`)
-        .join("; "),
+      unexpectedFailedRequests.map((request) => `${request.error} ${request.url}`).join("; "),
     );
   }
   manifest.status = "passed";

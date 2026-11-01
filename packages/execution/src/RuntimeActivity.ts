@@ -5,6 +5,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Logger,
   PubSub,
   Schema,
   Semaphore,
@@ -16,6 +17,13 @@ import * as Executor from "./Executor.ts";
 
 export const Status = Schema.Literals(["running", "complete", "failed", "interrupted"]);
 
+export const Log = Schema.Struct({
+  timestamp: Schema.Number,
+  level: Schema.String,
+  message: Schema.String,
+});
+export type Log = typeof Log.Type;
+
 export const Node = Schema.Struct({
   id: Schema.String,
   graphId: Schema.String,
@@ -25,6 +33,7 @@ export const Node = Schema.Struct({
   finishedAt: Schema.NullOr(Schema.Number),
   status: Status,
   error: Schema.NullOr(Schema.String),
+  logs: Schema.Array(Log),
 });
 export type Node = typeof Node.Type;
 
@@ -43,7 +52,14 @@ export const Event = Schema.Struct({
 });
 export type Event = typeof Event.Type;
 
-export const limits = { events: 100, nodes: 200, payload: 8192, error: 2048 } as const;
+export const limits = {
+  events: 100,
+  nodes: 200,
+  logs: 50,
+  payload: 8192,
+  error: 2048,
+  log: 2048,
+} as const;
 
 export class ReplayUnavailable extends Schema.TaggedError<ReplayUnavailable>()(
   "ReplayUnavailable",
@@ -107,6 +123,13 @@ const display = (value: unknown, limit: number): string => {
   } catch {
     return '"[unserializable]"';
   }
+};
+
+const displayLog = (message: unknown): string => {
+  const text = (Array.isArray(message) ? message : [message])
+    .map((part) => (typeof part === "string" ? part : display(part, limits.log)))
+    .join(" ");
+  return text.length <= limits.log ? text : `${text.slice(0, limits.log - 16)}... [truncated]`;
 };
 
 export class Service extends Context.Service<
@@ -205,9 +228,21 @@ export const layer = Layer.effect(Service)(
     const executionEnvironment = Executor.inProcessExecution((key, nodeExecutor) =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
-          const effect = nodeExecutor.executeNode(key);
           const eventId = yield* CurrentEvent;
-          if (eventId === undefined) return yield* restore(effect);
+          if (eventId === undefined) return yield* restore(nodeExecutor.executeNode(key));
+          const logs: Array<Log> = [];
+          const effect = nodeExecutor.executeNode(key).pipe(
+            Effect.withLogger(
+              Logger.make(({ message, logLevel, date }) => {
+                if (logs.length >= limits.logs) logs.shift();
+                logs.push({
+                  timestamp: date.getTime(),
+                  level: logLevel,
+                  message: displayLog(message),
+                });
+              }),
+            ),
+          );
           const startedAt = yield* Clock.currentTimeMillis;
           yield* update((events) =>
             events.map((event) =>
@@ -226,6 +261,7 @@ export const layer = Layer.effect(Service)(
                         finishedAt: null,
                         status: "running",
                         error: null,
+                        logs: [],
                       },
                     ],
                   },
@@ -242,7 +278,9 @@ export const layer = Layer.effect(Service)(
                         : {
                             ...event,
                             nodes: event.nodes.map((node) =>
-                              node.id === key.traceId ? { ...node, ...finished } : node,
+                              node.id === key.traceId
+                                ? { ...node, ...finished, logs: [...logs] }
+                                : node,
                             ),
                           },
                     ),

@@ -228,6 +228,7 @@ describe("RuntimeActivity", () => {
           finishedAt: captured.finishedAt,
           status: "complete",
           error: null,
+          logs: [],
         },
       ]);
       assert.deepStrictEqual(
@@ -236,6 +237,31 @@ describe("RuntimeActivity", () => {
       );
       yield* executeNode(activity, "untracked", Effect.succeed(result));
       assert.strictEqual(yield* activity.snapshot, events);
+    }).pipe(Effect.provide(RuntimeActivity.layer)),
+  );
+
+  it.effect("records logs emitted while a tracked node runs", () =>
+    Effect.gen(function* () {
+      const activity = yield* RuntimeActivity.Service;
+      const timestamp = yield* Clock.currentTimeMillis;
+      yield* activity.track(
+        "test",
+        { _tag: "Message" },
+        executeNode(
+          activity,
+          "one",
+          Effect.logInfo("hello").pipe(
+            Effect.andThen(Effect.logWarning("careful", { count: 2 })),
+            Effect.as(result),
+          ),
+        ),
+      );
+      yield* Effect.logInfo("outside a node");
+      const [event] = yield* activity.snapshot;
+      assert.deepStrictEqual(event?.nodes[0]?.logs, [
+        { timestamp, level: "Info", message: "hello" },
+        { timestamp, level: "Warn", message: 'careful {"count":2}' },
+      ]);
     }).pipe(Effect.provide(RuntimeActivity.layer)),
   );
 

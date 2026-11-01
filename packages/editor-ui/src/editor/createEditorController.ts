@@ -9,7 +9,7 @@ import { createEditorCatalog } from "./catalog/createEditorCatalog";
 import { createEditorCommands } from "./createEditorCommands";
 import { createEditorActivity } from "./session/createEditorActivity";
 import { createEditorConnection } from "./session/createEditorConnection";
-import { createEditorFollow } from "./session/createEditorFollow";
+import { createEditorFollow, viewForTarget } from "./session/createEditorFollow";
 import { createEditorPresence } from "./session/createEditorPresence";
 import { createEditorStore } from "./store";
 import { createEditorWorkspace } from "./workspace/createEditorWorkspace";
@@ -76,6 +76,25 @@ export function createEditorController<Connection extends EditorConnection>(
   const catalog = createEditorCatalog(editor, layout.graphs);
   const commands = createEditorCommands(editor, connection, layout);
 
+  /** Opens a graph in the focused pane, centred on and selecting one of its nodes. */
+  const revealNode = (graphId: string, nodeId: string) => {
+    const node = editor.store.project?.graphs[graphId]?.nodes[nodeId];
+    if (node === undefined) return;
+    const reveal = () => {
+      const view = viewForTarget({ graphId, point: node.position }, presence.canvasSize(), {
+        origin: layout.canvasOrigin(),
+        scale: layout.canvasScale(),
+      });
+      if (view !== null) layout.setCanvasOrigin(view.origin);
+      layout.setSelectedNodeIds([nodeId]);
+    };
+    const view = layout.activeWorkspaceView();
+    if (view.type === "graph" && view.graphId === graphId) return reveal();
+    layout.setSelectedGraphId(graphId);
+    // Opening a graph restores its saved view in a microtask; reveal the node after that.
+    queueMicrotask(reveal);
+  };
+
   return {
     editor,
     layout,
@@ -85,6 +104,7 @@ export function createEditorController<Connection extends EditorConnection>(
     follow,
     catalog,
     commands,
+    revealNode,
     openProjectSettings: () => layout.openProjectSettings(layout.workspace().focusedPaneId),
     refreshModuleData: connection.refreshModuleData,
   };
