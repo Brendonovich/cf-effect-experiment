@@ -306,3 +306,75 @@ describe("signing in with a provider", () => {
     }),
   );
 });
+
+describe("dev sign-in", () => {
+  const local = { "x-forwarded-host": "localhost:5176" };
+  const providerIds = (app: App) =>
+    Effect.gen(function* () {
+      const response = yield* send(app, "/api/website/sign-in/providers", { headers: local });
+      const providers: Array<{ readonly id: string }> = yield* Effect.promise(() =>
+        response.json(),
+      );
+      return providers.map((provider) => provider.id);
+    });
+  const devSignIn = (app: App, headers: Record<string, string> = {}) =>
+    send(app, `/api/website/sign-in/dev?returnTo=${encodeURIComponent("/cloud")}`, {
+      headers: { ...local, ...headers },
+    });
+
+  it.effect("isn't offered unless enabled", () =>
+    Effect.gen(function* () {
+      const { app } = yield* harness;
+      assert.notInclude(yield* providerIds(app), "dev");
+      assert.strictEqual((yield* devSignIn(app)).status, 400);
+    }),
+  );
+
+  it.effect("signs in to one shared account from localhost", () =>
+    Effect.gen(function* () {
+      const { app } = yield* harnessWith({ devSignIn: true });
+      // Listed first, since it's the quickest way in locally.
+      assert.strictEqual((yield* providerIds(app))[0], "dev");
+
+      const first = yield* devSignIn(app);
+      assert.strictEqual(location(first).pathname, "/cloud");
+      const { user } = yield* sessionOf(app, first);
+      assert.strictEqual(user.email, "dev@macrograph.localhost");
+      assert.isTrue(user.hasSignInMethod);
+
+      const second = yield* sessionOf(app, yield* devSignIn(app));
+      assert.strictEqual(second.user.id, user.id);
+    }),
+  );
+
+  it.effect("refuses other origins", () =>
+    Effect.gen(function* () {
+      const { app } = yield* harnessWith({ devSignIn: true });
+      const response = yield* devSignIn(app, { "x-forwarded-host": "macrograph.app" });
+      assert.strictEqual(response.status, 404);
+      assert.isUndefined(cookieValue(response, "auth_session"));
+    }),
+  );
+
+  it.effect("connects to a signed-in password account", () =>
+    Effect.gen(function* () {
+      const { app, pg } = yield* harnessWith({ devSignIn: true });
+      yield* Effect.promise(() =>
+        pg.exec(
+          `insert into "user" (id, email, hashed_password) values ('legacy', 'legacy@example.com', 'x');
+           insert into "session" (id, user_id, expires_at) values ('legacy-session', 'legacy', now() + interval '20 days')`,
+        ),
+      );
+      const cookie = "auth_session=legacy-session";
+      const response = yield* devSignIn(app, { cookie });
+      assert.isNull(location(response).searchParams.get("error"));
+      assert.isUndefined(cookieValue(response, "auth_session"));
+      const session = yield* body(
+        yield* send(app, "/api/website/session", { headers: { ...local, cookie } }),
+      );
+      const user = session.user as Record<string, unknown>;
+      assert.strictEqual(user.id, "legacy");
+      assert.isTrue(user.hasSignInMethod);
+    }),
+  );
+});
