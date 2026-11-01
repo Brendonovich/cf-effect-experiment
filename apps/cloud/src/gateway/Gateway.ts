@@ -3,7 +3,9 @@ import {
   Execute,
   defaultPolicy,
   type Inputs,
+  type InvalidInput,
   type Policy,
+  type PreparedRequest,
   type Tool,
 } from "@macrograph/gateway";
 import { and, desc, eq, gt, lte } from "drizzle-orm";
@@ -107,6 +109,13 @@ export class Service extends Context.Service<
       id: string,
       timeoutMs: number,
     ) => Effect.Effect<Approval | undefined>;
+    /** Sends a request the gateway prepared itself, such as listing GitHub repositories. */
+    readonly request: (
+      userId: string,
+      providerId: string,
+      accountId: string,
+      prepared: PreparedRequest,
+    ) => Effect.Effect<{ readonly response: Execute.Response } | { readonly error: string }>;
   }
 >()("macrograph/cloudflare/Gateway") {}
 
@@ -154,24 +163,29 @@ export const layer = Layer.effect(Service)(
           Effect.map((rows) => rows[0]?.policy ?? defaultPolicy(tool)),
         );
 
-    /** Sends the request, refreshing the account's token once if the provider rejects it. */
-    const run = (userId: string, tool: Tool, accountId: string, inputs: Inputs) =>
+    /** Sends a request as an account, refreshing its token once if the provider rejects it. */
+    const send = (
+      userId: string,
+      providerId: string,
+      accountId: string,
+      prepare: (account: Account) => Effect.Effect<PreparedRequest, InvalidInput>,
+    ) =>
       Effect.gen(function* () {
-        const provider = Catalog.provider(tool.provider);
-        if (provider === undefined) return { error: `Unknown provider ${tool.provider}` };
+        const provider = Catalog.provider(providerId);
+        if (provider === undefined) return { error: `Unknown provider ${providerId}` };
         const rows = yield* credentialRows(userId);
         const row = rows.find(
-          (row) => row.providerId === tool.provider && row.providerUserId === accountId,
+          (row) => row.providerId === providerId && row.providerUserId === accountId,
         );
         if (row === undefined)
           return { error: `The ${provider.displayName} account is no longer connected` };
-        const prepared = yield* tool.prepare(inputs, toAccount(row));
+        const prepared = yield* prepare(toAccount(row));
         const clientId = providers.get(provider.id)?.clientId;
-        const send = (accessToken: string) =>
+        const execute = (accessToken: string) =>
           Execute.execute(provider, prepared, { accessToken, clientId }).pipe(
             Effect.provideService(HttpClient.HttpClient, httpClient),
           );
-        let response = yield* send(row.token.access_token);
+        let response = yield* execute(row.token.access_token);
         if (response.status === 401) {
           const refreshed = yield* CredentialStore.refresh(
             database,
@@ -181,7 +195,7 @@ export const layer = Layer.effect(Service)(
             accountId,
           );
           if (refreshed !== undefined && refreshed.token.access_token !== row.token.access_token)
-            response = yield* send(refreshed.token.access_token);
+            response = yield* execute(refreshed.token.access_token);
         }
         return { response };
       }).pipe(
@@ -190,6 +204,9 @@ export const layer = Layer.effect(Service)(
           GatewayRequestError: (error) => Effect.succeed({ error: error.message }),
         }),
       );
+
+    const run = (userId: string, tool: Tool, accountId: string, inputs: Inputs) =>
+      send(userId, tool.provider, accountId, (account) => tool.prepare(inputs, account));
 
     const toApproval = (row: ApprovalRow, accounts: ReadonlyArray<Account>): Approval => ({
       id: row.id,
@@ -420,6 +437,9 @@ export const layer = Layer.effect(Service)(
         }),
 
       await: awaitApproval,
+
+      request: (userId, providerId, accountId, prepared) =>
+        send(userId, providerId, accountId, () => Effect.succeed(prepared)),
     };
   }),
 );

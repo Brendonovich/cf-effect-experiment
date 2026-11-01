@@ -4,11 +4,16 @@ import { assert, describe, it } from "@effect/vitest";
 import { ApiCaller } from "@macrograph/project-api";
 import { ConfigProvider, Effect, Fiber, Layer } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse, HttpRouter } from "effect/http";
+import { DatabaseSync } from "node:sqlite";
 
+import type { ConfigureRequest, Status } from "../src/gateway/GatewayDO.ts";
+
+import * as Authentication from "../src/auth/Authentication.ts";
 import * as OAuthProviders from "../src/auth/OAuthProviders.ts";
+import { EventLog } from "../src/gateway/EventLog.ts";
 import { Gateway } from "../src/gateway/Gateway.ts";
+import { GatewayHttp } from "../src/gateway/GatewayHttp.ts";
 import { GatewayMcp } from "../src/gateway/GatewayMcp.ts";
-import { GatewayRoutes } from "../src/website/GatewayRoutes.ts";
 import { type App, body, send, signIn } from "./OAuthHarness.ts";
 import * as PgliteDatabase from "./PgliteDatabase.ts";
 
@@ -37,6 +42,49 @@ const connectTwitch = (pg: PGlite, userId: string, accountId: string, displayNam
     ),
   );
 
+/** An in-memory stand-in for a user's GatewayDO. */
+const fakeObject = () => {
+  const database = new DatabaseSync(":memory:");
+  const log = EventLog.make({
+    exec: (query, ...bindings) => {
+      const rows = database.prepare(query).all(...bindings);
+      return { toArray: () => rows as ReadonlyArray<Record<string, unknown>> };
+    },
+  });
+  const configured: Array<ConfigureRequest> = [];
+  const status = (): Status => {
+    const last = configured.at(-1);
+    return {
+      subscriptions: {
+        twitch: last?.subscriptions.twitch ?? {},
+        github: last?.subscriptions.github ?? [],
+        discord: null,
+      },
+      discord: { status: "off", error: null },
+      error: null,
+    };
+  };
+  const object: GatewayHttp.GatewayObject = {
+    configure: (request) =>
+      Effect.sync(() => {
+        configured.push(request);
+        return status();
+      }),
+    status: () => Effect.sync(status),
+    ingress: () => Effect.succeed({ status: 404 }),
+    events: ({ after, limit }) =>
+      Effect.sync(() =>
+        after === undefined ? log.latest(limit).toReversed() : log.after(after, limit),
+      ),
+    webhooks: () => Effect.sync(() => log.webhooks().map(({ secret: _, ...webhook }) => webhook)),
+    addWebhook: (request) => Effect.sync(() => log.addWebhook(request)),
+    removeWebhook: (id) => Effect.sync(() => log.removeWebhook(id)),
+    deliveries: (webhookId) => Effect.sync(() => log.deliveries(webhookId)),
+    stream: () => Effect.die("unused"),
+  };
+  return { object, log, configured };
+};
+
 const setupWith = (options: { readonly allowedUsers: string }) =>
   Effect.gen(function* () {
     const pg = yield* PgliteDatabase.make;
@@ -61,8 +109,16 @@ const setupWith = (options: { readonly allowedUsers: string }) =>
         ),
       ]),
     );
+    const authentication = yield* Authentication.Service.pipe(
+      Effect.provide(Authentication.layer.pipe(Layer.provide(database))),
+    );
+    const object = fakeObject();
     const routes: App = yield* Layer.mergeAll(
-      GatewayRoutes.layer,
+      GatewayHttp.layer({
+        objects: () => object.object,
+        authenticateSession: authentication.authenticateSession,
+        ingressOrigin: () => "https://ingress.example",
+      }),
       GatewayMcp.layer({ approvalWaitMs: 10_000 }),
     ).pipe(Layer.provide([gateway, database]), HttpRouter.toHttpEffect);
     const session = yield* signIn(pg, "owner");
@@ -90,16 +146,25 @@ const setupWith = (options: { readonly allowedUsers: string }) =>
         })),
       );
     const website = (path: string, init?: RequestInit) =>
-      send(routes, `/api/website/gateway${path}`, {
+      send(routes, `${GatewayHttp.managePrefix}${path}`, {
         ...init,
         headers: { "content-type": "application/json", ...session, ...init?.headers },
+      });
+    const api = (path: string, key: string, init?: RequestInit) =>
+      send(routes, `${GatewayHttp.apiPrefix}${path}`, {
+        ...init,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${key}`,
+          ...init?.headers,
+        },
       });
     const toolNames = rpc("tools/list").pipe(
       Effect.map((result) =>
         (result.tools as ReadonlyArray<{ readonly name: string }>).map((tool) => tool.name),
       ),
     );
-    return { pg, requests, call, website, toolNames };
+    return { pg, requests, call, website, api, toolNames, object };
   });
 
 const setup = setupWith({ allowedUsers: "someone-else, owner" });
@@ -297,7 +362,7 @@ describe("Gateway", () => {
           headers: { origin: "https://evil.example" },
           body: JSON.stringify({ policy: "allow" }),
         })).status,
-        403,
+        401,
       );
       assert.strictEqual(
         (yield* website("/tools/not_a_tool", {
@@ -305,6 +370,156 @@ describe("Gateway", () => {
           body: JSON.stringify({ policy: "allow" }),
         })).status,
         404,
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("serves tools over HTTP to gateway API keys, with approvals", () =>
+    Effect.gen(function* () {
+      const { pg, requests, website, api } = yield* setup;
+      yield* connectTwitch(pg, "owner", "1234", "brendonovich");
+
+      assert.strictEqual((yield* api("/tools", "mgw_nope")).status, 401);
+      const created = yield* body(
+        yield* website("/keys", { method: "POST", body: JSON.stringify({ name: "Script" }) }),
+      );
+      const key = String(created.key);
+      assert.match(key, /^mgw_[0-9a-f]{64}$/);
+      // A gateway key can't use the website's management routes.
+      assert.strictEqual(
+        (yield* website("/keys", { headers: { cookie: "", authorization: `Bearer ${key}` } }))
+          .status,
+        401,
+      );
+
+      const tools = (yield* body(yield* api("/tools", key))).tools as ReadonlyArray<{
+        readonly name: string;
+        readonly policy: string;
+      }>;
+      assert.deepInclude(
+        tools.map(({ name, policy }) => ({ name, policy })),
+        { name: "twitch_get_chatters", policy: "allow" },
+      );
+
+      const read = yield* api("/tools/twitch_get_chatters", key, { method: "POST", body: "{}" });
+      assert.strictEqual(read.status, 200);
+      assert.deepStrictEqual(yield* body(read), { status: 200, body: { data: [{ ok: true }] } });
+
+      const write = yield* api("/tools/twitch_ban_user", key, {
+        method: "POST",
+        body: JSON.stringify({ arguments: { userId: "99" } }),
+      });
+      assert.strictEqual(write.status, 202);
+      const approval = (yield* body(write)).approval as Record<string, unknown>;
+      assert.strictEqual(approval.status, "pending");
+      assert.strictEqual(approval.caller, 'API key "Script"');
+      assert.lengthOf(requests, 1);
+
+      yield* website(`/approvals/${String(approval.id)}/approve`, { method: "POST" });
+      const decided = (yield* body(yield* api(`/approvals/${String(approval.id)}`, key)))
+        .approval as Record<string, unknown>;
+      assert.strictEqual(decided.status, "succeeded");
+      assert.lengthOf(requests, 2);
+
+      const keys = (yield* body(yield* website("/keys"))).keys as ReadonlyArray<{
+        readonly id: string;
+        readonly lastUsedAt: string | null;
+      }>;
+      assert.lengthOf(keys, 1);
+      assert.isString(keys[0]?.lastUsedAt);
+      assert.strictEqual(
+        (yield* website(`/keys/${keys[0]?.id}`, { method: "DELETE" })).status,
+        204,
+      );
+      assert.strictEqual((yield* api("/tools", key)).status, 401);
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("validates event subscriptions before applying them", () =>
+    Effect.gen(function* () {
+      const { pg, website, object } = yield* setup;
+      yield* connectTwitch(pg, "owner", "1234", "brendonovich");
+
+      const options = yield* body(yield* website("/subscriptions"));
+      const twitch = (options.options as Record<string, Record<string, unknown>>).twitch;
+      assert.include(twitch?.events, "channel.chat.message");
+
+      const subscribe = (subscriptions: unknown) =>
+        website("/subscriptions", { method: "PUT", body: JSON.stringify(subscriptions) });
+      const empty = { twitch: {}, github: [], discord: null };
+      assert.strictEqual(
+        (yield* subscribe({ ...empty, twitch: { "999": ["channel.follow"] } })).status,
+        400,
+      );
+      assert.strictEqual(
+        (yield* subscribe({ ...empty, twitch: { "1234": ["not.a.type"] } })).status,
+        400,
+      );
+      assert.strictEqual(
+        (yield* subscribe({ ...empty, discord: { token: "t", intents: ["everything"] } })).status,
+        400,
+      );
+      const applied = yield* subscribe({ ...empty, twitch: { "1234": ["channel.raid"] } });
+      assert.strictEqual(applied.status, 200);
+      assert.deepStrictEqual(object.configured.at(-1), {
+        userId: "owner",
+        publicOrigin: "https://ingress.example",
+        subscriptions: { ...empty, twitch: { "1234": ["channel.raid"] } },
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("manages webhooks and serves event history", () =>
+    Effect.gen(function* () {
+      const { website, api, object } = yield* setup;
+      const insecure = yield* website("/webhooks", {
+        method: "POST",
+        body: JSON.stringify({ url: "http://example.com", events: [] }),
+      });
+      assert.strictEqual(insecure.status, 400);
+      const created = yield* body(
+        yield* website("/webhooks", {
+          method: "POST",
+          body: JSON.stringify({ url: "https://example.com/hook", events: ["twitch.*"] }),
+        }),
+      );
+      assert.match(String(created.secret), /^mgws_/);
+      const listed = (yield* body(yield* website("/webhooks"))).webhooks as ReadonlyArray<
+        Record<string, unknown>
+      >;
+      assert.lengthOf(listed, 1);
+      assert.notProperty(listed[0], "secret");
+
+      object.log.append({
+        id: "e1",
+        source: "twitch",
+        account: "1234",
+        type: "channel.follow",
+        data: { user: "a" },
+      });
+      object.log.append({ id: "e2", source: "github", account: "a/b", type: "push", data: {} });
+
+      const key = String(
+        (yield* body(
+          yield* website("/keys", { method: "POST", body: JSON.stringify({ name: "Events" }) }),
+        )).key,
+      );
+      const page = (yield* body(yield* api("/events?after=1", key))).events as ReadonlyArray<{
+        readonly id: string;
+      }>;
+      assert.deepStrictEqual(
+        page.map((event) => event.id),
+        ["e2"],
+      );
+      const deliveries = (yield* body(yield* website(`/webhooks/${String(created.id)}/deliveries`)))
+        .deliveries as ReadonlyArray<{ readonly eventSeq: number }>;
+      assert.deepStrictEqual(
+        deliveries.map((delivery) => delivery.eventSeq),
+        [1],
+      );
+      assert.strictEqual(
+        (yield* website(`/webhooks/${String(created.id)}`, { method: "DELETE" })).status,
+        204,
       );
     }).pipe(Effect.scoped),
   );

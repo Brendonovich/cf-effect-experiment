@@ -367,3 +367,20 @@ export const gatewayApprovals = pgTable(
   },
   (table) => [index("gateway_approvals_user_created_idx").on(table.userId, table.createdAt)],
 );
+
+/** Keys for the gateway's HTTP API and MCP endpoint; only their hashes are stored. */
+export const gatewayApiKeys = pgTable(
+  "gateway_api_keys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastUsedAt: text("last_used_at"),
+  },
+  (table) => [
+    uniqueIndex("gateway_api_keys_key_hash_unique").on(table.keyHash),
+    index("gateway_api_keys_user_id_idx").on(table.userId),
+  ],
+);

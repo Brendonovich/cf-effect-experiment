@@ -126,12 +126,17 @@ const devApiOrigin = () =>
   (typeof process === "undefined" ? undefined : process.env.VITE_WEBSITE_WORKER_URL) ??
   "http://localhost:1339";
 
+/** Where the server render reaches Cloud when it runs outside the Worker (`vite` dev). */
+const devCloudOrigin = () =>
+  (typeof process === "undefined" ? undefined : process.env.VITE_CLOUD_DEV_URL) ??
+  "http://localhost:5175";
+
 /**
- * Calls the website API. In the browser it's a same-origin fetch; during the server render it goes
- * to WebsiteWorker over its service binding, as the visitor, and passes any refreshed session
- * cookie on to the page response.
+ * Calls the website API, or Cloud for `/cloud` paths. In the browser it's a same-origin fetch;
+ * during the server render it goes to WebsiteWorker or CloudWorker over their service bindings, as
+ * the visitor, and passes any refreshed session cookie on to the page response.
  */
-async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   if (!isServer) return fetch(path, { ...init, credentials: "same-origin" });
   const event = getRequestEvent();
   const incoming = event?.request;
@@ -146,10 +151,18 @@ async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   headers.set("x-forwarded-proto", url.protocol.slice(0, -1));
   const native = (event as { readonly nativeEvent?: { readonly env?: WorkerBindings } } | undefined)
     ?.nativeEvent;
-  const api = native?.env?.API;
-  const response = api
-    ? await api.fetch(new Request(url, { ...init, headers }))
-    : await fetch(new URL(`${url.pathname}${url.search}`, devApiOrigin()), { ...init, headers });
+  // Cloud serves `/cloud`; WebsiteWorker serves the rest of the API.
+  const cloud = url.pathname.startsWith("/cloud/");
+  const binding = cloud ? native?.env?.CLOUD : native?.env?.API;
+  const response = binding
+    ? await binding.fetch(new Request(url, { ...init, headers }))
+    : await fetch(
+        new URL(`${url.pathname}${url.search}`, cloud ? devCloudOrigin() : devApiOrigin()),
+        {
+          ...init,
+          headers,
+        },
+      );
   const head = (event as { readonly response?: { readonly headers?: Headers } } | undefined)
     ?.response?.headers;
   for (const value of response.headers.getSetCookie()) head?.append("set-cookie", value);
@@ -176,80 +189,6 @@ export const credentialsKey = ["credentials"] as const;
 export const authorizationsKey = ["authorizations"] as const;
 export const signInProvidersKey = ["signInProviders"] as const;
 export const signInMethodsKey = ["signInMethods"] as const;
-
-export type GatewayPolicy = "allow" | "approve";
-
-export interface GatewayTool {
-  readonly name: string;
-  readonly title: string;
-  readonly description: string;
-  readonly method: string;
-  readonly readOnly: boolean;
-  readonly policy: GatewayPolicy;
-  readonly defaultPolicy: GatewayPolicy;
-}
-
-export interface GatewayProvider {
-  readonly id: string;
-  readonly displayName: string;
-  readonly accounts: ReadonlyArray<{ readonly id: string; readonly displayName: string | null }>;
-  readonly tools: ReadonlyArray<GatewayTool>;
-}
-
-export type GatewayApprovalStatus =
-  | "pending"
-  | "denied"
-  | "expired"
-  | "running"
-  | "succeeded"
-  | "failed";
-
-/** A call an agent made through the gateway that needed the user's approval. */
-export interface GatewayApproval {
-  readonly id: string;
-  readonly tool: string;
-  readonly title: string;
-  readonly provider: string;
-  readonly account: { readonly id: string; readonly displayName: string | null };
-  readonly arguments: Readonly<Record<string, unknown>>;
-  readonly caller: string | null;
-  readonly status: GatewayApprovalStatus;
-  readonly result: { readonly status: number; readonly body: unknown } | null;
-  readonly error: string | null;
-  readonly createdAt: string;
-  readonly expiresAt: string;
-}
-
-export const gatewayAccessKey = ["gateway", "access"] as const;
-export const gatewayToolsKey = ["gateway", "tools"] as const;
-export const gatewayApprovalsKey = ["gateway", "approvals"] as const;
-
-/** Whether the gateway is enabled for the signed-in account; it is limited to an allowlist. */
-export const getGatewayAccess = () =>
-  websiteRequest<{ readonly enabled: boolean }>("/gateway/access");
-export const getGatewayTools = () =>
-  websiteRequest<{ readonly providers: ReadonlyArray<GatewayProvider> }>("/gateway/tools");
-export const getGatewayApprovals = () =>
-  websiteRequest<ReadonlyArray<GatewayApproval>>("/gateway/approvals");
-export const setGatewayPolicy = (input: {
-  readonly tool: string;
-  readonly policy: GatewayPolicy;
-}) =>
-  websiteRequest<void>(`/gateway/tools/${encodeURIComponent(input.tool)}`, {
-    method: "PUT",
-    body: { policy: input.policy },
-  });
-export const decideGatewayApproval = (input: {
-  readonly id: string;
-  readonly decision: "approve" | "deny";
-}) =>
-  websiteRequest<GatewayApproval>(
-    `/gateway/approvals/${encodeURIComponent(input.id)}/${input.decision}`,
-    { method: "POST" },
-  );
-
-/** The gateway's MCP endpoint, which Cloud serves under `/cloud` on the website's origin. */
-export const gatewayMcpPath = "/cloud/api/gateway/mcp";
 
 export const getSession = () => websiteRequest<Session | null>("/session");
 export const getSignInProviders = () =>

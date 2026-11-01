@@ -1,17 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
 import { Config, Context, Effect, Layer, Option, Redacted } from "effect";
-import { FetchHttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import * as EarlyAccess from "../EarlyAccess.ts";
-import { Gateway } from "../gateway/Gateway.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import * as PublicHost from "../PublicHost.ts";
 import { DatabaseHyperdrive } from "../Storage.ts";
 import * as Analytics from "../website/Analytics.ts";
-import { GatewayRoutes } from "../website/GatewayRoutes.ts";
 import * as Jwt from "../website/Jwt.ts";
 import * as PreviewAuth from "../website/PreviewAuth.ts";
 import * as WebsiteRoutes from "../website/WebsiteRoutes.ts";
@@ -83,7 +81,6 @@ export default Layer.unwrap(
         main: import.meta.url,
         env: {
           ...environment,
-          GATEWAY_ALLOWED_USERS: process.env.GATEWAY_ALLOWED_USERS ?? "",
           ...(PublicHost.isPreviewStage(stage)
             ? { PREVIEW_ALLOWED_USERS: process.env.PREVIEW_ALLOWED_USERS ?? "" }
             : {}),
@@ -143,23 +140,19 @@ export default Layer.unwrap(
             })
           : undefined;
 
-        const app = yield* Layer.mergeAll(
-          WebsiteRoutes.layer({
-            stateKey,
-            signingKey,
-            ...(publicHost === undefined ? {} : { issuer: `https://${publicHost}` }),
-            authRedirectOrigin,
-            ...(Option.isNone(configuredRedirectOrigin)
-              ? { providerRedirectOrigins: PublicHost.providerRedirectOrigins }
-              : {}),
-            preview: PublicHost.isPreviewStage(stage),
-            devSignIn:
-              (yield* Config.String("WEBSITE_DEV_SIGN_IN").pipe(Config.withDefault(""))) === "1",
-            capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
-          }),
-          GatewayRoutes.layer,
-        ).pipe(
-          Layer.provide(Gateway.layer.pipe(Layer.provide(FetchHttpClient.layer))),
+        const app = yield* WebsiteRoutes.layer({
+          stateKey,
+          signingKey,
+          ...(publicHost === undefined ? {} : { issuer: `https://${publicHost}` }),
+          authRedirectOrigin,
+          ...(Option.isNone(configuredRedirectOrigin)
+            ? { providerRedirectOrigins: PublicHost.providerRedirectOrigins }
+            : {}),
+          preview: PublicHost.isPreviewStage(stage),
+          devSignIn:
+            (yield* Config.String("WEBSITE_DEV_SIGN_IN").pipe(Config.withDefault(""))) === "1",
+          capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
+        }).pipe(
           Layer.provide(OAuthProviders.layer),
           Layer.provide(Database.layer(databaseResource)),
           HttpRouter.toHttpEffect,

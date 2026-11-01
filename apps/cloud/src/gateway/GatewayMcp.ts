@@ -20,7 +20,7 @@ const instructions =
   "Calls the user's connected accounts (such as Twitch and GitHub) as them. Each tool runs as one connected account: pass `account` when several of a provider are connected (see gateway_list_accounts). The user decides per tool whether calls run immediately or wait for their approval. A call that needs approval returns an approvalId and a link for the user; once they decide, gateway_await_approval returns the outcome. Approved calls run with exactly the arguments you sent.";
 
 export const approvalUrl = (id: string) =>
-  `${new URL(McpOAuthConfig.issuer()).origin}/account/gateway?approval=${encodeURIComponent(id)}`;
+  `${new URL(McpOAuthConfig.issuer()).origin}/gateway/approvals?approval=${encodeURIComponent(id)}`;
 
 const callerLabel = (caller: ApiCaller.Caller) =>
   caller.mcpClient !== null

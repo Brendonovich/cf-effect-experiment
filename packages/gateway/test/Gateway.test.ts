@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 
-import { Catalog, Execute, defaultPolicy, snakeCase } from "../src/index.ts";
+import { Catalog, Delivery, Events, Execute, defaultPolicy, snakeCase } from "../src/index.ts";
 
 const account = { id: "1234", displayName: "brendonovich" };
 
@@ -149,5 +149,45 @@ describe("Execute", () => {
       Execute.url(twitch, { method: "GET", path: "https://id.twitch.tv/oauth2/validate" })?.href,
       "https://id.twitch.tv/oauth2/validate",
     );
+  });
+});
+
+describe("Events", () => {
+  it("lists every Twitch EventSub type and GitHub webhook event", () => {
+    assert.include(Events.twitchEventTypes, "channel.chat.message");
+    assert.include(Events.githubEventTypes, "push");
+  });
+
+  it("combines Discord intents into gateway bits", () => {
+    assert.strictEqual(Events.discordIntentBits(["guilds", "guild_messages"]), 1 | (1 << 9));
+    assert.strictEqual(Events.discordIntentBits([]), 0);
+  });
+
+  it("matches events by source, type, or wildcard", () => {
+    const event = { source: "twitch", type: "channel.follow" } as const;
+    assert.isTrue(Events.matches([], event));
+    assert.isTrue(Events.matches(["twitch.*"], event));
+    assert.isTrue(Events.matches(["twitch.channel.follow"], event));
+    assert.isTrue(Events.matches(["channel.follow"], event));
+    assert.isFalse(Events.matches(["github.*", "channel.raid"], event));
+  });
+});
+
+describe("Delivery", () => {
+  it("signs bodies so receivers can verify them", async () => {
+    const header = await Delivery.sign("secret", 1_000, '{"a":1}');
+    assert.match(header, /^t=1000,v1=[0-9a-f]{64}$/);
+    assert.isTrue(await Delivery.verify("secret", header, '{"a":1}', { now: 1_100 }));
+    assert.isFalse(await Delivery.verify("other", header, '{"a":1}', { now: 1_100 }));
+    assert.isFalse(await Delivery.verify("secret", header, '{"a":2}', { now: 1_100 }));
+    assert.isFalse(await Delivery.verify("secret", header, '{"a":1}', { now: 2_000 }));
+  });
+
+  it("only delivers to public HTTPS URLs", () => {
+    assert.isTrue(Delivery.validTarget("https://example.com/hook"));
+    assert.isFalse(Delivery.validTarget("http://example.com/hook"));
+    assert.isFalse(Delivery.validTarget("https://localhost/hook"));
+    assert.isFalse(Delivery.validTarget("https://10.0.0.1/hook"));
+    assert.isFalse(Delivery.validTarget("https://user:pass@example.com/hook"));
   });
 });

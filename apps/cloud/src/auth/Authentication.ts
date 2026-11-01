@@ -107,10 +107,7 @@ export const make = Effect.gen(function* () {
       };
     });
 
-  /** An MCP OAuth token issued for `resource`, or an API key. */
-  const authenticateMcpBearer = (
-    resource: McpOAuthConfig.Resource = McpOAuthConfig.projects,
-  ): Effect.Effect<
+  const authenticateMcpBearer = (): Effect.Effect<
     ProjectMcp.Principal,
     HttpApiError.Unauthorized,
     HttpServerRequest.HttpServerRequest
@@ -127,7 +124,7 @@ export const make = Effect.gen(function* () {
         .where(
           and(
             eq(oauthAccessTokens.tokenHash, keyHash),
-            eq(oauthAccessTokens.resource, McpOAuthConfig.resourceUrl(resource)),
+            eq(oauthAccessTokens.resource, McpOAuthConfig.resource()),
             eq(oauthAccessTokens.scope, McpOAuthConfig.scope),
             gt(oauthAccessTokens.expiresAt, new Date().toISOString()),
           ),
