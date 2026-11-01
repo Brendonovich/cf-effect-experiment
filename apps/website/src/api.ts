@@ -126,12 +126,17 @@ const devApiOrigin = () =>
   (typeof process === "undefined" ? undefined : process.env.VITE_WEBSITE_WORKER_URL) ??
   "http://localhost:1339";
 
+/** Where the server render reaches Cloud when it runs outside the Worker (`vite` dev). */
+const devCloudOrigin = () =>
+  (typeof process === "undefined" ? undefined : process.env.VITE_CLOUD_DEV_URL) ??
+  "http://localhost:5175";
+
 /**
- * Calls the website API. In the browser it's a same-origin fetch; during the server render it goes
- * to WebsiteWorker over its service binding, as the visitor, and passes any refreshed session
- * cookie on to the page response.
+ * Calls the website API, or Cloud for `/cloud` paths. In the browser it's a same-origin fetch;
+ * during the server render it goes to WebsiteWorker or CloudWorker over their service bindings, as
+ * the visitor, and passes any refreshed session cookie on to the page response.
  */
-async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   if (!isServer) return fetch(path, { ...init, credentials: "same-origin" });
   const event = getRequestEvent();
   const incoming = event?.request;
@@ -146,10 +151,18 @@ async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   headers.set("x-forwarded-proto", url.protocol.slice(0, -1));
   const native = (event as { readonly nativeEvent?: { readonly env?: WorkerBindings } } | undefined)
     ?.nativeEvent;
-  const api = native?.env?.API;
-  const response = api
-    ? await api.fetch(new Request(url, { ...init, headers }))
-    : await fetch(new URL(`${url.pathname}${url.search}`, devApiOrigin()), { ...init, headers });
+  // Cloud serves `/cloud`; WebsiteWorker serves the rest of the API.
+  const cloud = url.pathname.startsWith("/cloud/");
+  const binding = cloud ? native?.env?.CLOUD : native?.env?.API;
+  const response = binding
+    ? await binding.fetch(new Request(url, { ...init, headers }))
+    : await fetch(
+        new URL(`${url.pathname}${url.search}`, cloud ? devCloudOrigin() : devApiOrigin()),
+        {
+          ...init,
+          headers,
+        },
+      );
   const head = (event as { readonly response?: { readonly headers?: Headers } } | undefined)
     ?.response?.headers;
   for (const value of response.headers.getSetCookie()) head?.append("set-cookie", value);

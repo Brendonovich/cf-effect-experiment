@@ -356,3 +356,183 @@ it("keeps a linked device code when the session refetches", async () => {
   expect(container.textContent).toContain("Approve sign-in?");
   expect(container.textContent).toContain("BCDF-GHJK");
 });
+
+const gatewayManage = "/cloud/api/gateway/manage";
+
+/** Mocks the gateway management API, recording writes. */
+const mockGateway = (routes: Record<string, unknown>) => {
+  const calls: Array<{ readonly method: string; readonly path: string; readonly body?: unknown }> =
+    [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.origin === "http://localhost:25000") throw new TypeError("Desktop not running");
+      const method = init?.method ?? "GET";
+      const key = `${method} ${url.pathname}`;
+      if (method !== "GET")
+        calls.push({
+          method,
+          path: url.pathname,
+          ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) } : {}),
+        });
+      const route = key in routes ? routes[key] : routes[url.pathname];
+      if (route === undefined)
+        return method === "GET"
+          ? new Response(null, { status: 404 })
+          : new Response(null, { status: 204 });
+      return Response.json(typeof route === "function" ? route() : route);
+    }),
+  );
+  return calls;
+};
+
+const approval = {
+  id: "approval-1",
+  tool: "twitch_ban_user",
+  title: "Ban User",
+  provider: "twitch",
+  account: { id: "1234", displayName: "brendonovich" },
+  arguments: { userId: "99", reason: "spam" },
+  caller: "OpenCode",
+  status: "pending",
+  result: null,
+  error: null,
+  createdAt: "2026-11-01T00:00:00.000Z",
+  expiresAt: "2026-11-01T00:10:00.000Z",
+};
+
+const gatewayTools = {
+  providers: [
+    {
+      id: "twitch",
+      displayName: "Twitch",
+      accounts: [{ id: "1234", displayName: "brendonovich" }],
+      tools: [
+        {
+          name: "twitch_ban_user",
+          title: "Ban User",
+          description: "Ban User on Twitch.",
+          method: "POST",
+          readOnly: false,
+          policy: "approve",
+          defaultPolicy: "approve",
+        },
+      ],
+    },
+  ],
+};
+
+it("lets the user choose whether each gateway tool asks first", async () => {
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: [],
+    [`${gatewayManage}/tools`]: gatewayTools,
+  });
+  const { container } = renderApp("/gateway/tools");
+  await vi.waitFor(() => expect(container.textContent).toContain("Ban User"));
+  expect(container.textContent).toContain("MacroGraph Gateway");
+  expect(container.textContent).toContain("As brendonovich");
+
+  const policy = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>('[data-tool="twitch_ban_user"] button')].find(
+      (button) => button.textContent === label,
+    );
+  expect(policy("Ask")?.getAttribute("aria-pressed")).toBe("true");
+  expect(policy("Block")).toBeUndefined();
+  policy("Allow")?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "PUT",
+      path: `${gatewayManage}/tools/twitch_ban_user`,
+      body: { policy: "allow" },
+    }),
+  );
+});
+
+it("approves a gateway call after showing exactly what will run", async () => {
+  let approvals: ReadonlyArray<typeof approval> = [approval];
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: () => approvals,
+    [`${gatewayManage}/tools`]: gatewayTools,
+    [`POST ${gatewayManage}/approvals/approval-1/approve`]: () => {
+      approvals = [];
+      return { ...approval, status: "succeeded" };
+    },
+  });
+  const { container } = renderApp("/gateway/approvals?approval=approval-1");
+  await vi.waitFor(() => expect(container.textContent).toContain("OpenCode wants to Ban User"));
+  expect(container.textContent).toContain('"reason": "spam"');
+  expect(container.textContent).toContain("As brendonovich on Twitch");
+
+  [...container.querySelectorAll("button")]
+    .find((button) => button.textContent === "Approve")
+    ?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: `${gatewayManage}/approvals/approval-1/approve`,
+    }),
+  );
+  await vi.waitFor(() => expect(container.textContent).toContain("Nothing is waiting for you."));
+});
+
+it("shows endpoints and creates gateway API keys", async () => {
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: [],
+    [`${gatewayManage}/tools`]: gatewayTools,
+    [`${gatewayManage}/keys`]: { keys: [] },
+    [`POST ${gatewayManage}/keys`]: {
+      id: "key-1",
+      name: "Stream bot",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      lastUsedAt: null,
+      key: "mgw_secret",
+    },
+  });
+  const { container } = renderApp("/gateway");
+  await vi.waitFor(() => expect(container.textContent).toContain("/cloud/api/gateway/mcp"));
+  expect(container.textContent).toContain("/cloud/api/gateway/v1");
+
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Key name"]');
+  if (input === null) throw new Error("Missing key name input");
+  input.value = "Stream bot";
+  input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  await vi.waitFor(() =>
+    expect(
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Create key",
+      )?.disabled,
+    ).toBe(false),
+  );
+  container
+    .querySelector("form")
+    ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: `${gatewayManage}/keys`,
+      body: { name: "Stream bot" },
+    }),
+  );
+  await vi.waitFor(() => expect(container.textContent).toContain("mgw_secret"));
+});
+
+it("hides the gateway from accounts it isn't enabled for", async () => {
+  mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: false },
+  });
+  const { container } = renderApp("/gateway/tools");
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain(
+      "MacroGraph Gateway isn't available for your account yet.",
+    ),
+  );
+  expect(container.querySelector("[data-tool]")).toBeNull();
+});

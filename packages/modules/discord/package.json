@@ -7,6 +7,7 @@
     ".": "./src/Module.ts",
     "./Definition": "./src/Definition.ts",
     "./Engine": "./src/Engine.ts",
+    "./Gateway": "./src/Gateway.ts",
     "./Deployment": "./src/Deployment.ts",
     "./RestDeployment": "./src/RestDeployment.ts",
     "./Settings": "./src/Settings.tsx",

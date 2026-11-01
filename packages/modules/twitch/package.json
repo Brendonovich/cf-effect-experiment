@@ -5,7 +5,10 @@
   "main": "./src/Module.ts",
   "exports": {
     ".": "./src/Module.ts",
+    "./Actions": "./src/Actions.ts",
+    "./Helix": "./src/Helix.ts",
     "./Definition": "./src/Definition.ts",
+    "./EventSub": "./src/EventSub.ts",
     "./Engine": "./src/Engine.ts",
     "./Settings": "./src/Settings.tsx",
     "./EventSub/WebSocket": "./src/WebSocketEventSub.ts",

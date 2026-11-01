@@ -14,6 +14,10 @@ export interface GatewayOptions {
   readonly token: string;
   readonly messageContent: boolean;
   readonly onMessage: (message: MessageReceived) => void;
+  /** Gateway intent bits; defaults to server and direct messages (plus content when enabled). */
+  readonly intents?: number;
+  /** Receives every dispatch event, such as `MESSAGE_CREATE` or `GUILD_MEMBER_ADD`. */
+  readonly onDispatch?: (type: string, data: unknown) => void;
   readonly onStatus: (
     status: (typeof ClientState.Type)["status"],
     error?: (typeof ClientState.Type)["error"],
@@ -249,7 +253,9 @@ function startGateway(
               if (
                 send(2, {
                   token: options.token,
-                  intents: (1 << 9) | (1 << 12) | (options.messageContent ? 1 << 15 : 0),
+                  intents:
+                    options.intents ??
+                    (1 << 9) | (1 << 12) | (options.messageContent ? 1 << 15 : 0),
                   properties: { os: "linux", browser: "MacroGraph", device: "MacroGraph" },
                 })
               )
@@ -296,6 +302,7 @@ function startGateway(
             const message = decodeMessage(d);
             if (message) options.onMessage(message);
           }
+          if (typeof t === "string" && t !== "READY" && t !== "RESUMED") options.onDispatch?.(t, d);
           break;
       }
     };
