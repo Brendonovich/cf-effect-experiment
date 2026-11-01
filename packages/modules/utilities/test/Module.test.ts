@@ -111,7 +111,7 @@ describe("Utilities module", () => {
         Effect.provide(Logger.layer([logger])),
       );
       assert.strictEqual(messages.length, 1);
-      assert.deepStrictEqual(messages[0], ["Utilities Print", { value: "hello" }]);
+      assert.deepStrictEqual(messages[0], ["hello"]);
     }),
   );
 

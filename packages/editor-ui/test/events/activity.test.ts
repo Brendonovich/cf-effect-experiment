@@ -45,6 +45,7 @@ describe("live activity presentation", () => {
       finishedAt: 1,
       status: "complete",
       error: null,
+      logs: [],
     };
     const other = { ...node, id: "step-2", executionId: "execution-2" };
     const repeated = { ...node, id: "step-3" };

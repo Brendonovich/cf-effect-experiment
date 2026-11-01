@@ -80,6 +80,20 @@
       "status": "covered",
       "verification": "journey",
       "evidence": ["reset-project.json", "screenshot"]
+    },
+    {
+      "id": "inspector.print-log",
+      "name": "Inspector Print section lists node output and navigates to the logging node",
+      "documentation": ".opencode/skills/verify-macrograph/features/print-log.md",
+      "status": "covered",
+      "verification": "print-log",
+      "userJourney": [
+        "Import a Tick to Print project",
+        "Observe Print entries newest first",
+        "Click the node name in an entry",
+        "Delete the node"
+      ],
+      "evidence": ["print-project.json", "screenshot", "server-log"]
     }
   ]
 }

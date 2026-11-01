@@ -41,6 +41,7 @@
     "verify:playground:function-queues": "node tools/verify-macrograph/verify.mjs function-queues",
     "verify:playground:module-reference": "node tools/verify-macrograph/verify.mjs module-reference",
     "verify:playground:journey": "node tools/verify-macrograph/verify.mjs journey",
+    "verify:playground:print-log": "node tools/verify-macrograph/verify.mjs print-log",
     "verify:playground": "node tools/verify-macrograph/verify.mjs all",
     "verify:test": "node --test tools/verify-macrograph/diagnostics.test.mjs",
     "storybook": "pnpm --filter @macrograph/storybook dev",

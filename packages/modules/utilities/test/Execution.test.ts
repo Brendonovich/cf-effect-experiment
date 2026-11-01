@@ -130,10 +130,7 @@ describe("Utilities execution", () => {
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 2 }))
         .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
-      assert.deepStrictEqual(messages, [
-        ["Utilities Print", { value: "true" }],
-        ["Utilities Print", { value: "also true" }],
-      ]);
+      assert.deepStrictEqual(messages, [["true"], ["also true"]]);
 
       yield* executor.loadProject({
         ...project,
@@ -152,11 +149,7 @@ describe("Utilities execution", () => {
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 4 }))
         .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
-      assert.deepStrictEqual(messages, [
-        ["Utilities Print", { value: "true" }],
-        ["Utilities Print", { value: "also true" }],
-        ["Utilities Print", { value: "false" }],
-      ]);
+      assert.deepStrictEqual(messages, [["true"], ["also true"], ["false"]]);
       const printSpans = spans.filter(
         (span) => span.name === "Schema.run macrograph.app/macrograph/utilities.Print",
       );

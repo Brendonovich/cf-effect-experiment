@@ -14,6 +14,7 @@ Use the project-local harness rather than ad hoc browser state when checking pla
    - `pnpm verify:playground:function-navigation` for function creation and split constants.
    - `pnpm verify:playground:module-reference` for module info and reference browsing.
    - `pnpm verify:playground:journey` for local graph persistence and export.
+   - `pnpm verify:playground:print-log` for the inspector's Print output and node navigation.
    - `pnpm verify:playground` for changes spanning multiple covered areas and for CI, PR, or release readiness.
 4. Read the manifest path printed by the command. Treat `status`, every item in `checks`, browser errors, and evidence hashes as the verification result.
 5. Report the exact manifest and evidence paths. Do not claim success from screenshots alone.
