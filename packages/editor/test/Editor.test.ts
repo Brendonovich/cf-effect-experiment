@@ -28,7 +28,7 @@ const schemaRef = {
 
 const formatSchemaRef = {
   package: PackageId.make("local/test/format"),
-  schema: SchemaId.make("format-string"),
+  schema: SchemaId.make("formatString"),
 };
 
 const UtilitiesModule = Module.identify(Module.builtinId("utilities"), UtilitiesDefault);
@@ -45,7 +45,7 @@ const makeFormatModule = (name: string) =>
     Module.make({
       effect: (context) =>
         context.schema.register({
-          id: "format-string",
+          id: "formatString",
           name: "Format String",
           type: "pure",
           properties: {
@@ -76,7 +76,7 @@ const FormatModule = makeFormatModule("format");
 const LateFormatModule = makeFormatModule("late-format");
 const lateFormatSchemaRef = {
   package: PackageId.make("local/test/late-format"),
-  schema: SchemaId.make("format-string"),
+  schema: SchemaId.make("formatString"),
 };
 
 const suggestionSchemaRef = {
@@ -1170,7 +1170,7 @@ it.layer(TestLayer)((it) => {
           resources: [],
           schemas: [
             {
-              id: SchemaId.make("format-string"),
+              id: SchemaId.make("formatString"),
               name: "Replacement",
               type: "pure",
               properties: [],

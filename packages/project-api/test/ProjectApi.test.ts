@@ -89,7 +89,7 @@ describe("schema search", () => {
       name: "Twitch",
       resources: [{ id: "account", name: "Account" }],
       schemas: [
-        schema("send-message", "Send Chat Message", [
+        schema("sendMessage", "Send Chat Message", [
           { id: "account", name: "Account", resource: "account", optional: false },
         ]),
         schema("ban", "Ban User"),
@@ -99,7 +99,7 @@ describe("schema search", () => {
       id: PackageId.make("logic"),
       name: "Logic",
       resources: [],
-      schemas: [schema("message-branch", "Branch On Message")],
+      schemas: [schema("messageBranch", "Branch On Message")],
     },
   ];
   const resources: Array<ResourceConstant.Model> = [
@@ -112,11 +112,11 @@ describe("schema search", () => {
 
   it("ranks exact and prefix matches first and attaches matching resources", () => {
     const { schemas } = ProjectEditor.searchSchemas(packages, resources, {
-      queries: ["send-message", "message"],
+      queries: ["sendMessage", "message"],
     });
     assert.deepStrictEqual(
       schemas.map((match) => match.schema.id),
-      ["send-message", "message-branch"],
+      ["sendMessage", "messageBranch"],
     );
     assert.deepStrictEqual(schemas[0]?.resources, {
       account: [{ id: resources[0]!.id, name: "Bot" }],
