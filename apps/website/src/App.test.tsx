@@ -161,6 +161,16 @@ it("shows node properties with their controls", async () => {
   expect(container.textContent).toContain("OBS Socket");
 });
 
+it("shows event nodes from webhook modules", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/modules/macrograph/kofi/PaymentReceived");
+  await vi.waitFor(() =>
+    expect(container.querySelector("[data-graph-node-id]")?.textContent).toContain(
+      "Payment Received",
+    ),
+  );
+});
+
 it("shows a not-found message for unknown packages and nodes", async () => {
   mockApi({ "/api/website/session": null });
   const unknownPackage = renderApp("/modules/macrograph/nope");

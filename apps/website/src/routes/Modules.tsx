@@ -28,12 +28,7 @@ export function ModulesIndexRoute() {
         <For each={packages}>
           {(pkg) => (
             <li sx={styles.card}>
-              <Show
-                when={packageLogo(pkg)}
-                fallback={
-                  <span sx={[styles.cardLogo, styles.logoFallback]}>{pkg.displayName[0]}</span>
-                }
-              >
+              <Show when={packageLogo(pkg)}>
                 {(logo) => <img src={logo()} alt="" sx={styles.cardLogo} />}
               </Show>
               <div sx={styles.cardBody}>
@@ -118,14 +113,6 @@ const styles = stylex.create({
     height: 40,
     borderRadius: 8,
     objectFit: "contain",
-  },
-  logoFallback: {
-    display: "grid",
-    placeItems: "center",
-    backgroundColor: colors.gray4,
-    color: colors.gray11,
-    fontSize: 16,
-    fontWeight: 600,
   },
   cardBody: { minWidth: 0 },
   cardTitle: { margin: 0, fontSize: 15, fontWeight: 600 },
