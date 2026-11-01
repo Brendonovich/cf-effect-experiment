@@ -41,6 +41,10 @@ export default Layer.unwrap(
     const signingKeyPem = Option.getOrUndefined(yield* Effect.serviceOption(WebsiteSigningKey));
     // `Stack` is available both while deploying and at runtime, so the props match in each.
     const { stage } = yield* Alchemy.Stack;
+    // Only present while deploying, where it tells `alchemy dev` apart from real deployments.
+    const alchemyContext = Option.getOrUndefined(
+      yield* Effect.serviceOption(Alchemy.AlchemyContext),
+    );
     const databaseResource = yield* DatabaseHyperdrive;
     const environment = Object.fromEntries(
       [
@@ -82,6 +86,7 @@ export default Layer.unwrap(
           ...(PublicHost.isPreviewStage(stage)
             ? { PREVIEW_ALLOWED_USERS: process.env.PREVIEW_ALLOWED_USERS ?? "" }
             : {}),
+          ...(alchemyContext?.dev === true ? { WEBSITE_DEV_SIGN_IN: "1" } : {}),
           ...(process.env.WEBSITE_AUTH_REDIRECT_ORIGIN === undefined
             ? {}
             : { WEBSITE_AUTH_REDIRECT_ORIGIN: process.env.WEBSITE_AUTH_REDIRECT_ORIGIN }),
@@ -146,6 +151,8 @@ export default Layer.unwrap(
             ? { providerRedirectOrigins: PublicHost.providerRedirectOrigins }
             : {}),
           preview: PublicHost.isPreviewStage(stage),
+          devSignIn:
+            (yield* Config.String("WEBSITE_DEV_SIGN_IN").pipe(Config.withDefault(""))) === "1",
           capture: stage === "production" ? Analytics.posthog : Analytics.disabled,
         }).pipe(
           Layer.provide(OAuthProviders.layer),

@@ -30,6 +30,14 @@ export const websiteOrigins = [
 const oauthStateLifetimeSeconds = 60 * 60;
 const signInNonceCookie = "sign_in_nonce";
 
+/** Listed with the providers when {@link Options.devSignIn} is set. */
+const devSignInProvider = { id: "dev", displayName: "Dev account" } as const;
+const devIdentity: OAuthProviders.Identity = {
+  id: "dev",
+  displayName: "Dev",
+  verifiedEmail: "dev@macrograph.localhost",
+};
+
 /** Why signing in with a provider failed, passed to the website as `?error=`. */
 type SignInError =
   | "cancelled"
@@ -52,6 +60,11 @@ export interface Options {
   readonly providerRedirectOrigins?: Readonly<Record<string, string>>;
   /** Pull request previews serve the website from their own workers.dev origin. */
   readonly preview?: boolean;
+  /**
+   * Offers a shared dev account that signs in without a provider, from localhost only. Providers
+   * return to production's `/auth/proxy`, which can't finish a local sign-in.
+   */
+  readonly devSignIn?: boolean;
   readonly capture: Analytics.Capture;
   readonly fetch?: typeof fetch;
   /** Overrides the OAuth server's clock, for tests. */
@@ -395,7 +408,7 @@ export const layer = (options: Options) =>
        * did not verify addresses, so a matching email could belong to someone else.
        */
       const resolveSignIn = (
-        provider: OAuthProviders.Provider,
+        providerId: string,
         identity: OAuthProviders.Identity,
         linkUserId: string | undefined,
       ) =>
@@ -403,7 +416,7 @@ export const layer = (options: Options) =>
           | { readonly userId: string; readonly event: Analytics.Event }
           | { readonly error: SignInError }
         > {
-          const where = identityWhere(provider.id, identity.id);
+          const where = identityWhere(providerId, identity.id);
           const details = {
             email: identity.verifiedEmail ?? null,
             displayName: identity.displayName,
@@ -421,10 +434,10 @@ export const layer = (options: Options) =>
             yield* database.update(userIdentities).set(details).where(where).pipe(Effect.orDie);
             return { userId, event: { event: "user logged in" } };
           }
-          const identityRow = { providerId: provider.id, providerUserId: identity.id, ...details };
+          const identityRow = { providerId, providerUserId: identity.id, ...details };
           const connected = {
             event: "sign-in method connected",
-            providerId: provider.id,
+            providerId,
             providerUserId: identity.id,
           } as const;
           if (linkUserId !== undefined) {
@@ -467,6 +480,24 @@ export const layer = (options: Options) =>
             : { error: "account_exists" };
         });
 
+      /** Returns to `returnTo`, starting a session unless a signed-in user connected a method. */
+      const finishSignIn = (
+        request: HttpServerRequest.HttpServerRequest,
+        returnTo: string,
+        result: Effect.Success<ReturnType<typeof resolveSignIn>>,
+        connecting: boolean,
+      ) =>
+        Effect.gen(function* () {
+          if ("error" in result) return signInRedirect(returnTo, result.error);
+          yield* options.capture(result.userId, result.event);
+          const response = signInRedirect(returnTo);
+          if (connecting) return response;
+          return Session.setCookies(
+            yield* sessions.create(result.userId),
+            isSecure(request),
+          )(response);
+        });
+
       const completeSignIn = (
         request: HttpServerRequest.HttpServerRequest,
         provider: OAuthProviders.Provider,
@@ -484,21 +515,14 @@ export const layer = (options: Options) =>
           }
           const result = yield* providers.exchange(provider, code, proxyRedirectUri(provider)).pipe(
             Effect.flatMap((token) => providers.identity(provider, token.access_token)),
-            Effect.flatMap((identity) => resolveSignIn(provider, identity, state.userId)),
+            Effect.flatMap((identity) => resolveSignIn(provider.id, identity, state.userId)),
             Effect.catchTag("OAuthProviderError", (error) =>
               Effect.logWarning("Provider sign-in failed", error).pipe(
                 Effect.as({ error: "failed" as const }),
               ),
             ),
           );
-          if ("error" in result) return failed(result.error);
-          yield* options.capture(result.userId, result.event);
-          const response = signInRedirect(state.returnTo);
-          if (state.userId !== undefined) return response;
-          return Session.setCookies(
-            yield* sessions.create(result.userId),
-            isSecure(request),
-          )(response);
+          return yield* finishSignIn(request, state.returnTo, result, state.userId !== undefined);
         }).pipe(
           Effect.map(
             HttpServerResponse.setCookieUnsafe(signInNonceCookie, "", {
@@ -799,8 +823,34 @@ export const layer = (options: Options) =>
       );
 
       yield* router.add("GET", "/api/website/sign-in/providers", () =>
-        Effect.succeed(json(providers.signInList)),
+        Effect.succeed(
+          json(
+            options.devSignIn === true
+              ? [devSignInProvider, ...providers.signInList]
+              : providers.signInList,
+          ),
+        ),
       );
+
+      // Takes precedence over `/:provider`; without it, "dev" is an unknown provider.
+      if (options.devSignIn === true)
+        yield* router.add("GET", `/api/website/sign-in/${devSignInProvider.id}`, (request) =>
+          handle(
+            Effect.gen(function* () {
+              if (!isLocalOrigin(new URL(requestOrigin(request)))) return yield* reject(404);
+              const returnTo = PreviewAuth.safeNext(
+                requestUrl(request).searchParams.get("returnTo"),
+              );
+              const current = yield* optionalWebsiteSession(request);
+              const result = yield* resolveSignIn(
+                devSignInProvider.id,
+                devIdentity,
+                current?.user.id,
+              );
+              return yield* finishSignIn(request, returnTo, result, current !== undefined);
+            }),
+          ),
+        );
 
       /**
        * Starts signing in with a provider. With a session, this connects the provider account to
