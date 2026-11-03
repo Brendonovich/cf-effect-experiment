@@ -12,6 +12,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import * as Path from "effect/Path";
 
 import * as Database from "../database/Database.ts";
+import GatewayDO, { GatewayDOLayer } from "../gateway/GatewayDO.ts";
 import {
   AppIdConfig as GitHubAppIdConfig,
   PrivateKeyConfig as GitHubPrivateKeyConfig,
@@ -57,6 +58,7 @@ export default Layer.unwrap(
       },
       Effect.gen(function* () {
         const workerOperations = yield* CloudWorkerOperations.make(deploymentsResource);
+        const gatewayDos = yield* GatewayDO;
         const app = yield* HttpApiBuilder.layer(IngressApi).pipe(
           Layer.provide(IngressHandlers.make(workerOperations)),
           Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
@@ -67,6 +69,32 @@ export default Layer.unwrap(
           ...workerOperations,
           fetch: Effect.gen(function* () {
             const request = yield* HttpServerRequest.HttpServerRequest;
+            // Provider webhooks for a user's gateway: `/gateway/:userId/:endpointId`.
+            const gatewayHook = /^\/gateway\/([^/]+)\/([^/]+)$/.exec(
+              new URL(request.url, "http://localhost:1338").pathname,
+            );
+            if (gatewayHook !== null && request.method === "POST") {
+              const body = yield* request.arrayBuffer.pipe(Effect.orDie);
+              const response = yield* gatewayDos
+                .getByName(decodeURIComponent(gatewayHook[1] ?? ""))
+                .ingress({
+                  endpointId: decodeURIComponent(gatewayHook[2] ?? ""),
+                  method: request.method,
+                  headers: Object.entries(request.headers).flatMap(([name, value]) =>
+                    typeof value === "string" ? [[name, value] as const] : [],
+                  ),
+                  body: new Uint8Array(body),
+                })
+                .pipe(Effect.orDie);
+              return response.body === undefined
+                ? HttpServerResponse.empty({ status: response.status })
+                : HttpServerResponse.text(response.body, {
+                    status: response.status,
+                    ...(response.contentType === undefined
+                      ? {}
+                      : { contentType: response.contentType }),
+                  });
+            }
             if (
               request.method === "POST" &&
               new URL(request.url, "http://localhost:1338").pathname ===
@@ -85,6 +113,7 @@ export default Layer.unwrap(
       }).pipe(
         Effect.provide(ProjectIngressDOLayer),
         Effect.provide(OpenCodeDOLayer),
+        Effect.provide(GatewayDOLayer),
         Effect.provide(Database.layer(databaseResource)),
         Effect.provide(Cloudflare.Hyperdrive.ConnectBinding),
         Effect.provide(Cloudflare.R2.ReadBucketBinding),

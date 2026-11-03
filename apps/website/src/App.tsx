@@ -12,6 +12,12 @@ import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { DocsIndexRoute, DocsLayout } from "./routes/Docs";
 import { DocsShell } from "./routes/DocsShell";
+import { GatewayApprovalsRoute } from "./routes/gateway/Approvals";
+import { GatewayEventsRoute } from "./routes/gateway/Events";
+import { GatewayLayout } from "./routes/gateway/Layout";
+import { GatewayOverviewRoute } from "./routes/gateway/Overview";
+import { GatewayToolsRoute } from "./routes/gateway/Tools";
+import { GatewayWebhooksRoute } from "./routes/gateway/Webhooks";
 import { LandingRoute } from "./routes/Landing";
 import { ModulesIndexRoute, ModulesLayout } from "./routes/Modules";
 import { NotFoundRoute } from "./routes/NotFound";
@@ -86,6 +92,17 @@ export const routes = [
       { path: "/credentials", component: () => <CredentialsRoute /> },
       { path: "/sign-in", component: SignInMethodsRoute },
       { path: "/apps", component: AppsRoute },
+    ],
+  },
+  {
+    path: "/gateway",
+    component: GatewayLayout,
+    children: [
+      { path: "/", component: GatewayOverviewRoute },
+      { path: "/tools", component: GatewayToolsRoute },
+      { path: "/approvals", component: GatewayApprovalsRoute },
+      { path: "/events", component: GatewayEventsRoute },
+      { path: "/webhooks", component: GatewayWebhooksRoute },
     ],
   },
   { path: "/credentials", component: () => <Redirect href="/account/credentials" /> },

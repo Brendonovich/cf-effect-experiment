@@ -321,3 +321,66 @@ export const projectExecutionNodes = pgTable(
 export type ProjectRecord = typeof projects.$inferSelect;
 export type ProjectDeploymentRecord = typeof projectDeployments.$inferSelect;
 export type ProjectExecutionRecord = typeof projectExecutions.$inferSelect;
+
+export type GatewayPolicy = "allow" | "approve";
+
+/** A user's choice for one gateway tool; tools without a row use their default policy. */
+export const gatewayToolPolicies = pgTable(
+  "gateway_tool_policies",
+  {
+    userId: text("user_id").notNull(),
+    tool: text("tool").notNull(),
+    policy: text("policy").notNull().$type<GatewayPolicy>(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.tool] })],
+);
+
+export type GatewayApprovalStatus =
+  | "pending"
+  | "denied"
+  | "expired"
+  | "running"
+  | "succeeded"
+  | "failed";
+
+/** A gateway call waiting for, or decided by, its user. Approved calls run with these arguments. */
+export const gatewayApprovals = pgTable(
+  "gateway_approvals",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    tool: text("tool").notNull(),
+    provider: text("provider").notNull(),
+    accountId: text("account_id").notNull(),
+    arguments: jsonb("arguments").notNull().$type<Readonly<Record<string, unknown>>>(),
+    /** The MCP client or API key that asked, for the user to recognise. */
+    caller: text("caller"),
+    status: text("status").notNull().$type<GatewayApprovalStatus>(),
+    /** The provider's response once the call ran. */
+    result: jsonb("result").$type<{ readonly status: number; readonly body: unknown }>(),
+    error: text("error"),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    decidedAt: text("decided_at"),
+    completedAt: text("completed_at"),
+  },
+  (table) => [index("gateway_approvals_user_created_idx").on(table.userId, table.createdAt)],
+);
+
+/** Keys for the gateway's HTTP API and MCP endpoint; only their hashes are stored. */
+export const gatewayApiKeys = pgTable(
+  "gateway_api_keys",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastUsedAt: text("last_used_at"),
+  },
+  (table) => [
+    uniqueIndex("gateway_api_keys_key_hash_unique").on(table.keyHash),
+    index("gateway_api_keys_user_id_idx").on(table.userId),
+  ],
+);

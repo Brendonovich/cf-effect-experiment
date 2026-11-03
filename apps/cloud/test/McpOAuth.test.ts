@@ -183,4 +183,39 @@ describe("MCP OAuth", () => {
       }),
     ),
   );
+
+  it.effect("serves the gateway as its own resource and rejects unknown resources", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const app = yield* McpOAuth.layer({
+          authenticateSession: () => Effect.succeed({ userId: "user-1" }),
+          limitRegistration: () => Effect.succeed({ success: true }),
+        }).pipe(Layer.provide(databaseLayer), HttpRouter.toHttpEffect);
+
+        const metadata = yield* send(app, "/.well-known/oauth-protected-resource/api/gateway/mcp");
+        const metadataBody = yield* Effect.promise(() => HttpServerResponse.toWeb(metadata).json());
+        assert.strictEqual(metadataBody.resource, "https://macrograph.app/cloud/api/gateway/mcp");
+        assert.strictEqual(metadataBody.resource_name, "MacroGraph Gateway");
+
+        const authorization = new URLSearchParams({
+          response_type: "code",
+          client_id: "client-1",
+          redirect_uri: redirectUri,
+          code_challenge: "a".repeat(43),
+          code_challenge_method: "S256",
+          resource: "https://macrograph.app/cloud/api/gateway/mcp",
+          scope: "mcp",
+          state: "state-1",
+        });
+        const consent = yield* send(app, `/oauth/authorize?${authorization}`);
+        const page = yield* Effect.promise(() => HttpServerResponse.toWeb(consent).text());
+        assert.include(page, "connected accounts");
+        assert.include(page, 'value="https://macrograph.app/cloud/api/gateway/mcp"');
+
+        authorization.set("resource", "https://macrograph.app/cloud/api/other");
+        const rejected = yield* send(app, `/oauth/authorize?${authorization}`);
+        assert.include(rejected.headers.location, "error=invalid_request");
+      }),
+    ),
+  );
 });

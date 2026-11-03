@@ -4,6 +4,7 @@ import * as Output from "alchemy/Output";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import {
   Etag,
+  FetchHttpClient,
   HttpMiddleware,
   HttpPlatform,
   HttpRouter,
@@ -17,7 +18,7 @@ import { Api } from "../api/Api.ts";
 import * as CloudApiHandlers from "../api/CloudApiHandlers.ts";
 import * as CloudMcp from "../api/CloudMcp.ts";
 import * as CloudMount from "../api/CloudMount.ts";
-import { cloudPathPrefix } from "../api/HttpOrigin.ts";
+import { cloudPathPrefix, requestOrigin } from "../api/HttpOrigin.ts";
 import * as Authentication from "../auth/Authentication.ts";
 import * as Credential from "../auth/Credential.ts";
 import * as CredentialPolicy from "../auth/CredentialPolicy.ts";
@@ -26,10 +27,15 @@ import * as OAuthProviders from "../auth/OAuthProviders.ts";
 import * as Database from "../database/Database.ts";
 import * as Deployment from "../deployment/Deployment.ts";
 import * as DeploymentPolicy from "../deployment/DeploymentPolicy.ts";
+import * as EarlyAccess from "../EarlyAccess.ts";
 import * as EditorRpc from "../editor/EditorRpc.ts";
 import * as EditorRpcPolicy from "../editor/EditorRpcPolicy.ts";
 import * as Event from "../execution/Event.ts";
 import * as EventPolicy from "../execution/EventPolicy.ts";
+import { Gateway } from "../gateway/Gateway.ts";
+import GatewayDO from "../gateway/GatewayDO.ts";
+import { GatewayHttp } from "../gateway/GatewayHttp.ts";
+import { GatewayMcp } from "../gateway/GatewayMcp.ts";
 import { ObservabilityLayer } from "../Observability.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as Project from "../project/Project.ts";
@@ -102,6 +108,8 @@ export default Layer.unwrap(
         main: import.meta.url,
         env: {
           ...credentialEnvironment,
+          // Comma-separated user IDs that may use the gateway while it is being tried out.
+          GATEWAY_ALLOWED_USERS: yield* EarlyAccess.allowedUsers("GATEWAY_ALLOWED_USERS"),
           MCP_OAUTH_PUBLIC_ORIGIN:
             process.env.MCP_OAUTH_PUBLIC_ORIGIN ??
             `https://${publicHost ?? PublicHost.zoneName}${cloudPathPrefix}`,
@@ -126,6 +134,8 @@ export default Layer.unwrap(
         const workerOperations = yield* Cloudflare.Workers.bindWorker(IngressWorker);
         // Binds IngressWorker's OpenCodeDO namespace for ProjectEditorDO's managed connections.
         yield* OpenCodeDO.from(IngressWorker);
+        const gatewayDos = yield* GatewayDO.from(IngressWorker);
+        const workerEnvironment = yield* Cloudflare.WorkerEnvironment;
         const mcpOAuthRegistrationRateLimit = yield* Cloudflare.RateLimit(
           "MCP_OAUTH_REGISTRATION_RATE_LIMIT",
           {
@@ -139,7 +149,11 @@ export default Layer.unwrap(
           EditorRpcPolicy.layer,
           EventPolicy.layer,
         ).pipe(Layer.provideMerge(Layer.mergeAll(ProjectPolicy.layer, TeamPolicy.layer)));
-        const services = Layer.mergeAll(EditorRpc.layer, Event.layer(workerOperations)).pipe(
+        const services = Layer.mergeAll(
+          EditorRpc.layer,
+          Event.layer(workerOperations),
+          Gateway.layer.pipe(Layer.provide(FetchHttpClient.layer)),
+        ).pipe(
           Layer.provideMerge(Credential.layer),
           Layer.provideMerge(Deployment.layer(workerOperations, deploymentsResource)),
           Layer.provideMerge(Project.layer(workerOperations, deploymentsResource)),
@@ -154,6 +168,7 @@ export default Layer.unwrap(
           const authentication = yield* Authentication.Service;
           const project = yield* Project.Service;
           const event = yield* Event.Service;
+          const database = yield* Database.Service;
           const cloudHandlers = CloudApiHandlers.layer.pipe(
             Layer.provide(Authentication.middleware),
           );
@@ -216,6 +231,30 @@ export default Layer.unwrap(
             apiRoutes,
             docsRoutes,
             mcpRoutes,
+            GatewayMcp.layer(),
+            GatewayHttp.layer({
+              objects: (userId) => {
+                const stub = gatewayDos.getByName(userId);
+                return {
+                  configure: (request) => stub.configure(request),
+                  status: () => stub.status().pipe(Effect.orDie),
+                  ingress: (request) => stub.ingress(request).pipe(Effect.orDie),
+                  events: (request) => stub.events(request).pipe(Effect.orDie),
+                  webhooks: () => stub.webhooks().pipe(Effect.orDie),
+                  addWebhook: (request) => stub.addWebhook(request).pipe(Effect.orDie),
+                  removeWebhook: (id) => stub.removeWebhook(id).pipe(Effect.orDie),
+                  deliveries: (webhookId) => stub.deliveries(webhookId).pipe(Effect.orDie),
+                  stream: (request) =>
+                    stub.fetch(HttpServerRequest.fromWeb(request)).pipe(Effect.orDie),
+                };
+              },
+              authenticateSession: authentication.authenticateSession,
+              ingressOrigin: (request) =>
+                typeof workerEnvironment?.INGRESS_PUBLIC_ORIGIN === "string" &&
+                workerEnvironment.INGRESS_PUBLIC_ORIGIN !== ""
+                  ? workerEnvironment.INGRESS_PUBLIC_ORIGIN
+                  : requestOrigin(request),
+            }),
             McpOAuth.layer({
               authenticateSession: authentication.authenticateSession,
               limitRegistration: (key) => mcpOAuthRegistrationRateLimit.limit({ key }),
@@ -250,6 +289,13 @@ export default Layer.unwrap(
                   return yield* CloudMcp.authenticated(
                     app,
                     authentication.authenticateMcpBearer(),
+                  ).pipe(HttpMiddleware.cors());
+                if (resolved.path === GatewayMcp.path)
+                  return yield* GatewayMcp.authenticated(
+                    app,
+                    HttpServerRequest.HttpServerRequest.pipe(
+                      Effect.flatMap(GatewayHttp.authenticate(database)),
+                    ),
                   ).pipe(HttpMiddleware.cors());
                 if (forwarded.headers.get("upgrade")?.toLowerCase() === "websocket")
                   return yield* app;

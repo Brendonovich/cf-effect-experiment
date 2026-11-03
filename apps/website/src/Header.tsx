@@ -7,6 +7,7 @@ import * as stylex from "@stylexjs/stylex";
 import { For, Show } from "solid-js";
 
 import { loginPath } from "./api";
+import { useGatewayAccess } from "./gatewayApi";
 import { useLogOut, useSession } from "./session";
 
 const siteLinks = [
@@ -21,6 +22,7 @@ export function Header(props: { readonly nav?: JSX.Element; readonly actions?: J
   const logOut = useLogOut();
   const navigate = useNavigate();
   const location = useLocation();
+  const gatewayAccess = useGatewayAccess();
 
   return (
     <header sx={styles.header}>
@@ -73,6 +75,9 @@ export function Header(props: { readonly nav?: JSX.Element; readonly actions?: J
                   { label: "Credentials", onSelect: () => navigate("/account/credentials") },
                   { label: "Sign-in methods", onSelect: () => navigate("/account/sign-in") },
                   { label: "Apps", onSelect: () => navigate("/account/apps") },
+                  ...(gatewayAccess.data?.enabled === true
+                    ? [{ label: "Gateway", onSelect: () => navigate("/gateway") }]
+                    : []),
                 ]}
                 onSignOut={() => logOut.mutate()}
               />

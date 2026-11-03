@@ -73,7 +73,7 @@ interface AuthorizationRequest {
   readonly clientName: string;
   readonly redirectUri: string;
   readonly codeChallenge: string;
-  readonly resource: string;
+  readonly resource: McpOAuthConfig.Resource;
   readonly scope: string;
   readonly state: string | undefined;
 }
@@ -100,7 +100,7 @@ const consentPage = (authorization: AuthorizationRequest) => {
     redirect_uri: authorization.redirectUri,
     code_challenge: authorization.codeChallenge,
     code_challenge_method: "S256",
-    resource: authorization.resource,
+    resource: McpOAuthConfig.resourceUrl(authorization.resource),
     scope: authorization.scope,
     state: authorization.state,
     response_type: "code",
@@ -114,7 +114,7 @@ const consentPage = (authorization: AuthorizationRequest) => {
   return HttpServerResponse.html(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Authorize MacroGraph</title><style>body{color-scheme:dark;background:#111;color:#eee;font:16px system-ui;display:grid;min-height:100vh;place-items:center;margin:0}.card{max-width:28rem;padding:2rem;border:1px solid #333;border-radius:12px;background:#181818}h1{font-size:1.4rem}p{color:#bbb;line-height:1.5}.actions{display:flex;gap:.75rem;margin-top:1.5rem}button{padding:.65rem 1rem;border-radius:6px;border:1px solid #555;font:inherit;cursor:pointer}.allow{background:#eee;color:#111;border-color:#eee}</style></head>
-<body><main class="card"><h1>Connect ${escapeHtml(authorization.clientName)}?</h1><p>This lets the client use MacroGraph Cloud MCP as you, including reading and changing projects you can access.</p>
+<body><main class="card"><h1>Connect ${escapeHtml(authorization.clientName)}?</h1><p>${escapeHtml(authorization.resource.consent)}</p>
 <form method="post" action="authorize">${hidden}<div class="actions"><button name="decision" value="deny">Cancel</button><button class="allow" name="decision" value="allow">Allow</button></div></form></main></body></html>`);
 };
 
@@ -154,13 +154,13 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
             } satisfies AuthorizationRedirectError;
           const codeChallenge = params.get("code_challenge");
           const codeChallengeMethod = params.get("code_challenge_method");
-          const requestedResource = params.get("resource");
+          const requestedResource = McpOAuthConfig.resourceFor(params.get("resource"));
           const requestedScope = params.get("scope") ?? McpOAuthConfig.scope;
           if (
             codeChallenge === null ||
             !/^[A-Za-z0-9_-]{43}$/.test(codeChallenge) ||
             codeChallengeMethod !== "S256" ||
-            requestedResource !== McpOAuthConfig.resource()
+            requestedResource === undefined
           )
             return {
               redirectUri,
@@ -184,25 +184,23 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
           } satisfies AuthorizationRequest;
         });
 
-      yield* router.add(
-        "GET",
-        "/.well-known/oauth-protected-resource/api/mcp",
+      const resourceMetadata = (resource: McpOAuthConfig.Resource) =>
         json({
-          resource: McpOAuthConfig.resource(),
+          resource: McpOAuthConfig.resourceUrl(resource),
           authorization_servers: [McpOAuthConfig.issuer()],
           scopes_supported: [McpOAuthConfig.scope],
-          resource_name: "MacroGraph Cloud MCP",
-        }),
-      );
+          resource_name: resource.name,
+        });
+      for (const resource of McpOAuthConfig.resources)
+        yield* router.add(
+          "GET",
+          `/.well-known/oauth-protected-resource${resource.path}`,
+          resourceMetadata(resource),
+        );
       yield* router.add(
         "GET",
         "/.well-known/oauth-protected-resource",
-        json({
-          resource: McpOAuthConfig.resource(),
-          authorization_servers: [McpOAuthConfig.issuer()],
-          scopes_supported: [McpOAuthConfig.scope],
-          resource_name: "MacroGraph Cloud MCP",
-        }),
+        resourceMetadata(McpOAuthConfig.projects),
       );
       yield* router.add(
         "GET",
@@ -324,7 +322,7 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
               userId: session.value.userId,
               redirectUri: authorization.redirectUri,
               codeChallenge: authorization.codeChallenge,
-              resource: authorization.resource,
+              resource: McpOAuthConfig.resourceUrl(authorization.resource),
               scope: authorization.scope,
               expiresAt: new Date(new Date().getTime() + authorizationCodeLifetimeMs).toISOString(),
             })
@@ -340,7 +338,7 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
           const clientId = params.get("client_id");
           const redirectUri = params.get("redirect_uri");
           const verifier = params.get("code_verifier");
-          const requestedResource = params.get("resource");
+          const requested = McpOAuthConfig.resourceFor(params.get("resource"));
           if (
             params.get("grant_type") !== "authorization_code" ||
             code === null ||
@@ -348,9 +346,10 @@ export const layer = <RateLimitError, RateLimitRequirements>(options: {
             redirectUri === null ||
             verifier === null ||
             !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) ||
-            requestedResource !== McpOAuthConfig.resource()
+            requested === undefined
           )
             return oauthError("invalid_request", "Invalid authorization code request");
+          const requestedResource = McpOAuthConfig.resourceUrl(requested);
           const codeHash = yield* hashSecret(code);
           const challenge = yield* pkceChallenge(verifier);
           const codes = yield* database
