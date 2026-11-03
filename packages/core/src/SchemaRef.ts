@@ -3,7 +3,12 @@ import { Schema } from "effect";
 export const PackageId = Schema.String.pipe(Schema.brand("PackageId"));
 export type PackageId = typeof PackageId.Type;
 
-export const SchemaId = Schema.String.pipe(Schema.brand("SchemaId"));
+/** PascalCase or camelCase, so it reads cleanly in URLs and saved graphs. */
+export const SchemaId = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z][A-Za-z0-9]*$/, {
+    expected: "a PascalCase or camelCase node schema ID",
+  }),
+).pipe(Schema.brand("SchemaId"));
 export type SchemaId = typeof SchemaId.Type;
 
 export const SchemaRef = Schema.Struct({

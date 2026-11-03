@@ -41,12 +41,12 @@ describe("GitHub module", () => {
           "CreateIssue",
           "UpdateIssue",
           "CreateComment",
-          "webhook:push",
-          "webhook:pull-request",
-          "webhook:issues",
-          "webhook:issue-comment",
-          "webhook:workflow-run",
-          "webhook:release",
+          "PushWebhook",
+          "PullRequestWebhook",
+          "IssueWebhook",
+          "IssueCommentWebhook",
+          "WorkflowRunWebhook",
+          "ReleaseWebhook",
         ],
       );
       assert.strictEqual(deployment.definition, module.engine);
@@ -56,7 +56,7 @@ describe("GitHub module", () => {
   it.effect("decodes webhook payloads as concrete module types", () =>
     Effect.gen(function* () {
       const schemas = yield* Registration.collect(module.effect);
-      const webhook = schemas.find((schema) => schema.id === "webhook:release");
+      const webhook = schemas.find((schema) => schema.id === "ReleaseWebhook");
       assert.isDefined(webhook);
       assert.deepStrictEqual(
         webhook.dataOutputs.find((output) => output.id === "payload")?.type,

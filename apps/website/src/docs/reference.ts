@@ -8,14 +8,24 @@ import { createEffect, createMemo, createSignal } from "solid-js";
 import { loadModule, loadPackage, packages } from "virtual:macrograph-reference";
 
 import discordLogo from "../assets/integrations/discord.png";
+import elevenlabsLogo from "../assets/integrations/elevenlabs.svg";
+import elgatoLogo from "../assets/integrations/elgato.svg";
+import githubLogo from "../assets/integrations/github.svg";
 import goxlrLogo from "../assets/integrations/goxlr.png";
+import ikeaLogo from "../assets/integrations/ikea.svg";
+import kofiLogo from "../assets/integrations/kofi.svg";
+import lifxLogo from "../assets/integrations/lifx.svg";
 import midiLogo from "../assets/integrations/midi.svg";
 import obsLogo from "../assets/integrations/obs.png";
 import openaiLogo from "../assets/integrations/openai.png";
+import opencodeLogo from "../assets/integrations/opencode.svg";
+import sendblueLogo from "../assets/integrations/sendblue.svg";
 import speakerBotLogo from "../assets/integrations/speaker-bot.svg";
 import streamDeckLogo from "../assets/integrations/stream-deck.jpg";
 import streamlabsLogo from "../assets/integrations/streamlabs.png";
+import tiktokLogo from "../assets/integrations/tiktok.svg";
 import twitchLogo from "../assets/integrations/twitch.png";
+import voicemodLogo from "../assets/integrations/voicemod.svg";
 import vtubeStudioLogo from "../assets/integrations/vtube-studio.png";
 import websocketsLogo from "../assets/integrations/websockets.webp";
 
@@ -41,14 +51,24 @@ export const findPackage = (pkg: PackageName) =>
 /** Logos for packages that have one, keyed by `publisher/name`. */
 const logos: Readonly<Record<string, string>> = {
   "macrograph/discord": discordLogo,
+  "macrograph/elevenlabs": elevenlabsLogo,
+  "macrograph/elgato-key-light": elgatoLogo,
+  "macrograph/github": githubLogo,
   "macrograph/goxlr": goxlrLogo,
+  "macrograph/ikea-tradfri": ikeaLogo,
+  "macrograph/kofi": kofiLogo,
+  "macrograph/lifx": lifxLogo,
   "macrograph/midi": midiLogo,
   "macrograph/obs": obsLogo,
   "macrograph/openai": openaiLogo,
+  "macrograph/opencode": opencodeLogo,
+  "macrograph/sendblue": sendblueLogo,
   "macrograph/speakerbot": speakerBotLogo,
   "macrograph/streamdeck": streamDeckLogo,
   "macrograph/streamlabs": streamlabsLogo,
+  "macrograph/tiktok-euler-stream": tiktokLogo,
   "macrograph/twitch": twitchLogo,
+  "macrograph/voicemod": voicemodLogo,
   "macrograph/vtube-studio": vtubeStudioLogo,
   "macrograph/websocket-client": websocketsLogo,
   "macrograph/websocket-server": websocketsLogo,

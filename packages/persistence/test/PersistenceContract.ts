@@ -26,7 +26,7 @@ const node = (id: string, name = id): Node.Model => ({
   foldPins: true,
   schema: {
     package: PackageId.make("contract-package"),
-    schema: SchemaId.make("contract-schema"),
+    schema: SchemaId.make("contractSchema"),
   },
 });
 

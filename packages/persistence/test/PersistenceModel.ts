@@ -173,7 +173,7 @@ const makeNode = (graphId: string, spec: NodeSpec): Node.Model => ({
   inputDefaults: {},
   foldPins: spec.foldPins,
   ...(spec.split === null ? {} : { splitScopeOutputs: spec.split.map((id) => IoId.make(id)) }),
-  schema: { package: PackageId.make("model-package"), schema: SchemaId.make("model-schema") },
+  schema: { package: PackageId.make("model-package"), schema: SchemaId.make("modelSchema") },
   position: { x: spec.x, y: spec.y },
 });
 

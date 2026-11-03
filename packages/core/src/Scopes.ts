@@ -34,7 +34,7 @@ export const emptyIO: NodeIO = {
 
 const projectionSchema = {
   package: PackageId.make("$macrograph"),
-  schema: SchemaId.make("scope-projection"),
+  schema: SchemaId.make("ScopeProjection"),
 };
 
 export const isProjectionNode = (node: Pick<Node.Model, "schema">) =>

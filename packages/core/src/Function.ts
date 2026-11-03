@@ -88,7 +88,7 @@ export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = {
 
 const boundarySchema = {
   package: PackageId.make("$macrograph"),
-  schema: SchemaId.make("function-boundary"),
+  schema: SchemaId.make("FunctionBoundary"),
 };
 
 export const boundaryNodes = (fn: Model): ReadonlyArray<NodeModel> => [

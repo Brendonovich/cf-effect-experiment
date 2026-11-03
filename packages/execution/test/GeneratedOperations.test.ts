@@ -185,7 +185,9 @@ describe("generated custom operations", () => {
           '["record/id","update","deleted"]',
           '["constructor","make"]',
         ])
-          expect(catalog.get(SchemaId.make(id))?.generateIO({})).toBeUndefined();
+          expect(
+            Schema.is(SchemaId)(id) ? catalog.get(id)?.generateIO({}) : undefined,
+          ).toBeUndefined();
         const custom = t.Enum(enumId);
         const referenced: t.Definitions = {
           ...definitions,
@@ -369,7 +371,7 @@ describe("generated custom operations", () => {
                   }),
               });
               yield* context.schema.register({
-                id: "enum-anchor",
+                id: "enumAnchor",
                 type: "pure",
                 io: (io) => ({ value: io.data.in("value", t.Enum(enumId)) }),
                 run: () => Effect.void,
@@ -413,7 +415,7 @@ describe("generated custom operations", () => {
                   ),
                   sink: node("sink", module.id, "sink"),
                   forbidden: node("forbidden", module.id, "forbidden"),
-                  enumAnchor: node("enumAnchor", module.id, "enum-anchor"),
+                  enumAnchor: node("enumAnchor", module.id, "enumAnchor"),
                 },
                 scopeProjections: {
                   scope: { id: "scope", position: { x: 0, y: 0 } },
