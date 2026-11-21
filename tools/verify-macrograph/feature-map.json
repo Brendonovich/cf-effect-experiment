@@ -94,6 +94,19 @@
         "Delete the node"
       ],
       "evidence": ["print-project.json", "screenshot", "server-log"]
+    },
+    {
+      "id": "module.keyboard.keybind",
+      "name": "Keyboard keybinds fire on press and release in the browser tab",
+      "documentation": ".opencode/skills/verify-macrograph/features/keyboard.md",
+      "status": "covered",
+      "verification": "keyboard",
+      "userJourney": [
+        "Import a Shift+K Keybind wired to Print nodes",
+        "Press the keybind and other modifier combinations",
+        "Press the keybind while typing in a text field"
+      ],
+      "evidence": ["keyboard-project.json", "screenshot", "server-log"]
     }
   ]
 }

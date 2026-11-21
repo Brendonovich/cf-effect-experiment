@@ -8,6 +8,7 @@ import type * as S from "effect/Schema";
 import { StaticRegistry } from "@macrograph/module-host/core";
 import HttpClientLocalDeployment from "@macrograph/module-http-client/Deployment/Local";
 import JsonModule from "@macrograph/module-json";
+import KeyboardBrowserDeployment from "@macrograph/module-keyboard/Deployment/Browser";
 import ListModule from "@macrograph/module-list";
 import LogicModule from "@macrograph/module-logic";
 import MathModule from "@macrograph/module-math";
@@ -135,6 +136,15 @@ export const modules: ReadonlyArray<PlaygroundModule> = [
       description: "General-purpose control flow, formatting, timing, and debugging tools.",
     },
     UtilitiesStandaloneDeployment,
+  ),
+  engine(
+    {
+      name: "keyboard",
+      displayName: "Keyboard",
+      description:
+        "Respond to keybinds pressed in the browser or anywhere on the server's machine.",
+    },
+    KeyboardBrowserDeployment,
   ),
   engine(
     {

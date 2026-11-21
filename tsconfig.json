@@ -153,6 +153,9 @@
       "path": "packages/modules/json"
     },
     {
+      "path": "packages/modules/keyboard"
+    },
+    {
       "path": "packages/modules/lifx"
     },
     {

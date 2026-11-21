@@ -36,6 +36,7 @@
     { "path": "../../packages/modules/goxlr" },
     { "path": "../../packages/modules/ikea-tradfri" },
     { "path": "../../packages/modules/json" },
+    { "path": "../../packages/modules/keyboard" },
     { "path": "../../packages/modules/lifx" },
     { "path": "../../packages/modules/list" },
     { "path": "../../packages/modules/logic" },

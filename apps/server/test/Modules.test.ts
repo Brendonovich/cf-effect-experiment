@@ -20,6 +20,7 @@ import { Mounter } from "@macrograph/module-host/Mounter";
 import HttpClientDefinition from "@macrograph/module-http-client/Deployment/Local";
 import IkeaTradfriDefinition from "@macrograph/module-ikea-tradfri/Deployment";
 import JsonDefinition from "@macrograph/module-json";
+import KeyboardDefinition from "@macrograph/module-keyboard/Deployment/Native";
 import LIFXDefinition from "@macrograph/module-lifx/Deployment";
 import ListDefinition from "@macrograph/module-list";
 import LogicDefinition from "@macrograph/module-logic";
@@ -58,6 +59,7 @@ const GoXLR = Engine.identify(Module.builtinId("goxlr"), GoXLRDefinition);
 const HttpClient = Engine.identify(Module.builtinId("http-client"), HttpClientDefinition);
 const IkeaTradfri = Engine.identify(Module.builtinId("ikea-tradfri"), IkeaTradfriDefinition);
 const Json = Module.identify(Module.builtinId("json"), JsonDefinition);
+const Keyboard = Engine.identify(Module.builtinId("keyboard"), KeyboardDefinition);
 const LIFX = Engine.identify(Module.builtinId("lifx"), LIFXDefinition);
 const List = Module.identify(Module.builtinId("list"), ListDefinition);
 const Logic = Module.identify(Module.builtinId("logic"), LogicDefinition);
@@ -94,6 +96,7 @@ const deployments = [
   GoXLR,
   HttpClient,
   IkeaTradfri,
+  Keyboard,
   LIFX,
   Midi,
   OBS,
