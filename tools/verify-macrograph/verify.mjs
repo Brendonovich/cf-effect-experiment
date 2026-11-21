@@ -25,6 +25,7 @@ const supportedModes = new Set([
   "module-reference",
   "journey",
   "print-log",
+  "keyboard",
   "all",
 ]);
 const interactionTimeout = Number(process.env.MACROGRAPH_VERIFY_INTERACTION_TIMEOUT ?? 10_000);
@@ -739,6 +740,127 @@ async function printLog(page) {
   await evidence(deletedPath, "screenshot");
 }
 
+async function keyboard(page) {
+  const graphId = "verify-keyboard-graph";
+  const print = (id, name, text, position) => ({
+    id,
+    name,
+    properties: {},
+    inputDefaults: { in: text },
+    schema: { package: "macrograph.app/macrograph/utilities", schema: "Print" },
+    position,
+  });
+  const projectPath = join(outputDirectory, "keyboard-project.json");
+  await writeFile(
+    projectPath,
+    JSON.stringify({
+      version: 1,
+      project: {
+        name: "Keyboard verification",
+        functions: {},
+        engines: {},
+        constants: {},
+        types: {},
+        queues: {},
+        graphs: {
+          [graphId]: {
+            canvas: {
+              id: graphId,
+              name: "Keyboard Graph",
+              nodes: {
+                keybind: {
+                  id: "keybind",
+                  name: "Shift K",
+                  properties: { key: "k", shift: true },
+                  inputDefaults: {},
+                  schema: { package: "macrograph.app/macrograph/keyboard", schema: "Keybind" },
+                  position: { x: 0, y: 0 },
+                },
+                pressed: print("pressed", "Pressed Print", "keybind pressed", { x: 400, y: 0 }),
+                released: print("released", "Released Print", "keybind released", {
+                  x: 400,
+                  y: 200,
+                }),
+              },
+              connections: [
+                {
+                  id: "keybind-pressed",
+                  outNodeId: "keybind",
+                  outIo: { _tag: "Port", id: "exec" },
+                  inNodeId: "pressed",
+                  inIoId: "exec",
+                },
+                {
+                  id: "keybind-released",
+                  outNodeId: "keybind",
+                  outIo: { _tag: "Port", id: "released" },
+                  inNodeId: "released",
+                  inIoId: "exec",
+                },
+              ],
+            },
+          },
+        },
+      },
+    }),
+  );
+  await evidence(projectPath, "project-import");
+  await waitForAppShell(page);
+  page.once("dialog", (dialog) => dialog.accept());
+  const importNavigation = page.waitForEvent("framenavigated");
+  await page.locator('input[type="file"]').setInputFiles(projectPath);
+  await importNavigation;
+  await waitForAppShell(page);
+
+  const printRegion = page.getByRole("region", { name: "Print", exact: true });
+  await printRegion.waitFor({ timeout: uiTimeout });
+  const entries = (text) => printRegion.locator("[data-print-entry]").filter({ hasText: text });
+  const counts = async () => ({
+    pressed: await entries("keybind pressed").count(),
+    released: await entries("keybind released").count(),
+  });
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+
+  // The wrong modifiers must not fire the keybind.
+  await page.keyboard.press("k");
+  await page.keyboard.press("Control+Shift+k");
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("k");
+  await entries("keybind pressed").first().waitFor({ timeout: uiTimeout });
+  check(
+    "pressing the keybind fires Pressed only, before release",
+    JSON.stringify(await counts()) === JSON.stringify({ pressed: 1, released: 0 })
+      ? "passed"
+      : "failed",
+    JSON.stringify(await counts()),
+  );
+  await page.keyboard.up("Shift");
+  await page.keyboard.up("k");
+  await entries("keybind released").first().waitFor({ timeout: uiTimeout });
+
+  // Key presses while typing in a text field are ignored.
+  await page.evaluate(() => {
+    const input = document.createElement("input");
+    input.id = "verify-keyboard-input";
+    document.body.append(input);
+    input.focus();
+  });
+  await page.keyboard.press("Shift+k");
+  await page.evaluate(() => document.getElementById("verify-keyboard-input")?.remove());
+  await page.waitForTimeout(1_000);
+  const final = await counts();
+  check(
+    "the keybind fires once per press, ignoring other modifiers and text fields",
+    final.pressed === 1 && final.released === 1 ? "passed" : "failed",
+    JSON.stringify(final),
+  );
+  const path = join(outputDirectory, "keyboard-keybind.png");
+  await page.screenshot({ path, fullPage: true });
+  await evidence(path, "screenshot");
+}
+
 async function cleanup() {
   if (context !== undefined) await context.close().catch(() => {});
   if (appProcess !== undefined && appProcess.exitCode === null) {
@@ -785,7 +907,7 @@ process.once("SIGTERM", () => void handleSignal("SIGTERM"));
 async function main() {
   if (!supportedModes.has(mode))
     throw new Error(
-      `Usage: verify.mjs [doctor|smoke|function-navigation|function-queues|module-reference|journey|print-log|all]`,
+      `Usage: verify.mjs [doctor|smoke|function-navigation|function-queues|module-reference|journey|print-log|keyboard|all]`,
     );
   await mkdir(outputDirectory, { recursive: true });
   await doctor();
@@ -798,6 +920,7 @@ async function main() {
     if (mode === "journey" || mode === "all") await persistenceExportJourney(page);
     if (mode === "function-queues" || mode === "all") await functionQueues(page);
     if (mode === "print-log" || mode === "all") await printLog(page);
+    if (mode === "keyboard" || mode === "all") await keyboard(page);
     const unexpectedConsoleProblems = manifest.browser.console.filter(isUnexpectedConsoleProblem);
     const unexpectedFailedRequests = manifest.browser.failedRequests.filter(
       (request) => request.ignored !== true,

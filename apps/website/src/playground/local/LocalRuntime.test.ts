@@ -238,6 +238,7 @@ describe("local browser runtime", () => {
               "macrograph.app/macrograph/custom-types",
               "macrograph.app/macrograph/http-client",
               "macrograph.app/macrograph/json",
+              "macrograph.app/macrograph/keyboard",
               "macrograph.app/macrograph/list",
               "macrograph.app/macrograph/logic",
               "macrograph.app/macrograph/functions",

@@ -6,6 +6,7 @@ import * as Module from "@macrograph/module/Module";
 export const moduleUIs: ReadonlyMap<string, StaticModuleUI> = new Map<string, StaticModuleUI>([
   [Module.builtinId("obs"), () => import("@macrograph/module-obs/UI")],
   [Module.builtinId("twitch"), () => import("@macrograph/module-twitch/UI")],
+  [Module.builtinId("keyboard"), () => import("@macrograph/module-keyboard/UI")],
   [Module.builtinId("utilities"), () => import("@macrograph/module-utilities/UI")],
   [Module.builtinId("websocket-client"), () => import("@macrograph/module-websocket-client/UI")],
 ]);

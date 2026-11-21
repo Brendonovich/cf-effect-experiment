@@ -12,6 +12,7 @@ Use this map to choose the narrowest real-browser verification. A feature is onl
 | Import replaces the local project         | Covered | `journey`             | [project-import.md](project-import.md)                     |
 | Reset clears the local project            | Covered | `journey`             | [project-reset.md](project-reset.md)                       |
 | Inspector Print output and node links     | Covered | `print-log`           | [print-log.md](print-log.md)                               |
+| Keyboard keybinds in the browser tab      | Covered | `keyboard`            | [keyboard.md](keyboard.md)                                 |
 
 Run `pnpm verify:playground` for all covered features. The machine-readable index is `tools/verify-macrograph/feature-map.json`.
 
