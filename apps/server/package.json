@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "bin": {
+    "macrograph": "./dist/esm/index.js"
+  },
   "scripts": {
     "build": "rm -rf dist && pnpm --dir client build && pnpm build:backend",
-    "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/",
+    "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/ && chmod +x dist/esm/index.js",
     "typecheck": "tsgo --build",
-    "start": "node --env-file-if-exists=.env dist/esm/index.js",
+    "start": "node --env-file-if-exists=.env dist/esm/index.js serve",
     "test": "vitest run",
     "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
     "dev": "vite",
+    "dev:inline": "MACROGRAPH_DEV_BACKEND=inline vite",
     "agent:rest": "node scripts/rest-agent.mjs"
   },
   "dependencies": {

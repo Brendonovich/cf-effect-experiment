@@ -24,6 +24,8 @@ import { HttpApi, HttpApiBuilder, HttpApiError, OpenApi } from "effect/http-api"
 import type { ApiKeys } from "./ApiKeys.ts";
 import type { ClientSessions } from "./ClientSessions.ts";
 
+import { LocalAccess } from "./LocalAccess.ts";
+
 /** The REST API served by self-hosted servers: the cloud's project editing endpoints. */
 export class Api extends HttpApi.make("MacroGraphServerApi")
   .add(ProjectEditorApiGroup)
@@ -37,6 +39,7 @@ export interface Options {
   readonly basePath: string;
   readonly apiKeys: ApiKeys;
   readonly sessions: ClientSessions;
+  readonly local: LocalAccess.Access;
   readonly ownerId: Effect.Effect<string | undefined>;
   readonly adminIds: ReadonlySet<string>;
   readonly projectTimestamps: Effect.Effect<{
@@ -60,7 +63,8 @@ const prefixRouter = (prefix: string) =>
 /**
  * Serves the REST API under `/api`, MCP at `/api/mcp`, and API key management under
  * `/auth/api-keys`. REST and MCP callers authenticate with `Authorization: Bearer <api key>` and
- * act as the key's creator; only the owner and admins may edit or manage keys.
+ * act as the key's creator; only the owner and admins may edit or manage keys. A caller presenting
+ * the local token acts as `LocalAccess.userId` with the owner's editing rights.
  */
 export const layer = (
   options: Options,
@@ -81,11 +85,21 @@ export const layer = (
 > => {
   const access = (userId: string) =>
     options.ownerId.pipe(
-      Effect.map((ownerId) => ({ canEdit: userId === ownerId || options.adminIds.has(userId) })),
+      Effect.map((ownerId) => ({
+        canEdit:
+          (options.local.enabled && userId === LocalAccess.userId) ||
+          userId === ownerId ||
+          options.adminIds.has(userId),
+      })),
     );
 
   const principal = (key: string | undefined) =>
     Effect.gen(function* () {
+      if (options.local.matches(key))
+        return {
+          user: { id: LocalAccess.userId },
+          caller: LocalAccess.caller,
+        } satisfies ProjectMcp.Principal;
       const found = key === undefined ? undefined : yield* options.apiKeys.authenticate(key);
       if (found === undefined) return yield* new HttpApiError.Unauthorized();
       return {
@@ -284,6 +298,7 @@ export const layer = (
           const mcp = yield* ProjectMcp.layer({
             name: "MacroGraph Server",
             path: "/api/mcp",
+            instructions: ProjectMcp.instructions,
             toolkit: ProjectMcp.toolkit,
             handlers: {
               listProjects: project.list,

@@ -98,7 +98,13 @@ export const toolkit = Toolkit.make(
 );
 
 export const layer = (handlers: Toolkit.HandlersFrom<typeof toolkit.tools>) =>
-  ProjectMcp.layer({ name: "MacroGraph Cloud", path: "/api/mcp", toolkit, handlers });
+  ProjectMcp.layer({
+    name: "MacroGraph Cloud",
+    path: "/api/mcp",
+    toolkit,
+    handlers,
+    instructions: `${ProjectMcp.instructions} MacroGraph Cloud also exposes createProject, listExecutions and getExecution for projects and their runs.`,
+  });
 
 export const authenticated = <A, E, R>(
   app: Effect.Effect<A, E, R>,

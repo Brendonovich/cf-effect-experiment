@@ -28,7 +28,13 @@ export const isUnsafePath = (url: string) => {
 export const isInsideStaticRoot = (root: string, url: string) => {
   const decoded = decodePath(url);
   if (decoded === undefined) return false;
-  const realRoot = realpathSync(root);
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(root);
+  } catch {
+    // Without built client assets, as when `pnpm dev` serves the client, there is nothing to serve.
+    return false;
+  }
   const requestedPath = resolve(realRoot, `.${decoded.startsWith("/") ? decoded : `/${decoded}`}`);
   const isInside = (path: string) => path === realRoot || path.startsWith(`${realRoot}${sep}`);
   const isIndexInside = (directory: string) => {

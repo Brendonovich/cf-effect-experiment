@@ -5,6 +5,7 @@ import { Headers } from "effect/http";
 import type { AtomicFileStore } from "../src/AtomicFileStore.ts";
 
 import { ClientSessions } from "../src/ClientSessions.ts";
+import { LocalAccess } from "../src/LocalAccess.ts";
 
 describe("client sessions", () => {
   it.effect("grants edits only to the registered owner and configured admins", () =>
@@ -19,7 +20,12 @@ describe("client sessions", () => {
       const ownerToken = yield* sessions.create({ userId: "owner", email: "owner@example.com" });
       const adminToken = yield* sessions.create({ userId: "admin", email: "admin@example.com" });
       const readerToken = yield* sessions.create({ userId: "reader", email: "reader@example.com" });
-      const policy = sessions.policy(Effect.succeed("owner"), new Set(["admin"]), "ws");
+      const policy = sessions.policy(
+        Effect.succeed("owner"),
+        new Set(["admin"]),
+        "ws",
+        LocalAccess.none,
+      );
       const resolve = (token?: string) =>
         policy.resolve(
           Headers.fromInput(token === undefined ? {} : { "x-macrograph-session": token }),
@@ -51,8 +57,8 @@ describe("client sessions", () => {
       });
       const token = yield* sessions.create({ userId: "owner", email: "ada.l@example.com" });
       const headers = Headers.fromInput({ "x-macrograph-session": token });
-      const ws = sessions.policy(Effect.succeed("owner"), new Set(), "ws");
-      const http = sessions.policy(Effect.succeed("owner"), new Set(), "http");
+      const ws = sessions.policy(Effect.succeed("owner"), new Set(), "ws", LocalAccess.none);
+      const http = sessions.policy(Effect.succeed("owner"), new Set(), "http", LocalAccess.none);
 
       const browser = yield* ws.resolve(headers, 0);
       assert.deepStrictEqual(browser.actor, {
@@ -89,7 +95,7 @@ describe("client sessions", () => {
           clear: Effect.void,
         });
         const identity = yield* sessions
-          .policy(Effect.succeed(undefined), new Set(), "ws")
+          .policy(Effect.succeed(undefined), new Set(), "ws", LocalAccess.none)
           .resolve(Headers.empty, 0);
 
         assert.isFalse(identity.canEdit);
@@ -110,7 +116,12 @@ describe("client sessions", () => {
           clear: Effect.void,
         });
         for (const owner of [undefined, "owner"]) {
-          const policy = sessions.policy(Effect.succeed(owner), new Set(["admin"]), "http");
+          const policy = sessions.policy(
+            Effect.succeed(owner),
+            new Set(["admin"]),
+            "http",
+            LocalAccess.none,
+          );
           for (const token of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
             assert.isUndefined(yield* sessions.resolve(token));
             for (const headers of [
@@ -128,4 +139,43 @@ describe("client sessions", () => {
       }),
     );
   }
+
+  it.effect("treats the local token as the owner, even before setup", () =>
+    Effect.gen(function* () {
+      const sessions = ClientSessions.make({
+        read: Effect.succeed(null),
+        write: () => Effect.void,
+        clear: Effect.void,
+      });
+      const token = LocalAccess.generateToken();
+      for (const transport of ["ws", "http"] as const) {
+        const policy = sessions.policy(
+          Effect.succeed(undefined),
+          new Set(),
+          transport,
+          LocalAccess.make(token),
+        );
+        for (const headers of [
+          { "x-macrograph-session": token },
+          { authorization: `Bearer ${token}` },
+        ]) {
+          const identity = yield* policy.resolve(Headers.fromInput(headers), 3);
+          assert.isTrue(identity.canEdit);
+          assert.isTrue(identity.canManageCredentials);
+          assert.strictEqual(identity.actor.userId, LocalAccess.userId);
+        }
+        for (const wrong of [`${token}x`, token.slice(1), ""]) {
+          const identity = yield* policy.resolve(
+            Headers.fromInput({ authorization: `Bearer ${wrong}` }),
+            3,
+          );
+          assert.isFalse(identity.canEdit);
+          assert.isFalse(identity.canManageCredentials);
+        }
+      }
+      // Without a configured token, nothing matches.
+      assert.isFalse(LocalAccess.none.matches(token));
+      assert.isFalse(LocalAccess.make(token).matches(undefined));
+    }),
+  );
 });

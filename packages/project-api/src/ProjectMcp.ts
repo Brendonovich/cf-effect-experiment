@@ -172,6 +172,18 @@ export const editorTools = [
 /** The tool set of hosts with a fixed set of projects, such as self-hosted servers. */
 export const toolkit = Toolkit.make(listProjects, getProject, ...editorTools);
 
+/**
+ * What a client is told when it connects. Instructions reach the model before any tool call, so
+ * they carry the workflow the tool descriptions would otherwise repeat one by one.
+ */
+export const instructions = [
+  "MacroGraph is a visual automation editor. A project contains graphs; a graph contains nodes from package schemas, joined by connected ports.",
+  "Read before writing: listProjects, then listGraphs, then getGraph, which returns the graph's nodes, connections and each node's resolved inputs and outputs.",
+  "To build or replace a graph, call createGraph once with the whole graph: nodes keyed by temporary IDs, connections referencing those IDs, and resource IDs from searchSchemas.",
+  "Prefer createGraph over repeated createNode and createConnection calls.",
+  "Calls run as the API key's user, and edits appear to everyone with the project open in the editor.",
+].join(" ");
+
 const supportedProtocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const defaultProtocolVersion = "2025-06-18";
 
@@ -262,6 +274,8 @@ export const layer = <Tools extends Record<string, Tool.Any>>(options: {
   readonly path: `/${string}`;
   readonly toolkit: Toolkit.Toolkit<Tools>;
   readonly handlers: Toolkit.HandlersFrom<Tools>;
+  /** Sent as the `initialize` result's instructions, when the host has something to add. */
+  readonly instructions?: string;
 }) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
@@ -339,6 +353,9 @@ export const layer = <Tools extends Record<string, Tool.Any>>(options: {
                 protocolVersion,
                 capabilities: { tools: { listChanged: false } },
                 serverInfo: { name: options.name, version: "1.0.0" },
+                ...(options.instructions === undefined
+                  ? {}
+                  : { instructions: options.instructions }),
               });
             }
             case "ping":

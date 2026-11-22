@@ -1,5 +1,5 @@
 import { moduleDeployments } from "@macrograph/module/vite";
-import { defineConfig } from "rolldown";
+import { defineConfig, type OutputOptions, type RolldownOptions } from "rolldown";
 
 const serverDeployments = new Set([
   "@macrograph/module-http-client",
@@ -16,6 +16,7 @@ const serverDeployments = new Set([
   "@macrograph/module-goxlr",
   "@macrograph/module-ikea-tradfri",
   "@macrograph/module-json",
+  "@macrograph/module-keyboard",
   "@macrograph/module-lifx",
   "@macrograph/module-list",
   "@macrograph/module-logic",
@@ -34,15 +35,23 @@ const serverDeployments = new Set([
   "@macrograph/module-vtube-studio",
 ]);
 
-export default defineConfig({
+/** The server bundle for a release channel, built from `src/index.ts` in the working directory. */
+export const serverBuild = (channel: string): RolldownOptions & { output: OutputOptions } => ({
   platform: "node",
   plugins: [moduleDeployments(undefined, serverDeployments)],
   input: "src/index.ts",
-  // Native addon; resolved from node_modules at runtime and loaded lazily by the MIDI module.
-  external: ["@julusian/midi"],
+  // The channel the CLI serves unless MACROGRAPH_CHANNEL says otherwise; see src/Channel.ts.
+  transform: { define: { MACROGRAPH_CHANNEL: JSON.stringify(channel) } },
+  // Native addons; resolved from node_modules at runtime and loaded lazily by their modules.
+  external: ["@julusian/midi", "uiohook-napi"],
   output: {
     dir: "dist/esm",
     format: "esm",
+    // The entry is the `macrograph` bin.
+    banner: (chunk) => (chunk.isEntry ? "#!/usr/bin/env node" : ""),
     minify: false,
   },
 });
+
+// Builds are the latest channel unless built with MACROGRAPH_CHANNEL.
+export default defineConfig(serverBuild(process.env.MACROGRAPH_CHANNEL || "latest"));

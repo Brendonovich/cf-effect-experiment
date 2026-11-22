@@ -16,11 +16,43 @@ data and are not available to anonymous read-only viewers.
 pnpm --filter @macrograph/server dev
 ```
 
-This runs the backend and browser client in one Vite process. Vite loads the backend in a
-server environment and hot-reloads it when server or workspace dependencies change, disposing
-the old runtime before starting the next one. No backend build or watcher is needed; migrations
-are read directly from `packages/persistence-sqlite/drizzle`. Development loads `apps/server/.env`
-(and Vite's mode-specific env files), with existing environment variables taking precedence.
+Open `http://localhost:5174`. Vite serves and hot-reloads only the browser client, and proxies
+`/health`, `/auth`, `/api`, `/rpc`, `/rpc-ws` and `/module` to the `local` channel's background
+service (see [Channels](#channels)), which it finds or starts like the CLI does. That service runs
+from source: Vite bundles `src/index.ts` with the release build's configuration into
+`node_modules/.cache/macrograph-dev/index.mjs` and runs its `serve --service` with source maps.
+When the bundle's sources change (the server or any workspace package it uses), it is rebuilt and
+the service restarted, which the terminal reports; a failed build keeps the old service running.
+The service's own output is not shown.
+
+Several `pnpm dev` processes can run at once: each serves the client on the next free port, and all
+proxy to the one service. Only one of them builds, watches and restarts it, holding a lock in
+`node_modules/.cache/macrograph-dev`; when it exits, another takes over within a second, and
+starting or taking over never restarts the service unless the bundle changed.
+
+Interrupting `pnpm dev` stops only Vite: the service keeps running for local agents, and the next
+`pnpm dev` reuses it if its bundle is unchanged. Stop or restart it with
+`MACROGRAPH_CHANNEL=local macrograph service stop|restart`. It keeps its data in
+`$XDG_DATA_HOME/macrograph-local` unless `MACROGRAPH_DATA_DIR` is set; data from the old
+in-Vite backend in `apps/server/project.db` is not moved. The browser signs in as usual; the setup
+link for a new data directory is printed by `pnpm dev`.
+
+```sh
+pnpm --filter @macrograph/server dev:inline
+```
+
+`dev:inline` instead runs the backend inside Vite's server environment and hot-reloads it when
+server or workspace dependencies change, disposing the old runtime before starting the next one.
+Migrations are read directly from `packages/persistence-sqlite/drizzle`, and data stays in
+`MACROGRAPH_DATA_DIR` or `apps/server`. It also serves the `local` channel, registering Vite's URL;
+each reload overwrites the registration rather than removing it, so local agents never find it
+missing, and requests during a reload wait for the backend. It refuses to start while another
+server holds the channel (stop it with `MACROGRAPH_CHANNEL=local macrograph service stop`). When
+it is interrupted its registration stays behind, and clients treat it as stale because its process
+no longer answers.
+
+Both load `apps/server/.env` (and Vite's mode-specific env files), with existing environment
+variables taking precedence.
 
 Production:
 
@@ -29,11 +61,61 @@ pnpm --filter @macrograph/server build
 PORT=3001 MACROGRAPH_DATA_DIR=./data pnpm --filter @macrograph/server start
 ```
 
-In development, open `http://localhost:5174`; that is the only port. The backend listens on a
-private loopback port that Vite proxies to, so `PORT` and `HOST` apply to production only. In
-production, the server and client share `PORT`. `GET /health/live` reports process liveness and
+`start` runs `macrograph serve`, the foreground server configured by the environment below
+(`--port` and `--hostname` override `PORT` and `HOST`).
+
+`PORT` and `HOST` apply to production only: in development the backend's port is the `local`
+channel's, or a private one with `dev:inline`. In production, the server and client share `PORT`. `GET /health/live` reports process liveness and
 `GET /health/ready` reports readiness after persistence and module initialization. `GET /health`
 is a compatibility alias for readiness.
+
+## Background service and local agents
+
+The build is also the `macrograph` CLI (`dist/esm/index.js`, the package's `bin`). Run
+`macrograph` to start a per-user background service if one isn't running and print its URL. The
+service listens on loopback and keeps its data in `$XDG_DATA_HOME/macrograph`
+(`~/.local/share/macrograph`) unless `MACROGRAPH_DATA_DIR` is set. While it runs, it describes
+itself in `$XDG_STATE_HOME/macrograph/service.json` (`~/.local/state`, mode `0600`), including a
+local token that acts as the server's owner, even before setup. Deleting that file stops the
+service. Until the server is set up, `macrograph service status` shows its setup link.
+
+- `macrograph service start|stop|restart|status` manages the service.
+- `macrograph service get|set|unset <hostname|port|token> [value]` changes its settings in
+  `$XDG_CONFIG_HOME/macrograph/service.json` (`~/.config`). Changes stop the service, which
+  restarts with them on next use; unsetting `token` rotates it.
+- `macrograph mcp` is a stdio MCP server for local agents. It starts the service if needed and
+  relays each message to its `/api/mcp` with the local token. `macrograph mcp config` prints how
+  to connect OpenCode, Claude Code, Codex, and file-based clients; `--client <id>` prints one.
+- `--server <url>` on `mcp` and `service status` uses that server instead, with the token in
+  `MACROGRAPH_TOKEN`, without discovering or starting anything. For example,
+  `MACROGRAPH_TOKEN="$(macrograph service get token)" macrograph mcp --server http://127.0.0.1:3170`.
+
+### Channels
+
+Each channel has its own service: registration, config, token, data and default port. Builds are
+the `latest` channel (build with `MACROGRAPH_CHANNEL=<channel>` to bake in another), and
+`MACROGRAPH_CHANNEL` at runtime picks a channel for any command.
+
+| Channel  | Registration and config  | Data                                                           | Port                                |
+| -------- | ------------------------ | -------------------------------------------------------------- | ----------------------------------- |
+| `latest` | `service.json`           | `$XDG_DATA_HOME/macrograph`                                    | 3170                                |
+| `local`  | `service-local.json`     | `$XDG_DATA_HOME/macrograph-local` (`dev:inline` keeps its own) | 3171 (Vite's port for `dev:inline`) |
+| other    | `service-<channel>.json` | `$XDG_DATA_HOME/macrograph-<channel>`                          | from the name, 20000-29999          |
+
+`pnpm dev` (or `dev:inline`) serves the `local` channel, so an agent can work against the
+development server:
+
+```sh
+MACROGRAPH_CHANNEL=local macrograph mcp
+macrograph mcp config --channel local   # client configuration with that environment
+```
+
+Only `pnpm dev` starts a `local` service: `MACROGRAPH_CHANNEL=local macrograph mcp` fails straight
+away when none is running, so the built CLI never runs source on its own. A service `pnpm dev`
+started registers the command that runs it, so `service start`, `restart` and setting changes on
+the `local` channel restart it with that command; after `service stop` only `pnpm dev` starts it
+again. Vite proxies to the port the service had when `pnpm dev` started, so restart `pnpm dev`
+after changing it.
 
 ## Configuration
 

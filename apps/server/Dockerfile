@@ -34,4 +34,4 @@ VOLUME ["/data"]
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["node", "-e", "const b=(process.env.MACROGRAPH_BASE_PATH||'').replace(/\\/$/,'');fetch('http://127.0.0.1:'+process.env.PORT+b+'/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
-CMD ["node", "dist/esm/index.js"]
+CMD ["node", "dist/esm/index.js", "serve"]

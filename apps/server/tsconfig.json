@@ -6,7 +6,7 @@
     "outDir": "dist/types",
     "lib": ["ES2024"]
   },
-  "include": ["src", "test", "vite.config.ts", "client/vite.config.ts"],
+  "include": ["src", "test", "vite.config.ts", "rolldown.config.ts", "client/vite.config.ts"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/cloud-api" },
@@ -32,6 +32,7 @@
     { "path": "../../packages/modules/goxlr" },
     { "path": "../../packages/modules/ikea-tradfri" },
     { "path": "../../packages/modules/json" },
+    { "path": "../../packages/modules/keyboard" },
     { "path": "../../packages/modules/lifx" },
     { "path": "../../packages/modules/list" },
     { "path": "../../packages/modules/logic" },
