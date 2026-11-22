@@ -23,7 +23,6 @@ const decodeCommand = (value: unknown) =>
   );
 
 const GoXLRModule = Module.make({
-  id: "goxlr",
   name: "GoXLR",
   engine: GoXLREngine,
   effect: Effect.fnUntraced(function* (context) {

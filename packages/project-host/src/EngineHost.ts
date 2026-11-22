@@ -1,5 +1,6 @@
 import type * as HttpEndpoint from "@macrograph/module/HttpEndpoint";
 import type * as Module from "@macrograph/module/Module";
+import type * as ModuleId from "@macrograph/module/ModuleId";
 import type * as Resource from "@macrograph/module/Resource";
 import type * as S from "effect/Schema";
 
@@ -57,7 +58,7 @@ export const contextLayer = <
   );
 
 type DeploymentRef<Definition extends Engine.AnyDef> = {
-  readonly moduleId: string;
+  readonly moduleId: ModuleId.Id;
   readonly definition: Definition;
 };
 
@@ -149,12 +150,14 @@ export const layer = <
   ContextError,
   ContextServices,
 >(
-  deployment: Engine.Deployment<
-    Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
-    Layer.Layer<
-      Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
-      EngineError,
-      EngineServices
+  deployment: Engine.Identified<
+    Engine.Deployment<
+      Engine.Def<ResourceType, Event, Storage, Rpcs, ClientState, ClientRpcs>,
+      Layer.Layer<
+        Engine.Instance<ResourceType, Rpcs, ClientState, ClientRpcs>,
+        EngineError,
+        EngineServices
+      >
     >
   >,
   engineContext: Layer.Layer<
@@ -195,8 +198,9 @@ export const layer = <
   ).pipe(Layer.provideMerge(engineLayer));
 };
 
+/** Registers a deployed module with the editor until the current scope closes. */
 export const mount = <Definition extends Engine.AnyDef>(
-  module: Module.Module<Definition>,
+  module: Module.Identified<Definition>,
   deployment: Engine.AnyDeploymentFor<Definition>,
   clientState: Effect.Effect<unknown>,
 ) =>

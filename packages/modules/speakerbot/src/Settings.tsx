@@ -2,10 +2,8 @@ import Settings from "@macrograph/module-websocket-client/Settings";
 import { ClientSettings } from "@macrograph/module/ClientSettings";
 
 import { ClientRpcs, ClientState } from "./Definition.ts";
-import module from "./Module.ts";
 
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: { connections: [] },
   rpcs: ClientRpcs,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
-import { Conversion, t, Module } from "@macrograph/module";
+import { Conversion, t, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
@@ -118,34 +118,36 @@ const editorTypes: ReadonlyArray<t.Type> = [
   t.List(t.Option(t.Bool)),
 ];
 
-const testModule = Module.make({
-  id: "compatibility-test",
-  effect: Effect.fnUntraced(function* (context) {
-    for (const [index, type] of editorTypes.entries()) {
+const testModule = Module.identify(
+  ModuleId.Id.make("local/test/compatibility-test"),
+  Module.make({
+    effect: Effect.fnUntraced(function* (context) {
+      for (const [index, type] of editorTypes.entries()) {
+        yield* context.schema.register({
+          id: `source${index}`,
+          type: "pure",
+          io: (io) => ({ output: io.data.out("out", type) }),
+          run: () => Effect.void,
+        });
+        yield* context.schema.register({
+          id: `sink${index}`,
+          type: "pure",
+          io: (io) => ({ input: io.data.in("in", type) }),
+          run: () => Effect.void,
+        });
+      }
       yield* context.schema.register({
-        id: `source${index}`,
+        id: "pass",
         type: "pure",
-        io: (io) => ({ output: io.data.out("out", type) }),
-        run: () => Effect.void,
+        io: (io) => {
+          const type = io.wildcard("T");
+          return { input: io.data.in("in", type), output: io.data.out("out", type) };
+        },
+        run: ({ io }) => Effect.sync(() => io.output(io.input)),
       });
-      yield* context.schema.register({
-        id: `sink${index}`,
-        type: "pure",
-        io: (io) => ({ input: io.data.in("in", type) }),
-        run: () => Effect.void,
-      });
-    }
-    yield* context.schema.register({
-      id: "pass",
-      type: "pure",
-      io: (io) => {
-        const type = io.wildcard("T");
-        return { input: io.data.in("in", type), output: io.data.out("out", type) };
-      },
-      run: ({ io }) => Effect.sync(() => io.output(io.input)),
-    });
+    }),
   }),
-});
+);
 
 const TestLayer = Editor.defaultLayer.pipe(
   Layer.provideMerge(Packages.defaultLayer),

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HttpEndpoint } from "@macrograph/module";
+import { HttpEndpoint, Module } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
@@ -8,6 +8,8 @@ import { AppCredentials } from "../src/AppApi.ts";
 import { AccountId, InstallationId, RepositoryId, WebhookId } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
 import { handler as webhookHandler } from "../src/Webhook.ts";
+
+const moduleId = Module.builtinId("github");
 
 const secret = "github-webhook-secret";
 const endpoint = {
@@ -129,10 +131,10 @@ describe("GitHub repository webhook", () => {
           },
         },
       });
-      assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
+      assert.deepStrictEqual(yield* HttpIngress.manifest(moduleId, requirements), [
         {
           handlerId: HttpEndpoint.HandlerId.make("github:repository"),
-          moduleId: "github",
+          moduleId,
           instanceKey: HttpEndpoint.InstanceKey.make("primary"),
           displayName: "Main repository",
           metadata: {
@@ -311,7 +313,7 @@ describe("GitHub repository webhook", () => {
       const live = yield* webhookHandler.build.pipe(Effect.provide(lifecycleDependencies));
       const entry = {
         handlerId: HttpEndpoint.HandlerId.make("github:repository"),
-        moduleId: "github",
+        moduleId,
         instanceKey: HttpEndpoint.InstanceKey.make("primary"),
         displayName: "Main repository",
         metadata: endpoint.metadata,

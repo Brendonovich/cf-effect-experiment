@@ -8,7 +8,8 @@
     "./Definition": "./src/Definition.ts",
     "./Deployment": "./src/Deployment.ts",
     "./Engine": "./src/Engine.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -30,6 +31,18 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "openai",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "OpenAI",
+    "description": "Generate text and images with OpenAI.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "requires": [
+      "http-client"
+    ]
   }
 }

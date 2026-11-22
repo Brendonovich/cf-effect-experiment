@@ -30,7 +30,10 @@ type Action = {
   readonly inputs: ReadonlyArray<Input>;
   readonly outputs?: ReadonlyArray<Output>;
   readonly noContent?: boolean;
+  readonly docsUrl: string;
 };
+export const apiReference = (anchor: string) =>
+  `https://dev.twitch.tv/docs/api/reference/#${anchor}`;
 const channel: Input = { id: "broadcasterId", key: "broadcaster_id" };
 const user: Input = { id: "userId", key: "user_id" };
 const reward: Input = { id: "rewardId", name: "Reward Id", key: "id" };
@@ -57,6 +60,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Warn User",
     method: "POST",
     path: "/moderation/warnings",
+    docsUrl: apiReference("warn-chat-user"),
     scopes: ["moderator:manage:warnings"],
     role: "moderator",
     inputs: [
@@ -70,6 +74,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Ban User",
     method: "POST",
     path: "/moderation/bans",
+    docsUrl: apiReference("ban-user"),
     scopes: ["moderator:manage:banned_users"],
     role: "moderator",
     inputs: [
@@ -84,6 +89,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Unban User",
     method: "DELETE",
     path: "/moderation/bans",
+    docsUrl: apiReference("unban-user"),
     scopes: ["moderator:manage:banned_users"],
     role: "moderator",
     inputs: [channel, { ...user, name: "userID" }],
@@ -95,6 +101,7 @@ export const actions: ReadonlyArray<Action> = [
       name: `${verb} Moderator`,
       method: verb === "Add" ? "POST" : "DELETE",
       path: "/moderation/moderators",
+      docsUrl: apiReference(`${verb.toLowerCase()}-channel-moderator`),
       scopes: ["channel:manage:moderators"],
       role: "broadcaster",
       inputs: [channel, { ...user, name: "userID" }],
@@ -107,6 +114,7 @@ export const actions: ReadonlyArray<Action> = [
       name: `${verb} VIP`,
       method: verb === "Add" ? "POST" : "DELETE",
       path: "/channels/vips",
+      docsUrl: apiReference(`${verb.toLowerCase()}-channel-vip`),
       scopes: ["channel:manage:vips"],
       role: "broadcaster",
       inputs: [channel, user],
@@ -118,6 +126,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Check User Subscription",
     method: "GET",
     path: "/subscriptions",
+    docsUrl: apiReference("check-user-subscription"),
     scopes: ["channel:read:subscriptions"],
     role: "broadcaster",
     inputs: [channel, user],
@@ -128,6 +137,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Check User Follow",
     method: "GET",
     path: "/channels/followers",
+    docsUrl: apiReference("get-channel-followers"),
     scopes: ["moderator:read:followers"],
     inputs: [channel, user],
     outputs: [
@@ -146,6 +156,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Check User VIP",
     method: "GET",
     path: "/channels/vips",
+    docsUrl: apiReference("get-vips"),
     scopes: ["channel:read:vips", "channel:manage:vips"],
     role: "broadcaster",
     inputs: [channel, user],
@@ -156,6 +167,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Check User Mod",
     method: "GET",
     path: "/moderation/moderators",
+    docsUrl: apiReference("get-moderators"),
     scopes: ["moderation:read", "channel:manage:moderators"],
     role: "broadcaster",
     inputs: [channel, user],
@@ -166,6 +178,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Send Whisper",
     method: "POST",
     path: "/whispers",
+    docsUrl: apiReference("send-whisper"),
     scopes: ["user:manage:whispers"],
     role: "sender",
     inputs: [
@@ -179,6 +192,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get Hype Train",
     method: "GET",
     path: "/hypetrain/status",
+    docsUrl: apiReference("get-hype-train-status"),
     scopes: ["channel:read:hype_train"],
     role: "broadcaster",
     inputs: [channel],
@@ -189,6 +203,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Create Custom Reward",
     method: "POST",
     path: "/channel_points/custom_rewards",
+    docsUrl: apiReference("create-custom-rewards"),
     scopes: ["channel:manage:redemptions"],
     role: "broadcaster",
     inputs: [
@@ -204,6 +219,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Edit Custom Reward",
     method: "PATCH",
     path: "/channel_points/custom_rewards",
+    docsUrl: apiReference("update-custom-reward"),
     scopes: ["channel:manage:redemptions"],
     role: "broadcaster",
     inputs: [channel, reward, { id: "changesJson", kind: "json", location: "local" }],
@@ -214,6 +230,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Delete Custom Reward",
     method: "DELETE",
     path: "/channel_points/custom_rewards",
+    docsUrl: apiReference("delete-custom-reward"),
     scopes: ["channel:manage:redemptions"],
     role: "broadcaster",
     inputs: [channel, reward],
@@ -224,6 +241,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Update Redemption Status",
     method: "PATCH",
     path: "/channel_points/custom_rewards/redemptions",
+    docsUrl: apiReference("update-redemption-status"),
     scopes: ["channel:manage:redemptions"],
     role: "broadcaster",
     inputs: [
@@ -239,6 +257,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get Reward By Title",
     method: "GET",
     path: "/channel_points/custom_rewards",
+    docsUrl: apiReference("get-custom-reward"),
     scopes: ["channel:read:redemptions", "channel:manage:redemptions"],
     role: "broadcaster",
     inputs: [
@@ -253,6 +272,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Start Commercial",
     method: "POST",
     path: "/channels/commercial",
+    docsUrl: apiReference("start-commercial"),
     scopes: ["channel:edit:commercial"],
     role: "broadcaster",
     inputs: [
@@ -273,6 +293,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get Ad Schedule",
     method: "GET",
     path: "/channels/ads",
+    docsUrl: apiReference("get-ad-schedule"),
     scopes: ["channel:read:ads"],
     role: "broadcaster",
     inputs: [channel],
@@ -282,6 +303,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Snooze Next Ad",
     method: "POST",
     path: "/channels/ads/schedule/snooze",
+    docsUrl: apiReference("snooze-next-ad"),
     scopes: ["channel:manage:ads"],
     role: "broadcaster",
     inputs: [channel],
@@ -291,6 +313,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get Chatters",
     method: "GET",
     path: "/chat/chatters",
+    docsUrl: apiReference("get-chatters"),
     scopes: ["moderator:read:chatters"],
     role: "moderator",
     inputs: [channel, first(1000), after],
@@ -301,6 +324,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get User Chat Color By ID",
     method: "GET",
     path: "/chat/color",
+    docsUrl: apiReference("get-user-chat-color"),
     scopes: [],
     inputs: [user],
     outputs: [{ id: "color", name: "color", path: "data.0.color", kind: "string", optional: true }],
@@ -310,6 +334,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Moderation Chat Delay",
     method: "PATCH",
     path: "/chat/settings",
+    docsUrl: apiReference("update-chat-settings"),
     scopes: ["moderator:manage:chat_settings"],
     role: "moderator",
     inputs: [
@@ -331,6 +356,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Unique Chat Mode",
     method: "PATCH",
     path: "/chat/settings",
+    docsUrl: apiReference("update-chat-settings"),
     scopes: ["moderator:manage:chat_settings"],
     role: "moderator",
     inputs: [channel, { ...enabled, key: "unique_chat_mode" }],
@@ -340,6 +366,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Delete Chat Message",
     method: "DELETE",
     path: "/moderation/chat",
+    docsUrl: apiReference("delete-chat-messages"),
     scopes: ["moderator:manage:chat_messages"],
     role: "moderator",
     inputs: [channel, { id: "messageId", key: "message_id" }],
@@ -350,6 +377,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Shoutout User",
     method: "POST",
     path: "/chat/shoutouts",
+    docsUrl: apiReference("send-a-shoutout"),
     scopes: ["moderator:manage:shoutouts"],
     role: "moderator",
     inputs: [
@@ -363,6 +391,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Send Announcement",
     method: "POST",
     path: "/chat/announcements",
+    docsUrl: apiReference("send-chat-announcement"),
     scopes: ["moderator:manage:announcements"],
     role: "moderator",
     inputs: [
@@ -382,6 +411,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Validate Token",
     method: "GET",
     path: "https://id.twitch.tv/oauth2/validate",
+    docsUrl: "https://dev.twitch.tv/docs/authentication/validate-tokens/",
     scopes: [],
     inputs: [],
     outputs: [
@@ -395,6 +425,7 @@ export const actions: ReadonlyArray<Action> = [
     name: "Get Polls",
     method: "GET",
     path: "/polls",
+    docsUrl: apiReference("get-polls"),
     scopes: ["channel:read:polls", "channel:manage:polls"],
     role: "broadcaster",
     inputs: [channel, { id: "pollId", key: "id", optional: true }, first(20), after],

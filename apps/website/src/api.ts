@@ -16,9 +16,55 @@ export const providerDisplayNames: Record<AuthProvider, string> = {
 export const connectableProviders: ReadonlyArray<AuthProvider> = ["twitch", "discord"];
 
 export interface Session {
-  readonly user: { readonly id: string; readonly email: string };
+  readonly user: {
+    readonly id: string;
+    readonly email: string;
+    /** Password-only accounts must connect a sign-in provider before using anything else. */
+    readonly hasSignInMethod: boolean;
+  };
   readonly session: { readonly id: string };
 }
+
+/** A provider people can sign in to MacroGraph with. */
+export interface SignInProvider {
+  readonly id: string;
+  readonly displayName: string;
+}
+
+/** A provider account connected for signing in. */
+export interface SignInMethod {
+  readonly providerId: string;
+  readonly providerUserId: string;
+  readonly displayName: string | null;
+  readonly email: string | null;
+}
+
+/** Messages for the `?error=` a failed provider sign-in returns with. */
+const signInErrors: Record<string, string> = {
+  cancelled: "Sign-in was cancelled.",
+  expired: "Sign-in took too long or was started in another browser. Please try again.",
+  failed: "The provider couldn't be reached. Please try again.",
+  email_unverified:
+    "That account has no verified email address. Verify one with the provider, or use another provider.",
+  account_exists:
+    "A MacroGraph account already uses that email. Log in with your email and password, then connect this provider.",
+  identity_in_use: "That provider account already signs in to a different MacroGraph account.",
+};
+
+export const signInErrorMessage = (error: string | null) =>
+  error === null ? undefined : (signInErrors[error] ?? signInErrors.failed);
+
+/** Starts signing in with a provider, which returns to `returnTo`. Signed in, this connects it. */
+export const signInUrl = (provider: string, returnTo: string) =>
+  `/api/website/sign-in/${encodeURIComponent(provider)}?${new URLSearchParams({ returnTo })}`;
+
+/** The current page without the `error` a failed sign-in added. */
+export const withoutSignInError = (pathname: string, search: string) => {
+  const params = new URLSearchParams(search);
+  params.delete("error");
+  const query = params.toString();
+  return query === "" ? pathname : `${pathname}?${query}`;
+};
 
 export interface WebsiteCredential {
   readonly providerId: string;
@@ -80,12 +126,17 @@ const devApiOrigin = () =>
   (typeof process === "undefined" ? undefined : process.env.VITE_WEBSITE_WORKER_URL) ??
   "http://localhost:1339";
 
+/** Where the server render reaches Cloud when it runs outside the Worker (`vite` dev). */
+const devCloudOrigin = () =>
+  (typeof process === "undefined" ? undefined : process.env.VITE_CLOUD_DEV_URL) ??
+  "http://localhost:5175";
+
 /**
- * Calls the website API. In the browser it's a same-origin fetch; during the server render it goes
- * to WebsiteWorker over its service binding, as the visitor, and passes any refreshed session
- * cookie on to the page response.
+ * Calls the website API, or Cloud for `/cloud` paths. In the browser it's a same-origin fetch;
+ * during the server render it goes to WebsiteWorker or CloudWorker over their service bindings, as
+ * the visitor, and passes any refreshed session cookie on to the page response.
  */
-async function apiFetch(path: string, init: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   if (!isServer) return fetch(path, { ...init, credentials: "same-origin" });
   const event = getRequestEvent();
   const incoming = event?.request;
@@ -100,10 +151,18 @@ async function apiFetch(path: string, init: RequestInit): Promise<Response> {
   headers.set("x-forwarded-proto", url.protocol.slice(0, -1));
   const native = (event as { readonly nativeEvent?: { readonly env?: WorkerBindings } } | undefined)
     ?.nativeEvent;
-  const api = native?.env?.API;
-  const response = api
-    ? await api.fetch(new Request(url, { ...init, headers }))
-    : await fetch(new URL(`${url.pathname}${url.search}`, devApiOrigin()), { ...init, headers });
+  // Cloud serves `/cloud`; WebsiteWorker serves the rest of the API.
+  const cloud = url.pathname.startsWith("/cloud/");
+  const binding = cloud ? native?.env?.CLOUD : native?.env?.API;
+  const response = binding
+    ? await binding.fetch(new Request(url, { ...init, headers }))
+    : await fetch(
+        new URL(`${url.pathname}${url.search}`, cloud ? devCloudOrigin() : devApiOrigin()),
+        {
+          ...init,
+          headers,
+        },
+      );
   const head = (event as { readonly response?: { readonly headers?: Headers } } | undefined)
     ?.response?.headers;
   for (const value of response.headers.getSetCookie()) head?.append("set-cookie", value);
@@ -128,15 +187,27 @@ export async function websiteRequest<T>(
 export const sessionKey = ["session"] as const;
 export const credentialsKey = ["credentials"] as const;
 export const authorizationsKey = ["authorizations"] as const;
+export const signInProvidersKey = ["signInProviders"] as const;
+export const signInMethodsKey = ["signInMethods"] as const;
 
 export const getSession = () => websiteRequest<Session | null>("/session");
+export const getSignInProviders = () =>
+  websiteRequest<ReadonlyArray<SignInProvider>>("/sign-in/providers");
+export const getSignInMethods = () =>
+  websiteRequest<ReadonlyArray<SignInMethod>>("/sign-in-methods");
+export const removeSignInMethod = (method: SignInMethod) =>
+  websiteRequest<void>(
+    `/sign-in-methods/${encodeURIComponent(method.providerId)}/${encodeURIComponent(method.providerUserId)}`,
+    { method: "DELETE" },
+  );
 export const getCredentials = () =>
   websiteRequest<ReadonlyArray<WebsiteCredential>>("/credentials");
 export const getAuthorizations = () =>
   websiteRequest<ReadonlyArray<Authorization>>("/authorizations");
 
-export const submitCredentials = (mode: "login" | "signup", email: string, password: string) =>
-  websiteRequest<AuthResult>(`/${mode}`, { method: "POST", body: { email, password } });
+/** Only accounts from before sign-in providers have a password. */
+export const logInWithPassword = (email: string, password: string) =>
+  websiteRequest<AuthResult>("/login", { method: "POST", body: { email, password } });
 
 export const logOut = () => websiteRequest<void>("/logout", { method: "POST" });
 

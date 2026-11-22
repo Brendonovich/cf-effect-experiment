@@ -7,7 +7,6 @@ import { SpeakerBotConnection, SpeakerBotEngine } from "./Definition.ts";
 const properties = { connection: { name: "Connection", resource: SpeakerBotConnection } } as const;
 
 const SpeakerBotModule = Module.make({
-  id: "speakerbot",
   name: "SpeakerBot",
   engine: SpeakerBotEngine,
   effect: Effect.fnUntraced(function* (context) {

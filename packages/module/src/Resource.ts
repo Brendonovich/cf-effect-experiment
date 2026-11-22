@@ -1,6 +1,11 @@
 import { Context, Effect, Layer, Schema, Semaphore, Stream, SubscriptionRef } from "effect";
 
-let resourceSequence = 0;
+import type * as ModuleId from "./ModuleId.ts";
+
+import * as BoundKey from "./internal/boundKey.ts";
+
+/** Same symbol as `Engine.BindTypeId`; engines bind their resources when they are bound. */
+export const BindTypeId: unique symbol = Symbol.for("~macrograph/Module/bind");
 
 export interface Value<Identifier> {
   readonly id: Identifier;
@@ -35,13 +40,15 @@ export const make =
     id: Identifier,
     opts: { readonly name: string; readonly description?: string },
   ) => {
-    const sequence = resourceSequence++;
+    const handlerKey = BoundKey.make((scope) => `macrograph/Module/Resource/${scope}/${id}`);
     const HandlerTag = Context.Service<
       Handler<Identifier, Shape>,
       HandlerService<Identifier, Shape>
-    >(`macrograph/Module/Resource/${sequence}/${id}`);
+    >("macrograph/Module/Resource");
+    BoundKey.install(HandlerTag, handlerKey.key);
 
     class Resource {
+      static readonly [BindTypeId] = (moduleId: ModuleId.Id) => handlerKey.bind(moduleId);
       static readonly key = id;
       static readonly definition = opts;
       static readonly Handler = HandlerTag;
@@ -76,6 +83,7 @@ export const make =
 
 export interface ResourceClass<_Self, Identifier extends string, Shape> {
   new (_: never): {};
+  readonly [BindTypeId]: (moduleId: ModuleId.Id) => void;
   readonly key: Identifier;
   readonly definition: { readonly name: string; readonly description?: string };
   readonly Handler: Context.Service<Handler<Identifier, Shape>, HandlerService<Identifier, Shape>>;

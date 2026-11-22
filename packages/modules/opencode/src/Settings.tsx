@@ -25,7 +25,6 @@ import {
   OAuthAttempt,
   initialClientState,
 } from "./Definition.ts";
-import module from "./Module.ts";
 
 const styles = stylex.create({
   stack: { display: "flex", flexDirection: "column", gap: 12 },
@@ -710,7 +709,6 @@ const ConnectionDetails: Component<{
 
 export default Settings;
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: initialClientState,
   rpcs: ClientRpcs,

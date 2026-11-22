@@ -1,0 +1,63 @@
+{
+  "name": "@macrograph/module-keyboard",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/Module.ts",
+  "exports": {
+    ".": "./src/Module.ts",
+    "./Definition": "./src/Definition.ts",
+    "./Deployment/Browser": "./src/Deployment/Browser.ts",
+    "./Deployment/Native": "./src/Deployment/Native.ts",
+    "./Engine": "./src/Engine.ts",
+    "./Keys": "./src/Keys.ts",
+    "./Settings": "./src/Settings.tsx",
+    "./Transport": "./src/Transport.ts",
+    "./Transport/Browser": "./src/Transport/Browser.ts",
+    "./Transport/Native": "./src/Transport/Native.ts",
+    "./UI": "./src/UI.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/editor-ui": "workspace:*",
+    "@macrograph/module": "workspace:*",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/stylex": "catalog:",
+    "effect": "catalog:",
+    "solid-js": "2.0.0-rc.9",
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "^22",
+    "typescript": "^5.8",
+    "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "publisher": "macrograph",
+    "name": "keyboard",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Keyboard",
+    "description": "Respond to keybinds pressed in the browser or anywhere on the server's machine.",
+    "entries": {
+      "server": "./src/Deployment/Native.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "events"
+    ],
+    "build": {
+      "native": {
+        "uiohook": "uiohook-napi/prebuilds/{target}/uiohook-napi.node"
+      },
+      "alias": {
+        "uiohook-napi/dist/index.js": "./src/native/uiohook.ts"
+      }
+    }
+  }
+}

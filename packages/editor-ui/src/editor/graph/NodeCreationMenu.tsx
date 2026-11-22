@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { For, Show, createMemo, createSignal, onSettled } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
+import { plainDescription } from "../../ui/Description";
 import { rankedSearch } from "../catalog/search";
 import { searchMarker } from "../markers.stylex.ts";
 
@@ -170,7 +171,13 @@ export function NodeCreationMenu(props: {
             .map((schema) => ({
               item: schema,
               key: `${pkg.id}:${schema.id}`,
-              fields: [schema.name, schema.id, schema.description, pkg.name, pkg.id],
+              fields: [
+                schema.name,
+                schema.id,
+                schema.description === undefined ? undefined : plainDescription(schema.description),
+                pkg.name,
+                pkg.id,
+              ],
               terms: [schema.type],
             })),
         ),
@@ -263,7 +270,7 @@ export function NodeCreationMenu(props: {
                           sx={[styles.focus, styles.option]}
                           title={
                             schema.description
-                              ? `${schema.name}\n${schema.description}`
+                              ? `${schema.name}\n${plainDescription(schema.description)}`
                               : schema.name
                           }
                           onClick={() => {

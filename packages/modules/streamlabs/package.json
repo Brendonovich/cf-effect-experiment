@@ -8,7 +8,8 @@
     "./Definition": "./src/Definition.ts",
     "./Engine": "./src/Engine.ts",
     "./Deployment": "./src/Deployment.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -31,6 +32,33 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "streamlabs",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Streamlabs",
+    "description": "React to Streamlabs donations and alerts.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "buffer",
+      "child_process",
+      "crypto",
+      "events",
+      "fs",
+      "http",
+      "https",
+      "net",
+      "os",
+      "process",
+      "stream",
+      "tls",
+      "tty",
+      "url",
+      "util",
+      "zlib"
+    ]
   }
 }

@@ -84,15 +84,18 @@ const printService = (url: string, setupUrl: string | null) =>
 /** Runs the server in the foreground, configured by the environment and flags. */
 const serveForeground = (flags: { readonly port?: number; readonly hostname?: string }) =>
   Effect.gen(function* () {
-    const config = yield* serverConfig({
-      ...process.env,
+    const overrides = {
       ...(flags.port === undefined ? {} : { PORT: String(flags.port) }),
       ...(flags.hostname === undefined ? {} : { HOST: flags.hostname }),
-    });
+    };
+    // Validate before importing Server, which reads the environment when it loads.
+    yield* serverConfig({ ...process.env, ...overrides });
+    Object.assign(process.env, overrides);
     const Server = yield* loadServer;
-    return yield* Layer.launch(
-      Server.layer({ config, local: LocalAccess.none, announce: (line) => console.log(line) }),
-    ).pipe(Effect.orDie, Effect.provideService(Logger.LogToStderr, false));
+    return yield* Layer.launch(Server.service({ announce: (line) => console.log(line) })).pipe(
+      Effect.orDie,
+      Effect.provideService(Logger.LogToStderr, false),
+    );
   });
 
 /**
@@ -115,6 +118,13 @@ const serveService = (flags: { readonly port?: number; readonly hostname?: strin
       MACROGRAPH_DATA_DIR: process.env.MACROGRAPH_DATA_DIR ?? paths.data,
       MACROGRAPH_PUBLIC_ORIGIN: process.env.MACROGRAPH_PUBLIC_ORIGIN ?? origin,
     });
+    // Server reads the environment when it loads, which is after this point.
+    Object.assign(process.env, {
+      HOST: hostname,
+      PORT: String(port),
+      MACROGRAPH_DATA_DIR: process.env.MACROGRAPH_DATA_DIR ?? paths.data,
+      MACROGRAPH_PUBLIC_ORIGIN: process.env.MACROGRAPH_PUBLIC_ORIGIN ?? origin,
+    });
     const url = `${origin}${config.basePath}`;
     const incumbent = ServiceClient.probe({ url, token }).pipe(
       Effect.map((health) => health !== undefined),
@@ -127,8 +137,7 @@ const serveService = (flags: { readonly port?: number; readonly hostname?: strin
     const id = randomUUID();
     const launch = Effect.scoped(
       Layer.build(
-        Server.layer({
-          config,
+        Server.service({
           local: LocalAccess.make(token),
           announce: (line) => console.error(line),
           onListen: (bound) =>

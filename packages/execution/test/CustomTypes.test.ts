@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, Effect, Option, Ref, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -26,31 +26,33 @@ describe("custom type execution", () => {
       };
       const value = { _type: "tree", value: 42, next: Option.none() };
       const captured = yield* Ref.make<unknown>(undefined);
-      const module = Module.make({
-        id: "custom-test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({ value: io.data.out("value", type) }),
-            run: ({ io }) => Effect.sync(() => io.value(value)),
-          });
-          yield* context.schema.register({
-            id: "sink",
-            io: (io) => ({
-              connected: io.data.in("connected", type),
-              stored: io.data.in("stored", type),
-            }),
-            run: ({ io }) => Ref.set(captured, [io.connected, io.stored]),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/custom-test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({ value: io.data.out("value", type) }),
+              run: ({ io }) => Effect.sync(() => io.value(value)),
+            });
+            yield* context.schema.register({
+              id: "sink",
+              io: (io) => ({
+                connected: io.data.in("connected", type),
+                stored: io.data.in("stored", type),
+              }),
+              run: ({ io }) => Ref.set(captured, [io.connected, io.stored]),
+            });
+          }),
         }),
-      });
+      );
       const node = (id: string, schema: string, inputDefaults = {}) => ({
         id,
         name: id,
-        schema: { package: "custom-test", schema },
+        schema: { package: "local/test/custom-test", schema },
         properties: {},
         inputDefaults,
         foldPins: false,
@@ -105,9 +107,12 @@ describe("custom type execution", () => {
       });
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));

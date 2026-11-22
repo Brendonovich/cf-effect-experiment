@@ -90,7 +90,6 @@ describe("OpenAI catalog", () => {
 
   it.effect("registers runtime-compatible chat and image execution schemas", () =>
     Effect.gen(function* () {
-      assert.strictEqual(module.id, "openai");
       assert.strictEqual(deployment.module, module);
       assert.strictEqual(deployment.definition, OpenAIEngine);
       const schemas = yield* Registration.collect(module.effect);

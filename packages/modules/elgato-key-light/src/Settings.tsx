@@ -12,7 +12,6 @@ import {
   type DeviceId,
   type LightState,
 } from "./Definition.ts";
-import module from "./Module.ts";
 
 const styles = stylex.create({
   stack: { display: "flex", flexDirection: "column", gap: 12 },
@@ -253,7 +252,6 @@ function Settings(props: SettingsProps) {
 }
 
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: { devices: [] },
   rpcs: ClientRpcs,

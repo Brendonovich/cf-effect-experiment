@@ -11,10 +11,20 @@ import { AuthRoute } from "./routes/Auth";
 import { CredentialsRoute } from "./routes/Credentials";
 import { DeviceAuthorizationRoute } from "./routes/DeviceAuthorization";
 import { DocsIndexRoute, DocsLayout } from "./routes/Docs";
+import { DocsShell } from "./routes/DocsShell";
+import { GatewayApprovalsRoute } from "./routes/gateway/Approvals";
+import { GatewayEventsRoute } from "./routes/gateway/Events";
+import { GatewayLayout } from "./routes/gateway/Layout";
+import { GatewayOverviewRoute } from "./routes/gateway/Overview";
+import { GatewayToolsRoute } from "./routes/gateway/Tools";
+import { GatewayWebhooksRoute } from "./routes/gateway/Webhooks";
 import { LandingRoute } from "./routes/Landing";
+import { ModulesIndexRoute, ModulesLayout } from "./routes/Modules";
 import { NotFoundRoute } from "./routes/NotFound";
 import { NodeReferenceRoute, PackageLayout, PackageOverviewRoute } from "./routes/PackageReference";
 import { PlaygroundRoute } from "./routes/Playground";
+import { ServerSetupRoute } from "./routes/ServerSetup";
+import { SignInMethodsRoute } from "./routes/SignInMethods";
 import { Redirect, useSession } from "./session";
 import { Toaster } from "./Toasts";
 
@@ -25,7 +35,7 @@ function HomeRoute() {
   const promptLogin = () => new URLSearchParams(location.search).has("promptLogin");
   return (
     <Show
-      when={promptLogin() && !session.isPending && session.data === null}
+      when={promptLogin() && !session.isPending && !session.data?.user.hasSignInMethod}
       fallback={<LandingRoute />}
     >
       <Redirect href={loginPath("/")} />
@@ -33,17 +43,37 @@ function HomeRoute() {
   );
 }
 
+function SignupRedirect() {
+  const location = useLocation();
+  return <Redirect href={`/login${location.search}`} />;
+}
+
 export const routes = [
   { path: "/", component: HomeRoute },
-  { path: "/login", component: () => <AuthRoute mode="login" /> },
-  { path: "/signup", component: () => <AuthRoute mode="signup" /> },
+  { path: "/login", component: AuthRoute },
+  // Signing in with a provider creates accounts now.
+  { path: "/signup", component: SignupRedirect },
   { path: "/device", component: DeviceAuthorizationRoute },
   { path: "/playground", component: PlaygroundRoute },
   {
     path: "/docs",
     component: DocsLayout,
     children: [
-      { path: "/", component: DocsIndexRoute },
+      {
+        path: "/",
+        component: DocsShell,
+        children: [
+          { path: "/", component: DocsIndexRoute },
+          { path: "/server", component: ServerSetupRoute },
+        ],
+      },
+    ],
+  },
+  {
+    path: "/modules",
+    component: ModulesLayout,
+    children: [
+      { path: "/", component: ModulesIndexRoute },
       {
         path: "/:publisher/:name",
         component: PackageLayout,
@@ -60,7 +90,19 @@ export const routes = [
     children: [
       { path: "/", component: () => <Redirect href="/account/credentials" /> },
       { path: "/credentials", component: () => <CredentialsRoute /> },
+      { path: "/sign-in", component: SignInMethodsRoute },
       { path: "/apps", component: AppsRoute },
+    ],
+  },
+  {
+    path: "/gateway",
+    component: GatewayLayout,
+    children: [
+      { path: "/", component: GatewayOverviewRoute },
+      { path: "/tools", component: GatewayToolsRoute },
+      { path: "/approvals", component: GatewayApprovalsRoute },
+      { path: "/events", component: GatewayEventsRoute },
+      { path: "/webhooks", component: GatewayWebhooksRoute },
     ],
   },
   { path: "/credentials", component: () => <Redirect href="/account/credentials" /> },

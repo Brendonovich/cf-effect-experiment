@@ -14,7 +14,6 @@ import {
   type WebhookEventName,
   type WebhookId,
 } from "./Definition.ts";
-import GitHubModule from "./Module.ts";
 
 const styles = stylex.create({
   root: { color: colors.gray12, display: "flex", flexDirection: "column", fontSize: 12, gap: 12 },
@@ -395,7 +394,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: GitHubModule,
   state: ClientState,
   initial: { accounts: [], webhooks: [], provisioningAvailable: false },
   rpcs: ClientRpcs,

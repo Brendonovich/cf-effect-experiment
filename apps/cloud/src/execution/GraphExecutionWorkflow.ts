@@ -20,11 +20,11 @@ import {
   projectExecutionNodes,
   projectExecutions,
 } from "../database/DatabaseSchema.ts";
+import * as CloudModules from "../modules/CloudModules.ts";
 import { serviceSpanAnnotations } from "../Observability.ts";
 import OpenCodeDO from "../opencode/OpenCodeDO.ts";
 import * as OpenCodeInstances from "../opencode/OpenCodeInstances.ts";
 import { DeploymentObjectsBucket } from "../Storage.ts";
-import * as ExecutorModules from "./ExecutorModules.ts";
 import * as WorkflowRuntime from "./WorkflowRuntime.ts";
 
 const ExecutionNodeRecordId = Schema.String.pipe(Schema.brand("ExecutionNodeRecordId"));
@@ -223,7 +223,7 @@ export default class GraphExecutionWorkflow extends Cloudflare.Workflow<GraphExe
           },
           {
             executionEnvironment,
-            modules: ExecutorModules.registry,
+            modules: CloudModules.executorRegistry,
             engineClient,
           },
         ).pipe(Effect.orDie);

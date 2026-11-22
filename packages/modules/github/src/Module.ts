@@ -70,7 +70,6 @@ const isJsonObject = (
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const GitHubModule = Module.make({
-  id: "github",
   name: "GitHub",
   engine: GitHubEngine,
   types: WebhookTypeDefinitions,
@@ -366,7 +365,7 @@ const GitHubModule = Module.make({
         ),
     });
     yield* ctx.schema.register({
-      id: "webhook:push",
+      id: "PushWebhook",
       name: "Push Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },
@@ -397,7 +396,7 @@ const GitHubModule = Module.make({
         }),
     });
     yield* ctx.schema.register({
-      id: "webhook:pull-request",
+      id: "PullRequestWebhook",
       name: "Pull Request Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },
@@ -428,7 +427,7 @@ const GitHubModule = Module.make({
         }),
     });
     yield* ctx.schema.register({
-      id: "webhook:issues",
+      id: "IssueWebhook",
       name: "Issue Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },
@@ -459,7 +458,7 @@ const GitHubModule = Module.make({
         }),
     });
     yield* ctx.schema.register({
-      id: "webhook:issue-comment",
+      id: "IssueCommentWebhook",
       name: "Issue Comment Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },
@@ -490,7 +489,7 @@ const GitHubModule = Module.make({
         }),
     });
     yield* ctx.schema.register({
-      id: "webhook:workflow-run",
+      id: "WorkflowRunWebhook",
       name: "Workflow Run Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },
@@ -521,7 +520,7 @@ const GitHubModule = Module.make({
         }),
     });
     yield* ctx.schema.register({
-      id: "webhook:release",
+      id: "ReleaseWebhook",
       name: "Release Webhook",
       type: "event",
       properties: { webhook: { name: "Repository Webhook", resource: GitHubWebhook } },

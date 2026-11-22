@@ -15,7 +15,6 @@ import {
 } from "solid-js";
 
 import { ClientRpcs, ClientState, SUBSCRIPTION_TYPES, type AccountId } from "./Definition.ts";
-import TwitchModule from "./Module.ts";
 
 const styles = stylex.create({
   root: { color: colors.gray12 },
@@ -388,7 +387,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: TwitchModule,
   state: ClientState,
   initial: { transport: "webhook", accounts: [] },
   rpcs: ClientRpcs,

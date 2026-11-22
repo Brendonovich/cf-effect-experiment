@@ -47,7 +47,11 @@ export const make = (
             .resolveRequirements(
               engines[deployment.moduleId] ?? deployment.definition.InitialStorage,
             )
-            .pipe(Effect.flatMap(HttpIngress.manifest)),
+            .pipe(
+              Effect.flatMap((requirements) =>
+                HttpIngress.manifest(deployment.moduleId, requirements),
+              ),
+            ),
         ).pipe(Effect.map((manifests) => manifests.flat())),
       reconcile: (previous, desired, options) => {
         const desiredKeys = new Set(desired.map(HttpIngress.manifestEntryKey));

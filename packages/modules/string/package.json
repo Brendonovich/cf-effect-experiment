@@ -20,5 +20,16 @@
     "@effect/vitest": "catalog:",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "publisher": "macrograph",
+    "name": "string",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "String",
+    "description": "Create, compare, format, and transform text.",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
   }
 }

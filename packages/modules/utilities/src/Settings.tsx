@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { Show, createSignal, type Component } from "solid-js";
 
 import { ClientRpcs, ClientState } from "./Definition.ts";
-import UtilitiesModule from "./Module.ts";
 
 const styles = stylex.create({
   panel: {
@@ -95,7 +94,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: UtilitiesModule,
   state: ClientState,
   initial: { running: false },
   rpcs: ClientRpcs,

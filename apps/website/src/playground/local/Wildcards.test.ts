@@ -2,13 +2,18 @@ import { expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
 import { Editor, Packages } from "@macrograph/editor";
 import { Executor } from "@macrograph/execution";
-import { t, Engine, Module, Registration } from "@macrograph/module";
-import JsonModule from "@macrograph/module-json";
-import ListModule from "@macrograph/module-list";
-import LogicModule from "@macrograph/module-logic";
-import StringModule from "@macrograph/module-string";
+import { t, Engine, Module, Registration, ModuleId } from "@macrograph/module";
+import JsonModuleDefinition from "@macrograph/module-json";
+import ListModuleDefinition from "@macrograph/module-list";
+import LogicModuleDefinition from "@macrograph/module-logic";
+import StringModuleDefinition from "@macrograph/module-string";
 import { Persistence } from "@macrograph/persistence";
 import { Array, DateTime, Effect, Layer, Schema } from "effect";
+
+const JsonModule = Module.identify(Module.builtinId("json"), JsonModuleDefinition);
+const ListModule = Module.identify(Module.builtinId("list"), ListModuleDefinition);
+const LogicModule = Module.identify(Module.builtinId("logic"), LogicModuleDefinition);
+const StringModule = Module.identify(Module.builtinId("string"), StringModuleDefinition);
 
 class Trigger extends Schema.TaggedClass<Trigger>()("WildcardModulesTrigger", {}) {}
 class TestEngine extends Engine.make({ events: Array.empty<Trigger>() }) {}
@@ -31,11 +36,11 @@ it.effect(
             schema: { package: PackageId.make(pkg), schema: SchemaId.make(schema) },
           },
         });
-      const list = yield* create("list", "ListCreate");
-      const join = yield* create("string", "JoinLines");
-      const unwrap = yield* create("logic", "UnwrapOption");
+      const list = yield* create("macrograph.app/macrograph/list", "ListCreate");
+      const join = yield* create("macrograph.app/macrograph/string", "JoinLines");
+      const unwrap = yield* create("macrograph.app/macrograph/logic", "UnwrapOption");
       expect(unwrap.io.dataInputs[0]!.defaultValue).toEqual({ _tag: "None" });
-      const push = yield* create("list", "PushListValue");
+      const push = yield* create("macrograph.app/macrograph/list", "PushListValue");
       expect(push.io.dataInputs.find((port) => port.id === "list")!.defaultValue).toEqual([]);
       expect(list.io.dataInputs[0]!.type._tag).toBe("Wildcard");
       const connection = yield* editor.connection.create({
@@ -102,27 +107,29 @@ it.effect(
       const custom = t.Struct(id);
       const value = { _type: id, time: DateTime.makeUnsafe("2026-09-06T12:00:00Z") };
       const captured: unknown[] = [];
-      const source = Module.make({
-        id: "test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({ out: io.data.out("out", custom) }),
-            run: ({ io }) => Effect.sync(() => io.out(value)),
-          });
-          yield* context.schema.register({
-            id: "sink",
-            io: (io) => ({ input: io.data.in("in", t.List(custom)) }),
-            run: ({ io }) =>
-              Effect.sync(() => {
-                captured.push(io.input);
-              }),
-          });
+      const source = Module.identify(
+        ModuleId.Id.make("local/test/test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({ out: io.data.out("out", custom) }),
+              run: ({ io }) => Effect.sync(() => io.out(value)),
+            });
+            yield* context.schema.register({
+              id: "sink",
+              io: (io) => ({ input: io.data.in("in", t.List(custom)) }),
+              run: ({ io }) =>
+                Effect.sync(() => {
+                  captured.push(io.input);
+                }),
+            });
+          }),
         }),
-      });
+      );
       const model = Schema.decodeUnknownSync(Project.Model)({
         ...Project.empty(),
         types: {
@@ -140,15 +147,15 @@ it.effect(
               name: "Inferred modules",
               nodes: Object.fromEntries(
                 [
-                  ["event", "test", "event"],
-                  ["list", "list", "ListCreate"],
-                  ["copy", "logic", "Copy"],
-                  ["some", "logic", "MakeSome"],
-                  ["unwrap", "logic", "UnwrapOption"],
-                  ["encode", "json", "ToJSON"],
-                  ["decode", "json", "FromJSON"],
-                  ["decoded", "logic", "UnwrapOption"],
-                  ["sink", "test", "sink"],
+                  ["event", "local/test/test", "event"],
+                  ["list", "macrograph.app/macrograph/list", "ListCreate"],
+                  ["copy", "macrograph.app/macrograph/logic", "Copy"],
+                  ["some", "macrograph.app/macrograph/logic", "MakeSome"],
+                  ["unwrap", "macrograph.app/macrograph/logic", "UnwrapOption"],
+                  ["encode", "macrograph.app/macrograph/json", "ToJSON"],
+                  ["decode", "macrograph.app/macrograph/json", "FromJSON"],
+                  ["decoded", "macrograph.app/macrograph/logic", "UnwrapOption"],
+                  ["sink", "local/test/test", "sink"],
                 ].map(([id, pkg, schema]) => [
                   id,
                   {
@@ -193,9 +200,12 @@ it.effect(
       });
       yield* executor.module(
         source,
-        Engine.deployment(
-          source,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          source.id,
+          Engine.deployment(
+            source,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.module(ListModule);

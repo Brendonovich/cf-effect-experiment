@@ -53,7 +53,6 @@ describe("MIDI catalog", () => {
         schemas.map((schema) => schema.id),
         [...events, ...sends],
       );
-      assert.strictEqual(module.id, "midi");
       assert.isDefined(deployment);
       for (const schema of schemas) {
         const isEvent = events.includes(schema.id);

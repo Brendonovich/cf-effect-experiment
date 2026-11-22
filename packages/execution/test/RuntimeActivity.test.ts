@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Project } from "@macrograph/core";
-import { Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import {
   Array as EffectArray,
   Cause,
@@ -41,7 +41,10 @@ class Message extends Schema.TaggedClass<Message>()("Message", {
   values: Schema.Array(Schema.Number),
 }) {}
 class TestEngine extends Engine.make({ events: EffectArray.empty<Message>() }) {}
-const module = Module.make({ id: "replay-test", engine: TestEngine, effect: () => Effect.void });
+const module = Module.identify(
+  ModuleId.Id.make("local/test/replay-test"),
+  Module.make({ engine: TestEngine, effect: () => Effect.void }),
+);
 
 describe("RuntimeActivity", () => {
   it.effect("replays the full original input with fresh IDs and the current executor", () =>
@@ -225,6 +228,7 @@ describe("RuntimeActivity", () => {
           finishedAt: captured.finishedAt,
           status: "complete",
           error: null,
+          logs: [],
         },
       ]);
       assert.deepStrictEqual(
@@ -233,6 +237,31 @@ describe("RuntimeActivity", () => {
       );
       yield* executeNode(activity, "untracked", Effect.succeed(result));
       assert.strictEqual(yield* activity.snapshot, events);
+    }).pipe(Effect.provide(RuntimeActivity.layer)),
+  );
+
+  it.effect("records logs emitted while a tracked node runs", () =>
+    Effect.gen(function* () {
+      const activity = yield* RuntimeActivity.Service;
+      const timestamp = yield* Clock.currentTimeMillis;
+      yield* activity.track(
+        "test",
+        { _tag: "Message" },
+        executeNode(
+          activity,
+          "one",
+          Effect.logInfo("hello").pipe(
+            Effect.andThen(Effect.logWarning("careful", { count: 2 })),
+            Effect.as(result),
+          ),
+        ),
+      );
+      yield* Effect.logInfo("outside a node");
+      const [event] = yield* activity.snapshot;
+      assert.deepStrictEqual(event?.nodes[0]?.logs, [
+        { timestamp, level: "Info", message: "hello" },
+        { timestamp, level: "Warn", message: 'careful {"count":2}' },
+      ]);
     }).pipe(Effect.provide(RuntimeActivity.layer)),
   );
 

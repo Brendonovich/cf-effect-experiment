@@ -9,7 +9,7 @@ import {
   ResourceConstant,
   SchemaId,
 } from "@macrograph/core";
-import { t, Engine, Module, Resource } from "@macrograph/module";
+import { t, Engine, Module, Resource, ModuleId } from "@macrograph/module";
 import { Array, Effect, Exit, Option, Ref, Schema, Tracer } from "effect";
 import { Rpc, RpcGroup, RpcTest } from "effect/rpc";
 
@@ -22,6 +22,7 @@ class Ping extends Schema.TaggedClass<Ping>()("Ping", {
 class Pong extends Schema.TaggedClass<Pong>()("Pong", {}) {}
 
 class TestEngine extends Engine.make({ events: Array.empty<Ping | Pong>() }) {}
+class DynamicEngine extends Engine.make({ events: Array.empty<Ping | Pong>() }) {}
 
 describe("Executor", () => {
   it.effect("resolves resource constants and provides the hosted runtime RPC client", () =>
@@ -38,29 +39,34 @@ describe("Executor", () => {
         rpcs: RuntimeRpcs,
       }) {}
       const calls = yield* Ref.make<ReadonlyArray<string>>([]);
-      const module = Module.make({
-        id: "resource-action",
-        engine: ActionEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            properties: { account: { name: "Account", resource: AccountResource } },
-            event: (_event, { properties }) => Effect.succeed(properties.account === "account-1"),
-            io: () => ({}),
-            run: () => Effect.void,
-          });
-          yield* context.schema.register({
-            id: "action",
-            properties: { account: { name: "Account", resource: AccountResource } },
-            io: () => ({}),
-            run: ({ properties, engine }) => engine.Act({ account: properties.account }),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/resource-action"),
+        Module.make({
+          engine: ActionEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              properties: { account: { name: "Account", resource: AccountResource } },
+              event: (_event, { properties }) => Effect.succeed(properties.account === "account-1"),
+              io: () => ({}),
+              run: () => Effect.void,
+            });
+            yield* context.schema.register({
+              id: "action",
+              properties: { account: { name: "Account", resource: AccountResource } },
+              io: () => ({}),
+              run: ({ properties, engine }) => engine.Act({ account: properties.account }),
+            });
+          }),
         }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        ActionEngine.toLayer(() => Effect.die("not needed")),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          ActionEngine.toLayer(() => Effect.die("not needed")),
+        ),
       );
       const runtime = yield* RpcTest.makeClient(RuntimeRpcs).pipe(
         Effect.provide(
@@ -82,7 +88,7 @@ describe("Executor", () => {
           account: {
             id: ResourceConstant.Id.make("account"),
             name: "Streamer",
-            resource: { package: "resource-action", resource: "account" },
+            resource: { package: "local/test/resource-action", resource: "account" },
             value: "account-1",
           },
         },
@@ -99,7 +105,7 @@ describe("Executor", () => {
                   inputDefaults: {},
                   foldPins: false,
                   schema: {
-                    package: PackageId.make("resource-action"),
+                    package: PackageId.make("local/test/resource-action"),
                     schema: SchemaId.make("event"),
                   },
                   position: { x: 0, y: 0 },
@@ -111,7 +117,7 @@ describe("Executor", () => {
                   inputDefaults: {},
                   foldPins: false,
                   schema: {
-                    package: PackageId.make("resource-action"),
+                    package: PackageId.make("local/test/resource-action"),
                     schema: SchemaId.make("action"),
                   },
                   position: { x: 100, y: 0 },
@@ -197,63 +203,68 @@ describe("Executor", () => {
           ),
         );
       });
-      const module = Module.make({
-        id: "test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "ping",
-            type: "event",
-            event: (event) => Effect.succeed(event._tag === "Ping"),
-            io: (io) => ({
-              message: io.data.out("message", t.String),
-              optional: io.data.out("optional", t.Option(t.String)),
-            }),
-            run: ({ event, io }) =>
-              Effect.sync(() => {
-                if (event?._tag === "Ping") {
-                  io.message(event.message);
-                  io.optional(Option.some(event.message));
-                }
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "ping",
+              type: "event",
+              event: (event) => Effect.succeed(event._tag === "Ping"),
+              io: (io) => ({
+                message: io.data.out("message", t.String),
+                optional: io.data.out("optional", t.Option(t.String)),
               }),
-          });
-          yield* context.schema.register({
-            id: "uppercase",
-            type: "pure",
-            io: (io) => ({
-              value: io.data.in("value", t.String),
-              result: io.data.out("result", t.String),
-            }),
-            run: ({ io }) =>
-              Ref.update(pureRuns, (count) => count + 1).pipe(
-                Effect.andThen(Effect.sync(() => io.result(io.value.toUpperCase()))),
-              ),
-          });
-          yield* context.schema.register({
-            id: "record",
-            type: "exec",
-            io: (io) => ({
-              message: io.data.in("message", t.String),
-              upper: io.data.in("upper", t.String),
-              upperAgain: io.data.in("upperAgain", t.String),
-              suffix: io.data.in("suffix", t.String),
-              empty: io.data.in("empty", t.String, { defaultValue: "" }),
-              fallback: io.data.in("fallback", t.String, { defaultValue: "module" }),
-              optional: io.data.in("optional", t.Option(t.String), {
-                defaultValue: Option.none(),
+              run: ({ event, io }) =>
+                Effect.sync(() => {
+                  if (event?._tag === "Ping") {
+                    io.message(event.message);
+                    io.optional(Option.some(event.message));
+                  }
+                }),
+            });
+            yield* context.schema.register({
+              id: "uppercase",
+              type: "pure",
+              io: (io) => ({
+                value: io.data.in("value", t.String),
+                result: io.data.out("result", t.String),
               }),
-            }),
-            run: ({ io }) =>
-              Ref.update(executions, (values) => [
-                ...values,
-                `${io.message}:${io.upper}:${io.upperAgain}${io.suffix}${io.empty}:${io.fallback}:${Option.getOrElse(io.optional, () => "none")}`,
-              ]),
-          });
+              run: ({ io }) =>
+                Ref.update(pureRuns, (count) => count + 1).pipe(
+                  Effect.andThen(Effect.sync(() => io.result(io.value.toUpperCase()))),
+                ),
+            });
+            yield* context.schema.register({
+              id: "record",
+              type: "exec",
+              io: (io) => ({
+                message: io.data.in("message", t.String),
+                upper: io.data.in("upper", t.String),
+                upperAgain: io.data.in("upperAgain", t.String),
+                suffix: io.data.in("suffix", t.String),
+                empty: io.data.in("empty", t.String, { defaultValue: "" }),
+                fallback: io.data.in("fallback", t.String, { defaultValue: "module" }),
+                optional: io.data.in("optional", t.Option(t.String), {
+                  defaultValue: Option.none(),
+                }),
+              }),
+              run: ({ io }) =>
+                Ref.update(executions, (values) => [
+                  ...values,
+                  `${io.message}:${io.upper}:${io.upperAgain}${io.suffix}${io.empty}:${io.fallback}:${Option.getOrElse(io.optional, () => "none")}`,
+                ]),
+            });
+          }),
         }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        ),
       );
 
       const graphId = GraphId.make("main");
@@ -279,7 +290,10 @@ describe("Executor", () => {
                   properties: {},
                   inputDefaults: {},
                   foldPins: false,
-                  schema: { package: PackageId.make("test"), schema: SchemaId.make("ping") },
+                  schema: {
+                    package: PackageId.make("local/test/test"),
+                    schema: SchemaId.make("ping"),
+                  },
                   position: { x: 0, y: 0 },
                 },
                 [pureNodeId]: {
@@ -289,7 +303,7 @@ describe("Executor", () => {
                   inputDefaults: { value: "hello" },
                   foldPins: false,
                   schema: {
-                    package: PackageId.make("test"),
+                    package: PackageId.make("local/test/test"),
                     schema: SchemaId.make("uppercase"),
                   },
                   position: { x: 100, y: 100 },
@@ -303,7 +317,10 @@ describe("Executor", () => {
                     optional: { _tag: "Some", value: "stored" },
                   },
                   foldPins: false,
-                  schema: { package: PackageId.make("test"), schema: SchemaId.make("record") },
+                  schema: {
+                    package: PackageId.make("local/test/test"),
+                    schema: SchemaId.make("record"),
+                  },
                   position: { x: 200, y: 0 },
                 },
               },
@@ -382,7 +399,11 @@ describe("Executor", () => {
       const schemaSpans = spans.filter((span) => span.name.startsWith("Schema.run "));
       assert.deepStrictEqual(
         schemaSpans.map((span) => span.name),
-        ["Schema.run test.ping", "Schema.run test.uppercase", "Schema.run test.record"],
+        [
+          "Schema.run local/test/test.ping",
+          "Schema.run local/test/test.uppercase",
+          "Schema.run local/test/test.record",
+        ],
       );
       assert.strictEqual(Option.getOrUndefined(schemaSpans[1]!.parent), pureSpan);
       assert.strictEqual(Option.getOrUndefined(schemaSpans[2]!.parent), actionSpan);
@@ -431,7 +452,7 @@ describe("Executor", () => {
           .slice(replayStart)
           .filter((span) => span.name.startsWith("Schema.run "))
           .map((span) => span.name),
-        ["Schema.run test.uppercase"],
+        ["Schema.run local/test/test.uppercase"],
       );
       assert.deepStrictEqual(yield* Ref.get(executions), ["received:HELLO:HELLO!:module:stored"]);
       assert.strictEqual(yield* Ref.get(pureRuns), 2);
@@ -441,54 +462,61 @@ describe("Executor", () => {
 
   it.effect("rejects events from unregistered modules", () =>
     Effect.gen(function* () {
-      const module = Module.make({
-        id: "test",
-        engine: TestEngine,
-        effect: () => Effect.void,
-      });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/test"),
+        Module.make({
+          engine: TestEngine,
+          effect: () => Effect.void,
+        }),
+      );
       const executor = yield* Executor.make(Project.empty());
       const error = yield* Effect.flip(executor.handleEvent(module, new Pong()));
-      assert.strictEqual(error._tag, "ModuleNotRegistered");
+      assert.strictEqual(error._tag, "ModuleUnavailable");
     }),
   );
 
   it.effect("executes property-generated node IO", () =>
     Effect.gen(function* () {
       const values = yield* Ref.make<ReadonlyArray<string>>([]);
-      const module = Module.make({
-        id: "dynamic",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: (event) => Effect.succeed(event._tag === "Ping"),
-            io: (io, properties) => ({
-              value: io.data.out(
-                typeof properties.output === "string" ? properties.output : "value",
-                t.String,
-              ),
-            }),
-            run: ({ event, io }) =>
-              Effect.sync(() => {
-                if (event?._tag === "Ping") io.value(event.message);
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/dynamic"),
+        Module.make({
+          engine: DynamicEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: (event) => Effect.succeed(event._tag === "Ping"),
+              io: (io, properties) => ({
+                value: io.data.out(
+                  typeof properties.output === "string" ? properties.output : "value",
+                  t.String,
+                ),
               }),
-          });
-          yield* context.schema.register({
-            id: "record",
-            io: (io, properties) => ({
-              value: io.data.in(
-                typeof properties.input === "string" ? properties.input : "value",
-                t.String,
-              ),
-            }),
-            run: ({ io }) => Ref.update(values, (current) => [...current, io.value]),
-          });
+              run: ({ event, io }) =>
+                Effect.sync(() => {
+                  if (event?._tag === "Ping") io.value(event.message);
+                }),
+            });
+            yield* context.schema.register({
+              id: "record",
+              io: (io, properties) => ({
+                value: io.data.in(
+                  typeof properties.input === "string" ? properties.input : "value",
+                  t.String,
+                ),
+              }),
+              run: ({ io }) => Ref.update(values, (current) => [...current, io.value]),
+            });
+          }),
         }),
-      });
-      const deployment = Engine.deployment(
-        module,
-        TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+      );
+      const deployment = Engine.identify(
+        module.id,
+        Engine.deployment(
+          module,
+          DynamicEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        ),
       );
       const graphId = GraphId.make("dynamic");
       const eventId = NodeId.make("dynamic-event");
@@ -513,7 +541,7 @@ describe("Executor", () => {
                   inputDefaults: {},
                   foldPins: false,
                   schema: {
-                    package: PackageId.make("dynamic"),
+                    package: PackageId.make("local/test/dynamic"),
                     schema: SchemaId.make("event"),
                   },
                   position: { x: 0, y: 0 },
@@ -525,7 +553,7 @@ describe("Executor", () => {
                   inputDefaults: {},
                   foldPins: false,
                   schema: {
-                    package: PackageId.make("dynamic"),
+                    package: PackageId.make("local/test/dynamic"),
                     schema: SchemaId.make("record"),
                   },
                   position: { x: 100, y: 0 },

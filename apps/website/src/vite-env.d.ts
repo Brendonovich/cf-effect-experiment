@@ -18,14 +18,6 @@ declare module "*.webp" {
   export default src;
 }
 
-declare module "virtual:macrograph-module-settings" {
-  import type { ClientSettings } from "@macrograph/module";
-  import type { JSX } from "@solidjs/web";
-
-  const settings: ReadonlyArray<ClientSettings.Descriptor<JSX.Element>>;
-  export default settings;
-}
-
 declare module "virtual:macrograph-reference" {
   import type { Package } from "@macrograph/core";
   import type { ModuleId } from "@macrograph/module";
@@ -43,6 +35,7 @@ declare module "virtual:macrograph-reference" {
 
   export interface ReferenceModule {
     readonly effect: Parameters<typeof Registration.collectModule>[0];
+    readonly types?: import("@macrograph/module").t.Definitions;
   }
 
   export const packages: ReadonlyArray<PackageSummary>;

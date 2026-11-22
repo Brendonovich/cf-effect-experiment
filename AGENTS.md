@@ -42,6 +42,7 @@ Run the narrowest relevant test while developing, then use the repository comman
   | Function navigation or split constants           | `pnpm verify:playground:function-navigation` |
   | Module info, settings, or reference browsing     | `pnpm verify:playground:module-reference`    |
   | Local persistence, export, import, or reset      | `pnpm verify:playground:journey`             |
+  | Inspector Print output or runtime node logs      | `pnpm verify:playground:print-log`           |
   | Multiple covered areas, CI, PR, or release       | `pnpm verify:playground`                     |
 
 - Do not use `pnpm verify:playground` as the default for a focused change. Run the narrowest mode that proves the changed behavior; use `smoke` only for startup/shell confidence, not as a substitute for a feature-specific mode.

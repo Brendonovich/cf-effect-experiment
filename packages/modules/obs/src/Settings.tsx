@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { For, Match, Show, Switch, createSignal, type Component } from "solid-js";
 
 import { ClientRpcs, ClientState, SocketAddress, type HighVolumeEvents } from "./Definition.ts";
-import OBSModule from "./Module.ts";
 
 const sm = "@media (min-width: 640px)";
 const styles = stylex.create({
@@ -378,7 +377,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: OBSModule,
   state: ClientState,
   initial: { sockets: [] },
   rpcs: ClientRpcs,

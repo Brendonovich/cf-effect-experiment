@@ -27,6 +27,7 @@ const event: RuntimeActivity.Event = {
       finishedAt: now - 2980,
       status: "complete",
       error: null,
+      logs: [],
     },
   ],
 };

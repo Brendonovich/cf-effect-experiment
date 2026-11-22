@@ -24,5 +24,16 @@
     "@macrograph/module-string": "workspace:*",
     "typescript": "^5.8",
     "vitest": "^4.1.0"
+  },
+  "macrograph": {
+    "publisher": "macrograph",
+    "name": "logic",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Logic",
+    "description": "Branch, compare, and combine values with logical operations.",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
   }
 }

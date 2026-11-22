@@ -8,9 +8,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const session = {
-  user: { id: "user-1", email: "ada@example.com" },
+  user: { id: "user-1", email: "ada@example.com", hasSignInMethod: true },
   session: { id: "session-1" },
 };
+
+const signInProviders = [
+  { id: "twitch", displayName: "Twitch" },
+  { id: "github", displayName: "GitHub" },
+];
 
 const mockApi = (routes: Record<string, unknown>) =>
   vi.stubGlobal(
@@ -49,20 +54,94 @@ it("renders the landing page with a login link for signed-out visitors", async (
   await vi.waitFor(() => expect(container.textContent).toContain("Log in"));
   expect(container.querySelector("h1")?.textContent).toBe("MacroGraph");
   expect(container.textContent).toContain("Visual programming for streamers");
-  expect(container.querySelector('a[href="/playground"]')?.textContent).toBe("Playground");
+  expect(container.querySelector('main a[href="/playground"]')?.textContent).toBe("Playground");
 });
 
 it("links landing page integrations to their package reference", async () => {
   mockApi({ "/api/website/session": null });
   const { container } = renderApp("/");
   await vi.waitFor(() => expect(container.textContent).toContain("Integrations"));
-  expect(container.querySelector('a[href="/docs/macrograph/twitch"]')?.textContent).toBe("Twitch");
-  expect(container.querySelector('a[href="/docs"]')?.textContent).toContain("Browse all packages");
+  expect(container.querySelector('a[href="/modules/macrograph/twitch"]')?.textContent).toBe(
+    "Twitch",
+  );
+  expect(container.querySelector('main a[href="/modules"]')?.textContent).toContain(
+    "Browse all modules",
+  );
+});
+
+it("links the landing page to the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/");
+  await vi.waitFor(() => expect(container.textContent).toContain("Download Desktop"));
+  expect(container.querySelector('main a[href="/docs/server"]')?.textContent).toBe("Setup Server");
+});
+
+it("renders the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Set up a server"),
+  );
+  expect(container.textContent).toContain("ghcr.io/brendonovich/macrograph-server:beta");
+});
+
+it("steps through the server setup guide", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Set up a server"),
+  );
+  const expanded = () =>
+    container.querySelector('button[aria-expanded="true"]')?.textContent?.replace(/^\d/, "");
+  expect(expanded()).toBe("Start the container");
+  const next = [...container.querySelectorAll("button")].find((b) => b.textContent === "Next");
+  next?.click();
+  await vi.waitFor(() => expect(expanded()).toBe("Open your setup link"));
+  expect(container.textContent).toContain("docker logs macrograph");
+  const claim = [...container.querySelectorAll("button")].find(
+    (b) => b.getAttribute("aria-expanded") !== null && b.textContent?.includes("Claim your server"),
+  );
+  claim?.click();
+  await vi.waitFor(() => expect(container.textContent).toContain("Step 3 of 4"));
+  const currentPart = () =>
+    container.querySelector('button[aria-current="step"]')?.textContent ?? "";
+  expect(currentPart()).toContain("Continue with MacroGraph");
+  const approvePart = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("choose Approve"),
+  );
+  approvePart?.click();
+  await vi.waitFor(() => expect(currentPart()).toContain("choose Approve"));
+});
+
+it("links guides from the docs sidebar", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/docs/server");
+  await vi.waitFor(() => expect(container.querySelector('nav[aria-label="Docs"]')).not.toBeNull());
+  const sidebar = container.querySelector('nav[aria-label="Docs"]');
+  expect(sidebar?.textContent).toContain("Guides");
+  expect(sidebar?.textContent).not.toContain("Modules");
+  // Narrower screens open the same links in a drawer, from a bar that shows where you are.
+  const menu = container.querySelector('button[aria-controls="docs-drawer"]');
+  expect(menu?.getAttribute("aria-label")).toBe("Open navigation");
+  expect(menu?.parentElement?.textContent).toBe("GuidesSet up a server");
+  expect(sidebar?.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe(
+    "/docs/server",
+  );
+});
+
+it("gives modules their own section, outside the docs", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/modules/macrograph/string");
+  await vi.waitFor(() => expect(container.textContent).toContain("Overview"));
+  expect(container.querySelector('nav[aria-label="Docs"]')).toBeNull();
+  expect(
+    container.querySelector('header a[href="/modules"]')?.getAttribute("aria-current"),
+  ).toBeNull();
 });
 
 it("lists a package's nodes and shows one at a time", async () => {
   mockApi({ "/api/website/session": null });
-  const { container } = renderApp("/docs/macrograph/string/StringIncludes");
+  const { container } = renderApp("/modules/macrograph/string/StringIncludes");
   await vi.waitFor(() =>
     expect(container.querySelector("[data-graph-node-id]")?.textContent).toContain(
       "String Includes",
@@ -70,25 +149,35 @@ it("lists a package's nodes and shows one at a time", async () => {
   );
   expect(container.querySelectorAll("[data-graph-node-id]")).toHaveLength(1);
   expect(container.textContent).toContain("Performs a case-sensitive literal string comparison.");
-  const link = container.querySelector('a[href="/docs/macrograph/string/StringLength"]');
+  const link = container.querySelector('a[href="/modules/macrograph/string/StringLength"]');
   expect(link?.textContent).toBe("String Length");
   expect(container.querySelector('a[aria-current="page"]')?.textContent).toBe("String Includes");
 });
 
 it("shows node properties with their controls", async () => {
   mockApi({ "/api/website/session": null });
-  const { container } = renderApp("/docs/macrograph/obs/GetSceneItemTransform");
+  const { container } = renderApp("/modules/macrograph/obs/GetSceneItemTransform");
   await vi.waitFor(() => expect(container.textContent).toContain("Properties"));
   expect(container.textContent).toContain("OBS Socket");
 });
 
+it("shows event nodes from webhook modules", async () => {
+  mockApi({ "/api/website/session": null });
+  const { container } = renderApp("/modules/macrograph/kofi/PaymentReceived");
+  await vi.waitFor(() =>
+    expect(container.querySelector("[data-graph-node-id]")?.textContent).toContain(
+      "Payment Received",
+    ),
+  );
+});
+
 it("shows a not-found message for unknown packages and nodes", async () => {
   mockApi({ "/api/website/session": null });
-  const unknownPackage = renderApp("/docs/macrograph/nope");
+  const unknownPackage = renderApp("/modules/macrograph/nope");
   await vi.waitFor(() =>
-    expect(unknownPackage.container.textContent).toContain("Package not found"),
+    expect(unknownPackage.container.textContent).toContain("Module not found"),
   );
-  const unknownNode = renderApp("/docs/macrograph/string/Nope");
+  const unknownNode = renderApp("/modules/macrograph/string/Nope");
   await vi.waitFor(() => expect(unknownNode.container.textContent).toContain("Node not found"));
 });
 
@@ -98,6 +187,75 @@ it("sends signed-out visitors from account pages to login and back", async () =>
   await vi.waitFor(() =>
     expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/apps")}`),
   );
+});
+
+it("offers provider sign-in and explains why one failed", async () => {
+  mockApi({
+    "/api/website/session": null,
+    "/api/website/sign-in/providers": signInProviders,
+  });
+  const { container } = renderApp("/login?next=%2Fcloud&error=account_exists");
+  await vi.waitFor(() => expect(container.textContent).toContain("Continue with Twitch"));
+  const twitch = container.querySelector<HTMLAnchorElement>(
+    'a[href^="/api/website/sign-in/twitch"]',
+  );
+  // The provider returns to this page without the old error, which then continues to `next`.
+  expect(new URL(twitch?.href ?? "", "http://localhost").searchParams.get("returnTo")).toBe(
+    "/login?next=%2Fcloud",
+  );
+  expect(twitch?.rel).toBe("external");
+  expect(container.textContent).toContain("Continue with GitHub");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "already uses that email",
+  );
+  // Email and password stays available for existing accounts, but out of the way.
+  expect(container.querySelector('input[type="password"]')).toBeNull();
+});
+
+it("sends signups to the login page", async () => {
+  mockApi({ "/api/website/session": null, "/api/website/sign-in/providers": signInProviders });
+  const { history } = renderApp("/signup?next=%2Fcloud");
+  await vi.waitFor(() => expect(history.get()).toBe("/login?next=%2Fcloud"));
+});
+
+it("makes password-only accounts connect a sign-in method first", async () => {
+  mockApi({
+    "/api/website/session": { ...session, user: { ...session.user, hasSignInMethod: false } },
+    "/api/website/sign-in/providers": signInProviders,
+  });
+  const { container, history } = renderApp("/account/credentials");
+  await vi.waitFor(() =>
+    expect(container.querySelector("h1")?.textContent).toBe("Connect a sign-in method"),
+  );
+  expect(history.get()).toBe(`/login?next=${encodeURIComponent("/account/credentials")}`);
+  expect(container.textContent).toContain("ada@example.com");
+  const github = container.querySelector<HTMLAnchorElement>(
+    'a[href^="/api/website/sign-in/github"]',
+  );
+  expect(github?.textContent).toBe("Connect GitHub");
+});
+
+it("lists sign-in methods and keeps the last one", async () => {
+  mockApi({
+    "/api/website/session": session,
+    "/api/website/sign-in/providers": signInProviders,
+    "/api/website/sign-in-methods": [
+      {
+        providerId: "twitch",
+        providerUserId: "1001",
+        displayName: "ada",
+        email: "ada@example.com",
+      },
+    ],
+  });
+  const { container } = renderApp("/account/sign-in");
+  await vi.waitFor(() => expect(container.textContent).toContain("ada@example.com"));
+  expect(container.querySelector("h1")?.textContent).toBe("Sign-in methods");
+  const remove = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Remove",
+  );
+  expect(remove?.disabled).toBe(true);
+  await vi.waitFor(() => expect(container.textContent).toContain("Connect GitHub"));
 });
 
 it("lists credentials grouped by provider for signed-in users", async () => {
@@ -207,4 +365,184 @@ it("keeps a linked device code when the session refetches", async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(container.textContent).toContain("Approve sign-in?");
   expect(container.textContent).toContain("BCDF-GHJK");
+});
+
+const gatewayManage = "/cloud/api/gateway/manage";
+
+/** Mocks the gateway management API, recording writes. */
+const mockGateway = (routes: Record<string, unknown>) => {
+  const calls: Array<{ readonly method: string; readonly path: string; readonly body?: unknown }> =
+    [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.origin === "http://localhost:25000") throw new TypeError("Desktop not running");
+      const method = init?.method ?? "GET";
+      const key = `${method} ${url.pathname}`;
+      if (method !== "GET")
+        calls.push({
+          method,
+          path: url.pathname,
+          ...(typeof init?.body === "string" ? { body: JSON.parse(init.body) } : {}),
+        });
+      const route = key in routes ? routes[key] : routes[url.pathname];
+      if (route === undefined)
+        return method === "GET"
+          ? new Response(null, { status: 404 })
+          : new Response(null, { status: 204 });
+      return Response.json(typeof route === "function" ? route() : route);
+    }),
+  );
+  return calls;
+};
+
+const approval = {
+  id: "approval-1",
+  tool: "twitch_ban_user",
+  title: "Ban User",
+  provider: "twitch",
+  account: { id: "1234", displayName: "brendonovich" },
+  arguments: { userId: "99", reason: "spam" },
+  caller: "OpenCode",
+  status: "pending",
+  result: null,
+  error: null,
+  createdAt: "2026-11-01T00:00:00.000Z",
+  expiresAt: "2026-11-01T00:10:00.000Z",
+};
+
+const gatewayTools = {
+  providers: [
+    {
+      id: "twitch",
+      displayName: "Twitch",
+      accounts: [{ id: "1234", displayName: "brendonovich" }],
+      tools: [
+        {
+          name: "twitch_ban_user",
+          title: "Ban User",
+          description: "Ban User on Twitch.",
+          method: "POST",
+          readOnly: false,
+          policy: "approve",
+          defaultPolicy: "approve",
+        },
+      ],
+    },
+  ],
+};
+
+it("lets the user choose whether each gateway tool asks first", async () => {
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: [],
+    [`${gatewayManage}/tools`]: gatewayTools,
+  });
+  const { container } = renderApp("/gateway/tools");
+  await vi.waitFor(() => expect(container.textContent).toContain("Ban User"));
+  expect(container.textContent).toContain("MacroGraph Gateway");
+  expect(container.textContent).toContain("As brendonovich");
+
+  const policy = (label: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>('[data-tool="twitch_ban_user"] button')].find(
+      (button) => button.textContent === label,
+    );
+  expect(policy("Ask")?.getAttribute("aria-pressed")).toBe("true");
+  expect(policy("Block")).toBeUndefined();
+  policy("Allow")?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "PUT",
+      path: `${gatewayManage}/tools/twitch_ban_user`,
+      body: { policy: "allow" },
+    }),
+  );
+});
+
+it("approves a gateway call after showing exactly what will run", async () => {
+  let approvals: ReadonlyArray<typeof approval> = [approval];
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: () => approvals,
+    [`${gatewayManage}/tools`]: gatewayTools,
+    [`POST ${gatewayManage}/approvals/approval-1/approve`]: () => {
+      approvals = [];
+      return { ...approval, status: "succeeded" };
+    },
+  });
+  const { container } = renderApp("/gateway/approvals?approval=approval-1");
+  await vi.waitFor(() => expect(container.textContent).toContain("OpenCode wants to Ban User"));
+  expect(container.textContent).toContain('"reason": "spam"');
+  expect(container.textContent).toContain("As brendonovich on Twitch");
+
+  [...container.querySelectorAll("button")]
+    .find((button) => button.textContent === "Approve")
+    ?.click();
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: `${gatewayManage}/approvals/approval-1/approve`,
+    }),
+  );
+  await vi.waitFor(() => expect(container.textContent).toContain("Nothing is waiting for you."));
+});
+
+it("shows endpoints and creates gateway API keys", async () => {
+  const calls = mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: true },
+    [`${gatewayManage}/approvals`]: [],
+    [`${gatewayManage}/tools`]: gatewayTools,
+    [`${gatewayManage}/keys`]: { keys: [] },
+    [`POST ${gatewayManage}/keys`]: {
+      id: "key-1",
+      name: "Stream bot",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      lastUsedAt: null,
+      key: "mgw_secret",
+    },
+  });
+  const { container } = renderApp("/gateway");
+  await vi.waitFor(() => expect(container.textContent).toContain("/cloud/api/gateway/mcp"));
+  expect(container.textContent).toContain("/cloud/api/gateway/v1");
+
+  const input = container.querySelector<HTMLInputElement>('input[aria-label="Key name"]');
+  if (input === null) throw new Error("Missing key name input");
+  input.value = "Stream bot";
+  input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  await vi.waitFor(() =>
+    expect(
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Create key",
+      )?.disabled,
+    ).toBe(false),
+  );
+  container
+    .querySelector("form")
+    ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  await vi.waitFor(() =>
+    expect(calls).toContainEqual({
+      method: "POST",
+      path: `${gatewayManage}/keys`,
+      body: { name: "Stream bot" },
+    }),
+  );
+  await vi.waitFor(() => expect(container.textContent).toContain("mgw_secret"));
+});
+
+it("hides the gateway from accounts it isn't enabled for", async () => {
+  mockGateway({
+    "/api/website/session": session,
+    [`${gatewayManage}/access`]: { enabled: false },
+  });
+  const { container } = renderApp("/gateway/tools");
+  await vi.waitFor(() =>
+    expect(container.textContent).toContain(
+      "MacroGraph Gateway isn't available for your account yet.",
+    ),
+  );
+  expect(container.querySelector("[data-tool]")).toBeNull();
 });

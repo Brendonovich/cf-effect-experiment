@@ -8,7 +8,6 @@ import { checked, integer, kelvinToMireds, miredsToKelvin } from "./Validation.t
 const properties = { light: { name: "Key Light", resource: KeyLightDevice } } as const;
 
 const module = Module.make({
-  id: "elgato-key-light",
   name: "Elgato Key Light",
   engine: KeyLightEngine,
   effect: Effect.fnUntraced(function* (context) {

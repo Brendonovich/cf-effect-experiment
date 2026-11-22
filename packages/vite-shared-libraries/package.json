@@ -1,0 +1,37 @@
+{
+  "name": "@macrograph/vite-shared-libraries",
+  "version": "0.0.1",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./BuildManifest": "./src/BuildManifest.ts",
+    "./ImportMap": "./src/ImportMap.ts",
+    "./PackageExports": "./src/PackageExports.ts",
+    "./SharedLibrariesPlugin": "./src/SharedLibrariesPlugin.ts",
+    "./StyleX": "./src/StyleX.ts"
+  },
+  "scripts": {
+    "build": "tsgo --build",
+    "typecheck": "tsgo --build",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@macrograph/module": "workspace:*",
+    "@stylexjs/stylex": "catalog:"
+  },
+  "devDependencies": {
+    "@solidjs/vite-plugin": "3.0.0-next.44",
+    "@solidjs/web": "2.0.0-rc.9",
+    "@stylexjs/unplugin": "catalog:",
+    "@types/node": "^24",
+    "effect": "catalog:",
+    "playwright": "1.63.0",
+    "solid-js": "2.0.0-rc.9",
+    "typescript": "^5.8",
+    "vite": "^8.0.7",
+    "vitest": "^4.1.0"
+  }
+}

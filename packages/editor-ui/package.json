@@ -8,8 +8,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./Button": "./src/ui/Button.tsx",
+    "./modules-admin": "./src/modules-admin/index.ts",
     "./events.stylex": "./src/events/events.stylex.ts",
     "./events-markers.stylex": "./src/events/events-markers.stylex.ts",
+    "./modules": "./src/editor/modules/index.ts",
     "./tokens.stylex": "./src/tokens.stylex.ts",
     "./styles.css": "./src/styles.css"
   },
@@ -38,6 +40,7 @@
   },
   "devDependencies": {
     "@macrograph/icons": "workspace:*",
+    "@macrograph/vite-shared-libraries": "workspace:*",
     "@solidjs/vite-plugin": "3.0.0-next.44",
     "@stylexjs/unplugin": "catalog:",
     "happy-dom": "^20.11.6",

@@ -1,3 +1,5 @@
+import type { JSX } from "@solidjs/web";
+
 import { Button, macrographLogo } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useNavigate } from "@solidjs/router";
@@ -44,14 +46,117 @@ const sortedScopes = (scopes: ReadonlyArray<OAuthScope>) => [
 export function DeviceAuthorizationRoute() {
   return (
     <main sx={styles.page}>
-      <div sx={styles.content}>
-        <a href="/" sx={[styles.brand]}>
-          <img src={macrographLogo} alt="" sx={styles.logo} />
-          MacroGraph
-        </a>
+      <DeviceAuthorizationLayout>
         <RequireSession>{(session) => <DeviceAuthorization session={session} />}</RequireSession>
-      </div>
+      </DeviceAuthorizationLayout>
     </main>
+  );
+}
+
+/** The page's brand and content column, without the full-height page around it. */
+export function DeviceAuthorizationLayout(props: { readonly children: JSX.Element }) {
+  return (
+    <div sx={styles.content}>
+      <a href="/" sx={[styles.brand]}>
+        <img src={macrographLogo} alt="" sx={styles.logo} />
+        MacroGraph
+      </a>
+      {props.children}
+    </div>
+  );
+}
+
+export function DeviceCard(props: { readonly children: JSX.Element }) {
+  return <div sx={styles.card}>{props.children}</div>;
+}
+
+function SignedInAs(props: { readonly email: string }) {
+  return (
+    <p sx={styles.signedIn}>
+      Signed in as <strong sx={styles.email}>{props.email}</strong>
+    </p>
+  );
+}
+
+/** Asks the signed-in user to approve or deny a request. */
+export function DeviceApproval(props: {
+  readonly email: string;
+  readonly request: DeviceRequest;
+  readonly pending: boolean;
+  readonly error?: string | undefined;
+  readonly onDecide: (approve: boolean) => void;
+}) {
+  return (
+    <>
+      <h1 sx={styles.title}>Approve sign-in?</h1>
+      <SignedInAs email={props.email} />
+      <div sx={styles.codePanel}>
+        <p sx={styles.codePanelLabel}>Check this matches your device</p>
+        <p sx={styles.code} aria-label="Code">
+          {props.request.userCode}
+        </p>
+      </div>
+
+      <div sx={styles.details}>
+        <div sx={styles.client}>
+          <span sx={styles.clientName}>{props.request.client.name}</span>
+          <Show when={!props.request.client.verified}>
+            <span sx={styles.badge} title="MacroGraph hasn't checked who runs this server">
+              Unverified
+            </span>
+          </Show>
+        </div>
+        <Show when={requestOrigin(props.request) !== ""}>
+          <p sx={styles.origin}>{requestOrigin(props.request)}</p>
+        </Show>
+        <ul sx={styles.scopeList}>
+          <For each={sortedScopes(props.request.scope)}>
+            {(scope) => {
+              const Icon = scopeIcons[scope];
+              const warning = scopeWarnings[scope];
+              return (
+                <li sx={[styles.scope, warning !== undefined && styles.dangerScope]}>
+                  <Icon
+                    {...stylex.attrs(styles.scopeIcon, warning !== undefined && styles.dangerIcon)}
+                  />
+                  <div>
+                    {scopeDescriptions[scope]}
+                    <Show when={warning}>{(text) => <p sx={styles.scopeWarning}>{text()}</p>}</Show>
+                  </div>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </div>
+
+      <Show when={props.error}>
+        {(error) => (
+          <p role="alert" sx={styles.error}>
+            {error()}
+          </p>
+        )}
+      </Show>
+      <div sx={styles.buttons}>
+        <Button
+          type="button"
+          variant="secondary"
+          sx={styles.button}
+          disabled={props.pending}
+          onClick={() => props.onDecide(false)}
+        >
+          Deny
+        </Button>
+        <Button
+          type="button"
+          sx={styles.button}
+          disabled={props.pending}
+          onClick={() => props.onDecide(true)}
+        >
+          {props.pending ? "Saving..." : "Approve"}
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -144,12 +249,6 @@ function DeviceAuthorization(props: { readonly session: () => Session }) {
     queueMicrotask(() => navigate(location.pathname, { replace: true }));
   });
 
-  const signedInAs = () => (
-    <p sx={styles.signedIn}>
-      Signed in as <strong sx={styles.email}>{props.session().user.email}</strong>
-    </p>
-  );
-
   const confirming = () => {
     const current = step();
     return current.state === "confirm" ? current.request : undefined;
@@ -160,7 +259,7 @@ function DeviceAuthorization(props: { readonly session: () => Session }) {
   };
 
   return (
-    <div sx={styles.card}>
+    <DeviceCard>
       <Switch>
         <Match when={done()}>
           {(result) => (
@@ -182,86 +281,18 @@ function DeviceAuthorization(props: { readonly session: () => Session }) {
         </Match>
         <Match when={confirming()}>
           {(request) => (
-            <>
-              <h1 sx={styles.title}>Approve sign-in?</h1>
-              {signedInAs()}
-              <div sx={styles.codePanel}>
-                <p sx={styles.codePanelLabel}>Check this matches your device</p>
-                <p sx={styles.code} aria-label="Code">
-                  {request().userCode}
-                </p>
-              </div>
-
-              <div sx={styles.details}>
-                <div sx={styles.client}>
-                  <span sx={styles.clientName}>{request().client.name}</span>
-                  <Show when={!request().client.verified}>
-                    <span sx={styles.badge} title="MacroGraph hasn't checked who runs this server">
-                      Unverified
-                    </span>
-                  </Show>
-                </div>
-                <Show when={requestOrigin(request()) !== ""}>
-                  <p sx={styles.origin}>{requestOrigin(request())}</p>
-                </Show>
-                <ul sx={styles.scopeList}>
-                  <For each={sortedScopes(request().scope)}>
-                    {(scope) => {
-                      const Icon = scopeIcons[scope];
-                      const warning = scopeWarnings[scope];
-                      return (
-                        <li sx={[styles.scope, warning !== undefined && styles.dangerScope]}>
-                          <Icon
-                            {...stylex.attrs(
-                              styles.scopeIcon,
-                              warning !== undefined && styles.dangerIcon,
-                            )}
-                          />
-                          <div>
-                            {scopeDescriptions[scope]}
-                            <Show when={warning}>
-                              {(text) => <p sx={styles.scopeWarning}>{text()}</p>}
-                            </Show>
-                          </div>
-                        </li>
-                      );
-                    }}
-                  </For>
-                </ul>
-              </div>
-
-              <Show when={decide.error}>
-                {(error) => (
-                  <p role="alert" sx={styles.error}>
-                    {error().message}
-                  </p>
-                )}
-              </Show>
-              <div sx={styles.buttons}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  sx={styles.button}
-                  disabled={decide.isPending}
-                  onClick={() => decide.mutate({ userCode: request().userCode, approve: false })}
-                >
-                  Deny
-                </Button>
-                <Button
-                  type="button"
-                  sx={styles.button}
-                  disabled={decide.isPending}
-                  onClick={() => decide.mutate({ userCode: request().userCode, approve: true })}
-                >
-                  {decide.isPending ? "Saving..." : "Approve"}
-                </Button>
-              </div>
-            </>
+            <DeviceApproval
+              email={props.session().user.email}
+              request={request()}
+              pending={decide.isPending}
+              error={decide.error?.message}
+              onDecide={(approve) => decide.mutate({ userCode: request().userCode, approve })}
+            />
           )}
         </Match>
         <Match when={step().state === "enter-code"}>
           <h1 sx={styles.title}>Connect a device</h1>
-          {signedInAs()}
+          <SignedInAs email={props.session().user.email} />
           <form
             sx={styles.form}
             onSubmit={(event) => {
@@ -303,7 +334,7 @@ function DeviceAuthorization(props: { readonly session: () => Session }) {
           </p>
         </Match>
       </Switch>
-    </div>
+    </DeviceCard>
   );
 }
 

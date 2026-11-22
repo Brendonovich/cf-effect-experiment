@@ -31,6 +31,6 @@ export const run = Effect.fnUntraced(function* (
     ...(options.engineClient === undefined ? {} : { engineClient: options.engineClient }),
   });
   yield* options.modules.handle(executor, input.moduleId, input.event);
-});
+}, Effect.scoped);
 
 export * as GraphExecution from "./GraphExecution.ts";

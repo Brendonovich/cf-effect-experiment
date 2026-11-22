@@ -16,7 +16,6 @@ export const ids = [
   "ExecuteHotkey",
 ] as const;
 export default Module.make({
-  id: "vtube-studio",
   name: "VTube Studio",
   engine: VTubeStudioEngine,
   effect: Effect.fnUntraced(function* (context) {

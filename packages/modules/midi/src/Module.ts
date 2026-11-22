@@ -12,7 +12,6 @@ const channelOut = { name: "Channel (1-16)" };
 const channelIn = { name: "Channel (1-16)", defaultValue: 1 };
 
 const MidiModule = Module.make({
-  id: "midi",
   name: "MIDI",
   engine: MidiEngine,
   effect: Effect.fnUntraced(function* (context) {

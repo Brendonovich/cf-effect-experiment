@@ -115,14 +115,14 @@ describe("schema-owned authoring", () => {
     };
     for (const schema of CustomTypes.packageModel.schemas)
       expect(
-        BuiltinAuthoring.registry.get({ package: "CustomTypes", schema: schema.id })!.properties,
+        BuiltinAuthoring.registry.get({ package: CustomTypes.packageId, schema: schema.id })!.properties,
       ).toEqual(
         schema.id === "ConstructEnum"
           ? expect.objectContaining({ variant: expect.anything() })
           : {},
       );
     const source = BuiltinAuthoring.registry.get({
-      package: "CustomTypes",
+      package: CustomTypes.packageId,
       schema: "ConstructEnum",
     })!.properties!.variant!;
     expect(
@@ -263,7 +263,7 @@ describe("schema-owned authoring", () => {
   it("keeps the catalog static across definition changes while regenerating node IO", () =>
     createRoot((dispose) => {
       const editor = createEditorStore();
-      const n = node("make", "MakeStruct", "CustomTypes");
+      const n = node("make", "MakeStruct", CustomTypes.packageId);
       const sink = node("sink", "Static");
       const project = {
         ...Project.empty(),
@@ -313,7 +313,7 @@ describe("schema-owned authoring", () => {
       ...Canvas.empty("g"),
       nodes: {
         source: node("source", "Static"),
-        target: node("target", "BreakStruct", "CustomTypes"),
+        target: node("target", "BreakStruct", CustomTypes.packageId),
       },
       connections: [wire("source", "out", "target", "value")],
     };
@@ -402,8 +402,8 @@ describe("schema-owned authoring", () => {
         fields: [{ name: "next", type: t.Struct(id) }],
       },
     };
-    const a = node("a", "BreakStruct", "CustomTypes"),
-      b = node("b", "BreakStruct", "CustomTypes");
+    const a = node("a", "BreakStruct", CustomTypes.packageId),
+      b = node("b", "BreakStruct", CustomTypes.packageId);
     const graph = {
       ...Canvas.empty("g"),
       nodes: { a, b },

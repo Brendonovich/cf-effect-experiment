@@ -1,4 +1,4 @@
-import { t } from "@macrograph/module";
+import { Module, t } from "@macrograph/module";
 import { Effect, Schema } from "effect";
 
 import type { SchemaModel } from "./Package.ts";
@@ -14,7 +14,7 @@ import { PackageId, SchemaId } from "./SchemaRef.ts";
 export const InputBoundaryNodeId = NodeId.make("$function:input");
 export const OutputBoundaryNodeId = NodeId.make("$function:output");
 export const ExecutionIoId = IoId.make("exec");
-export const packageId = PackageId.make("macrograph-functions");
+export const packageId = PackageId.make(Module.builtinId("functions"));
 export const CallSchemaId = SchemaId.make("call");
 
 export const isCall = (node: Pick<NodeModel, "schema">): boolean =>
@@ -88,7 +88,7 @@ export const authoring: Readonly<Record<string, SchemaAuthoring.Definition>> = {
 
 const boundarySchema = {
   package: PackageId.make("$macrograph"),
-  schema: SchemaId.make("function-boundary"),
+  schema: SchemaId.make("FunctionBoundary"),
 };
 
 export const boundaryNodes = (fn: Model): ReadonlyArray<NodeModel> => [

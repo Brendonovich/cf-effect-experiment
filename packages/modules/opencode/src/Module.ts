@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { OpenCodeConnection, OpenCodeEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "opencode",
   name: "OpenCode",
   description: "Generates model-agnostic text through OpenCode.",
   engine: OpenCodeEngine,

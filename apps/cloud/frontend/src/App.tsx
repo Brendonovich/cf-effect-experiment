@@ -25,7 +25,6 @@ import {
   untrack,
   useContext,
 } from "solid-js";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import type { ApiClient } from "./api";
 
@@ -34,7 +33,7 @@ import { useAuth } from "./Auth";
 import { createPresence } from "./createPresence";
 import { CreateProjectDialog } from "./CreateProjectForm";
 import { CreateTeamDialog } from "./CreateTeamForm";
-import { makeEditorConnection } from "./editorConnection";
+import { editorModules, makeEditorConnection } from "./editorConnection";
 import { TeamSettings } from "./TeamSettings";
 
 interface WorkspaceContextValue {
@@ -187,10 +186,10 @@ export function App(
     const userId = currentUserId();
     if (projectId === undefined || userId === undefined) return undefined;
     return createEditorController({
-      connection: makeEditorConnection(editorUrl(projectId), discoveredModuleSettings),
+      connection: makeEditorConnection(editorUrl(projectId), projectId),
       workspaceId: projectId,
       userId,
-      settingsDescriptors: discoveredModuleSettings,
+      modules: editorModules(),
       reconnect: true,
     });
   });

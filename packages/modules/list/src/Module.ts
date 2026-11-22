@@ -9,7 +9,6 @@ const indexOf = (index: number, length: number) =>
     : Effect.fail(new RangeError("Index must be a safe integer"));
 
 const ListModule = Module.make({
-  id: "list",
   name: "List",
   description: "Create, inspect, and transform typed lists.",
   effect: Effect.fnUntraced(function* (context) {

@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { For, Show, action, createSignal, type Component } from "solid-js";
 
 import { type AccountId, ClientRpcs, ClientState, type DeliveryMode } from "./Definition.ts";
-import SendblueModule from "./Module.ts";
 
 const styles = stylex.create({
   root: { color: colors.gray12, display: "flex", flexDirection: "column", gap: 8, fontSize: 12 },
@@ -258,7 +257,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module: SendblueModule,
   state: ClientState,
   initial: { accounts: [] },
   rpcs: ClientRpcs,

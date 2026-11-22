@@ -7,10 +7,7 @@ import {
   type SchemaAuthoring,
 } from "@macrograph/core";
 import { t } from "@macrograph/module";
-import { Context, Effect, Layer, Ref, Result, Schema } from "effect";
-
-const SchemaRuntimeKey = Schema.String.pipe(Schema.brand("SchemaRuntimeKey"));
-type SchemaRuntimeKey = typeof SchemaRuntimeKey.Type;
+import { Context, Effect, Layer, Ref, Result, Schema, Scope } from "effect";
 
 export type IOCalculator = (
   properties: Readonly<Record<string, unknown>>,
@@ -34,10 +31,14 @@ export class Service extends Context.Service<
   {
     readonly setTypeDefinitions: (definitions: t.Definitions) => Effect.Effect<void>;
     readonly getTypeDefinitions: (definitions?: t.Definitions) => Effect.Effect<t.Definitions>;
+    /**
+     * Loads a package until the current scope closes. Closing the scope removes exactly this
+     * registration; if it had replaced a package with the same id, that one becomes current again.
+     */
     readonly loadPackage: (
       pkg: Package.Model,
       runtimes?: ReadonlyMap<string, SchemaRuntime>,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<void, never, Scope.Scope>;
     readonly getPackages: () => Effect.Effect<ReadonlyArray<Package.Model>>;
     readonly getSchema: (
       ref: SchemaRef,
@@ -90,80 +91,91 @@ export class Service extends Context.Service<
 export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.registry) =>
   Layer.effect(Service)(
     Effect.gen(function* () {
-      const calculatorKey = (ref: SchemaRef) =>
-        SchemaRuntimeKey.make(`${ref.package}\0${ref.schema}`);
-      const state = yield* Ref.make<{
+      interface Registration {
+        readonly pkg: Package.Model;
+        readonly runtimes: ReadonlyMap<string, SchemaRuntime>;
+      }
+      interface State {
         readonly definitions: t.Definitions;
-        readonly packages: Map<PackageId, Package.Model>;
-        readonly runtimes: Map<SchemaRuntimeKey, SchemaRuntime>;
-      }>({
-        definitions: {},
-        packages: new Map(),
-        runtimes: new Map(),
+        /** Every live registration per package id; the last one is current. */
+        readonly registrations: ReadonlyMap<PackageId, ReadonlyArray<Registration>>;
+      }
+      const state = yield* Ref.make<State>({ definitions: {}, registrations: new Map() });
+      const currentRegistration = (value: State, id: PackageId) =>
+        value.registrations.get(id)?.at(-1);
+      const packagesOf = (value: State) =>
+        Array.from(value.registrations.values(), (registrations) => registrations.at(-1)!.pkg);
+      const runtimeOf = (value: State, ref: SchemaRef) =>
+        currentRegistration(value, ref.package)?.runtimes.get(ref.schema);
+      const definitionsOf = (value: State, provided?: t.Definitions): t.Definitions => ({
+        ...(provided ?? value.definitions),
+        ...Object.fromEntries(packagesOf(value).flatMap((pkg) => Object.entries(pkg.types ?? {}))),
       });
-      const definitionsOf = (
-        current: {
-          readonly definitions: t.Definitions;
-          readonly packages: Map<PackageId, Package.Model>;
-        },
-        provided?: t.Definitions,
-      ): t.Definitions => ({
-        ...(provided ?? current.definitions),
-        ...Object.fromEntries(
-          [...current.packages.values()].flatMap((pkg) => Object.entries(pkg.types ?? {})),
-        ),
-      });
+
+      const defaultRuntime = (pkg: Package.Model, schema: Package.SchemaModel): SchemaRuntime => {
+        const behavior = authoring.get({ package: pkg.id, schema: schema.id });
+        return {
+          declaresProperties: behavior !== undefined,
+          getIO: (properties, definitions) => {
+            const declared: NodeIO = {
+              dataInputs: schema.dataInputs,
+              dataOutputs: schema.dataOutputs,
+              executionInputs: schema.executionInputs,
+              executionOutputs: schema.executionOutputs,
+            };
+            const result = behavior?.generateIO?.({
+              declared,
+              properties,
+              definitions,
+              resolve: (type) => type,
+              inputScope: () => undefined,
+            });
+            return result === undefined
+              ? declared
+              : Result.isSuccess(result)
+                ? result.success
+                : {
+                    dataInputs: [],
+                    dataOutputs: [],
+                    executionInputs: [],
+                    executionOutputs: [],
+                  };
+          },
+        };
+      };
 
       const loadPackage = Effect.fn("Packages.loadPackage")(function* (
         pkg: Package.Model,
         providedRuntimes?: ReadonlyMap<string, SchemaRuntime>,
       ) {
-        yield* Ref.update(state, (current) => {
-          const runtimes = new Map(current.runtimes);
-          for (const key of runtimes.keys()) {
-            if (key.startsWith(`${pkg.id}\0`)) runtimes.delete(key);
-          }
-          for (const schema of pkg.schemas) {
-            const provided = providedRuntimes?.get(schema.id);
-            const behavior = authoring.get({ package: pkg.id, schema: schema.id });
-            runtimes.set(
-              calculatorKey({ package: pkg.id, schema: schema.id }),
-              provided ?? {
-                declaresProperties: behavior !== undefined,
-                getIO: (properties, definitions) => {
-                  const declared: NodeIO = {
-                    dataInputs: schema.dataInputs,
-                    dataOutputs: schema.dataOutputs,
-                    executionInputs: schema.executionInputs,
-                    executionOutputs: schema.executionOutputs,
-                  };
-                  const result = behavior?.generateIO?.({
-                    declared,
-                    properties,
-                    definitions,
-                    resolve: (type) => type,
-                    inputScope: () => undefined,
-                  });
-                  return result === undefined
-                    ? declared
-                    : Result.isSuccess(result)
-                      ? result.success
-                      : {
-                          dataInputs: [],
-                          dataOutputs: [],
-                          executionInputs: [],
-                          executionOutputs: [],
-                        };
-                },
-              },
-            );
-          }
-          return {
-            ...current,
-            packages: new Map(current.packages).set(pkg.id, pkg),
-            runtimes,
-          };
-        });
+        const registration: Registration = {
+          pkg,
+          runtimes: new Map(
+            pkg.schemas.map((schema) => [
+              schema.id,
+              providedRuntimes?.get(schema.id) ?? defaultRuntime(pkg, schema),
+            ]),
+          ),
+        };
+        yield* Effect.acquireRelease(
+          Ref.update(state, (value) => ({
+            ...value,
+            registrations: new Map(value.registrations).set(pkg.id, [
+              ...(value.registrations.get(pkg.id) ?? []),
+              registration,
+            ]),
+          })),
+          () =>
+            Ref.update(state, (value) => {
+              const remaining = (value.registrations.get(pkg.id) ?? []).filter(
+                (candidate) => candidate !== registration,
+              );
+              const registrations = new Map(value.registrations);
+              if (remaining.length === 0) registrations.delete(pkg.id);
+              else registrations.set(pkg.id, remaining);
+              return { ...value, registrations };
+            }),
+        );
       });
 
       const setTypeDefinitions = Effect.fn("Packages.setTypeDefinitions")(function* (
@@ -176,11 +188,11 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         Ref.get(state).pipe(Effect.map((current) => definitionsOf(current, definitions)));
 
       const getPackages = Effect.fn("Packages.getPackages")(function* () {
-        return Array.from((yield* Ref.get(state)).packages.values());
+        return packagesOf(yield* Ref.get(state));
       });
 
       const getSchema = Effect.fn("Packages.getSchema")(function* (ref: SchemaRef) {
-        const pkg = (yield* Ref.get(state)).packages.get(ref.package);
+        const pkg = currentRegistration(yield* Ref.get(state), ref.package)?.pkg;
         if (!pkg) {
           return yield* Effect.fail(new Package.SchemaNotFoundError({ ref }));
         }
@@ -197,14 +209,14 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         definitions?: t.Definitions,
         resolve?: (type: t.Type) => t.Type,
       ) {
-        const current = yield* Ref.get(state);
-        const schema = current.packages
-          .get(ref.package)
-          ?.schemas.find((candidate) => candidate.id === ref.schema);
+        const value = yield* Ref.get(state);
+        const schema = currentRegistration(value, ref.package)?.pkg.schemas.find(
+          (candidate) => candidate.id === ref.schema,
+        );
         if (schema === undefined) return yield* new Package.SchemaNotFoundError({ ref });
-        const runtime = current.runtimes.get(calculatorKey(ref));
+        const runtime = runtimeOf(value, ref);
         if (runtime === undefined) return yield* new Package.SchemaNotFoundError({ ref });
-        return runtime.getIO(properties, definitionsOf(current, definitions), resolve);
+        return runtime.getIO(properties, definitionsOf(value, definitions), resolve);
       });
 
       const normalizeProperties = Effect.fn("Packages.normalizeProperties")(function* (
@@ -212,7 +224,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
         properties: Readonly<Record<string, unknown>>,
       ) {
         const schema = yield* getSchema(ref);
-        const runtime = (yield* Ref.get(state)).runtimes.get(calculatorKey(ref));
+        const runtime = runtimeOf(yield* Ref.get(state), ref);
         if (schema.properties.length === 0 && runtime?.declaresProperties !== true) {
           const normalized: Record<string, Schema.Json> = {};
           for (const [property, value] of Object.entries(properties)) {
@@ -416,7 +428,7 @@ export const layer = (authoring: SchemaAuthoring.Registry = BuiltinAuthoring.reg
             reason: "Input does not declare suggestions",
           });
         }
-        const runtime = (yield* Ref.get(state)).runtimes.get(calculatorKey(ref));
+        const runtime = runtimeOf(yield* Ref.get(state), ref);
         const resolver = runtime?.getSuggestions;
         const io = yield* getNodeIO(ref, properties);
         const decodedDefaults: Record<string, unknown> = {};

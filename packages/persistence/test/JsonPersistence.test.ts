@@ -302,7 +302,7 @@ describe("JsonPersistence", () => {
         foldPins: true,
         schema: {
           package: PackageId.make("my-pkg"),
-          schema: SchemaId.make("my-schema"),
+          schema: SchemaId.make("mySchema"),
         },
       };
       const graph = {
@@ -333,7 +333,7 @@ describe("JsonPersistence", () => {
       expect(loadedNode.inputDefaults).toEqual({ message: "hello" });
       expect(loadedNode.foldPins).toBe(true);
       expect(loadedNode.schema.package).toBe("my-pkg");
-      expect(loadedNode.schema.schema).toBe("my-schema");
+      expect(loadedNode.schema.schema).toBe("mySchema");
     }).pipe(Effect.provide(TestLayer)),
   );
 });

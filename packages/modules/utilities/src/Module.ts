@@ -69,7 +69,6 @@ export const parseFormatString = (format: string): ReadonlyArray<FormatBlock> =>
 export const formatValue = (value: unknown): string => Inspectable.toStringUnknown(value, 0);
 
 const UtilitiesModule = Module.make({
-  id: "util",
   name: "Utilities",
   description: "General-purpose control flow, formatting, timing, and debugging tools.",
   engine: UtilitiesEngine,
@@ -88,11 +87,11 @@ const UtilitiesModule = Module.make({
       run: ({ io, properties }) => {
         switch (properties.type) {
           case "log":
-            return Effect.logInfo("Utilities Print", { value: io.value });
+            return Effect.logInfo(io.value);
           case "warn":
-            return Effect.logWarning("Utilities Print", { value: io.value });
+            return Effect.logWarning(io.value);
           case "error":
-            return Effect.logError("Utilities Print", { value: io.value });
+            return Effect.logError(io.value);
           default:
             return Effect.fail(new TypeError("Type must be log, warn, or error"));
         }

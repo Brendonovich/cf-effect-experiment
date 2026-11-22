@@ -1,0 +1,15 @@
+{
+  "name": "@macrograph-fixture/module-tla",
+  "private": true,
+  "type": "module",
+  "macrograph": {
+    "publisher": "fixture",
+    "name": "tla",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Top-level await",
+    "entries": {
+      "server": "./src/Module.ts"
+    }
+  }
+}

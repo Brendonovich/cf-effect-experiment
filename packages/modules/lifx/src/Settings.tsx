@@ -5,7 +5,6 @@ import { Effect, Schema } from "effect";
 import { action, createSignal, createUniqueId, type Component } from "solid-js";
 
 import { ClientRpcs, ClientState, initialStorage, RuntimeStorage } from "./Definition.ts";
-import module from "./Module.ts";
 import { failure, validateStorage } from "./Validation.ts";
 
 const styles = stylex.create({
@@ -134,7 +133,6 @@ const Settings: Component<SettingsProps> = (props) => {
 export default Settings;
 
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: initialStorage,
   rpcs: ClientRpcs,

@@ -3,17 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "alchemy": "pnpm exec node --env-file-if-exists=.env node_modules/alchemy/bin/alchemy.js",
-    "deploy": "pnpm alchemy deploy",
-    "dev": "pnpm alchemy dev",
     "enroll": "node src/credentials.ts enroll",
     "test": "vp test run"
-  },
-  "dependencies": {
-    "@alchemy.run/cloudflare": "2.0.0-beta.84",
-    "@alchemy.run/github": "2.0.0-beta.84",
-    "alchemy": "2.0.0-beta.84",
-    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^24",

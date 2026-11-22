@@ -37,7 +37,6 @@ export type EventSubEndpointMetadata = typeof EventSubEndpointMetadata.Type;
 
 export const EventSubIngress = HttpIngress.make({
   id: "twitch:eventsub",
-  moduleId: "twitch",
   displayName: "EventSub Webhook",
   method: "POST",
   metadata: EventSubEndpointMetadata,

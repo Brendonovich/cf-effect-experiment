@@ -9,7 +9,7 @@ import {
   SchemaId,
   OutputRef,
 } from "@macrograph/core";
-import { t, Module } from "@macrograph/module";
+import { t, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
@@ -29,22 +29,24 @@ const definition: Extract<t.Definition, { readonly _tag: "Enum" }> = {
     { name: "Empty", fields: [] },
   ],
 };
-const sinkModule = Module.make({
-  id: "scope-editor",
-  effect: Effect.fnUntraced(function* (context) {
-    yield* context.schema.register({
-      id: "sink",
-      io: (io) => ({ value: io.data.in("value", t.String) }),
-      run: () => Effect.void,
-    });
-    yield* context.schema.register({
-      id: "source",
-      type: "pure",
-      io: (io) => ({ value: io.data.out("value", t.Enum(enumId)) }),
-      run: () => Effect.void,
-    });
+const sinkModule = Module.identify(
+  ModuleId.Id.make("local/test/scope-editor"),
+  Module.make({
+    effect: Effect.fnUntraced(function* (context) {
+      yield* context.schema.register({
+        id: "sink",
+        io: (io) => ({ value: io.data.in("value", t.String) }),
+        run: () => Effect.void,
+      });
+      yield* context.schema.register({
+        id: "source",
+        type: "pure",
+        io: (io) => ({ value: io.data.out("value", t.Enum(enumId)) }),
+        run: () => Effect.void,
+      });
+    }),
   }),
-});
+);
 const setup = Effect.gen(function* () {
   const persistence = yield* Persistence.Service;
   yield* persistence.saveProject({

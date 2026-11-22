@@ -213,12 +213,18 @@ importers:
       '@macrograph/execution':
         specifier: workspace:*
         version: link:../../packages/execution
+      '@macrograph/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
       '@macrograph/http-ingress':
         specifier: workspace:*
         version: link:../../packages/http-ingress
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@macrograph/module-build':
+        specifier: workspace:*
+        version: link:../../packages/module-build
       '@macrograph/module-discord':
         specifier: workspace:*
         version: link:../../packages/modules/discord
@@ -228,6 +234,9 @@ importers:
       '@macrograph/module-github':
         specifier: workspace:*
         version: link:../../packages/modules/github
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client
@@ -252,6 +261,9 @@ importers:
       '@macrograph/module-opencode':
         specifier: workspace:*
         version: link:../../packages/modules/opencode
+      '@macrograph/module-registry':
+        specifier: workspace:*
+        version: link:../../packages/module-registry
       '@macrograph/module-sendblue':
         specifier: workspace:*
         version: link:../../packages/modules/sendblue
@@ -401,6 +413,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))
@@ -427,19 +442,6 @@ importers:
         version: '@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0)'
 
   apps/opencode-bot:
-    dependencies:
-      '@alchemy.run/cloudflare':
-        specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@alchemy.run/github':
-        specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
-      alchemy:
-        specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.6
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -456,9 +458,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
-      '@julusian/midi':
-        specifier: ^3.8.1
-        version: 3.8.1
       '@macrograph/cloud-api':
         specifier: workspace:*
         version: link:../../packages/cloud-api
@@ -498,15 +497,24 @@ importers:
       '@macrograph/module-goxlr':
         specifier: workspace:*
         version: link:../../packages/modules/goxlr
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client
       '@macrograph/module-ikea-tradfri':
         specifier: workspace:*
         version: link:../../packages/modules/ikea-tradfri
+      '@macrograph/module-installer':
+        specifier: workspace:*
+        version: link:../../packages/module-installer
       '@macrograph/module-json':
         specifier: workspace:*
         version: link:../../packages/modules/json
+      '@macrograph/module-keyboard':
+        specifier: workspace:*
+        version: link:../../packages/modules/keyboard
       '@macrograph/module-lifx':
         specifier: workspace:*
         version: link:../../packages/modules/lifx
@@ -601,6 +609,9 @@ importers:
       '@iconify/json':
         specifier: 2.2.196
         version: 2.2.196
+      '@macrograph/module-build':
+        specifier: workspace:*
+        version: link:../../packages/module-build
       '@macrograph/server-client':
         specifier: workspace:*
         version: link:client
@@ -634,75 +645,6 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../../packages/module
-      '@macrograph/module-discord':
-        specifier: workspace:*
-        version: link:../../../packages/modules/discord
-      '@macrograph/module-elevenlabs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/elevenlabs
-      '@macrograph/module-elgato-key-light':
-        specifier: workspace:*
-        version: link:../../../packages/modules/elgato-key-light
-      '@macrograph/module-github':
-        specifier: workspace:*
-        version: link:../../../packages/modules/github
-      '@macrograph/module-goxlr':
-        specifier: workspace:*
-        version: link:../../../packages/modules/goxlr
-      '@macrograph/module-http-client':
-        specifier: workspace:*
-        version: link:../../../packages/modules/http-client
-      '@macrograph/module-ikea-tradfri':
-        specifier: workspace:*
-        version: link:../../../packages/modules/ikea-tradfri
-      '@macrograph/module-lifx':
-        specifier: workspace:*
-        version: link:../../../packages/modules/lifx
-      '@macrograph/module-midi':
-        specifier: workspace:*
-        version: link:../../../packages/modules/midi
-      '@macrograph/module-obs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/obs
-      '@macrograph/module-openai':
-        specifier: workspace:*
-        version: link:../../../packages/modules/openai
-      '@macrograph/module-opencode':
-        specifier: workspace:*
-        version: link:../../../packages/modules/opencode
-      '@macrograph/module-sendblue':
-        specifier: workspace:*
-        version: link:../../../packages/modules/sendblue
-      '@macrograph/module-speakerbot':
-        specifier: workspace:*
-        version: link:../../../packages/modules/speakerbot
-      '@macrograph/module-streamdeck':
-        specifier: workspace:*
-        version: link:../../../packages/modules/streamdeck
-      '@macrograph/module-streamlabs':
-        specifier: workspace:*
-        version: link:../../../packages/modules/streamlabs
-      '@macrograph/module-tiktok-euler-stream':
-        specifier: workspace:*
-        version: link:../../../packages/modules/tiktok-euler-stream
-      '@macrograph/module-twitch':
-        specifier: workspace:*
-        version: link:../../../packages/modules/twitch
-      '@macrograph/module-utilities':
-        specifier: workspace:*
-        version: link:../../../packages/modules/utilities
-      '@macrograph/module-voicemod':
-        specifier: workspace:*
-        version: link:../../../packages/modules/voicemod
-      '@macrograph/module-vtube-studio':
-        specifier: workspace:*
-        version: link:../../../packages/modules/vtube-studio
-      '@macrograph/module-websocket-client':
-        specifier: workspace:*
-        version: link:../../../packages/modules/websocket-client
-      '@macrograph/module-websocket-server':
-        specifier: workspace:*
-        version: link:../../../packages/modules/websocket-server
       '@solidjs/web':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)
@@ -722,6 +664,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -792,6 +737,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -867,6 +815,9 @@ importers:
       '@macrograph/module-goxlr':
         specifier: workspace:*
         version: link:../../packages/modules/goxlr
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../../packages/module-host
       '@macrograph/module-http-client':
         specifier: workspace:*
         version: link:../../packages/modules/http-client
@@ -876,6 +827,9 @@ importers:
       '@macrograph/module-json':
         specifier: workspace:*
         version: link:../../packages/modules/json
+      '@macrograph/module-keyboard':
+        specifier: workspace:*
+        version: link:../../packages/modules/keyboard
       '@macrograph/module-kofi':
         specifier: workspace:*
         version: link:../../packages/modules/kofi
@@ -976,6 +930,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../../packages/icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../../packages/vite-shared-libraries
       '@solidjs/diagnostics':
         specifier: 2.0.0-rc.9
         version: 2.0.0-rc.9(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))
@@ -1140,6 +1097,9 @@ importers:
       '@macrograph/icons':
         specifier: workspace:*
         version: link:../icons
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../vite-shared-libraries
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.44
         version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -1208,6 +1168,28 @@ importers:
       '@macrograph/module':
         specifier: workspace:*
         version: link:../module
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/gateway:
+    dependencies:
+      '@macrograph/module-github':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@macrograph/module-twitch':
+        specifier: workspace:*
+        version: link:../modules/twitch
       effect:
         specifier: 'catalog:'
         version: 4.0.6
@@ -1312,6 +1294,220 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/module-build:
+    dependencies:
+      '@babel/parser':
+        specifier: ^7.29.3
+        version: 7.29.8
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      '@macrograph/module-registry':
+        specifier: workspace:*
+        version: link:../module-registry
+      '@macrograph/vite-shared-libraries':
+        specifier: workspace:*
+        version: link:../vite-shared-libraries
+      '@solidjs/vite-plugin':
+        specifier: 3.0.0-next.44
+        version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@stylexjs/unplugin':
+        specifier: 'catalog:'
+        version: 0.19.0(supports-color@10.2.2)(unplugin@2.3.11)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      modern-tar:
+        specifier: 0.8.5
+        version: 0.8.5
+      rolldown:
+        specifier: ^1.0.1
+        version: 1.2.13
+      vite:
+        specifier: ^8.0.7
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@macrograph/module-discord':
+        specifier: workspace:*
+        version: link:../modules/discord
+      '@macrograph/module-elevenlabs':
+        specifier: workspace:*
+        version: link:../modules/elevenlabs
+      '@macrograph/module-elgato-key-light':
+        specifier: workspace:*
+        version: link:../modules/elgato-key-light
+      '@macrograph/module-fs':
+        specifier: workspace:*
+        version: link:../modules/fs
+      '@macrograph/module-github':
+        specifier: workspace:*
+        version: link:../modules/github
+      '@macrograph/module-goxlr':
+        specifier: workspace:*
+        version: link:../modules/goxlr
+      '@macrograph/module-host':
+        specifier: workspace:*
+        version: link:../module-host
+      '@macrograph/module-http-client':
+        specifier: workspace:*
+        version: link:../modules/http-client
+      '@macrograph/module-ikea-tradfri':
+        specifier: workspace:*
+        version: link:../modules/ikea-tradfri
+      '@macrograph/module-installer':
+        specifier: workspace:*
+        version: link:../module-installer
+      '@macrograph/module-json':
+        specifier: workspace:*
+        version: link:../modules/json
+      '@macrograph/module-kofi':
+        specifier: workspace:*
+        version: link:../modules/kofi
+      '@macrograph/module-lifx':
+        specifier: workspace:*
+        version: link:../modules/lifx
+      '@macrograph/module-list':
+        specifier: workspace:*
+        version: link:../modules/list
+      '@macrograph/module-logic':
+        specifier: workspace:*
+        version: link:../modules/logic
+      '@macrograph/module-math':
+        specifier: workspace:*
+        version: link:../modules/math
+      '@macrograph/module-midi':
+        specifier: workspace:*
+        version: link:../modules/midi
+      '@macrograph/module-obs':
+        specifier: workspace:*
+        version: link:../modules/obs
+      '@macrograph/module-openai':
+        specifier: workspace:*
+        version: link:../modules/openai
+      '@macrograph/module-opencode':
+        specifier: workspace:*
+        version: link:../modules/opencode
+      '@macrograph/module-sendblue':
+        specifier: workspace:*
+        version: link:../modules/sendblue
+      '@macrograph/module-shell':
+        specifier: workspace:*
+        version: link:../modules/shell
+      '@macrograph/module-speakerbot':
+        specifier: workspace:*
+        version: link:../modules/speakerbot
+      '@macrograph/module-streamdeck':
+        specifier: workspace:*
+        version: link:../modules/streamdeck
+      '@macrograph/module-streamlabs':
+        specifier: workspace:*
+        version: link:../modules/streamlabs
+      '@macrograph/module-string':
+        specifier: workspace:*
+        version: link:../modules/string
+      '@macrograph/module-tiktok-euler-stream':
+        specifier: workspace:*
+        version: link:../modules/tiktok-euler-stream
+      '@macrograph/module-twitch':
+        specifier: workspace:*
+        version: link:../modules/twitch
+      '@macrograph/module-utilities':
+        specifier: workspace:*
+        version: link:../modules/utilities
+      '@macrograph/module-voicemod':
+        specifier: workspace:*
+        version: link:../modules/voicemod
+      '@macrograph/module-vtube-studio':
+        specifier: workspace:*
+        version: link:../modules/vtube-studio
+      '@macrograph/module-websocket-client':
+        specifier: workspace:*
+        version: link:../modules/websocket-client
+      '@macrograph/module-websocket-server':
+        specifier: workspace:*
+        version: link:../modules/websocket-server
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/module-host:
+    dependencies:
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/module-installer:
+    dependencies:
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      '@macrograph/module-registry':
+        specifier: workspace:*
+        version: link:../module-registry
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      modern-tar:
+        specifier: 0.8.5
+        version: 0.8.5
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/module-registry:
+    dependencies:
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/modules/discord:
     dependencies:
@@ -1573,6 +1769,44 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/modules/keyboard:
+    dependencies:
+      '@macrograph/editor-ui':
+        specifier: workspace:*
+        version: link:../../editor-ui
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../../module
+      '@solidjs/web':
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      solid-js:
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9
+      uiohook-napi:
+        specifier: ^1.5.5
+        version: 1.5.5
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
 
   packages/modules/kofi:
     dependencies:
@@ -1877,6 +2111,9 @@ importers:
 
   packages/modules/shell:
     dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@macrograph/module':
         specifier: workspace:*
         version: link:../../module
@@ -1884,9 +2121,6 @@ importers:
         specifier: 'catalog:'
         version: 4.0.6
     devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -2436,6 +2670,46 @@ importers:
         specifier: ^4.1.0
         version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
 
+  packages/vite-shared-libraries:
+    dependencies:
+      '@macrograph/module':
+        specifier: workspace:*
+        version: link:../module
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
+    devDependencies:
+      '@solidjs/vite-plugin':
+        specifier: 3.0.0-next.44
+        version: 3.0.0-next.44(@solidjs/web@2.0.0-rc.9(solid-js@2.0.0-rc.9))(@testing-library/jest-dom@6.9.1)(solid-js@2.0.0-rc.9)(supports-color@10.2.2)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@solidjs/web':
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9(solid-js@2.0.0-rc.9)
+      '@stylexjs/unplugin':
+        specifier: 'catalog:'
+        version: 0.19.0(supports-color@10.2.2)(unplugin@2.3.11)
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.6
+      playwright:
+        specifier: 1.63.0
+        version: 1.63.0
+      solid-js:
+        specifier: 2.0.0-rc.9
+        version: 2.0.0-rc.9
+      typescript:
+        specifier: ^5.8
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.7
+        version: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/workflow-runtime:
     dependencies:
       '@macrograph/core':
@@ -2490,7 +2764,7 @@ importers:
         version: link:../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       typescript:
         specifier: ^5.8
         version: 5.9.3
@@ -2502,7 +2776,7 @@ importers:
     dependencies:
       '@alchemy.run/cloudflare':
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+        version: 2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
       '@macrograph/workflow-runtime':
         specifier: workspace:*
         version: link:../../workflow-runtime
@@ -2514,7 +2788,7 @@ importers:
         version: link:../../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect:
         specifier: 'catalog:'
         version: 4.0.6
@@ -2573,7 +2847,7 @@ importers:
         version: link:../../workflow-runtime/test-app
       alchemy:
         specifier: 2.0.0-beta.84
-        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+        version: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect:
         specifier: 'catalog:'
         version: 4.0.6
@@ -12132,6 +12406,11 @@ packages:
     resolution: {integrity: sha512-rvKSBiC5zqCCiDZ9kAOszZcDvdAHwwIKJG33Ykj43OKcWsnmcBRL09YTU4nOeHZ8Y2a7l1MgTd08SBe9A8Qj6A==}
     engines: {node: '>=18'}
 
+  uiohook-napi@1.5.5:
+    resolution: {integrity: sha512-oSlTdnECw2GBfsJPTbBQBeE4v/EXP0EZmX6BJq5nzH/JgFaBE8JpFwEA/kLhiEP7HxQw28FViWiYgdIZzWuuJQ==}
+    engines: {node: '>= 16'}
+
+
   ulid@3.0.2:
     resolution: {integrity: sha512-yu26mwteFYzBAot7KVMqFGCVpsF6g8wXfJzQUHvu1no3+rRRSFcSV2nKeYvNPLD2J4b08jYBDhHUjeH0ygIl9w==}
     hasBin: true
@@ -12829,6 +13108,12 @@ snapshots:
       alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect: 4.0.6
 
+  '@alchemy.run/acme@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
+    dependencies:
+      '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.0.6)
+      alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+      effect: 4.0.6
+
   '@alchemy.run/acme@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
     dependencies:
       '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.0.6)
@@ -12839,12 +13124,6 @@ snapshots:
     dependencies:
       '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.0.6)
       alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
-      effect: 4.0.6
-
-  '@alchemy.run/acme@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
-    dependencies:
-      '@distilled.cloud/acme': 1.0.0-rc.17(effect@4.0.6)
-      alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect: 4.0.6
 
   '@alchemy.run/axiom@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
@@ -12958,6 +13237,34 @@ snapshots:
       - proxy-agent
       - typescript
 
+  '@alchemy.run/cloudflare@2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
+    dependencies:
+      '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
+      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.0.6))(@effect/platform-node@4.0.6(effect@4.0.6))(@types/node@24.13.3)(effect@4.0.6)(rolldown@1.2.13)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
+      '@alchemy.run/docker': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
+      '@alchemy.run/sql': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)
+      '@distilled.cloud/aws4signer': 1.0.0-rc.17(effect@4.0.6)
+      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.0.6)
+      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.0.6)
+      '@distilled.cloud/iceberg': 1.0.0-rc.17(effect@4.0.6)
+      '@effect/sql-d1': 4.0.6(effect@4.0.6)
+      alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+      effect: 4.0.6
+      pathe: 2.0.3
+      rolldown: 1.2.13
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+    transitivePeerDependencies:
+      - '@effect/sql-libsql'
+      - '@effect/sql-mysql2'
+      - '@effect/sql-pg'
+      - '@types/node'
+      - mysql2
+      - pg
+      - proxy-agent
+      - typescript
+
   '@alchemy.run/cloudflare@2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
     dependencies:
       '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
@@ -12986,37 +13293,15 @@ snapshots:
       - proxy-agent
       - typescript
 
-  '@alchemy.run/cloudflare@2.0.0-beta.84(patch_hash=8c2beb57da51ee24699a9094d22590d6eb7c851b49e494a7bdeafee1e296879f)(@types/node@24.13.3)(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))':
-    dependencies:
-      '@alchemy.run/acme': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
-      '@alchemy.run/cloudflare-runtime': 2.0.0-beta.84(@distilled.cloud/cloudflare@1.0.0-rc.17(effect@4.0.6))(@effect/platform-node@4.0.6(effect@4.0.6))(@types/node@24.13.3)(effect@4.0.6)(rolldown@1.2.13)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
-      '@alchemy.run/docker': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)
-      '@alchemy.run/sql': 2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)
-      '@distilled.cloud/aws4signer': 1.0.0-rc.17(effect@4.0.6)
-      '@distilled.cloud/cloudflare': 1.0.0-rc.17(effect@4.0.6)
-      '@distilled.cloud/core': 1.0.0-rc.17(effect@4.0.6)
-      '@distilled.cloud/iceberg': 1.0.0-rc.17(effect@4.0.6)
-      '@effect/sql-d1': 4.0.6(effect@4.0.6)
-      alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
-      effect: 4.0.6
-      pathe: 2.0.3
-      rolldown: 1.2.13
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
-    transitivePeerDependencies:
-      - '@effect/sql-libsql'
-      - '@effect/sql-mysql2'
-      - '@effect/sql-pg'
-      - '@types/node'
-      - mysql2
-      - pg
-      - proxy-agent
-      - typescript
-
   '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
     dependencies:
       alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+      effect: 4.0.6
+      rolldown: 1.2.13
+
+  '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
+    dependencies:
+      alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect: 4.0.6
       rolldown: 1.2.13
 
@@ -13029,12 +13314,6 @@ snapshots:
   '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
     dependencies:
       alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
-      effect: 4.0.6
-      rolldown: 1.2.13
-
-  '@alchemy.run/docker@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)':
-    dependencies:
-      alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect: 4.0.6
       rolldown: 1.2.13
 
@@ -13115,6 +13394,13 @@ snapshots:
       '@effect/sql-pg': 4.0.6(effect@4.0.6)
       pg: 8.22.0
 
+  '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)':
+    dependencies:
+      alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
+      effect: 4.0.6
+    optionalDependencies:
+      pg: 8.22.0
+
   '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.5(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)':
     dependencies:
       alchemy: 2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.5(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
@@ -13132,13 +13418,6 @@ snapshots:
   '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)':
     dependencies:
       alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6))(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
-      effect: 4.0.6
-    optionalDependencies:
-      pg: 8.22.0
-
-  '@alchemy.run/sql@2.0.0-beta.84(alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3))(effect@4.0.6)(pg@8.22.0)':
-    dependencies:
-      alchemy: 2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3)
       effect: 4.0.6
     optionalDependencies:
       pg: 8.22.0
@@ -18831,6 +19110,27 @@ snapshots:
       - '@types/react'
       - react-devtools-core
 
+  alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3):
+    dependencies:
+      '@alchemy.run/node-utils': 2.0.0-beta.84
+      '@alchemy.run/sigil': 0.1.0-alpha.1(@types/react@19.2.18)
+      capnweb: 0.12.0
+      effect: 4.0.6
+      fflate: 0.8.3
+      pathe: 2.0.3
+      picomatch: 4.0.7
+      rolldown: 1.2.13
+      tinyglobby: 0.2.17
+      yaml: 2.9.1
+    optionalDependencies:
+      '@effect/platform-node': 4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/vitest': 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@types/react'
+      - react-devtools-core
+
   alchemy@2.0.0-beta.84(@effect/platform-node@4.0.6(effect@4.0.6)(redis@6.3.0(@opentelemetry/api@1.9.1)))(@effect/vitest@4.0.6(effect@4.0.6)(vitest@5.0.5(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3):
     dependencies:
       '@alchemy.run/node-utils': 2.0.0-beta.84
@@ -18887,26 +19187,6 @@ snapshots:
       yaml: 2.9.1
     optionalDependencies:
       '@effect/vitest': 4.0.6(@voidzero-dev/vite-plus-test@0.1.21(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(esbuild@0.28.1)(happy-dom@20.11.6)(jiti@2.7.0)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(tsx@4.23.1)(typescript@5.9.3)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(yaml@2.9.0))(effect@4.0.6)
-      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
-      ws: 8.21.3
-    transitivePeerDependencies:
-      - '@types/react'
-      - react-devtools-core
-
-  alchemy@2.0.0-beta.84(@effect/vitest@4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))))(@types/react@19.2.18)(effect@4.0.6)(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(ws@8.21.3):
-    dependencies:
-      '@alchemy.run/node-utils': 2.0.0-beta.84
-      '@alchemy.run/sigil': 0.1.0-alpha.1(@types/react@19.2.18)
-      capnweb: 0.12.0
-      effect: 4.0.6
-      fflate: 0.8.3
-      pathe: 2.0.3
-      picomatch: 4.0.7
-      rolldown: 1.2.13
-      tinyglobby: 0.2.17
-      yaml: 2.9.1
-    optionalDependencies:
-      '@effect/vitest': 4.0.6(effect@4.0.6)(vitest@4.1.11(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(happy-dom@20.11.6)(jsdom@27.4.0(@noble/hashes@2.4.0)(supports-color@10.2.2))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)))
       vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
       ws: 8.21.3
     transitivePeerDependencies:
@@ -22742,6 +23022,11 @@ snapshots:
       '@lukeed/csprng': 1.1.0
 
   uint8array-extras@1.5.0: {}
+
+  uiohook-napi@1.5.5:
+    dependencies:
+      node-gyp-build: 4.8.4
+
 
   ulid@3.0.2: {}
 

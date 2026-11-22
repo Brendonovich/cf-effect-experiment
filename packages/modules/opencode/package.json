@@ -11,7 +11,8 @@
     "./Engine": "./src/Engine.ts",
     "./Engine/Server": "./src/Engine/Server.ts",
     "./Instance": "./src/Instance.ts",
-    "./Settings": "./src/Settings.tsx"
+    "./Settings": "./src/Settings.tsx",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -34,6 +35,21 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/Server.ts"
+    "publisher": "macrograph",
+    "name": "opencode",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "OpenCode",
+    "description": "Generates model-agnostic text through OpenCode.",
+    "entries": {
+      "server": "./src/Deployment/Server.ts",
+      "ui": "./src/UI.ts"
+    },
+    "node": [
+      "child_process",
+      "fs/promises",
+      "os",
+      "path"
+    ]
   }
 }

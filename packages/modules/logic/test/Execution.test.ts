@@ -9,14 +9,19 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import { t, Engine, Module } from "@macrograph/module";
-import ListModule from "@macrograph/module-list";
-import StringModule from "@macrograph/module-string";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
+import ListModuleDefinition from "@macrograph/module-list";
+import StringModuleDefinition from "@macrograph/module-string";
 import { Array, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { RpcGroup } from "effect/rpc";
 import { TestClock } from "effect/testing";
 
-import LogicModule from "../src/Module.ts";
+import LogicModuleDefinition from "../src/Module.ts";
+
+const LogicModule = Module.identify(Module.builtinId("logic"), LogicModuleDefinition);
+
+const ListModule = Module.identify(Module.builtinId("list"), ListModuleDefinition);
+const StringModule = Module.identify(Module.builtinId("string"), StringModuleDefinition);
 
 class Start extends Schema.TaggedClass<Start>()("Start", {}) {}
 class SourceEngine extends Engine.make({
@@ -57,55 +62,60 @@ describe("Logic execution", () => {
           readonly none: boolean;
           readonly lines: string;
         }> = [];
-        const source = Module.make({
-          id: "test-source",
-          engine: SourceEngine,
-          effect: Effect.fnUntraced(function* (context) {
-            yield* context.schema.register({
-              id: "Start",
-              type: "event",
-              event: () => Effect.succeed(true),
-              io: (io) => ({
-                list: io.data.out("list", t.List(t.String)),
-                option: io.data.out("option", t.Option(t.String)),
-              }),
-              run: ({ io }) =>
-                Effect.sync(() => {
-                  io.list([]);
-                  io.option(Option.none());
+        const source = Module.identify(
+          ModuleId.Id.make("local/test/test-source"),
+          Module.make({
+            engine: SourceEngine,
+            effect: Effect.fnUntraced(function* (context) {
+              yield* context.schema.register({
+                id: "Start",
+                type: "event",
+                event: () => Effect.succeed(true),
+                io: (io) => ({
+                  list: io.data.out("list", t.List(t.String)),
+                  option: io.data.out("option", t.Option(t.String)),
                 }),
-            });
-            yield* context.schema.register({
-              id: "Sink",
-              io: (io) => ({
-                length: io.data.in("length", t.Int),
-                none: io.data.in("none", t.Bool),
-                lines: io.data.in("lines", t.String),
-              }),
-              run: ({ io }) =>
-                Effect.sync(() => {
-                  results.push(io);
+                run: ({ io }) =>
+                  Effect.sync(() => {
+                    io.list([]);
+                    io.option(Option.none());
+                  }),
+              });
+              yield* context.schema.register({
+                id: "Sink",
+                io: (io) => ({
+                  length: io.data.in("length", t.Int),
+                  none: io.data.in("none", t.Bool),
+                  lines: io.data.in("lines", t.String),
                 }),
-            });
-          }),
-        });
-        const sourceDeployment = Engine.deployment(
-          source,
-          SourceEngine.toLayer(() =>
-            Effect.succeed({
-              resources: Layer.empty,
-              rpcs: Layer.empty,
-              client: { state: Effect.succeed(null), rpcs: Layer.empty },
+                run: ({ io }) =>
+                  Effect.sync(() => {
+                    results.push(io);
+                  }),
+              });
             }),
+          }),
+        );
+        const sourceDeployment = Engine.identify(
+          source.id,
+          Engine.deployment(
+            source,
+            SourceEngine.toLayer(() =>
+              Effect.succeed({
+                resources: Layer.empty,
+                rpcs: Layer.empty,
+                client: { state: Effect.succeed(null), rpcs: Layer.empty },
+              }),
+            ),
           ),
         );
         const graphId = GraphId.make("defaults");
         const nodes = [
           node("start", source.id, "Start"),
           node("sink", source.id, "Sink"),
-          node("length", "list", "ListLength"),
-          node("none", "logic", "IsOptionNone"),
-          node("lines", "string", "JoinLines"),
+          node("length", "macrograph.app/macrograph/list", "ListLength"),
+          node("none", "macrograph.app/macrograph/logic", "IsOptionNone"),
+          node("lines", "macrograph.app/macrograph/string", "JoinLines"),
         ];
         for (const item of nodes) assert.deepStrictEqual(item.inputDefaults, {});
         const project: Project.Model = {
@@ -147,51 +157,56 @@ describe("Logic execution", () => {
     () =>
       Effect.gen(function* () {
         const messages: Array<string> = [];
-        const source = Module.make({
-          id: "test-source",
-          engine: SourceEngine,
-          effect: Effect.fnUntraced(function* (context) {
-            yield* context.schema.register({
-              id: "Start",
-              type: "event",
-              event: () => Effect.succeed(true),
-              io: () => ({}),
-              run: () => Effect.void,
-            });
-            yield* context.schema.register({
-              id: "Sink",
-              io: (io) => ({ input: io.data.in("input", t.String) }),
-              run: ({ io }) =>
-                Effect.sync(() => {
-                  messages.push(io.input);
-                }),
-            });
-          }),
-        });
-        const sourceDeployment = Engine.deployment(
-          source,
-          SourceEngine.toLayer(() =>
-            Effect.succeed({
-              resources: Layer.empty,
-              rpcs: Layer.empty,
-              client: { state: Effect.succeed(null), rpcs: Layer.empty },
+        const source = Module.identify(
+          ModuleId.Id.make("local/test/test-source"),
+          Module.make({
+            engine: SourceEngine,
+            effect: Effect.fnUntraced(function* (context) {
+              yield* context.schema.register({
+                id: "Start",
+                type: "event",
+                event: () => Effect.succeed(true),
+                io: () => ({}),
+                run: () => Effect.void,
+              });
+              yield* context.schema.register({
+                id: "Sink",
+                io: (io) => ({ input: io.data.in("input", t.String) }),
+                run: ({ io }) =>
+                  Effect.sync(() => {
+                    messages.push(io.input);
+                  }),
+              });
             }),
+          }),
+        );
+        const sourceDeployment = Engine.identify(
+          source.id,
+          Engine.deployment(
+            source,
+            SourceEngine.toLayer(() =>
+              Effect.succeed({
+                resources: Layer.empty,
+                rpcs: Layer.empty,
+                client: { state: Effect.succeed(null), rpcs: Layer.empty },
+              }),
+            ),
           ),
         );
         const graphId = GraphId.make("logic");
-        const invert = node("invert", "logic", "NOT", { input: false });
+        const invert = node("invert", "macrograph.app/macrograph/logic", "NOT", { input: false });
         const nodes = [
-          node("start", "test-source", "Start"),
-          node("wait", "logic", "Wait", { delay: 20 }),
-          node("branch", "logic", "Branch"),
+          node("start", "local/test/test-source", "Start"),
+          node("wait", "macrograph.app/macrograph/logic", "Wait", { delay: 20 }),
+          node("branch", "macrograph.app/macrograph/logic", "Branch"),
           invert,
-          node("conditional", "logic", "Conditional", {
+          node("conditional", "macrograph.app/macrograph/logic", "Conditional", {
             condition: true,
             trueValue: "selected",
             falseValue: "unselected",
           }),
-          node("true", "test-source", "Sink"),
-          node("false", "test-source", "Sink", { input: "false branch" }),
+          node("true", "local/test/test-source", "Sink"),
+          node("false", "local/test/test-source", "Sink", { input: "false branch" }),
         ];
         const graph = {
           id: graphId,

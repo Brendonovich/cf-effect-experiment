@@ -1,0 +1,9 @@
+{
+  "manifest": 1,
+  "publisher": "fixtures",
+  "name": "undeclared-builtin",
+  "version": "1.0.0",
+  "api": 1,
+  "displayName": "Undeclared built-in",
+  "server": "server.cjs"
+}

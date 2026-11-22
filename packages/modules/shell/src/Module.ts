@@ -5,7 +5,6 @@ import { Effect } from "effect";
 import { ShellEngine } from "./Definition.ts";
 
 const ShellModule = Module.make({
-  id: "shell",
   name: "Shell",
   engine: ShellEngine,
   effect: (context) =>

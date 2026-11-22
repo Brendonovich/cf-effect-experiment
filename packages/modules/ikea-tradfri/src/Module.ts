@@ -6,7 +6,6 @@ import { IkeaEngine, IkeaLight } from "./Definition.ts";
 
 const properties = { light: { name: "Light", resource: IkeaLight } } as const;
 const module = Module.make({
-  id: "ikea-tradfri",
   name: "IKEA TRADFRI Gateway",
   engine: IkeaEngine,
   effect: Effect.fnUntraced(function* (context) {

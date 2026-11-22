@@ -75,7 +75,7 @@ export function RealtimeWorkspace(
   return (
     <div sx={styles.root}>
       <div hidden={view() !== "editor"} sx={[styles.panel, view() !== "editor" && styles.hidden]}>
-        <Editor {...props} />
+        <Editor {...props} activity={events()} />
       </div>
       <div sx={[styles.panel, view() !== "events" && styles.hidden]}>
         <LiveEvents

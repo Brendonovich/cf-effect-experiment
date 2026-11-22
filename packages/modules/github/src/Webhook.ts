@@ -22,7 +22,6 @@ export const WebhookConfiguration = Schema.Struct({ events: Schema.Array(Webhook
 
 export const WebhookIngress = HttpIngress.make({
   id: "github:repository",
-  moduleId: "github",
   displayName: "Repository Webhook",
   method: "POST",
   metadata: WebhookMetadata,

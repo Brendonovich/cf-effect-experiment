@@ -12,7 +12,6 @@ export interface Options {
 
 export const make = (options: Options) =>
   Module.make({
-    id: "discord",
     name: "Discord",
     engine: DiscordEngine,
     effect: Effect.fnUntraced(function* (ctx) {

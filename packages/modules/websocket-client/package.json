@@ -10,7 +10,8 @@
     "./Deployment/Local": "./src/Deployment/Local.ts",
     "./Engine": "./src/Engine.ts",
     "./Settings": "./src/Settings.tsx",
-    "./UrlPolicy": "./src/UrlPolicy.ts"
+    "./UrlPolicy": "./src/UrlPolicy.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -34,6 +35,18 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/Local.ts"
+    "publisher": "macrograph",
+    "name": "websocket-client",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "WebSocket Client",
+    "description": "Connect to WebSocket servers and exchange messages.",
+    "entries": {
+      "server": "./src/Deployment/Local.ts",
+      "ui": "./src/UI.ts"
+    },
+    "requires": [
+      "socket"
+    ]
   }
 }

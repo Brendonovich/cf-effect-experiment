@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { TikTokEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "tiktok-euler-stream",
   name: "TikTok (Euler Stream)",
   engine: TikTokEngine,
   effect: Effect.fnUntraced(function* (ctx) {

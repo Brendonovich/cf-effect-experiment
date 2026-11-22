@@ -4,10 +4,8 @@ import { Effect } from "effect";
 import { createSignal } from "solid-js";
 
 import { ClientRpcs, ClientState, DEFAULT_PORT } from "./Definition.ts";
-import module from "./Module.ts";
 
 export const settings = ClientSettings.make({
-  module,
   state: ClientState,
   initial: { servers: [] },
   rpcs: ClientRpcs,

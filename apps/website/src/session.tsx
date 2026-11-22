@@ -50,8 +50,9 @@ export function Redirect(props: { readonly href: string }) {
 }
 
 /**
- * Renders its children for signed-in users and sends everyone else to the login page. Children
- * stay mounted while the session refetches, since each fetch yields a new object.
+ * Renders its children for signed-in users and sends everyone else to the login page, which also
+ * asks password-only accounts to connect a sign-in method. Children stay mounted while the session
+ * refetches, since each fetch yields a new object.
  */
 export function RequireSession(props: {
   readonly children: (session: () => Session) => JSX.Element;
@@ -64,7 +65,7 @@ export function RequireSession(props: {
       fallback={<LoadingState label="Checking your session" style={styles.loading} />}
     >
       <Show
-        when={session.data}
+        when={session.data?.user.hasSignInMethod ? session.data : undefined}
         fallback={<Redirect href={loginPath(`${location.pathname}${location.search}`)} />}
       >
         {/* Called in JSX so what the children read (such as the matched route) stays tracked. */}

@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Graph, IoId, OutputRef, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Module } from "@macrograph/module";
+import { t, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer } from "effect";
 
@@ -10,33 +10,35 @@ const TestLayer = Editor.defaultLayer.pipe(
   Layer.provideMerge(Packages.defaultLayer),
   Layer.provideMerge(Persistence.layerMemory),
 );
-const module = Module.make({
-  id: "wildcard-test",
-  effect: Effect.fnUntraced(function* (context) {
-    yield* context.schema.register({
-      id: "identity",
-      type: "pure",
-      io: (io) => {
-        const type = io.wildcard("T");
-        return {
-          input: io.data.in("in", type),
-          other: io.data.in("other", type),
-          output: io.data.out("out", type),
-        };
-      },
-      run: ({ io }) => Effect.sync(() => io.output(io.input)),
-    });
-    yield* context.schema.register({
-      id: "anchor",
-      type: "pure",
-      properties: { integer: { name: "Integer", type: t.Bool, defaultValue: false } },
-      io: (io, properties) => ({
-        output: io.data.out("out", properties.integer ? t.Int : t.String),
-      }),
-      run: () => Effect.void,
-    });
+const module = Module.identify(
+  ModuleId.Id.make("local/test/wildcard-test"),
+  Module.make({
+    effect: Effect.fnUntraced(function* (context) {
+      yield* context.schema.register({
+        id: "identity",
+        type: "pure",
+        io: (io) => {
+          const type = io.wildcard("T");
+          return {
+            input: io.data.in("in", type),
+            other: io.data.in("other", type),
+            output: io.data.out("out", type),
+          };
+        },
+        run: ({ io }) => Effect.sync(() => io.output(io.input)),
+      });
+      yield* context.schema.register({
+        id: "anchor",
+        type: "pure",
+        properties: { integer: { name: "Integer", type: t.Bool, defaultValue: false } },
+        io: (io, properties) => ({
+          output: io.data.out("out", properties.integer ? t.Int : t.String),
+        }),
+        run: () => Effect.void,
+      });
+    }),
   }),
-});
+);
 const setup = Effect.gen(function* () {
   yield* (yield* Persistence.Service).saveProject({
     ...Project.empty(),

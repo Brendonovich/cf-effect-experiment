@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { GraphId, NodeId, PackageId, Project, SchemaId } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { Engine, Module, ModuleId } from "@macrograph/module";
 import {
   Array,
   Cause,
@@ -29,23 +29,27 @@ const executionSpanNames = [
 
 const setup = Effect.fnUntraced(function* (
   run: Effect.Effect<void, unknown> | (() => Effect.Effect<void, unknown>),
-  missingInput = false,
 ) {
-  const module = Module.make({
-    id: "tracing",
-    engine: TestEngine,
-    effect: (registration) =>
-      registration.schema.register({
-        id: "event",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: (io) => (missingInput ? { value: io.data.in("value", t.String) } : {}),
-        run: typeof run === "function" ? run : () => run,
-      }),
-  });
-  const deployment = Engine.deployment(
-    module,
-    TestEngine.toLayer(() => Effect.die("not hosted")),
+  const module = Module.identify(
+    ModuleId.Id.make("local/test/tracing"),
+    Module.make({
+      engine: TestEngine,
+      effect: (registration) =>
+        registration.schema.register({
+          id: "event",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: () => ({}),
+          run: typeof run === "function" ? run : () => run,
+        }),
+    }),
+  );
+  const deployment = Engine.identify(
+    module.id,
+    Engine.deployment(
+      module,
+      TestEngine.toLayer(() => Effect.die("not hosted")),
+    ),
   );
   const project: Project.Model = {
     ...Project.empty(),
@@ -61,7 +65,10 @@ const setup = Effect.fnUntraced(function* (
               properties: {},
               inputDefaults: {},
               foldPins: false,
-              schema: { package: PackageId.make("tracing"), schema: SchemaId.make("event") },
+              schema: {
+                package: PackageId.make("local/test/tracing"),
+                schema: SchemaId.make("event"),
+              },
               position: { x: 0, y: 0 },
             },
           },
@@ -131,7 +138,7 @@ describe("execution tracing", () => {
       assert.strictEqual(Option.getOrUndefined(graphSpan!.parent), eventSpan);
       assert.strictEqual(Option.getOrUndefined(nodeSpan!.parent), graphSpan);
       assert.strictEqual(nodeSpan!.traceId, eventSpan!.traceId);
-      const schemaSpan = spans.find((span) => span.name === "Schema.run tracing.event")!;
+      const schemaSpan = spans.find((span) => span.name === "Schema.run local/test/tracing.event")!;
       assert.strictEqual(Option.getOrUndefined(schemaSpan.parent), nodeSpan);
       assert.strictEqual(schemaSpan.status._tag, "Ended");
       if (schemaSpan.status._tag === "Ended" && Exit.isFailure(schemaSpan.status.exit)) {
@@ -162,7 +169,7 @@ describe("execution tracing", () => {
       const exit = yield* Fiber.await(fiber);
       assert.isTrue(Exit.hasInterrupts(exit));
       for (const name of executionSpanNames) assertSpanExit(spans, name, exit);
-      assertSpanExit(spans, "Schema.run tracing.event", exit);
+      assertSpanExit(spans, "Schema.run local/test/tracing.event", exit);
     }).pipe(Effect.scoped),
   );
 
@@ -175,7 +182,7 @@ describe("execution tracing", () => {
       const exit = yield* Effect.exit(dispatch);
       assert.isTrue(Exit.isFailure(exit));
       for (const name of executionSpanNames) assertSpanExit(spans, name, exit);
-      const schemaSpan = spans.find((span) => span.name === "Schema.run tracing.event")!;
+      const schemaSpan = spans.find((span) => span.name === "Schema.run local/test/tracing.event")!;
       assert.strictEqual(schemaSpan.status._tag, "Ended");
       if (schemaSpan.status._tag === "Ended" && Exit.isFailure(schemaSpan.status.exit)) {
         assert.isTrue(Cause.hasDies(schemaSpan.status.exit.cause));
@@ -184,34 +191,12 @@ describe("execution tracing", () => {
     }),
   );
 
-  it.effect("captures missing-input failure before any consuming node executes", () =>
-    Effect.gen(function* () {
-      const { spans, dispatch } = yield* setup(Effect.die("run must not be reached"), true);
-      const exit = yield* Effect.exit(dispatch);
-      assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) {
-        assert.deepStrictEqual(
-          Cause.squash(exit.cause),
-          new Executor.MissingInput({ nodeId, inputId: "value" }),
-        );
-      }
-      assertSpanExit(spans, "Executor.executeEventNode", exit);
-      assertSpanExit(spans, "Executor.handleEvent", exit);
-      assert.isFalse(
-        spans.some(
-          (span) => span.name === "Executor.runNode" || span.name === "Executor.resolveInput",
-        ),
-      );
-      assert.isFalse(spans.some((span) => span.name.startsWith("Schema.run ")));
-    }),
-  );
-
   it.effect("records node logs as schema span events when default loggers are replaced", () =>
     Effect.gen(function* () {
       const { spans, dispatch } = yield* setup(Effect.logInfo("node output"));
       // Runtimes such as Cloudflare Workers install their own loggers, dropping the tracer logger.
       yield* dispatch.pipe(Effect.provide(Logger.layer([])));
-      const schemaSpan = spans.find((span) => span.name === "Schema.run tracing.event");
+      const schemaSpan = spans.find((span) => span.name === "Schema.run local/test/tracing.event");
       assert.instanceOf(schemaSpan, Tracer.NativeSpan);
       if (schemaSpan instanceof Tracer.NativeSpan)
         assert.deepStrictEqual(

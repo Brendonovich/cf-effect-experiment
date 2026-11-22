@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Project, OutputRef } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, DateTime, Effect, Option, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -12,7 +12,7 @@ const value = Option.some([DateTime.makeUnsafe("2026-09-05T12:00:00Z")]);
 const node = (id: string, schema = id) => ({
   id,
   name: id,
-  schema: { package: "inline", schema },
+  schema: { package: "local/test/inline", schema },
   properties: {},
   inputDefaults: {},
   foldPins: false,
@@ -50,59 +50,61 @@ const model = (connections: readonly ReturnType<typeof wire>[]) =>
     },
   });
 const fixture = (captured: unknown[], runs: string[] = []) =>
-  Module.make({
-    id: "inline",
-    engine: TestEngine,
-    effect: Effect.fnUntraced(function* (context) {
-      yield* context.schema.register({
-        id: "event",
-        type: "event",
-        event: () => Effect.succeed(true),
-        io: () => ({}),
-        run: () => Effect.void,
-      });
-      yield* context.schema.register({
-        id: "source",
-        type: "base",
-        io: (io) => ({
-          input: io.exec.in("exec"),
-          found: io.scope.out("found", { value: type }),
-          empty: io.exec.out("empty"),
-        }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            runs.push("source");
-            return io.found({ value });
+  Module.identify(
+    ModuleId.Id.make("local/test/inline"),
+    Module.make({
+      engine: TestEngine,
+      effect: Effect.fnUntraced(function* (context) {
+        yield* context.schema.register({
+          id: "event",
+          type: "event",
+          event: () => Effect.succeed(true),
+          io: () => ({}),
+          run: () => Effect.void,
+        });
+        yield* context.schema.register({
+          id: "source",
+          type: "base",
+          io: (io) => ({
+            input: io.exec.in("exec"),
+            found: io.scope.out("found", { value: type }),
+            empty: io.exec.out("empty"),
           }),
-      });
-      yield* context.schema.register({
-        id: "pure",
-        type: "pure",
-        io: (io) => ({ input: io.data.in("in", type), output: io.data.out("out", type) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            runs.push("pure");
-            io.output(io.input);
-          }),
-      });
-      yield* context.schema.register({
-        id: "sink",
-        io: (io) => ({ value: io.data.in("value", type) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            captured.push(io.value);
-          }),
-      });
-      yield* context.schema.register({
-        id: "both",
-        io: (io) => ({ outer: io.data.in("outer", type), inner: io.data.in("inner", type) }),
-        run: ({ io }) =>
-          Effect.sync(() => {
-            captured.push([io.outer, io.inner]);
-          }),
-      });
+          run: ({ io }) =>
+            Effect.sync(() => {
+              runs.push("source");
+              return io.found({ value });
+            }),
+        });
+        yield* context.schema.register({
+          id: "pure",
+          type: "pure",
+          io: (io) => ({ input: io.data.in("in", type), output: io.data.out("out", type) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              runs.push("pure");
+              io.output(io.input);
+            }),
+        });
+        yield* context.schema.register({
+          id: "sink",
+          io: (io) => ({ value: io.data.in("value", type) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              captured.push(io.value);
+            }),
+        });
+        yield* context.schema.register({
+          id: "both",
+          io: (io) => ({ outer: io.data.in("outer", type), inner: io.data.in("inner", type) }),
+          run: ({ io }) =>
+            Effect.sync(() => {
+              captured.push([io.outer, io.inner]);
+            }),
+        });
+      }),
     }),
-  });
+  );
 const base = [
   wire("enter", "event", OutputRef.port("exec"), "source", "exec"),
   wire("field", "source", OutputRef.scopeField("found", "value"), "pure", "in"),
@@ -137,9 +139,12 @@ describe("inline scopes", () => {
         });
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         yield* executor.handleEvent(module, new Trigger({}));
@@ -168,9 +173,12 @@ describe("inline scopes", () => {
         );
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         const error = yield* Effect.flip(executor.handleEvent(module, new Trigger({})));
@@ -195,9 +203,12 @@ describe("inline scopes", () => {
         );
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         expect(yield* Effect.flip(executor.handleEvent(module, new Trigger({})))).toBeInstanceOf(
@@ -223,9 +234,12 @@ describe("inline scopes", () => {
       );
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));
@@ -247,9 +261,12 @@ describe("inline scopes", () => {
         );
         yield* executor.module(
           module,
-          Engine.deployment(
-            module,
-            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          Engine.identify(
+            module.id,
+            Engine.deployment(
+              module,
+              TestEngine.toLayer(() => Effect.die("Not hosted")),
+            ),
           ),
         );
         expect(yield* Effect.flip(executor.handleEvent(module, new Trigger({})))).toBeInstanceOf(

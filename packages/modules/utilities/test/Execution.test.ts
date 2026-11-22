@@ -9,19 +9,28 @@ import {
   SchemaId,
 } from "@macrograph/core";
 import { Executor } from "@macrograph/execution";
-import LogicModule from "@macrograph/module-logic";
+import { Module, Engine } from "@macrograph/module";
+import LogicModuleDefinition from "@macrograph/module-logic";
 import { Effect, Logger, Schema, Tracer } from "effect";
 
 import { TickEvent } from "../src/Definition.ts";
-import UtilitiesDeployment from "../src/Deployment.ts";
-import UtilitiesModule from "../src/Module.ts";
+import UtilitiesDeploymentDefinition from "../src/Deployment.ts";
+import UtilitiesModuleDefinition from "../src/Module.ts";
+
+const UtilitiesDeployment = Engine.identify(
+  Module.builtinId("utilities"),
+  UtilitiesDeploymentDefinition,
+);
+const UtilitiesModule = Module.identify(Module.builtinId("utilities"), UtilitiesModuleDefinition);
+
+const LogicModule = Module.identify(Module.builtinId("logic"), LogicModuleDefinition);
 
 const node = (
   id: string,
   schema: string,
   properties: Readonly<Record<string, Schema.Json>>,
   inputDefaults: Readonly<Record<string, Schema.Json>>,
-  packageId = "util",
+  packageId = "macrograph.app/macrograph/utilities",
 ) => ({
   id: NodeId.make(id),
   name: id,
@@ -37,7 +46,13 @@ describe("Utilities execution", () => {
     Effect.gen(function* () {
       const graphId = GraphId.make("utilities");
       const tick = node("tick", "Tick", { intervalSeconds: 2 }, {});
-      const branch = node("branch", "Branch", {}, { condition: true }, "logic");
+      const branch = node(
+        "branch",
+        "Branch",
+        {},
+        { condition: true },
+        "macrograph.app/macrograph/logic",
+      );
       const whenTrue = node("true", "Print", {}, { in: "true" });
       const alsoTrue = node("also-true", "Print", {}, { in: "also true" });
       const whenFalse = node("false", "Print", {}, { in: "false" });
@@ -115,10 +130,7 @@ describe("Utilities execution", () => {
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 2 }))
         .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
-      assert.deepStrictEqual(messages, [
-        ["Utilities Print", { value: "true" }],
-        ["Utilities Print", { value: "also true" }],
-      ]);
+      assert.deepStrictEqual(messages, [["true"], ["also true"]]);
 
       yield* executor.loadProject({
         ...project,
@@ -137,18 +149,19 @@ describe("Utilities execution", () => {
       yield* executor
         .handleEvent(UtilitiesModule, new TickEvent({ tick: 4 }))
         .pipe(Effect.provide(Logger.layer([logger])), Effect.provideService(Tracer.Tracer, tracer));
-      assert.deepStrictEqual(messages, [
-        ["Utilities Print", { value: "true" }],
-        ["Utilities Print", { value: "also true" }],
-        ["Utilities Print", { value: "false" }],
-      ]);
-      const printSpans = spans.filter((span) => span.name === "Schema.run util.Print");
+      assert.deepStrictEqual(messages, [["true"], ["also true"], ["false"]]);
+      const printSpans = spans.filter(
+        (span) => span.name === "Schema.run macrograph.app/macrograph/utilities.Print",
+      );
       assert.lengthOf(printSpans, 3);
       for (const [index, span] of printSpans.entries()) {
         assert.strictEqual(span?._tag, "Span");
         if (span?._tag === "Span") {
-          assert.strictEqual(span.name, "Schema.run util.Print");
-          assert.strictEqual(span.attributes.get("macrograph.module.id"), "util");
+          assert.strictEqual(span.name, "Schema.run macrograph.app/macrograph/utilities.Print");
+          assert.strictEqual(
+            span.attributes.get("macrograph.module.id"),
+            "macrograph.app/macrograph/utilities",
+          );
           assert.strictEqual(span.attributes.get("macrograph.schema.id"), "Print");
           assert.strictEqual(
             span.attributes.get("macrograph.node.id"),

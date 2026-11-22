@@ -4,6 +4,7 @@ import { createMemo, createSignal, mapArray } from "solid-js";
 
 import type { createEditorWorkspace } from "../workspace/createEditorWorkspace";
 
+import { plainDescription } from "../../ui/Description";
 import { type createEditorStore, resourceValuesKey } from "../store";
 import { rankedSearch } from "./search";
 
@@ -31,7 +32,11 @@ export function createEditorCatalog(
         fields: [
           pkg.name,
           pkg.id,
-          ...pkg.schemas.flatMap((schema) => [schema.name, schema.id, schema.description]),
+          ...pkg.schemas.flatMap((schema) => [
+            schema.name,
+            schema.id,
+            schema.description === undefined ? undefined : plainDescription(schema.description),
+          ]),
         ],
       })),
   );

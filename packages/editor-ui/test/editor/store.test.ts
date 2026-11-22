@@ -104,7 +104,7 @@ describe("editor store", () => {
         id: NodeId.make("node"),
         name: "Make Struct",
         schema: {
-          package: PackageId.make("CustomTypes"),
+          package: CustomTypes.packageId,
           schema: SchemaId.make("MakeStruct"),
         },
         position: { x: 0, y: 0 },

@@ -19,6 +19,7 @@ import {
   type EditorController,
 } from "../../src/editor/createEditorController";
 import { Editor } from "../../src/editor/Editor";
+import { bundledModules } from "../../src/editor/modules/EditorModules";
 import {
   createWorkspaceState,
   type PaneDirection,
@@ -86,7 +87,7 @@ const setup = (direction: PaneDirection) => {
       connection: Effect.never,
       workspaceId: "pane-test",
       userId: "user",
-      settingsDescriptors: [],
+      modules: bundledModules(),
       projectSettings: true,
     });
     // Render the retained project without requiring an RPC transport.

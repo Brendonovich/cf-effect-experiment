@@ -29,7 +29,6 @@ const member = (value: Schema.Json | undefined, key: string): Schema.Json | unde
 const serializedOption = (value: Schema.Json | undefined): Option.Option<string> =>
   value === undefined ? Option.none() : Option.some(JSON.stringify(value));
 const JsonModule = Module.make({
-  id: "json",
   name: "JSON",
   description: "Build, inspect, and transform JSON values.",
   effect: Effect.fnUntraced(function* (context) {

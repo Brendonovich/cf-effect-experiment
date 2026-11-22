@@ -4,12 +4,11 @@ import { Effect, Option } from "effect";
 import { KofiEngine, KofiWebhook } from "./Definition.ts";
 
 export default Module.make({
-  id: "kofi",
   name: "Ko-fi",
   engine: KofiEngine,
   effect: Effect.fnUntraced(function* (ctx) {
     yield* ctx.schema.register({
-      id: "webhook:payment",
+      id: "PaymentReceived",
       name: "Payment Received",
       description: "Runs when the selected Ko-fi webhook reports a completed payment.",
       type: "event",

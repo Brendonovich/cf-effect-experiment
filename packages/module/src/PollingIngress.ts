@@ -34,7 +34,6 @@ export class InvalidEvent extends Schema.TaggedError<InvalidEvent>()("PollingIng
 
 export const Requirement = Schema.Struct({
   handlerId: Id,
-  moduleId: Schema.String,
   instanceKey: InstanceKey,
   displayName: Schema.String,
   intervalMs: Schema.Number,
@@ -44,8 +43,8 @@ export type Requirement = typeof Requirement.Type;
 export const Manifest = Schema.Array(Requirement);
 export type Manifest = typeof Manifest.Type;
 
-export interface DeliveredEvent {
-  readonly moduleId: string;
+/** An encoded event; the host adds the id of the module whose handler produced it. */
+export interface PolledEvent {
   readonly eventType: string;
   readonly eventId?: string;
   readonly payload: unknown;
@@ -53,12 +52,11 @@ export interface DeliveredEvent {
 
 export interface PollResponse {
   readonly cursor: unknown;
-  readonly events: ReadonlyArray<DeliveredEvent>;
+  readonly events: ReadonlyArray<PolledEvent>;
 }
 
 export interface AnyHandler {
   readonly id: Id;
-  readonly moduleId: string;
   readonly displayName: string;
   readonly intervalMs: number;
   readonly initialCursor: (
@@ -95,7 +93,6 @@ export interface Handler<Configuration, R> extends AnyHandler {
 
 export const make = <Configuration, Cursor, Event extends { readonly _tag: string }, R>(options: {
   readonly id: string;
-  readonly moduleId: string;
   readonly displayName: string;
   readonly intervalMs: number;
   readonly configuration: Schema.Codec<Configuration, unknown, never, never>;
@@ -120,12 +117,10 @@ export const make = <Configuration, Cursor, Event extends { readonly _tag: strin
   const encodeEvent = Schema.encodeUnknownEffect(options.event);
   return {
     id,
-    moduleId: options.moduleId,
     displayName: options.displayName,
     intervalMs: options.intervalMs,
     require: ({ instanceKey, displayName = options.displayName, configuration }) => ({
       handlerId: id,
-      moduleId: options.moduleId,
       instanceKey: InstanceKey.make(instanceKey),
       displayName,
       intervalMs: options.intervalMs,
@@ -150,7 +145,6 @@ export const make = <Configuration, Cursor, Event extends { readonly _tag: strin
         const events = yield* Effect.forEach(result.events, ({ event, eventId }) =>
           encodeEvent(event).pipe(
             Effect.map((payload) => ({
-              moduleId: options.moduleId,
               eventType: event._tag,
               ...(eventId === undefined ? {} : { eventId }),
               payload,

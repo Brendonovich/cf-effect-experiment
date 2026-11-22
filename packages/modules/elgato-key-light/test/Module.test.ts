@@ -39,7 +39,6 @@ describe("Key Light catalog", () => {
           "MiredsToKelvin",
         ],
       );
-      assert.strictEqual(module.id, "elgato-key-light");
       assert.isDefined(deployment);
       for (const schema of schemas.slice(0, 7))
         assert.deepStrictEqual(

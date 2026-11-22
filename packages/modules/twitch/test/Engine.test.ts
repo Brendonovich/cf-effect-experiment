@@ -19,7 +19,6 @@ interface HttpCall {
 
 describe("TwitchEngine", () => {
   it("declares its WebSocket deployment", () => {
-    assert.strictEqual(deployment.moduleId, "twitch");
     assert.strictEqual("httpIngress" in deployment, false);
   });
 

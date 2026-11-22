@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 
 import { type Package } from "@macrograph/core";
-import { LoadingState, SchemaReference } from "@macrograph/editor-ui";
+import { SchemaReference, plainDescription } from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import { useLocation, useParams } from "@solidjs/router";
 import { httpStatus, isServer } from "@solidjs/web";
@@ -10,7 +10,7 @@ import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 
 import {
   type PackageSummary,
-  docsPath,
+  modulesPath,
   findPackage,
   nodePath,
   packageCounts,
@@ -42,7 +42,7 @@ export function PackageLayout(props: { readonly children?: JSX.Element }) {
   return (
     <Show
       when={summary()}
-      fallback={<NotFound title="Package not found" message="There's no package with this name." />}
+      fallback={<NotFound title="Module not found" message="There's no module with this name." />}
     >
       {(summary) => <PackageShell summary={summary()}>{props.children}</PackageShell>}
     </Show>
@@ -61,12 +61,13 @@ function PackageShell(props: {
     const matches = (schema: Package.SchemaModel) =>
       query.length === 0 ||
       schema.name.toLocaleLowerCase().includes(query) ||
-      schema.description?.toLocaleLowerCase().includes(query) === true;
+      (schema.description !== undefined &&
+        plainDescription(schema.description).toLocaleLowerCase().includes(query));
     return schemaVariants
       .map((variant) => ({
         ...variant,
-        schemas: (reference.data()?.schemas ?? [])
-          .filter((schema) => schema.type === variant.type && matches(schema))
+        schemas: reference()
+          .schemas.filter((schema) => schema.type === variant.type && matches(schema))
           .toSorted((left, right) => left.name.localeCompare(right.name)),
       }))
       .filter((group) => group.schemas.length > 0);
@@ -75,8 +76,8 @@ function PackageShell(props: {
     decodeURIComponent(location.pathname) === decodeURIComponent(href);
   const currentLabel = createMemo(
     () =>
-      reference.data()?.schemas.find((schema) => current(nodePath(props.summary, schema.id)))
-        ?.name ?? "Overview",
+      reference().schemas.find((schema) => current(nodePath(props.summary, schema.id)))?.name ??
+      "Overview",
   );
   // On narrow screens the node list is a menu, which closes once a page is chosen.
   const [menuOpen, setMenuOpen] = createSignal(false);
@@ -91,8 +92,8 @@ function PackageShell(props: {
     <div sx={styles.shell}>
       <header sx={styles.packageHeader}>
         <nav aria-label="Breadcrumb" sx={styles.breadcrumb}>
-          <a href={docsPath} sx={styles.breadcrumbLink}>
-            Packages
+          <a href={modulesPath} sx={styles.breadcrumbLink}>
+            Modules
           </a>
           <span aria-hidden="true">/</span>
           <span>{props.summary.publisher}</span>
@@ -171,7 +172,7 @@ function PackageShell(props: {
                   </section>
                 )}
               </For>
-              <Show when={reference.data() !== undefined && groups().length === 0}>
+              <Show when={groups().length === 0}>
                 <p sx={styles.empty}>No matching nodes.</p>
               </Show>
             </nav>
@@ -200,21 +201,7 @@ function PackageData(props: {
   readonly children: (pkg: () => Package.Model, summary: () => PackageSummary) => JSX.Element;
 }) {
   const reference = usePackageReference(() => props.summary.id);
-  return (
-    <Show
-      when={reference.data()}
-      fallback={
-        <Show
-          when={reference.query.isError}
-          fallback={<LoadingState label="Loading reference" style={styles.loading} />}
-        >
-          <p sx={styles.lead}>The reference could not be loaded.</p>
-        </Show>
-      }
-    >
-      {(pkg) => props.children(pkg, () => props.summary)}
-    </Show>
-  );
+  return <>{props.children(reference, () => props.summary)}</>;
 }
 
 export function PackageOverviewRoute() {
@@ -226,7 +213,7 @@ export function PackageOverviewRoute() {
             {summary().description ?? "No description provided."}
           </p>
           <dl sx={styles.facts}>
-            <dt sx={styles.factLabel}>Package</dt>
+            <dt sx={styles.factLabel}>Module</dt>
             <dd sx={styles.factValue}>
               <code sx={styles.code}>
                 {summary().publisher}/{summary().name}
@@ -243,7 +230,7 @@ export function PackageOverviewRoute() {
             <section sx={styles.section}>
               <h2 sx={styles.sectionTitle}>Resources</h2>
               <p sx={styles.sectionLead}>
-                Connections and accounts that this package's nodes act on. Choose one when adding a
+                Connections and accounts that this module's nodes act on. Choose one when adding a
                 node that needs it.
               </p>
               <ul sx={styles.resources}>
@@ -317,8 +304,8 @@ function NotFound(props: { readonly title: string; readonly message: string }) {
       <h1 sx={styles.title}>{props.title}</h1>
       <p sx={styles.lead}>
         {props.message}{" "}
-        <a href={docsPath} sx={styles.inlineLink}>
-          Browse all packages
+        <a href={modulesPath} sx={styles.inlineLink}>
+          Browse all modules
         </a>
       </p>
     </main>
@@ -336,7 +323,11 @@ const variantColor = (type: SchemaType) =>
 
 const md = "@media (min-width: 768px)";
 const styles = stylex.create({
+  // Fills the page below the site header, so the node list can reach the bottom of the window.
   shell: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
     width: "100%",
     maxWidth: 1280,
     boxSizing: "border-box",
@@ -380,8 +371,10 @@ const styles = stylex.create({
   },
   layout: {
     display: "grid",
+    flex: 1,
     gridTemplateColumns: { default: "minmax(0, 1fr)", [md]: "240px minmax(0, 1fr)" },
-    alignItems: "start",
+    gridTemplateRows: { default: "auto 1fr", [md]: "1fr" },
+    alignItems: { default: "start", [md]: "stretch" },
   },
   sidebar: {
     position: "sticky",
@@ -508,7 +501,6 @@ const styles = stylex.create({
     paddingInlineStart: { default: 0, [md]: 32 },
     paddingBottom: { default: 48, [md]: 96 },
   },
-  loading: { marginTop: 48 },
   overview: { maxWidth: 720 },
   lead: {
     margin: 0,

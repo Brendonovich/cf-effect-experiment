@@ -90,6 +90,34 @@ describe("Discord v10 gateway", () => {
     assert.deepStrictEqual(socket.close.mock.lastCall, [1000]);
   });
 
+  it("identifies with requested intents and forwards every dispatch event", () => {
+    const sockets: FakeSocket[] = [];
+    const onDispatch = vi.fn<NonNullable<GatewayOptions["onDispatch"]>>();
+    const close = makeGateway((_url) => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket;
+    }).start({
+      token: "private-token",
+      messageContent: false,
+      intents: 1 | (1 << 1),
+      onStatus: vi.fn(),
+      onMessage: vi.fn(),
+      onDispatch,
+    });
+    const socket = sockets[0]!;
+    socket.receive({ op: 10, d: { heartbeat_interval: 1000 } });
+    assert.strictEqual(JSON.parse(socket.sent[0]!).d.intents, 1 | (1 << 1));
+    socket.receive({ op: 0, t: "READY", s: 1, d: { session_id: "session" } });
+    socket.receive({ op: 0, t: "GUILD_MEMBER_ADD", s: 2, d: { user: { id: "4" } } });
+    socket.receive({ op: 0, t: "MESSAGE_CREATE", s: 3, d: message });
+    assert.deepStrictEqual(onDispatch.mock.calls, [
+      ["GUILD_MEMBER_ADD", { user: { id: "4" } }],
+      ["MESSAGE_CREATE", message],
+    ]);
+    close();
+  });
+
   it("clears zombie heartbeats, reconnects and resumes on the fixed gateway origin", () => {
     const h = harness(false);
     const socket = h.sockets[0]!;

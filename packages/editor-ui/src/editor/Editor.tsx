@@ -6,6 +6,7 @@ import type { Effect, Stream } from "effect";
 import type { RpcClient, RpcClientError } from "effect/rpc";
 
 import { Function as GraphFunction, OutputRef, TypeDefinition } from "@macrograph/core";
+import { ModuleId } from "@macrograph/module/ModuleId";
 import * as stylex from "@stylexjs/stylex";
 import { createEffect, createMemo, createSignal, Errored, For, Show } from "solid-js";
 
@@ -33,6 +34,7 @@ import {
 import { NodeCreationMenu } from "./graph/NodeCreationMenu";
 import { Wire } from "./graph/Wire";
 import { Inspector } from "./inspector/Inspector";
+import { PrintLog } from "./inspector/PrintLog";
 import { ModuleSettingsView } from "./modules/ModuleSettingsView";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { EmptyContext, Sidebar, WorkspacePanes } from "./workspace/Layout";
@@ -45,6 +47,24 @@ const activityFade = stylex.keyframes({
 });
 
 const styles = stylex.create({
+  inspectorSection: {
+    display: "flex",
+    flex: 1,
+    flexDirection: "column",
+    minHeight: 96,
+    overflow: "hidden",
+  },
+  printSection: { borderTopColor: colors.gray5, borderTopStyle: "solid", borderTopWidth: 1 },
+  inspectorSectionTitle: {
+    alignItems: "center",
+    color: colors.gray11,
+    display: "flex",
+    flexShrink: 0,
+    fontSize: 11,
+    fontWeight: 600,
+    height: 32,
+    paddingInline: 8,
+  },
   wireActivity: {
     opacity: 0,
     animationName: activityFade,
@@ -378,7 +398,6 @@ export type EditorRpcClient = RpcClient.FromGroup<
 
 export interface EditorConnection {
   readonly client: EditorRpcClient;
-  readonly moduleSettings: ReadonlyMap<string, ClientSettings.Connected<JSX.Element>>;
   readonly activity?: Stream.Stream<ReadonlyArray<RuntimeActivity.Event>, unknown>;
   readonly replayEvent?: (eventId: string) => Effect.Effect<void, unknown>;
 }
@@ -393,7 +412,32 @@ export interface EditorSettingsContext {
 export interface EditorProps {
   readonly controller: EditorController;
   readonly renderProjectSettings?: (context: EditorSettingsContext) => JSX.Element;
+  /** Retained runtime activity; enables the inspector's print output. */
+  readonly activity?: ReadonlyArray<RuntimeActivity.Event>;
 }
+
+/** Explains why a node is a missing-module placeholder: which module, and its catalog status. */
+const missingModuleDiagnostics = (
+  controller: EditorController,
+  node: { readonly schema: { readonly package: string; readonly schema: string } },
+  missing: boolean,
+): ReadonlyArray<string> => {
+  if (!missing) return [];
+  const id = node.schema.package;
+  const parsed = ModuleId.parse(id);
+  const name = parsed._tag === "Some" ? ModuleId.toDisplay(parsed.value) : id;
+  const entry = controller.connection.moduleCatalog.get(id);
+  if (entry === undefined) return [`Module ${name} is not installed`];
+  const status =
+    entry.status === "loaded"
+      ? `has no node ${node.schema.schema}`
+      : entry.status === "failed" || entry.status === "disabled"
+        ? `is ${entry.status}`
+        : "is not loaded";
+  return [
+    `Module ${entry.displayName} (${name}) ${status}${entry.error === undefined ? "" : `: ${entry.error}`}`,
+  ];
+};
 
 export function Editor(props: EditorProps) {
   return (
@@ -427,7 +471,13 @@ export function Editor(props: EditorProps) {
       }}
     >
       <Show when={props.controller} keyed>
-        {(controller) => EditorContent(controller, () => props.renderProjectSettings)}
+        {(controller) =>
+          EditorContent(
+            controller,
+            () => props.renderProjectSettings,
+            () => props.activity,
+          )
+        }
       </Show>
     </Errored>
   );
@@ -436,6 +486,7 @@ export function Editor(props: EditorProps) {
 function EditorContent(
   controller: EditorController,
   renderProjectSettings: () => EditorProps["renderProjectSettings"],
+  activity: () => EditorProps["activity"],
 ) {
   let editorRoot: HTMLDivElement | undefined;
   const canvas = createEditorCanvas({
@@ -558,9 +609,8 @@ function EditorContent(
                         view,
                       })
                     }
-                    settings={controller.connection.moduleSettingsById().get(value().id)}
+                    settings={controller.connection.moduleData.settings(value().id)}
                     data={controller.connection.moduleData.metadata()}
-                    state={() => controller.connection.moduleData.states.get(value().id)?.()}
                     onChanged={() => controller.connection.refreshModuleData(value().id)}
                   />
                 )}
@@ -917,6 +967,11 @@ function EditorContent(
                                     }}
                                     diagnostics={[
                                       ...new Set([
+                                        ...missingModuleDiagnostics(
+                                          controller,
+                                          node(),
+                                          canvas.schemaForNode(node()) === undefined,
+                                        ),
                                         ...(controller.editor.store.nodeDiagnostics[
                                           tab().graphId
                                         ]?.[node().id] ?? []),
@@ -1258,49 +1313,66 @@ function EditorContent(
               open={controller.layout.inspectorOpen()}
               onClose={() => controller.layout.setInspectorOpen(false)}
             >
-              <Inspector
-                queues={controller.editor.store.project?.queues ?? {}}
-                authoring={controller.editor.authoring}
-                module={selectedModule()}
-                nodeDiagnostics={
-                  controller.editor.store.nodeDiagnostics[
-                    controller.layout.selectedGraphId() ?? ""
-                  ] ?? {}
-                }
-                graph={controller.layout.selectedGraph()}
-                node={controller.layout.selectedNode()}
-                packages={controller.editor.store.packages}
-                constants={controller.editor.store.project?.constants ?? {}}
-                definitions={runtimeDefinitions()}
-                nodeIO={
-                  controller.editor.store.nodeIO[controller.layout.selectedGraphId() ?? ""] ?? {}
-                }
-                onSaveDefault={controller.commands.setInputDefault}
-                onRemoveDefault={controller.commands.clearInputDefault}
-                fn={
-                  controller.editor.store.project?.functions[
-                    controller.layout.selectedGraphId() ?? ""
-                  ]
-                }
-                functions={Object.values(controller.editor.store.project?.functions ?? {})}
-                canEdit={controller.connection.canEdit()}
-                editingGraphNameId={controller.commands.editingGraphNameId()}
-                onEditingGraphNameChange={(id) =>
-                  controller.commands.setEditingName(id === null ? null : { type: "graph", id })
-                }
-                onRenameGraph={controller.commands.renameGraph}
-                editingNodeNameId={controller.commands.editingNodeNameId()}
-                onEditingNodeNameChange={(id) =>
-                  controller.commands.setEditingName(id === null ? null : { type: "node", id })
-                }
-                onRenameNode={controller.commands.renameNode}
-                onSetNodeProperty={controller.commands.setNodeProperty}
-                onClearNodeProperty={controller.commands.clearNodeProperty}
-                onAddFunctionField={controller.commands.addFunctionField}
-                onUpdateFunctionField={controller.commands.updateFunctionField}
-                onReorderFunctionField={controller.commands.reorderFunctionField}
-                onDeleteFunctionField={controller.commands.deleteFunctionField}
-              />
+              <section sx={styles.inspectorSection} aria-label="Properties">
+                <span sx={styles.inspectorSectionTitle}>Properties</span>
+                <Inspector
+                  queues={controller.editor.store.project?.queues ?? {}}
+                  authoring={controller.editor.authoring}
+                  module={selectedModule()}
+                  nodeDiagnostics={
+                    controller.editor.store.nodeDiagnostics[
+                      controller.layout.selectedGraphId() ?? ""
+                    ] ?? {}
+                  }
+                  graph={controller.layout.selectedGraph()}
+                  node={controller.layout.selectedNode()}
+                  packages={controller.editor.store.packages}
+                  constants={controller.editor.store.project?.constants ?? {}}
+                  definitions={runtimeDefinitions()}
+                  nodeIO={
+                    controller.editor.store.nodeIO[controller.layout.selectedGraphId() ?? ""] ?? {}
+                  }
+                  onSaveDefault={controller.commands.setInputDefault}
+                  onRemoveDefault={controller.commands.clearInputDefault}
+                  fn={
+                    controller.editor.store.project?.functions[
+                      controller.layout.selectedGraphId() ?? ""
+                    ]
+                  }
+                  functions={Object.values(controller.editor.store.project?.functions ?? {})}
+                  canEdit={controller.connection.canEdit()}
+                  editingGraphNameId={controller.commands.editingGraphNameId()}
+                  onEditingGraphNameChange={(id) =>
+                    controller.commands.setEditingName(id === null ? null : { type: "graph", id })
+                  }
+                  onRenameGraph={controller.commands.renameGraph}
+                  editingNodeNameId={controller.commands.editingNodeNameId()}
+                  onEditingNodeNameChange={(id) =>
+                    controller.commands.setEditingName(id === null ? null : { type: "node", id })
+                  }
+                  onRenameNode={controller.commands.renameNode}
+                  onSetNodeProperty={controller.commands.setNodeProperty}
+                  onClearNodeProperty={controller.commands.clearNodeProperty}
+                  onAddFunctionField={controller.commands.addFunctionField}
+                  onUpdateFunctionField={controller.commands.updateFunctionField}
+                  onReorderFunctionField={controller.commands.reorderFunctionField}
+                  onDeleteFunctionField={controller.commands.deleteFunctionField}
+                />
+              </section>
+              <Show when={activity()}>
+                {(events) => (
+                  <section sx={[styles.inspectorSection, styles.printSection]} aria-label="Print">
+                    <span sx={styles.inspectorSectionTitle}>Print</span>
+                    <PrintLog
+                      events={events()}
+                      nodeName={(graphId, nodeId) =>
+                        controller.editor.store.project?.graphs[graphId]?.nodes[nodeId]?.name
+                      }
+                      onSelectNode={controller.revealNode}
+                    />
+                  </section>
+                )}
+              </Show>
             </Sidebar>
           </div>
           <footer sx={styles.footer}>

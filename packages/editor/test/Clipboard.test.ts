@@ -223,7 +223,7 @@ it.layer(TestLayer)((it) => {
           schemas: [
             {
               ...sourceIO,
-              id: SchemaId.make("emit:new"),
+              id: SchemaId.make("EmitNew"),
               name: "Emit New",
               type: "exec",
               properties: [],
@@ -233,7 +233,7 @@ it.layer(TestLayer)((it) => {
         });
         const eventNode = {
           ...node("event", 200),
-          schema: { package: eventPackage, schema: SchemaId.make("emit:old") },
+          schema: { package: eventPackage, schema: SchemaId.make("EmitOld") },
           properties: {},
           inputDefaults: { "field:old": "preserved" },
         };
@@ -257,7 +257,7 @@ it.layer(TestLayer)((it) => {
         ).toEqual([
           {
             package: "project-events",
-            schema: "emit:old",
+            schema: "EmitOld",
             moduleName: "Project Events",
             schemaName: "Stream Started",
           },

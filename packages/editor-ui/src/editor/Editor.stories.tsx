@@ -5,6 +5,7 @@ import { createMemo } from "solid-js";
 
 import { createEditorController, type EditorControllerOptions } from "./createEditorController";
 import { Editor } from "./Editor";
+import { bundledModules } from "./modules/EditorModules";
 
 function StoryEditor(props: Pick<EditorControllerOptions, "connection">) {
   const controller = createMemo(() =>
@@ -12,7 +13,7 @@ function StoryEditor(props: Pick<EditorControllerOptions, "connection">) {
       connection: props.connection,
       workspaceId: "storybook",
       userId: "storybook-user",
-      settingsDescriptors: [],
+      modules: bundledModules(),
     }),
   );
   return <Editor controller={controller()} />;

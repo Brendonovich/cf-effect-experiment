@@ -151,7 +151,7 @@ Solid v2 settings component and named `settings`; `/Transport` exports the
 
 The host must add the workspace dependency and TypeScript reference, register the
 module/deployment for server execution, and discover the settings export. The
-manifest includes `macrograph.standaloneDeployment` for production discovery.
+manifest includes `macrograph.entries.server` for production discovery.
 No shared host files are changed by this package.
 
 Run `pnpm --filter @macrograph/module-tiktok-euler-stream test run` and

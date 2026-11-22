@@ -6,6 +6,7 @@ import { For, Show, createSignal, onCleanup, type Component } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { defaultValueError } from "../../ui/defaultValues";
+import { plainDescription } from "../../ui/Description";
 import { TextInput } from "../../ui/TextInput";
 import { typeLabel } from "../../ui/typeSelection";
 import { visiblePorts } from "./connectionAuthoring";
@@ -684,7 +685,13 @@ export const GraphNode: Component<GraphNodeProps> = (props) => {
       <div
         sx={[styles.nodeHeader, headerStyle(props.schema?.type)]}
         data-node-header={props.node.id}
-        title={props.diagnostics?.length ? props.diagnostics.join("\n") : props.schema?.description}
+        title={
+          props.diagnostics?.length
+            ? props.diagnostics.join("\n")
+            : props.schema?.description === undefined
+              ? undefined
+              : plainDescription(props.schema.description)
+        }
         onPointerDown={(event) => {
           event.stopPropagation();
           if (event.button === 0) props.onSelect(props.node.id, event.shiftKey);

@@ -21,7 +21,7 @@ export const utilityPackageId = PackageId.make("utilities");
 export const obsPackageId = PackageId.make("obs");
 
 export const chatMessageSchema: Package.SchemaModel = {
-  id: SchemaId.make("chat-message"),
+  id: SchemaId.make("ChatMessage"),
   name: "Chat Message",
   description: "Runs whenever a viewer sends a message in the selected channel.",
   type: "event",
@@ -89,7 +89,7 @@ export const branchSchema: Package.SchemaModel = {
 };
 
 export const switchSceneSchema: Package.SchemaModel = {
-  id: SchemaId.make("switch-scene"),
+  id: SchemaId.make("SwitchScene"),
   name: "Switch Scene",
   description: "Changes the active scene in OBS Studio.",
   type: "exec",

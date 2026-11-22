@@ -1,11 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
-import { HttpEndpoint } from "@macrograph/module";
+import { HttpEndpoint, Module } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect } from "effect";
 
 import { AccountId } from "../src/Definition.ts";
 import deployment from "../src/Deployment/Webhook.ts";
 import { handler as webhookHandler } from "../src/Webhook.ts";
+
+const moduleId = Module.builtinId("sendblue");
 
 const delivery = {
   message_handle: "message-1",
@@ -49,7 +51,7 @@ describe("Sendblue webhook", () => {
       );
       const requirements = yield* deployment.httpIngress.requirements({
         accounts: {
-          primary: {
+          [AccountId.make("primary")]: {
             name: "Primary",
             apiKey: "key",
             apiSecret: "api-secret",
@@ -58,10 +60,10 @@ describe("Sendblue webhook", () => {
           },
         },
       });
-      assert.deepStrictEqual(yield* HttpIngress.manifest(requirements), [
+      assert.deepStrictEqual(yield* HttpIngress.manifest(moduleId, requirements), [
         {
           handlerId: HttpEndpoint.HandlerId.make("sendblue:receive"),
-          moduleId: "sendblue",
+          moduleId,
           instanceKey: HttpEndpoint.InstanceKey.make("primary"),
           displayName: "Primary",
           metadata: { accountId: "primary" },

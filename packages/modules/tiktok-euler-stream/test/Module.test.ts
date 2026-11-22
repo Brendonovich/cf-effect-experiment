@@ -113,9 +113,7 @@ describe("TikTok catalog", () => {
         assert.strictEqual(schema.dataOutputs.length, Object.keys(output).length);
         assert.strictEqual(schema.executionOutputs.length, 1);
       }
-      assert.strictEqual(module.id, "tiktok-euler-stream");
       assert.strictEqual(module.name, "TikTok (Euler Stream)");
-      assert.strictEqual(deployment.moduleId, "tiktok-euler-stream");
       assert.strictEqual(deployment.definition, module.engine);
     }),
   );

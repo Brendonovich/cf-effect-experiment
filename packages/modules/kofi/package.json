@@ -8,7 +8,8 @@
     "./Definition": "./src/Definition.ts",
     "./Settings": "./src/Settings.tsx",
     "./Webhook": "./src/Webhook.ts",
-    "./Deployment/Webhook": "./src/Deployment/Webhook.ts"
+    "./Deployment/Webhook": "./src/Deployment/Webhook.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -30,6 +31,15 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment/Webhook.ts"
+    "publisher": "macrograph",
+    "name": "kofi",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Ko-fi",
+    "description": "React to Ko-fi donations, subscriptions and shop orders.",
+    "entries": {
+      "server": "./src/Deployment/Webhook.ts",
+      "ui": "./src/UI.ts"
+    }
   }
 }

@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { StreamlabsEngine } from "./Definition.ts";
 
 export default Module.make({
-  id: "streamlabs",
   name: "Streamlabs",
   engine: StreamlabsEngine,
   effect: Effect.fnUntraced(function* (ctx) {

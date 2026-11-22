@@ -11,7 +11,8 @@
     "./Engine": "./src/Engine.ts",
     "./Polling": "./src/Polling.ts",
     "./Settings": "./src/Settings.tsx",
-    "./Webhook": "./src/Webhook.ts"
+    "./Webhook": "./src/Webhook.ts",
+    "./UI": "./src/UI.ts"
   },
   "scripts": {
     "build": "tsgo --build",
@@ -33,6 +34,18 @@
     "vitest": "^4.1.0"
   },
   "macrograph": {
-    "standaloneDeployment": "./src/Deployment.ts"
+    "publisher": "macrograph",
+    "name": "sendblue",
+    "version": "0.1.0",
+    "api": 1,
+    "displayName": "Sendblue",
+    "description": "Send and receive iMessages and SMS with Sendblue.",
+    "entries": {
+      "server": "./src/Deployment.ts",
+      "ui": "./src/UI.ts"
+    },
+    "requires": [
+      "http-client"
+    ]
   }
 }

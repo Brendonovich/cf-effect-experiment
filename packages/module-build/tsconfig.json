@@ -1,0 +1,122 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "dist/types",
+    "lib": ["ES2024", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src", "test"],
+  "exclude": ["test/fixtures"],
+  "references": [
+    {
+      "path": "../module"
+    },
+    {
+      "path": "../module-host"
+    },
+    {
+      "path": "../module-installer"
+    },
+    {
+      "path": "../module-registry"
+    },
+    {
+      "path": "../vite-shared-libraries"
+    },
+    {
+      "path": "../modules/discord"
+    },
+    {
+      "path": "../modules/elevenlabs"
+    },
+    {
+      "path": "../modules/elgato-key-light"
+    },
+    {
+      "path": "../modules/fs"
+    },
+    {
+      "path": "../modules/github"
+    },
+    {
+      "path": "../modules/goxlr"
+    },
+    {
+      "path": "../modules/http-client"
+    },
+    {
+      "path": "../modules/ikea-tradfri"
+    },
+    {
+      "path": "../modules/json"
+    },
+    {
+      "path": "../modules/kofi"
+    },
+    {
+      "path": "../modules/lifx"
+    },
+    {
+      "path": "../modules/list"
+    },
+    {
+      "path": "../modules/logic"
+    },
+    {
+      "path": "../modules/math"
+    },
+    {
+      "path": "../modules/midi"
+    },
+    {
+      "path": "../modules/obs"
+    },
+    {
+      "path": "../modules/openai"
+    },
+    {
+      "path": "../modules/opencode"
+    },
+    {
+      "path": "../modules/sendblue"
+    },
+    {
+      "path": "../modules/shell"
+    },
+    {
+      "path": "../modules/speakerbot"
+    },
+    {
+      "path": "../modules/streamdeck"
+    },
+    {
+      "path": "../modules/streamlabs"
+    },
+    {
+      "path": "../modules/string"
+    },
+    {
+      "path": "../modules/tiktok-euler-stream"
+    },
+    {
+      "path": "../modules/twitch"
+    },
+    {
+      "path": "../modules/utilities"
+    },
+    {
+      "path": "../modules/voicemod"
+    },
+    {
+      "path": "../modules/vtube-studio"
+    },
+    {
+      "path": "../modules/websocket-client"
+    },
+    {
+      "path": "../modules/websocket-server"
+    }
+  ]
+}

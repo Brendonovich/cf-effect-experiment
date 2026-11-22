@@ -51,7 +51,8 @@
         "Select an exposed node",
         "Reload and observe the same module view and reference selection",
         "Observe its preview and configurable wildcard types and value properties",
-        "Copy the preview, paste into a new graph, and export the pasted node"
+        "Copy the preview, paste into a new graph, and export the pasted node",
+        "Open a Twitch node reference and observe the docs link in its description"
       ],
       "evidence": ["screenshot", "server-log", "reference-paste-project.json"]
     },
@@ -79,6 +80,33 @@
       "status": "covered",
       "verification": "journey",
       "evidence": ["reset-project.json", "screenshot"]
+    },
+    {
+      "id": "inspector.print-log",
+      "name": "Inspector Print section lists node output and navigates to the logging node",
+      "documentation": ".opencode/skills/verify-macrograph/features/print-log.md",
+      "status": "covered",
+      "verification": "print-log",
+      "userJourney": [
+        "Import a Tick to Print project",
+        "Observe Print entries newest first",
+        "Click the node name in an entry",
+        "Delete the node"
+      ],
+      "evidence": ["print-project.json", "screenshot", "server-log"]
+    },
+    {
+      "id": "module.keyboard.keybind",
+      "name": "Keyboard keybinds fire on press and release in the browser tab",
+      "documentation": ".opencode/skills/verify-macrograph/features/keyboard.md",
+      "status": "covered",
+      "verification": "keyboard",
+      "userJourney": [
+        "Import a Shift+K Keybind wired to Print nodes",
+        "Press the keybind and other modifier combinations",
+        "Press the keybind while typing in a text field"
+      ],
+      "evidence": ["keyboard-project.json", "screenshot", "server-log"]
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Editor, EditorEvents, Packages } from "@macrograph/editor";
-import { Engine, HttpEndpoint, Module } from "@macrograph/module";
+import { Engine, HttpEndpoint, Module, ModuleId } from "@macrograph/module";
 import { Persistence } from "@macrograph/persistence";
 import { Effect, Layer, PubSub, Schema } from "effect";
 
@@ -59,14 +59,19 @@ it.effect("persists editor-backed storage and endpoints", () => {
     storage: Schema.Struct({ enabled: Schema.Boolean }),
     initialStorage: { enabled: false },
   });
-  const HostedModule = Module.make({
-    id: "hosted",
-    engine: HostedEngine,
-    effect: () => Effect.void,
-  });
-  const deployment = Engine.deployment(
-    HostedModule,
-    HostedEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+  const HostedModule = Module.identify(
+    ModuleId.Id.make("local/test/hosted"),
+    Module.make({
+      engine: HostedEngine,
+      effect: () => Effect.void,
+    }),
+  );
+  const deployment = Engine.identify(
+    HostedModule.id,
+    Engine.deployment(
+      HostedModule,
+      HostedEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+    ),
   );
   const endpoint = {
     id: HttpEndpoint.Id.make("endpoint-1"),
@@ -115,20 +120,21 @@ it.effect("persists editor-backed storage and endpoints", () => {
     const editor = yield* Editor.Service;
     const events = yield* EditorEvents.Service.pipe(Effect.flatMap((events) => events.subscribe));
     yield* editor.module(HostedModule, deployment);
+    expect((yield* PubSub.take(events))._tag).toBe("PackagesChanged");
     yield* context.storage.update((state) => ({ enabled: !state.enabled }));
-    expect((yield* editor.project.get()).engines.hosted).toEqual({ enabled: true });
+    expect((yield* editor.project.get()).engines["local/test/hosted"]).toEqual({ enabled: true });
     expect(yield* editor.engine.getEndpoints()).toEqual([endpoint]);
     yield* context.client.refresh;
     expect(yield* PubSub.take(events)).toEqual({
       _tag: "EngineStateChanged",
       actor: { type: "SYSTEM" },
-      moduleId: "hosted",
+      moduleId: "local/test/hosted",
       state: { enabled: true },
     });
     expect(yield* PubSub.take(events)).toEqual({
       _tag: "ModuleClientStateDirty",
       actor: { type: "SYSTEM" },
-      moduleId: "hosted",
+      moduleId: "local/test/hosted",
     });
   }).pipe(Effect.provide(layer), Effect.provide(editorLayer));
 });

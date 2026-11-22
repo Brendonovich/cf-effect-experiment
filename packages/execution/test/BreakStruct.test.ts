@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { CustomTypes, Project } from "@macrograph/core";
-import { t, Engine, Module } from "@macrograph/module";
+import { t, Engine, Module, ModuleId } from "@macrograph/module";
 import { Array, Effect, Schema } from "effect";
 
 import { Executor } from "../src/index.ts";
@@ -15,28 +15,30 @@ it.effect(
       const root = t.DefinitionId.make("root"),
         child = t.DefinitionId.make("child");
       const results: string[] = [];
-      const module = Module.make({
-        id: "test",
-        engine: TestEngine,
-        effect: Effect.fnUntraced(function* (context) {
-          yield* context.schema.register({
-            id: "event",
-            type: "event",
-            event: () => Effect.succeed(true),
-            io: (io) => ({ out: io.data.out("out", t.Struct(root)) }),
-            run: ({ io }) =>
-              Effect.sync(() => io.out({ _type: root, child: { _type: child, text: "done" } })),
-          });
-          yield* context.schema.register({
-            id: "sink",
-            io: (io) => ({ input: io.data.in("in", t.String) }),
-            run: ({ io }) =>
-              Effect.sync(() => {
-                results.push(io.input);
-              }),
-          });
+      const module = Module.identify(
+        ModuleId.Id.make("local/test/test"),
+        Module.make({
+          engine: TestEngine,
+          effect: Effect.fnUntraced(function* (context) {
+            yield* context.schema.register({
+              id: "event",
+              type: "event",
+              event: () => Effect.succeed(true),
+              io: (io) => ({ out: io.data.out("out", t.Struct(root)) }),
+              run: ({ io }) =>
+                Effect.sync(() => io.out({ _type: root, child: { _type: child, text: "done" } })),
+            });
+            yield* context.schema.register({
+              id: "sink",
+              io: (io) => ({ input: io.data.in("in", t.String) }),
+              run: ({ io }) =>
+                Effect.sync(() => {
+                  results.push(io.input);
+                }),
+            });
+          }),
         }),
-      });
+      );
       const project = Schema.decodeUnknownSync(Project.Model)({
         ...Project.empty(),
         types: {
@@ -60,8 +62,8 @@ it.effect(
               name: "Graph",
               nodes: Object.fromEntries(
                 [
-                  ["event", "test", "event"],
-                  ["sink", "test", "sink"],
+                  ["event", "local/test/test", "event"],
+                  ["sink", "local/test/test", "sink"],
                   ["a", CustomTypes.packageId, "BreakStruct"],
                   ["b", CustomTypes.packageId, "BreakStruct"],
                 ].map(([id, pkg, schema]) => [
@@ -96,9 +98,12 @@ it.effect(
       const executor = yield* Executor.make(project);
       yield* executor.module(
         module,
-        Engine.deployment(
-          module,
-          TestEngine.toLayer(() => Effect.die("Not hosted")),
+        Engine.identify(
+          module.id,
+          Engine.deployment(
+            module,
+            TestEngine.toLayer(() => Effect.die("Not hosted")),
+          ),
         ),
       );
       yield* executor.handleEvent(module, new Trigger({}));

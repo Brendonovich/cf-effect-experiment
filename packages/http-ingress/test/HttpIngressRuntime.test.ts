@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Engine, HttpEndpoint, Module } from "@macrograph/module";
+import { Engine, HttpEndpoint, Module, ModuleId } from "@macrograph/module";
 import * as HttpIngress from "@macrograph/module/HttpIngress";
 import { Effect, Option, Redacted, Schema } from "effect";
 
@@ -12,15 +12,16 @@ class TestEngine extends Engine.make({
   storage: TestStorage,
   initialStorage: { values: [] },
 }) {}
-const TestModule = Module.make({
-  id: "test",
-  engine: TestEngine,
-  effect: () => Effect.void,
-});
+const TestModule = Module.identify(
+  ModuleId.Id.make("local/test/test"),
+  Module.make({
+    engine: TestEngine,
+    effect: () => Effect.void,
+  }),
+);
 
 const TestIngress = HttpIngress.make({
   id: "test:received",
-  moduleId: "test",
   displayName: "Webhook",
   method: "POST",
   metadata: Schema.Struct({ value: Schema.String }),
@@ -64,27 +65,32 @@ it.effect("resolves, mounts, dispatches, and removes HTTP ingress handlers", () 
         }),
       ),
     );
-    const deployment = Engine.withHttpIngress(
-      Engine.deployment(
-        TestModule,
-        TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
-      ),
-      {
-        handlers: [live],
-        requirements: (state) =>
-          Effect.succeed(
-            state.values.map((value) =>
-              TestIngress.require({
-                instanceKey: value,
-                displayName: `Endpoint ${value}`,
-                metadata: { value },
-                configuration: { token: "token", topics: ["Received"] },
-              }),
+    const deployment = Engine.identify(
+      TestModule.id,
+      Engine.withHttpIngress(
+        Engine.deployment(
+          TestModule,
+          TestEngine.toLayer(() => Effect.die("Test engine is not hosted")),
+        ),
+        {
+          handlers: [live],
+          requirements: (state) =>
+            Effect.succeed(
+              state.values.map((value) =>
+                TestIngress.require({
+                  instanceKey: value,
+                  displayName: `Endpoint ${value}`,
+                  metadata: { value },
+                  configuration: { token: "token", topics: ["Received"] },
+                }),
+              ),
             ),
-          ),
-      },
+        },
+      ),
     );
-    const registry = yield* HttpIngress.makeRegistry(deployment.httpIngress.handlers);
+    const registry = yield* HttpIngress.makeRegistry([
+      { moduleId: deployment.moduleId, handlers: deployment.httpIngress.handlers },
+    ]);
     const provisioned = new Map<string, HttpEndpoint.Routed>();
     const endpoints = HttpEndpoint.Host.of({
       ensure: (handler, endpoint) => {
@@ -117,7 +123,7 @@ it.effect("resolves, mounts, dispatches, and removes HTTP ingress handlers", () 
     });
     const runtime = yield* HttpIngressRuntime.make([deployment], registry, endpoints);
     const manifest = yield* runtime.resolveManifest({
-      test: { values: ["one", "two"] },
+      [TestModule.id]: { values: ["one", "two"] },
     });
     const mounted = yield* runtime.reconcile([], manifest);
     assert.deepStrictEqual(

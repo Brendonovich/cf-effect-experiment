@@ -106,7 +106,7 @@ in this workspace; tests use mocked transports and real CoAP codec fixtures.
 Package exports: default module at `.`, `./Definition`, `./Engine` (default native
 layer, `runtimeLayer`, injectable `Transport` and `transportLayer` requiring
 `DtlsClient` and `HostResolver`), `./Deployment` (default
-deployment), and `./Settings` (`settings`). `macrograph.standaloneDeployment`
+deployment), and `./Settings` (`settings`). `macrograph.entries.server`
 points to `./src/Deployment.ts`. Parent host code owns registry/settings wiring;
 this package is server-only and must not be mounted in Cloudflare runtimes.
 

@@ -1,22 +1,27 @@
 import { CloudCredentials } from "@macrograph/cloud-credentials";
 import { randomUUID } from "@macrograph/editor";
-import { Button, createEditorController, RealtimeWorkspace } from "@macrograph/editor-ui";
+import {
+  Button,
+  createEditorController,
+  createModuleUILoader,
+  RealtimeWorkspace,
+} from "@macrograph/editor-ui";
 import { colors } from "@macrograph/editor-ui/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { useQueryClient } from "@tanstack/solid-query";
 import { Effect } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { createSignal, For, onSettled, Show } from "solid-js";
-import discoveredModuleSettings from "virtual:macrograph-module-settings";
 
 import { getSession, sessionKey } from "../api";
 import { Header } from "../Header";
-import { makeLocalConnection } from "./local/LocalRuntime";
+import { makeLocalConnection, type LocalEditorConnection } from "./local/LocalRuntime";
 import {
   MAX_LOCAL_PROJECT_BYTES,
   makeLocalProjectStore,
   type LocalProjectStatus,
 } from "./local/LocalStoragePersistence";
+import { moduleUIs } from "./local/ModuleUIs";
 
 const localUserId = () => {
   const key = "macrograph:local-user";
@@ -102,7 +107,11 @@ export function Playground() {
     ),
     workspaceId: "local-browser",
     userId: localUserId(),
-    settingsDescriptors: discoveredModuleSettings,
+    modules: {
+      catalog: (connection: LocalEditorConnection) => connection.moduleCatalog,
+      loader: createModuleUILoader({ static: moduleUIs }),
+      rpcProtocol: (connection: LocalEditorConnection) => connection.moduleRpcProtocol,
+    },
   });
   const [status, setStatus] = createSignal<LocalProjectStatus>();
   const statusMessage = () => {
@@ -225,11 +234,7 @@ export function Playground() {
         </div>
       </Show>
       <main sx={styles.main}>
-        <RealtimeWorkspace
-          controller={editor}
-          runtimeLabel="Browser"
-          view={view()}
-        />
+        <RealtimeWorkspace controller={editor} runtimeLabel="Browser" view={view()} />
       </main>
     </div>
   );

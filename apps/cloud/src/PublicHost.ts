@@ -21,6 +21,14 @@ export const isPreviewStage = (stage: string) => /^pr\d+$/.test(stage);
 export const authRedirectHost = "macrograph.brendonovich.dev";
 
 /**
+ * Providers that have also registered `/auth/proxy` on the main site, where WebsiteWorker claims
+ * `/auth/*`. They send people back to macrograph.app instead of {@link authRedirectHost}.
+ */
+export const providerRedirectOrigins: Readonly<Record<string, string>> = {
+  twitch: `https://${zoneName}`,
+};
+
+/**
  * The Worker Route patterns WebsiteWorker claims on a hostname. `/auth/*` stays for shipped desktop
  * apps, and RFC 8414 fixes the metadata document at the root of the issuer's host.
  */

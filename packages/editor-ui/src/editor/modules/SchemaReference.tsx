@@ -13,6 +13,7 @@ import { For, Show, createMemo, createSignal } from "solid-js";
 
 import { colors } from "../../tokens.stylex.ts";
 import { DataTypePicker } from "../../ui/DataTypePicker";
+import { Description } from "../../ui/Description";
 import {
   GraphNode,
   graphNodeHeight,
@@ -255,7 +256,9 @@ export function SchemaReference(props: {
             props.schema.description === undefined ? styles.missingDescription : null,
           ]}
         >
-          {props.schema.description ?? "No description provided."}
+          <Show when={props.schema.description} fallback="No description provided.">
+            {(description) => <Description text={description()} />}
+          </Show>
         </p>
       </header>
       <div sx={styles.configuration}>
