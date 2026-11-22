@@ -30,7 +30,7 @@
     "test:unit": "CI=1 pnpm --recursive --if-present run test",
     "test:affected": "CI=1 pnpm --filter '...[origin/main]' --filter '!.' --if-present run test",
     "list:affected": "pnpm --filter '...[origin/main]' --filter '!.' list --depth -1",
-    "test:integration": "pnpm --filter @macrograph/server test:integration",
+    "test:integration": "pnpm --filter @macrograph/cli test:integration",
     "lint": "vp lint --quiet && pnpm lint:rules",
     "lint:rules": "node --test tooling/oxlint/macrograph.test.mjs",
     "check:fast": "pnpm typecheck && pnpm test:unit && pnpm verify:test",

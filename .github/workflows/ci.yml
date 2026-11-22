@@ -41,8 +41,8 @@ jobs:
             cache-files: |
               pnpm-lock.yaml
               apps/server/package.json
-            install: pnpm install --frozen-lockfile --filter '@macrograph/server...'
-            command: pnpm --filter @macrograph/server test:integration
+            install: pnpm install --frozen-lockfile --filter '@macrograph/cli...'
+            command: pnpm --filter @macrograph/cli test:integration
     steps:
       - uses: actions/checkout@v6
         with:
