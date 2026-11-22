@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Simulates a REST API client editing the project, so presence and following can be tried out.
 //
-//   MACROGRAPH_API_KEY=mg_... pnpm --filter @macrograph/server agent:rest
+//   MACROGRAPH_API_KEY=mg_... pnpm --filter @macrograph/cli agent:rest
 //
 // Environment:
 //   MACROGRAPH_API_KEY   API key from the server's settings (required)

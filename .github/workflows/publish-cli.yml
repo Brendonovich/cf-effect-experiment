@@ -1,0 +1,67 @@
+name: Publish CLI
+
+# Every push to main publishes a dev build to the `dev` npm dist-tag as
+# `0.0.0-dev-<run>`, the way OpenCode publishes its dev channel.
+#
+# The first publish cannot use trusted publishing: the package and the
+# @macrograph npm org must exist first. To bootstrap, create the org, then run
+# the same version and build steps locally and publish with an npm token:
+#
+#   node apps/server/scripts/set-version.mjs 0.0.0-dev-0
+#   MACROGRAPH_CHANNEL=dev pnpm --filter @macrograph/cli build
+#   pnpm --filter @macrograph/cli run pack:npm
+#   cd apps/server/dist/npm && npm publish --tag dev --access public
+#
+# Then add this repository and workflow as a trusted publisher in the package's
+# npm settings; no NPM_TOKEN secret is needed from that point on.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'Brendonovich/cf-effect-experiment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Set version
+        id: version
+        run: |
+          version="0.0.0-dev-${GITHUB_RUN_NUMBER}"
+          if [ "${GITHUB_RUN_ATTEMPT}" != "1" ]; then version="$version.${GITHUB_RUN_ATTEMPT}"; fi
+          node apps/server/scripts/set-version.mjs "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build CLI
+        run: pnpm --filter @macrograph/cli build
+        env:
+          MACROGRAPH_CHANNEL: dev
+      - name: Pack the npm package
+        run: pnpm --filter @macrograph/cli run pack:npm
+      - name: Check the CLI
+        run: node apps/server/dist/npm/esm/index.js --version
+      - name: Publish
+        working-directory: apps/server/dist/npm
+        run: npm publish --tag dev --access public --provenance

@@ -13,7 +13,7 @@ data and are not available to anonymous read-only viewers.
 ## Local development
 
 ```sh
-pnpm --filter @macrograph/server dev
+pnpm --filter @macrograph/cli dev
 ```
 
 Open `http://localhost:5174`. Vite serves and hot-reloads only the browser client, and proxies
@@ -38,7 +38,7 @@ in-Vite backend in `apps/server/project.db` is not moved. The browser signs in a
 link for a new data directory is printed by `pnpm dev`.
 
 ```sh
-pnpm --filter @macrograph/server dev:inline
+pnpm --filter @macrograph/cli dev:inline
 ```
 
 `dev:inline` instead runs the backend inside Vite's server environment and hot-reloads it when
@@ -57,8 +57,8 @@ variables taking precedence.
 Production:
 
 ```sh
-pnpm --filter @macrograph/server build
-PORT=3001 MACROGRAPH_DATA_DIR=./data pnpm --filter @macrograph/server start
+pnpm --filter @macrograph/cli build
+PORT=3001 MACROGRAPH_DATA_DIR=./data pnpm --filter @macrograph/cli start
 ```
 
 `start` runs `macrograph serve`, the foreground server configured by the environment below
@@ -295,3 +295,26 @@ For a path prefix, build with `--build-arg MACROGRAPH_BASE_PATH=/macrograph` and
 `MACROGRAPH_BASE_PATH`. Forward WebSocket upgrades for `rpc-ws`, preserve the public prefix, and
 set `MACROGRAPH_PUBLIC_ORIGIN` to the external scheme and host. Do not rely on forwarded headers;
 the server intentionally uses the explicit origin when generating public URLs.
+
+## Releases
+
+`@macrograph/cli` is published from this package. Pushes to `main` run
+`.github/workflows/publish-cli.yml`, which builds the `dev` channel and publishes
+`0.0.0-dev-<run>` under the npm `dev` dist-tag. Install it with
+`npm install --global @macrograph/cli@dev`. `pnpm --filter @macrograph/cli run pack:npm`
+writes the dependency-free package to `apps/server/dist/npm`, with `esm`, `client` and
+`modules` at its root.
+
+The workflow publishes with npm trusted publishing over OIDC, so it stores no token. The package
+must exist before a trusted publisher can be configured. For the first publish, create the
+`@macrograph` npm organization and run:
+
+```sh
+node apps/server/scripts/set-version.mjs 0.0.0-dev-0
+MACROGRAPH_CHANNEL=dev pnpm --filter @macrograph/cli build
+pnpm --filter @macrograph/cli run pack:npm
+cd apps/server/dist/npm && npm publish --tag dev --access public
+```
+
+Then add this repository with workflow `publish-cli.yml` as a trusted publisher in the package's
+npm settings. `set-version.mjs` updates both `package.json` and the bundled `Version.ts`.
