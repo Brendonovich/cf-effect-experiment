@@ -23,7 +23,7 @@ import { Installer } from "@macrograph/module-installer/Installer";
 import { ModuleAdminRpc } from "@macrograph/module/ModuleAdminRpc";
 import { ModuleId } from "@macrograph/module/ModuleId";
 import { DrizzleDriver, SqlitePersistence } from "@macrograph/persistence-sqlite";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, type Scope } from "effect";
 import {
   FetchHttpClient,
   HttpMiddleware,
@@ -33,12 +33,13 @@ import {
 } from "effect/http";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { mkdirSync, statSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 
 import { ApiKeys } from "./ApiKeys.ts";
 import { makeAtomicFileStore } from "./AtomicFileStore.ts";
 import { ClientSessions } from "./ClientSessions.ts";
+import { LocalAccess } from "./LocalAccess.ts";
 import { ModuleAdmin } from "./ModuleAdmin.ts";
 import { ModuleHost } from "./ModuleHost.ts";
 import { Observability } from "./Observability.ts";
@@ -46,8 +47,15 @@ import { ProjectApi } from "./ProjectApi.ts";
 import { ServerConfig } from "./ServerConfig.ts";
 import { ServerSetup } from "./ServerSetup.ts";
 import { StaticRoutes } from "./StaticRoutes.ts";
+import { version } from "./Version.ts";
 
 const config = ServerConfig.makeServerConfig(process.env);
+
+// Set by `make` before its layers are built. Requests and the setup callback read them then, so a
+// process that serves as the background service can announce through its own channel and accept
+// its local token; `Main` leaves both at their defaults.
+let announce: (line: string) => void = (line) => console.log(line);
+let local: LocalAccess.Access = LocalAccess.none;
 mkdirSync(config.dataDirectory, { recursive: true });
 // The watcher only covers folders that exist when it starts.
 mkdirSync(join(config.dataDirectory, "modules", "local"), { recursive: true });
@@ -77,7 +85,7 @@ const setup = ServerSetup.make({
   sessions: clientSessions,
   onKeyIssued: (key) =>
     Effect.gen(function* () {
-      yield* Effect.sync(() => console.log(`MACROGRAPH_SETUP_KEY ${key}`));
+      yield* Effect.sync(() => announce(`MACROGRAPH_SETUP_KEY ${key}`));
       // The key goes in the fragment so it is never sent to the server or stored in access logs.
       const setupUrl = `${config.publicOrigin}${config.basePath}/#setup-key=${encodeURIComponent(key)}`;
       yield* Effect.logInfo(`Open ${setupUrl} to set up this server.`);
@@ -90,7 +98,7 @@ const connectionMiddlewareFor = (transport: ClientSessions.Transport) =>
     Layer.provideMerge(
       Layer.succeed(
         EditorAccess.Policy,
-        clientSessions.policy(serverOwnerId, config.adminIds, transport),
+        clientSessions.policy(serverOwnerId, config.adminIds, transport, local),
       ),
     ),
   );
@@ -100,6 +108,7 @@ const canEditRequest = (request: HttpServerRequest.HttpServerRequest) =>
     const token = authorization?.startsWith("Bearer ")
       ? authorization.slice("Bearer ".length)
       : undefined;
+    if (local.matches(token)) return true;
     const [session, ownerId] = yield* Effect.all([clientSessions.resolve(token), serverOwnerId]);
     return (
       session !== undefined && (session.userId === ownerId || config.adminIds.has(session.userId))
@@ -163,8 +172,9 @@ const ClientAuthRoutes = Layer.effectDiscard(
         setupRequired,
         hasOwner: ownerId !== undefined,
         canEdit:
-          session !== undefined &&
-          (session.userId === ownerId || config.adminIds.has(session.userId)),
+          local.matches(token) ||
+          (session !== undefined &&
+            (session.userId === ownerId || config.adminIds.has(session.userId))),
       };
     });
 
@@ -312,21 +322,23 @@ const HealthRoute = Layer.effectDiscard(
   }),
 );
 
-const RemoteApiRoutes = ProjectApi.layer({
-  basePath: config.basePath,
-  apiKeys: ApiKeys.make(makeAtomicFileStore(config.apiKeysPath)),
-  sessions: clientSessions,
-  ownerId: serverOwnerId,
-  adminIds: config.adminIds,
-  projectTimestamps: Effect.sync(() => {
-    const stats = statSync(config.databasePath, { throwIfNoEntry: false });
-    const now = new Date().toISOString();
-    return {
-      createdAt: stats?.birthtime.toISOString() ?? now,
-      updatedAt: stats?.mtime.toISOString() ?? now,
-    };
-  }),
-});
+const remoteApiRoutes = (local: LocalAccess.Access) =>
+  ProjectApi.layer({
+    basePath: config.basePath,
+    apiKeys: ApiKeys.make(makeAtomicFileStore(config.apiKeysPath)),
+    sessions: clientSessions,
+    local,
+    ownerId: serverOwnerId,
+    adminIds: config.adminIds,
+    projectTimestamps: Effect.sync(() => {
+      const stats = statSync(config.databasePath, { throwIfNoEntry: false });
+      const now = new Date().toISOString();
+      return {
+        createdAt: stats?.birthtime.toISOString() ?? now,
+        updatedAt: stats?.mtime.toISOString() ?? now,
+      };
+    }),
+  });
 
 /** How the server finds and evaluates modules; production and dev differ only here. */
 export interface ModuleOptions {
@@ -411,7 +423,73 @@ const pathGuard = HttpMiddleware.make((httpEffect) =>
   }),
 );
 
-export const make = (modules: ModuleOptions) => {
+const setupUrl = (config: ServerConfig.Config, key: string) =>
+  `${config.publicOrigin}${config.basePath}/#setup-key=${encodeURIComponent(key)}`;
+
+/** Lets the local agents' CLI find the service and its setup link before the app is serving. */
+const InfoRoute = (local: LocalAccess.Access) =>
+  local.enabled
+    ? Layer.effectDiscard(
+        Effect.gen(function* () {
+          const router = (yield* HttpRouter.HttpRouter).prefixed(config.basePath);
+          yield* router.add(
+            "GET",
+            "/api/info",
+            Effect.gen(function* () {
+              const request = yield* HttpServerRequest.HttpServerRequest;
+              if (!local.matches(LocalAccess.bearer(request.headers.authorization)))
+                return HttpServerResponse.empty({ status: 401 });
+              const key = yield* setup.setupKey;
+              return HttpServerResponse.jsonUnsafe(
+                {
+                  version,
+                  pid: process.pid,
+                  setupUrl: key === undefined ? null : setupUrl(config, key),
+                },
+                { headers: { "cache-control": "no-store" } },
+              );
+            }),
+          );
+        }),
+      )
+    : Layer.empty;
+
+/**
+ * Answers requests that arrive after the server is bound but before the app is serving them, so
+ * clients can tell a booting server from a dead one. It steps aside once the app's handler is
+ * attached.
+ */
+const bootingResponder =
+  (server: ReturnType<typeof createServer>, local: LocalAccess.Access) =>
+  (request: IncomingMessage, response: ServerResponse) => {
+    if (server.listenerCount("request") > 1) return;
+    const json = (status: number, body: unknown) => {
+      response.writeHead(status, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      response.end(JSON.stringify(body));
+    };
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (path !== `${config.basePath}/api/info`) return json(503, { error: "Starting" });
+    if (!local.matches(LocalAccess.bearer(request.headers.authorization)))
+      return response.writeHead(401).end();
+    json(503, { version, pid: process.pid, setupUrl: null });
+  };
+
+export interface ServiceOptions {
+  /** Authenticates the background service's local token as the owner. */
+  readonly local?: LocalAccess.Access;
+  /** Writes the machine-readable `MACROGRAPH_SETUP_KEY` and `MACROGRAPH_LISTENING` lines. */
+  readonly announce?: (line: string) => void;
+  /** Runs once the HTTP server is listening, before the app is built. */
+  readonly onListen?: (port: number) => Effect.Effect<void, never, Scope.Scope>;
+}
+
+export const make = (modules: ModuleOptions & ServiceOptions) => {
+  local = modules.local ?? LocalAccess.none;
+  if (modules.announce !== undefined) announce = modules.announce;
+
   const mapEntry = (entry: ModuleCatalog.Entry) => {
     const prefixed = ModuleHost.withBasePath(config.basePath)(entry);
     return modules.mapEntry === undefined ? prefixed : modules.mapEntry(prefixed);
@@ -436,9 +514,10 @@ export const make = (modules: ModuleOptions) => {
   const ApiRoutes = Layer.mergeAll(
     EditorHttpRoutes,
     ClientAuthRoutes,
-    RemoteApiRoutes,
+    remoteApiRoutes(local),
     ModuleHost.routes({ basePath: config.basePath, canEditRequest }),
     HealthRoute,
+    InfoRoute(local),
   );
 
   const StaticRoute = StaticRoutes.layer({
@@ -493,17 +572,35 @@ export const make = (modules: ModuleOptions) => {
     ),
   );
 
+  nodeServer.on("request", bootingResponder(nodeServer, local));
+
+  const Listening =
+    modules.onListen === undefined
+      ? Layer.empty
+      : Layer.effectDiscard(
+          Effect.suspend(() => {
+            const address = nodeServer.address();
+            return typeof address === "object" && address !== null
+              ? modules.onListen!(address.port)
+              : Effect.die("The HTTP server has no port");
+          }),
+        );
+
   const Served = HttpRouter.serve(AppLayer, {
     disableLogger: true,
     disableListenLog: config.behindDevProxy,
     middleware: pathGuard,
   }).pipe(
     Layer.provide(
-      NodeHttpServer.layer(() => nodeServer, {
-        port: config.port,
-        host: config.host,
-        gracefulShutdownTimeout: "10 seconds",
-      }),
+      Listening.pipe(
+        Layer.provideMerge(
+          NodeHttpServer.layer(() => nodeServer, {
+            port: config.port,
+            host: config.host,
+            gracefulShutdownTimeout: "10 seconds",
+          }),
+        ),
+      ),
     ),
     Layer.provide(CoreLayer),
     Layer.provide(Observability.layer(config)),
@@ -513,6 +610,10 @@ export const make = (modules: ModuleOptions) => {
   // This outer layer is acquired last, so it quiesces sockets before the HTTP server waits to close.
   return ShutdownLayer.pipe(Layer.provideMerge(Served));
 };
+
+/** Runs this build's modules, including as the background service or the foreground server. */
+export const service = (options: ServiceOptions = {}) =>
+  make({ shippedDirs: [config.modulesDirectory], evaluator: ModuleEvaluator.vm, ...options });
 
 /** Shipped built-ins from `dist/modules`, evaluated with the `vm` loader. */
 export const Main = make({ shippedDirs: [config.modulesDirectory], evaluator: ModuleEvaluator.vm });

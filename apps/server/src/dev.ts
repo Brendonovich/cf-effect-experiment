@@ -1,12 +1,26 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import sources from "virtual:macrograph-dev-modules";
 
+import { Channel } from "./Channel.ts";
 import { DevModules } from "./DevModules.ts";
+import { LocalAccess } from "./LocalAccess.ts";
 import { make } from "./Server.ts";
 import { ServerConfig } from "./ServerConfig.ts";
+import { ServiceConfig } from "./ServiceConfig.ts";
+import { ServicePaths } from "./ServicePaths.ts";
+import { ServiceRegistration } from "./ServiceRegistration.ts";
+import { version } from "./Version.ts";
 
 const config = ServerConfig.makeServerConfig(process.env);
+const paths = ServicePaths.make(Channel.local);
+
+// Vite's server environment is an ES module, so top-level await is available here.
+const { token } = await Effect.runPromise(
+  ServiceConfig.loadWithToken(paths.config).pipe(Effect.orDie),
+);
+
 const runtime = ManagedRuntime.make(
   Layer.unwrap(
     Effect.map(
@@ -17,7 +31,20 @@ const runtime = ManagedRuntime.make(
         ),
         basePath: config.basePath,
       }),
-      make,
+      (options) =>
+        make({
+          ...options,
+          local: LocalAccess.make(token),
+          // Vite owns the public port and proxies to this listener, so agents connect through it.
+          onListen: () =>
+            ServiceRegistration.write(paths.registration, {
+              id: randomUUID(),
+              version,
+              url: `${config.publicOrigin}${config.basePath}`,
+              pid: process.pid,
+              token,
+            }).pipe(Effect.andThen(Effect.logInfo(`MCP: ${Channel.mcpCommand(Channel.local)}`))),
+        }),
     ),
   ),
 );

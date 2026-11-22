@@ -206,4 +206,6 @@ export const makeServerConfig = (env: NodeJS.ProcessEnv) => {
   };
 };
 
+export type Config = ReturnType<typeof makeServerConfig>;
+
 export * as ServerConfig from "./ServerConfig.ts";

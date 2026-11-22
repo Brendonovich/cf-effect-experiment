@@ -174,6 +174,18 @@ export const editorTools = [
 export const toolkit = Toolkit.make(listProjects, getProject, ...editorTools);
 
 /**
+ * What a client is told when it connects. Instructions reach the model before any tool call, so
+ * they carry the workflow the tool descriptions would otherwise repeat one by one.
+ */
+export const instructions = [
+  "MacroGraph is a visual automation editor. A project contains graphs; a graph contains nodes from package schemas, joined by connected ports.",
+  "Read before writing: listProjects, then listGraphs, then getGraph, which returns the graph's nodes, connections and each node's resolved inputs and outputs.",
+  "To build or replace a graph, call createGraph once with the whole graph: nodes keyed by temporary IDs, connections referencing those IDs, and resource IDs from searchSchemas.",
+  "Prefer createGraph over repeated createNode and createConnection calls.",
+  "Calls run as the API key's user, and edits appear to everyone with the project open in the editor.",
+].join(" ");
+
+/**
  * Serves a toolkit over MCP (see `McpServer`). Tool calls run as the authenticated user and as an
  * `mcp` caller identified by the MCP session, falling back to the API key.
  */
@@ -182,6 +194,8 @@ export const layer = <Tools extends Record<string, Tool.Any>>(options: {
   readonly path: `/${string}`;
   readonly toolkit: Toolkit.Toolkit<Tools>;
   readonly handlers: Toolkit.HandlersFrom<Tools>;
+  /** Sent as the `initialize` result's instructions, when the host has something to add. */
+  readonly instructions?: string;
 }) =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -204,6 +218,7 @@ export const layer = <Tools extends Record<string, Tool.Any>>(options: {
       return McpServer.layer({
         name: options.name,
         path: options.path,
+        ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
         listTools: Effect.succeed(tools),
         callTool: (name, args) =>
           Object.hasOwn(built.tools, name)

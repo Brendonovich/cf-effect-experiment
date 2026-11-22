@@ -12,6 +12,6 @@ describe("production image", () => {
     expect(dockerfile).toContain("/health/ready");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
     expect(dockerfile).toContain("/workspace/apps/server/dist ./dist");
-    expect(dockerfile).toContain('CMD ["node", "dist/esm/index.js"]');
+    expect(dockerfile).toContain('CMD ["node", "dist/esm/index.js", "serve"]');
   });
 });

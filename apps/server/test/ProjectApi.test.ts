@@ -13,6 +13,7 @@ import type { AtomicFileStore } from "../src/AtomicFileStore.ts";
 
 import { ApiKeys } from "../src/ApiKeys.ts";
 import { ClientSessions } from "../src/ClientSessions.ts";
+import { LocalAccess } from "../src/LocalAccess.ts";
 import { ProjectApi } from "../src/ProjectApi.ts";
 
 const UtilitiesModule = Module.identify(Module.builtinId("utilities"), UtilitiesModuleDefinition);
@@ -52,6 +53,7 @@ const pkg: Package.Model = {
 const sessions = ClientSessions.make(memoryStore());
 const apiKeys = ApiKeys.make(memoryStore());
 const adminIds = new Set(["admin"]);
+const localToken = LocalAccess.generateToken();
 
 const EditorLayer = Editor.layer.pipe(
   Layer.provideMerge(EditorEvents.layer),
@@ -70,6 +72,7 @@ const TestLayer = HttpRouter.serve(
     basePath,
     apiKeys,
     sessions,
+    local: LocalAccess.make(localToken),
     ownerId: Effect.succeed("owner"),
     adminIds,
     projectTimestamps: Effect.succeed({
@@ -410,6 +413,10 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
       const initialized = yield* mcp(key.key, undefined, initialize);
       assert.strictEqual(initialized.status, 200);
       assert.strictEqual(initialized.body.result.serverInfo.name, "MacroGraph Server");
+      assert.include(
+        initialized.body.result.instructions,
+        "MacroGraph is a visual automation editor",
+      );
       const sessionId = initialized.headers["mcp-session-id"];
       assert.isString(sessionId);
 
@@ -471,6 +478,58 @@ it.layer(TestLayer)("self-hosted project API", (it) => {
         params: { name: "listProjects", arguments: {} },
       });
       assert.strictEqual(unauthorized.status, 401);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lets the local token edit over REST and MCP as the local principal", () =>
+    Effect.gen(function* () {
+      const events = yield* (yield* EditorEvents.Service).subscribe;
+      assert.strictEqual(
+        (yield* send("GET", "/api/projects/local/graphs", { token: `${localToken}x` })).status,
+        401,
+      );
+
+      const rest = yield* send("POST", "/api/projects/local/graphs", {
+        token: localToken,
+        body: { name: "From local REST" },
+      });
+      assert.strictEqual(rest.status, 201);
+      const restEvent = yield* PubSub.take(events);
+      assert.strictEqual(restEvent._tag, "GraphCreated");
+      assert.deepStrictEqual(restEvent.actor, {
+        type: "CLIENT",
+        kind: "api",
+        id: "api:local",
+        userId: LocalAccess.userId,
+      });
+
+      const initialized = yield* mcp(localToken, undefined, {
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "Local agent", version: "1" },
+        },
+      });
+      assert.strictEqual(initialized.status, 200);
+      const sessionId = initialized.headers["mcp-session-id"];
+      const graph = yield* mcp(localToken, sessionId, {
+        id: 2,
+        method: "tools/call",
+        params: { name: "createGraph", arguments: { projectId: "local", name: "From local MCP" } },
+      });
+      assert.isFalse(graph.body.result.isError);
+      const mcpEvent = yield* PubSub.take(events);
+      assert.deepStrictEqual(mcpEvent.actor, {
+        type: "CLIENT",
+        kind: "mcp",
+        id: `mcp:${sessionId}`,
+        userId: LocalAccess.userId,
+      });
+
+      // Key management stays with signed-in owners and admins.
+      assert.strictEqual((yield* send("GET", "/auth/api-keys", { token: localToken })).status, 401);
     }).pipe(Effect.scoped),
   );
 });

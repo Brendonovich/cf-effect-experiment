@@ -5,6 +5,8 @@ import { randomBytes } from "node:crypto";
 
 import type { AtomicFileStore } from "./AtomicFileStore.ts";
 
+import { LocalAccess } from "./LocalAccess.ts";
+
 const Session = Schema.Struct({ userId: Schema.String, email: Schema.String });
 export type Session = typeof Session.Type;
 const StoredSessions = Schema.Record(Schema.String, Session);
@@ -17,11 +19,14 @@ export interface ClientSessions {
    * RPC servers number their clients independently, so client numbers are only used for the
    * single WebSocket server. Every HTTP RPC server shares a policy and gets random IDs instead,
    * which keeps HTTP callers from sharing an ID with a tab or with each other.
+   *
+   * A client presenting the local token acts as the owner, whether or not the server is set up.
    */
   readonly policy: (
     ownerId: Effect.Effect<string | undefined>,
     adminIds: ReadonlySet<string>,
     transport: Transport,
+    local: LocalAccess.Access,
   ) => EditorAccess.Policy["Service"];
 }
 
@@ -82,7 +87,7 @@ export const make = (store: AtomicFileStore): ClientSessions => {
         }),
       ),
     resolve,
-    policy: (ownerId, adminIds, transport) =>
+    policy: (ownerId, adminIds, transport, local) =>
       EditorAccess.Policy.of({
         resolve: (headers, clientId) =>
           Effect.gen(function* () {
@@ -90,18 +95,26 @@ export const make = (store: AtomicFileStore): ClientSessions => {
             const bearer = authorization?.startsWith("Bearer ")
               ? authorization.slice("Bearer ".length)
               : undefined;
-            const session = yield* resolve(headers["x-macrograph-session"] ?? bearer);
+            const token = headers["x-macrograph-session"] ?? bearer;
+            const actorId =
+              transport === "ws"
+                ? `self-hosted-ws-${clientId}`
+                : `self-hosted-http-${randomBytes(16).toString("base64url")}`;
+            if (local.matches(token))
+              return {
+                actor: Actor.client(clientKinds[transport], actorId, LocalAccess.userId),
+                displayName: "Local",
+                email: null,
+                projectId: "local",
+                canEdit: true,
+                canManageCredentials: true,
+              };
+            const session = yield* resolve(token);
             const owner = yield* ownerId;
             const canEdit =
               session !== undefined && (session.userId === owner || adminIds.has(session.userId));
             return {
-              actor: Actor.client(
-                clientKinds[transport],
-                transport === "ws"
-                  ? `self-hosted-ws-${clientId}`
-                  : `self-hosted-http-${randomBytes(16).toString("base64url")}`,
-                session?.userId ?? null,
-              ),
+              actor: Actor.client(clientKinds[transport], actorId, session?.userId ?? null),
               displayName: session === undefined ? "" : Presence.nameFromEmail(session.email),
               email: session?.email ?? null,
               projectId: "local",

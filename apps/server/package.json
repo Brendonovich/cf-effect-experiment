@@ -2,14 +2,17 @@
   "name": "@macrograph/server",
   "version": "0.0.1",
   "private": true,
+  "bin": {
+    "macrograph": "./dist/esm/index.js"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
     "build": "rm -rf dist && pnpm --dir client build && pnpm build:backend && pnpm build:modules",
-    "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/",
+    "build:backend": "rm -rf dist/esm && pnpm rolldown -c rolldown.config.ts && mkdir -p dist/esm/migrations && cp -R ../../packages/persistence-sqlite/drizzle/. dist/esm/migrations/ && chmod +x dist/esm/index.js",
     "build:modules": "rm -rf dist/modules && macrograph-module package --dependencies-of . --out dist/modules",
     "typecheck": "tsgo --build",
-    "start": "node --env-file-if-exists=.env dist/esm/index.js",
+    "start": "node --env-file-if-exists=.env dist/esm/index.js serve",
     "test": "vitest run",
     "test:integration": "MACROGRAPH_BASE_PATH=/macrograph pnpm build && vitest run --config vitest.integration.config.ts",
     "dev": "vite",

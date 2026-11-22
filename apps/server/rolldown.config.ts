@@ -5,9 +5,15 @@ import { defineConfig } from "rolldown";
 export default defineConfig({
   platform: "node",
   input: "src/index.ts",
+  // The channel the CLI serves unless MACROGRAPH_CHANNEL says otherwise; see src/Channel.ts.
+  transform: {
+    define: { MACROGRAPH_CHANNEL: JSON.stringify(process.env.MACROGRAPH_CHANNEL || "latest") },
+  },
   output: {
     dir: "dist/esm",
     format: "esm",
+    // The entry is the `macrograph` bin.
+    banner: (chunk) => (chunk.isEntry ? "#!/usr/bin/env node" : ""),
     minify: false,
   },
 });

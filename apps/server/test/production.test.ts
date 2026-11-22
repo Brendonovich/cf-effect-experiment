@@ -178,7 +178,7 @@ beforeAll(async () => {
   if (cloudAddress === null || typeof cloudAddress === "string")
     throw new Error("No cloud address");
   dataDirectory = await mkdtemp(join(tmpdir(), "macrograph-production-"));
-  child = spawn(process.execPath, ["dist/esm/index.js"], {
+  child = spawn(process.execPath, ["dist/esm/index.js", "serve"], {
     cwd: appDirectory,
     env: {
       ...process.env,

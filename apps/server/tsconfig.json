@@ -6,7 +6,7 @@
     "outDir": "dist/types",
     "lib": ["ES2024"]
   },
-  "include": ["src", "test", "vite.config.ts", "client/vite.config.ts"],
+  "include": ["src", "test", "vite.config.ts", "rolldown.config.ts", "client/vite.config.ts"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/cloud-api" },
